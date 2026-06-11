@@ -1,0 +1,42 @@
+providers:
+  - name: mock-local
+    type: mock
+    model: mock-model
+
+model:
+  default: mock-model
+
+agent:
+  max_tool_rounds: 3
+  max_provider_requests: 3
+  tool_result_max_chars: 6000
+  context_summary_enabled: true
+  context_budget_tokens: auto
+  context_reserve_tokens: 16384
+  context_handoff_enabled: true
+  context_handoff_threshold: 0.70
+  reasoning: high
+  temperature: 0.0
+  max_tokens: 512
+  ghost_provider: ""
+  ghost_model: ""
+
+sandbox:
+  enabled: true
+  clean_env: true
+  block_shell_escape: true
+  shell_network_enabled: true
+  web_fetch_enabled: true
+  web_fetch_allowed_hosts: []
+  audit_log: logs/tool_audit.jsonl
+  max_output_chars: 50000
+
+access:
+  mode: full
+  default_roots:
+    - .
+
+paths:
+  memory_file: memory/mo.db
+  runtime_log: logs/runtime.jsonl
+  critique_file: critique/ANSWER.md

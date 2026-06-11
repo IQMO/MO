@@ -1,0 +1,158 @@
+# MO Agent Configuration Template
+# Copy to ~/.mo/config.yaml and fill your provider details.
+# Checkout-local config.yaml is gitignored and only active when explicitly selected with MO_CONFIG or --config.
+
+providers:
+  # Required keys: name, type, base_url, api_key_env OR api_key
+  # Optional keys: model, headers, timeout, auth_path (codex only)
+  #
+  # You can specify API keys two ways:
+  #   1. api_key_env: OPENCODE_API_KEY  (recommended - reads from environment)
+  #   2. api_key: "sk-..."              (direct value - less secure, not recommended)
+  
+  - name: opencode
+    type: chat_completions
+    base_url: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_API_KEY
+    model: deepseek-v4-pro
+
+  - name: opencode-flash
+    type: chat_completions
+    base_url: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_API_KEY
+    model: deepseek-v4-flash
+
+  - name: opencode-pro
+    type: chat_completions
+    base_url: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_API_KEY
+    model: deepseek-v4-pro
+
+  - name: opencode-bigpickle
+    type: chat_completions
+    base_url: https://opencode.ai/zen/v1
+    api_key_env: OPENCODE_API_KEY
+    model: big-pickle
+
+  - name: agentrouter
+    type: agentrouter
+    base_url: https://agentrouter.org/v1
+    api_key_env: AGENTROUTER_API_KEY
+
+  - name: openai-codex
+    type: codex_responses
+    base_url: https://chatgpt.com/backend-api/codex
+    auth_path: ~/.codex/auth.json
+    model: gpt-5.5
+
+model:
+  # Main MO: DeepSeek v4 Pro first, then normal Codex. Flash is for Ghost only.
+  default: deepseek-v4-pro
+  # Fallback stays within the same provider key by default so a new user with
+  # one key still has working fallback. Point it at a paid/second-account
+  # provider (e.g. openai-codex) only if you have that login configured.
+  fallback: opencode-pro
+
+runtime:
+  # Private MO home for profile, memory, sessions, logs, scheduler, Telegram DB, and caches.
+  # Project folders are read/edited only when the operator asks; MO should not create project-local state by default.
+  home: ~/.mo
+  state: private
+
+agent:
+  max_tool_rounds: 80
+  max_provider_requests: 300
+  tool_result_max_chars: 6000
+  tool_compress_enabled: true
+  tool_compress_min_bytes: 500
+  context_summary_enabled: true
+  context_budget_tokens: auto
+  context_reserve_tokens: 16384
+  context_handoff_enabled: true
+  context_handoff_threshold: 0.70
+  # Deterministic, provider-free compaction of old completed tool chains before handoff.
+  # Provider context-overflow errors force an aggressive one-time compact/handoff retry.
+  context_momentum_compact_enabled: true
+  context_momentum_compact_threshold: 0.45
+  context_momentum_keep_recent: 18
+  context_momentum_max_chains: 4
+  # Tool-result aging: compact old chains once their tool-result footprint
+  # exceeds this many chars even when pressure is low (0 disables). Full
+  # outputs are archived under logs/compacted_chains/ before the summary
+  # replaces them, so exact results stay recoverable with read_file.
+  context_momentum_tool_chars_threshold: 48000
+  reasoning: high
+  temperature: 0.7
+  max_tokens: 8192
+  # Ghost proposal/side-chat: Flash first, then DeepSeek v4 Pro, then Codex.
+  ghost_provider: opencode-flash
+  ghost_model: deepseek-v4-flash
+  background_workers_max: 3
+
+prt:
+  enabled: true
+  # Review lane is code-restricted to DeepSeek v4 Pro → Codex only.
+  # Flash, Anthropic, and big-pickle providers are not tried by /prt.
+  default_model: "deepseek-v4-pro"
+  fallback_model: "codex"
+  auto_review_large: true
+  ghost_suggest_medium: true
+  score_target: 4.5
+
+heartbeat:
+  enabled: true
+  interval_seconds: 60
+
+scheduler:
+  enabled: false
+  tick_seconds: 30
+  jobs_path: memory/scheduler/jobs.json
+  runs_path: memory/scheduler/runs.jsonl
+  lock_path: memory/scheduler/tick.lock
+
+mo_control:
+  # Optional external operator-policy bridge. Operator data normally lives in
+  # the ~/.mo profile (memory/profile/*.md); leave empty to use the profile only.
+  workspace_path: ""
+  # Operator project/codename vocabulary that should trigger control context
+  # (e.g. your repo or product names). Private data — set in your own config.
+  trigger_terms: []
+
+telegram:
+  enabled: false
+  bot_token_env: TELEGRAM_BOT_TOKEN
+  bot_username: ""
+  dm_policy: pairing
+  db_path: memory/telegram.sqlite
+  # Optional key=value files for TELEGRAM_BOT_TOKEN; keep real files gitignored.
+  secret_files: []
+  worker_count: 2
+  allow_from: []
+  groups:
+    require_mention: true
+    allow_from: []
+
+sandbox:
+  enabled: true
+  clean_env: true
+  block_shell_escape: true
+  # Network posture below is LOCAL-TRUST (convenient on your own machine), not
+  # hardened. To lock down: set shell_network_enabled/web_fetch_enabled to false,
+  # or restrict web_fetch with an explicit allowlist.
+  shell_network_enabled: true   # allow shell commands to reach the network
+  web_fetch_enabled: true       # allow the web_fetch/web_search tools
+  web_fetch_allowed_hosts: []   # EMPTY = unrestricted. Add hosts to restrict, e.g. ["api.github.com"]
+  audit_log: logs/tool_audit.jsonl
+  max_output_chars: 50000
+  write_file_existing_max_lines: 250
+
+access:
+  # Default install mode: tools operate inside the project cwd where MO was called.
+  # Use `full` only for a trusted private operator setup.
+  mode: project
+  default_roots:
+    - .
+
+paths:
+  memory_file: memory/mo.db
+  critique_file: critique/ANSWER.md
