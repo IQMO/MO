@@ -1,182 +1,210 @@
 # MO Agent
 
-**A local-first AI coding agent that refuses to fake progress.**
-By [IQMO](https://github.com/IQMO).
+**A local-first coding agent for people who want the work to stay honest.**
 
-The coding agent you point at your own projects — like Cursor, Claude, or
-GPT — but local-first, and built so it never fakes progress, never forgets your
-session, and never pads the answer.
+MO is a Python terminal agent from [IQMO](https://github.com/IQMO). It gives a
+provider model real tools, then surrounds that model with a local runtime that
+tracks what actually happened: task evidence, sandboxed tool dispatch, private
+memory, code navigation, long-session continuity, and post-work review.
 
-> **Status: under active development.** A private pre-release ("underdog"
-> build) — used daily and already capable, but evolving fast: expect rough
-> edges, changing internals, and features still landing. Not a finished product.
+> **Status: public underdog release.** MO is used daily and already useful, but
+> it is still early: terminal-first, fast-moving, and rough in places. This is
+> not a polished SaaS product. It is a working local agent runtime being opened
+> while it is still being sharpened.
 
----
+## Why MO Exists
 
-## Why MO Agent
+Most coding agents fail in quiet ways. They say work is done because the model
+sounds confident. They lose the thread when context gets long. They re-read the
+same files every turn. They bury you in generic explanations. They treat your
+keys, profile, memories, and project habits as cloud product data.
 
-A few things set MO apart from the agents you already know:
+MO is built against those failures.
 
-- **It stays focused across a long session.** Most agents *compact* when the
-  chat gets long — they summarize the past, quietly forget it, and drift off
-  task. MO doesn't. It manages context **dynamically in the background** —
-  progressively compressing as pressure builds, then doing a clean **handoff**
-  (a continuity capsule: live task board, files touched, goals, code map) only
-  when needed — so the agent keeps the thread and stays on the task, and a
-  two-hour run still remembers what mattered at minute five.
-- **Recoverable dumpzone, zero token tax.** Before any handoff, MO
-  deterministically folds *old, completed* work into compact summaries — with
-  **no extra model call and no token cost**. The full originals are archived to
-  a recoverable dumpzone (`logs/compacted_chains/`), so exact past output is one
-  `read_file` away whenever you need it.
-- **It navigates your code instead of grinding through it.** MO keeps a local
-  **structural code graph** — fuzzy symbol search, a caller/callee walker, and a
-  community map — and is built to reach for it *before* grep sweeps or reading
-  whole files. One graph lookup routinely replaces 5–20 blind grep/read calls.
-  Edits are targeted exact-text patches (never whole-file rewrites). The model
-  spends its budget on your problem, not on rediscovering your repo every turn.
-- **Concise by default.** MO leads with the answer, not the setup, and
-  losslessly structure-compresses tool output before it ever costs you
-  tokens — so you pay for substance, not noise.
+The core idea is simple: **let the model drive, but make the runtime keep the
+truth.** The provider reasons and uses tools. MO's Gateway, sandbox, task board,
+memory, graph, review, and verification layers keep the work local, scoped, and
+evidence-backed.
 
-These are the difference between an agent that *uses* a model and one that
-*works it well*: MO's tooling keeps the provider model fast, cheap, and on
-target instead of drowning it in grep dumps, whole-file reads, and lost context.
+## What Makes It Different
 
-And the foundation underneath them:
+### Runtime-owned progress
 
-- **Evidence-backed task truth** — the runtime Gateway owns the task board.
-  Model prose cannot mark work complete; tasks close only on real tool/runtime
-  evidence, and the final answer cannot claim done while tasks are open.
-- **Local-first** — your code, keys, profile, and memory stay on your machine
-  under `~/.mo`. No server, no telemetry, no cloud account.
-- **Provider-agnostic, with failover** — any OpenAI-compatible endpoint is just
-  the engine; MO automatically fails over to a backup provider on
-  rate/balance/empty-response errors and keeps going. Its identity and behavior
-  stay MO's.
-- **Learns only with your permission** — MO mines recurring patterns from your
-  sessions into reviewable suggestions; nothing influences future behavior
-  until you confirm it (`/learning pending` → `confirm`).
+MO does not let model prose mark work complete. For real work, the Gateway owns
+a compact task board, and tasks close only when runtime evidence exists: files
+were inspected, edits landed, tests or checks ran, blockers were observed. Final
+answers are not allowed to turn open work into fake success.
 
-## Quickstart (10 minutes)
+### Local-first by default
 
-Requirements: Python 3.10+, Windows / Linux / macOS.
+Your profile, sessions, memory, config, logs, provider keys, and learned terms
+live under your private MO home, normally `~/.mo`. A fresh install starts empty.
+There is no cloud account requirement, no telemetry requirement, and no server
+needed for normal use.
+
+### Provider-first, provider-agnostic
+
+MO is not a wrapper that only works with one model brand. It is built around
+OpenAI-compatible provider config and failover. The model is the engine; MO is
+the local runtime that keeps behavior, tools, memory, and reporting consistent.
+
+### Long-session continuity
+
+MO keeps more than chat text. It tracks task state, touched files, tool evidence,
+provider/tool audits, session state, and code-map orientation so long work can
+continue without silently forgetting the important parts.
+
+### Code-aware, not grep-drunk
+
+MO includes local code intelligence: fuzzy symbol search, caller/callee lookup,
+and a structural graph under private runtime state. The goal is to spend model
+context on the problem, not on repeatedly rediscovering the repository.
+
+### Concise output
+
+MO is answer-first. Tool output is structurally compressed before it reaches the
+model context, and final reports focus on the useful delta: what changed, what
+was verified, what failed, and what is still unknown.
+
+### Side-checks without stealing truth
+
+Ghost is MO's side-check and planning lane. It can help scope work or sanity
+check direction, but it does not own the task board and cannot claim completion.
+PRT is MO's post-work review path: it checks diffs with evidence-weighted
+findings and can surface issues without turning every change into a ceremony.
+
+### Learning you approve
+
+MO can mine recurring corrections and workflow patterns from your sessions, but
+they stay reviewable until you confirm them. Learned guidance is local,
+relevance-gated, and subordinate to the current request, sandbox, and runtime
+truth.
+
+## Who This Release Is For
+
+Try MO now if you:
+
+- prefer local tools and private project memory over a hosted coding assistant;
+- want an agent that reports blockers instead of pretending;
+- work in long coding sessions where continuity matters;
+- like terminal-first software and can tolerate early-release edges;
+- want to inspect and shape the runtime, not just chat with a model.
+
+Wait if you need a polished packaged app, a hosted team dashboard, a plugin
+marketplace, or enterprise administration features today.
+
+## Quickstart
+
+Requirements: Python 3.10+ on Windows, Linux, or macOS.
 
 ```bash
-git clone https://github.com/IQMO/rMO.git
-cd rMO
+git clone https://github.com/IQMO/MO.git
+cd MO
 python -m pip install -r requirements.txt
 python mo.py --init
 ```
 
-**Verify:** `--init` prints your private home layout (`~/.mo`), created
-profile templates, and an honest provider-key report (present/missing).
+`--init` creates/checks your private MO home, normally `~/.mo`, including config,
+profile templates, session/log/cache folders, and a `.env` file for provider
+keys.
 
-Add a provider key to `~/.mo/.env` (created by init, never tracked):
+Add a provider key to `~/.mo/.env` or your shell environment. The default
+example config uses:
 
 ```env
 OPENCODE_API_KEY=your_key_here
 ```
 
-Run it:
+Run MO:
 
 ```bash
 python mo.py
 ```
 
-**Verify:** MO greets you by your profile name (set it with
-`/profile name <you>`), and the footer shows tokens · model · reasoning.
-
-Give it real work from any project folder:
+Then point it at a real project:
 
 ```text
 find issues in this project
 ```
 
-**Verify:** a task checklist appears (`N tasks (X done, Y open)`), advances
-only as tools actually run, and the report separates confirmed findings from
-suspicions.
+For non-trivial work, you should see a compact task checklist appear and advance
+only as tools actually run.
 
-Optional global command — add `~/.mo/bin` to PATH, then run `mo` from any
-project directory:
+Optional global command: add `~/.mo/bin` to your `PATH`, then run `mo` from any
+project directory.
 
 ```bash
 # Linux/macOS
 export PATH="$HOME/.mo/bin:$PATH"
+
 # Windows PowerShell
 [Environment]::SetEnvironmentVariable('Path', "$env:USERPROFILE\.mo\bin;$env:Path", 'User')
 ```
 
-## What you get
+## Capability Map
 
 | Capability | What it means |
-|---|---|
-| Context handoff | Long sessions continue via a continuity capsule, not destructive compaction — nothing important is forgotten |
-| Recoverable dumpzone | Old completed work is compacted with no token cost; full originals archived under `logs/compacted_chains/`, recoverable with read |
-| Concise output | Answer-first replies + lossless structural compression of tool output |
-| Evidence task board | Compact checklist (`√ → □ !`) owned by the runtime, not the model |
-| Project audit mindset | "Find issues in my codebase" gets disciplined diagnosis: orientation → catalog → fix → verify |
-| Reference comparison | "Compare this against X" stays read-only, classifies per dimension, adopts only proven-better |
-| `/goal` | Autonomous multi-step runs with a deterministic completion auditor |
-| Ghost (Alt+G) | Fast side-check/planning lane that proposes but never owns task truth |
-| PRT (`/prt`) | Post-commit review pipeline with structural impact scoring |
-| Code graph | Local community map + BM25 fuzzy search + caller/callee walker (`/structural-graph`) |
-| Learning loop | Pattern mining → confidence-ranked clusters → your confirmation → relevance-gated injection |
-| Profile portability | `/profile export` / `import` moves your learned state between MO installs |
-| Telegram (optional) | Remote surface with the same task truth in replies |
-| Hooks (optional) | `~/.mo/hooks.yaml` maps runtime events to your shell commands |
-| Session trace | `python mo_trace.py serve` records a session and validates MO's behavior afterwards |
+| --- | --- |
+| Evidence task board | Runtime-owned checklist for real work; model text cannot complete it |
+| Sandboxed tools | File, shell, web, and git access pass through local safety gates |
+| Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
+| Provider failover | OpenAI-compatible providers can fail over on rate, auth, balance, timeout, or empty-response errors |
+| Code graph | Local fuzzy search, caller/callee lookup, and structural graph orientation |
+| Session continuity | Long work preserves task state, evidence, files, and context orientation |
+| `/goal` | Autonomous multi-step work with deterministic completion auditing |
+| Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
+| PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings |
+| Learning loop | Suggestions remain pending until you confirm or dismiss them |
+| Profile portability | Export/import local profile and learning state between MO installs |
+| Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
+| Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
+| Trace tooling | `mo_trace.py` can record and validate a session for behavior debugging |
 
-Run `/help` inside MO for the full command list, or press `F4` for the palette.
+Inside MO, use `/help` for commands or press `F4` for the command palette.
 
-## Personalization and privacy
+## Public Boundaries
 
-Everything personal lives in your private runtime home — never in this repo:
+This public repo is the product code. It does not include anyone's private MO
+home, provider keys, personal profile, project/server knowledge, learned terms,
+or session memory. Those belong in each user's `~/.mo` runtime state.
 
-| Yours | Where |
-|---|---|
-| Profile, terms, learned behavior | `~/.mo/memory/profile/` |
-| API keys and secrets | `~/.mo/.env` (gitignored everywhere, never printed) |
-| Sessions, memory, task history | `~/.mo/memory/` |
-| Config | `~/.mo/config.yaml` |
+MO's personalization is part of the product idea, but the personal data is not
+part of the product defaults. A new user gets the same machinery empty, then MO
+adapts through their own approved profile and learning surfaces.
 
-A fresh `--init` gives every user the same machinery, empty. MO builds your
-profile from working with you.
+## Privacy And Security
 
-## Run it your way
+- Keys live in `~/.mo/.env`, shell environment, or configured secret files, not
+  in the repo.
+- Tool calls pass through sandbox rules for path boundaries, shell safety,
+  network policy, and secret redaction.
+- A secrets-focused critic checks outgoing answers, and modified files can be
+  scanned by turn-end safety checks.
+- MO does not need an inbound network listener for normal use.
+- Optional Telegram support uses outbound polling; run only one poller for a bot
+  token at a time.
+- Backend monitor logs are diagnostics only. Runtime task truth stays with the
+  Gateway and task board.
 
-- **Headless / always-on:** run MO as a background service and reach it
-  remotely (e.g. Telegram) with
-  `python mo_service.py --config ~/.mo/config.yaml --surface server`.
-- **Backend diagnostics:** a best-effort JSONL monitor writes under
-  `~/.mo/logs/monitor/` for when you want to see what the runtime did. It is
-  never runtime authority — the task board is.
-- **Upgrading an older install:** `python mo.py --migrate-state` (dry-run
-  first; apply with `--confirm`).
+## Current Rough Edges
 
-## Design principles
+- Terminal-first experience; no packaged desktop app yet.
+- Provider setup is manual and expects you to understand your endpoint.
+- Internals are moving quickly; docs and command surfaces may change.
+- Some advanced paths, such as service mode, tracing, hooks, and PRT fix loops,
+  are best treated as builder-facing features for now.
 
-- **Provider-first:** the model decides; the sandbox enforces.
-- **One source of truth:** Gateway owns boards; helpers own templates; the UI
-  renders truth only.
-- **Anti-duplication, anti-over-engineering:** the simplest working solution,
-  consolidated, with nothing dead left behind.
-- **Honest reporting:** what changed, what verified, what failed, what's
-  unknown — never a generic AI dump.
+## Design Principles
 
-## Security
-
-- Sandbox gates every tool call: path boundaries, shell safety, network
-  policy, secret redaction.
-- A secrets-only critic gate scans answers; a turn-end security check scans
-  modified files.
-- Keys/config never committed; supervisor lock prevents duplicate processes.
-- No inbound network surface — MO never opens a listening port; the optional
-  Telegram surface is outbound polling only.
-- Outbound tools (`web_fetch`/`web_search`, shell network) are sandbox-gated and
-  default to a **local-trust** posture; harden them in `config.yaml`
-  (`web_fetch_allowed_hosts`, or disable network) — see `config.example.yaml`.
+- **Provider-first:** the model reasons and acts; the runtime enforces truth.
+- **Local-first:** user state stays on the user's machine by default.
+- **Evidence-first:** reports distinguish verified facts from guesses.
+- **No fake progress:** blocked work stays blocked until evidence changes.
+- **Small over grand:** prefer simple, inspectable runtime behavior over platform
+  theater.
 
 ## License
 
-Private. © IQMO 2024–2026.
+No open-source license has been published yet. Until a `LICENSE` file is added,
+this repository is source-available for preview and all rights are reserved by
+IQMO.
