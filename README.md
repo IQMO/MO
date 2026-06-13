@@ -2,10 +2,12 @@
 
 **A local-first coding agent for people who want the work to stay honest.**
 
-MO is a Python terminal agent from [IQMO](https://github.com/IQMO). It gives a
-provider model real tools, then surrounds that model with a local runtime that
-tracks what actually happened: task evidence, sandboxed tool dispatch, private
-memory, code navigation, long-session continuity, and post-work review.
+MO is a Python terminal agent from [IQMO](https://github.com/IQMO). Install it
+once, add its generated `mo` command to your `PATH`, then call `mo` from any
+project folder. It gives OpenCode/OpenAI-compatible provider models real tools,
+then surrounds those models with a local runtime that tracks what actually
+happened: task evidence, sandboxed tool dispatch, private memory, code
+navigation, long-session continuity, and post-work review.
 
 > **Status: public underdog release.** MO is used daily and already useful, but
 > it is still early: terminal-first, fast-moving, and rough in places. This is
@@ -44,9 +46,20 @@ needed for normal use.
 
 ### Provider-first, provider-agnostic
 
-MO is not a wrapper that only works with one model brand. It is built around
-OpenAI-compatible provider config and failover. The model is the engine; MO is
-the local runtime that keeps behavior, tools, memory, and reporting consistent.
+MO is not a wrapper that only works with one model brand. The default config is
+OpenCode-first, with DeepSeek v4 Pro for main work, Flash for Ghost, and
+OpenAI/Codex-compatible fallback paths when configured. Under the hood, normal
+providers use OpenAI-compatible chat completions; Codex can use the local
+`~/.codex/auth.json` OAuth path. The model is the engine; MO is the local
+runtime that keeps behavior, tools, memory, and reporting consistent.
+
+### Install once, use anywhere
+
+`python mo.py --init` creates a private MO home and command shims:
+`~/.mo/bin/mo` for POSIX shells and `~/.mo/bin/mo.cmd` for Windows. Add that
+directory to `PATH` once, then run `mo` from any terminal in any project. The
+shim preserves the directory you called it from, so MO works on the current
+project while keeping its own state under `~/.mo`.
 
 ### Long-session continuity
 
@@ -105,15 +118,18 @@ python mo.py --init
 ```
 
 `--init` creates/checks your private MO home, normally `~/.mo`, including config,
-profile templates, session/log/cache folders, and a `.env` file for provider
-keys.
+profile templates, session/log/cache folders, generated `mo` command shims, and
+a `.env` file for provider keys.
 
 Add a provider key to `~/.mo/.env` or your shell environment. The default
-example config uses:
+example config is OpenCode-first:
 
 ```env
 OPENCODE_API_KEY=your_key_here
 ```
+
+OpenAI-compatible providers can be added in `~/.mo/config.yaml`. Codex/OpenAI
+fallback can use your local `~/.codex/auth.json` when configured.
 
 Run MO:
 
@@ -130,8 +146,8 @@ find issues in this project
 For non-trivial work, you should see a compact task checklist appear and advance
 only as tools actually run.
 
-Optional global command: add `~/.mo/bin` to your `PATH`, then run `mo` from any
-project directory.
+Global command: add `~/.mo/bin` to your `PATH`, then run `mo` from any project
+directory.
 
 ```bash
 # Linux/macOS
@@ -145,10 +161,12 @@ export PATH="$HOME/.mo/bin:$PATH"
 
 | Capability | What it means |
 | --- | --- |
+| Global `mo` command | `--init` creates POSIX/Windows shims so MO can be called from any terminal |
 | Evidence task board | Runtime-owned checklist for real work; model text cannot complete it |
 | Sandboxed tools | File, shell, web, and git access pass through local safety gates |
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
-| Provider failover | OpenAI-compatible providers can fail over on rate, auth, balance, timeout, or empty-response errors |
+| OpenCode/OpenAI providers | OpenCode-first config, OpenAI-compatible chat completions, and Codex/OpenAI fallback support |
+| Provider failover | Providers can fail over on rate, auth, balance, timeout, or empty-response errors |
 | Code graph | Local fuzzy search, caller/callee lookup, and structural graph orientation |
 | Session continuity | Long work preserves task state, evidence, files, and context orientation |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
