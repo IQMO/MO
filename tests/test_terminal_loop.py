@@ -19,7 +19,7 @@ class DummyMonitor:
 
 def test_startup_identity_lines_reports_resolved_runtime_root():
     agent = SimpleNamespace(
-        runtime_home=r"C:\Users\Admin\.mo",
+        runtime_home=r"C:\Users\example\.mo",
         provider_name="opencode",
         model="deepseek-v4-pro",
     )
@@ -31,7 +31,7 @@ def test_startup_identity_lines_reports_resolved_runtime_root():
     expected_root = os.path.dirname(os.path.dirname(os.path.abspath(core.__file__)))
     assert any(line == f"  runtime: {expected_root}" for line in lines)
     assert any("opencode / deepseek-v4-pro" in line for line in lines)
-    assert any(r"C:\Users\Admin\.mo" in line for line in lines)
+    assert any(r"C:\Users\example\.mo" in line for line in lines)
 
 
 def test_startup_identity_lines_shows_project_when_cwd_differs(monkeypatch, tmp_path):

@@ -578,6 +578,11 @@ def _v_tool_errors_trace(trace: dict[str, Any]) -> tuple[bool, str, str]:
 
     detail = f"{len(errors)} tool error/block(s): {tools}"
     if hard_parts:
+        # Monitor traces lack serve-session completion events; tool errors
+        # may still be recovered before the session ends.  Downgrade to WARN
+        # so the operator can see the error without a hard FAIL.
+        if trace.get("mode") == "monitor":
+            return (True, f"{detail}; monitor trace — unresolved context: {', '.join(hard_parts)} (serve session may recover)", "warn")
         return (False, f"{detail}; unresolved context: {', '.join(hard_parts)}", "fail")
 
     if blocked:
@@ -701,6 +706,10 @@ def _v_memory_indexed_trace(trace: dict[str, Any]) -> tuple[bool, str, str]:
     if kind == "local_command":
         return (True, "No memory indexing expected for local slash command", "info")
     if _has_event(events, "provider_response", "auto_reply") or str(trace.get("stdout") or "").strip():
+        # Monitor traces capture provider responses but not memory_index
+        # events (those are emitted at serve-session closeout).
+        if trace.get("mode") == "monitor":
+            return (True, "No memory indexing event in monitor trace (expected — emitted at serve-session closeout)", "info")
         return (False, "No memory indexing event for an answered turn", "fail")
     return (True, "No memory indexing event; no answered turn detected", "info")
 

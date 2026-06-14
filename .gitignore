@@ -22,9 +22,9 @@ nul
 with open*
 personal/
 .claude/
-# Operator-private lanes. `devmode/` is TRACKED in private rMO (the protocol
-# pack + maintainer guide + operator context, for operator/agents/devs) but is
-# kept out of the public IQMO/MO snapshot via .gitattributes export-ignore.
+# Operator-private lanes. `devmode/` is TRACKED in the private source tree (the
+# protocol pack + maintainer guide + operator context, for operator/agents/devs)
+# but is kept out of the public snapshot via .gitattributes export-ignore.
 # The bulky session records / archives below stay local-only.
 docs/devmode/
 docs/comparisons/
