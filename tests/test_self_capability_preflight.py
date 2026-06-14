@@ -30,6 +30,16 @@ def test_self_capability_preflight_detection_is_scoped():
     assert should_include_self_capability_preflight("can you fix this bug in parser.py") is False
 
 
+def test_self_capability_preflight_ignores_incidental_mo_substrings():
+    # Regression: the 2-char "mo" scope marker used to match inside ordinary
+    # words (re-MO-ve, me-MO-ry, MO-dal), firing the self-preflight on plain work.
+    assert should_include_self_capability_preflight("debug the memory leak") is False
+    assert should_include_self_capability_preflight("audit and remove duplicate rows") is False
+    assert should_include_self_capability_preflight("skip the modal animation") is False
+    # Real whole-word "mo" self-scope with an action word still fires.
+    assert should_include_self_capability_preflight("audit mo's own workflow") is True
+
+
 def test_vs05_readonly_source_roots_extracts_existing_absolute_paths(tmp_path):
     current = tmp_path / "ref-a"
     reference = tmp_path / "ref-b"

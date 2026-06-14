@@ -8,6 +8,10 @@ def pytest_collection_modifyitems(config, items):
         try:
             size = Path(item.fspath).stat().st_size
         except OSError:
+            # Unknown size: default to the unit tier so the test still runs in
+            # tiered sweeps instead of being silently excluded from every
+            # -m smoke/unit/full filter.
+            item.add_marker(pytest.mark.unit)
             continue
         if size < 3000:
             item.add_marker(pytest.mark.smoke)

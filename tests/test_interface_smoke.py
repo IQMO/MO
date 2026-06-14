@@ -326,7 +326,7 @@ def test_ghost_route_confirmation_to_main_shows_sent_receipt(monkeypatch):
     tui._ghost_pending_route = GhostRouteSuggestion("main", "review UI", "idle")
     started = []
     transitions = []
-    monkeypatch.setattr(tui, "_handle_input", lambda objective: started.append(objective))
+    monkeypatch.setattr(tui, "_handle_input", lambda objective, **_kw: started.append(objective))
     monkeypatch.setattr(tui, "_start_ghost_route_transition", lambda user_text, response: transitions.append((user_text, response)))
 
     handled = tui._handle_ghost_route_reply("yes")

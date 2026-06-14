@@ -10,6 +10,8 @@ from pathlib import Path
 import os
 import re
 
+from .path_defaults import mo_home
+
 
 _SELF_ACTION_WORDS = {
     "audit",
@@ -78,7 +80,7 @@ _CAPABILITY_FILES = (
     ("turn learning hook", "core/agent/agent.py", "_record_turn_memory_and_learning() records feedback/terms/workflow results"),
     ("turn workflow control", "core/agent/agent_turn.py", "_maybe_handle_workflow_control_turn() handles explicit workflow adoption"),
     ("provider audit", "core/provider/provider_audit.py", "logs provider requests/responses for trace review"),
-    ("tool audit", "core/agent/agent_turn.py", "_write_tool_audit() writes redacted logs/tool_audit.jsonl"),
+    ("tool audit", "core/agent/agent_turn_dispatch.py", "_write_tool_audit() writes redacted logs/tool_audit.jsonl"),
     ("session closeout", "core/session/session_closeout.py", "captures dirty workspace, taskboard state, logs, and unresolved work"),
     ("heartbeat", "core/heartbeat.py", "records live taskboard/git/session continuity"),
     ("taskboard truth", "core/tasking/agent_taskboard.py", "task rows advance only via explicit complete_task evidence"),
@@ -163,6 +165,17 @@ def vs05_readonly_source_roots(user_input: str) -> list[str]:
     return roots
 
 
+def _marker_in_text(marker: str, text: str) -> bool:
+    """Whole-word marker match.
+
+    Substring matching let the 2-char scope marker ``mo`` fire on ordinary words
+    like *re**mo**ve* / *me**mo**ry* / *modal*, injecting the self-preflight on
+    unrelated work. Word-boundary matching keeps real mentions (``audit mo``,
+    ``devmode``, ``your codebase``) while dropping incidental substrings.
+    """
+    return re.search(r"\b" + re.escape(marker) + r"\b", text) is not None
+
+
 def should_include_self_capability_preflight(user_input: str) -> bool:
     """Return True for MO self-work where capability discovery must precede action."""
     text = " ".join(str(user_input or "").strip().lower().split())
@@ -170,8 +183,8 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
         return False
     if is_devmode05_activation(text) or is_vs05_activation(text):
         return True
-    scope_hit = any(marker in text for marker in _SELF_SCOPE_MARKERS)
-    action_hit = any(word in text for word in _SELF_ACTION_WORDS)
+    scope_hit = any(_marker_in_text(marker, text) for marker in _SELF_SCOPE_MARKERS)
+    action_hit = any(_marker_in_text(word, text) for word in _SELF_ACTION_WORDS)
     if scope_hit and action_hit:
         return True
     # Angry/corrective operator feedback often says "you" rather than "MO".
@@ -569,7 +582,7 @@ def build_self_capability_preflight_context(user_input: str, *, cwd: str | None 
 
 def _runtime_evidence_lines(root: Path) -> list[str]:
     """Return sandbox-friendly runtime evidence locations to inspect."""
-    home = Path(os.environ.get("MO_STATE_HOME") or os.environ.get("MO_HOME") or "~/.mo").expanduser()
+    home = mo_home()
     repo_memory = root / "memory"
     lines = [
         "Runtime evidence paths to inspect when relevant:",

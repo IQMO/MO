@@ -13,6 +13,7 @@ from interface.command_registry import (
     SLASH_SUBCOMMANDS,
     SlashCommandSpec,
     build_help_text,
+    build_palette_categories,
     slash_command_names,
     slash_command_with_desc,
 )
@@ -149,12 +150,35 @@ def test_ghost_is_a_public_slash_command_with_help_and_palette():
     assert found_in_palette, "/ghost must appear in PALETTE_ORDER"
 
 
-def test_vs05_is_public_work_command_for_comparison_mode():
-    assert "/vs05" in SLASH_COMMANDS
-    assert "VS05 comparison/adoption mode" in SLASH_COMMAND_HELP
+def test_vs05_is_operator_only_dispatchable_but_hidden_from_users(monkeypatch):
+    # /vs05 is an operator-only protocol command: always dispatchable, but
+    # advertised only when the operator protocol pack is installed. A public
+    # user (no pack) must not see it in help / palette / completion.
+    assert "/vs05" in SLASH_COMMANDS  # still resolvable/dispatchable for everyone
+    assert COMMAND_BY_NAME["/vs05"].operator_only is True
+
+    def _palette_has_vs05() -> bool:
+        return any(
+            cmd.split()[0] == "/vs05"
+            for _cat, entries in build_palette_categories()
+            for cmd, _desc in entries
+        )
+
+    # Operator build (pack installed) — visible.
+    monkeypatch.setattr(
+        "core.self_capability_preflight.operator_protocols_installed", lambda: True
+    )
     assert "/vs05" in slash_command_names()
-    assert any("/vs05" in commands for _section, commands in HELP_SECTIONS)
-    assert any(any(cmd.split()[0] == "/vs05" for cmd in commands) for _category, commands in PALETTE_ORDER)
+    assert "VS05 comparison/adoption mode" in build_help_text()
+    assert _palette_has_vs05()
+
+    # Public build (no pack) — hidden from all user-facing surfaces.
+    monkeypatch.setattr(
+        "core.self_capability_preflight.operator_protocols_installed", lambda: False
+    )
+    assert "/vs05" not in slash_command_names()
+    assert "/vs05" not in build_help_text()
+    assert not _palette_has_vs05()
 
 
 def test_projects_is_preferred_project_history_and_sessions_is_legacy_alias():

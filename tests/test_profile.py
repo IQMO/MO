@@ -87,3 +87,15 @@ def test_profile_learning_updates_behavior_rules_without_system_mutation(tmp_pat
     assert "[evidence] Verify logs before claiming runtime success" in behavior
     assert "### behavior.md" in context
     assert "Verify logs before claiming runtime success" in context
+
+
+def test_profile_important_paths_round_trip(tmp_path):
+    # Regression: important_paths is consumed by graph scoring but was never
+    # serialized, so it always loaded back as [] and any set value was lost.
+    path = str(tmp_path / "mo.db")
+    profile = Profile(_path=path, user_name="Ada")
+    profile.important_paths = ["core/agent", "interface/tui_app.py"]
+    profile.save()
+
+    reloaded = Profile.load(path)
+    assert reloaded.important_paths == ["core/agent", "interface/tui_app.py"]

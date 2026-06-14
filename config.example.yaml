@@ -95,7 +95,6 @@ prt:
   # Flash, Anthropic, and big-pickle providers are not tried by /prt.
   default_model: "deepseek-v4-pro"
   fallback_model: "codex"
-  auto_review_large: true
   ghost_suggest_medium: true
   score_target: 4.5
 

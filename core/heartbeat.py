@@ -99,12 +99,40 @@ def record_heartbeat(
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         with ledger_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(snapshot, ensure_ascii=False, sort_keys=True) + "\n")
+        _prune_heartbeat_ledger(ledger_path)
         monitor = get_monitor()
         if monitor:
             monitor.emit("heartbeat", {k: v for k, v in snapshot.items() if k not in {"git", "extra"}})
         return snapshot
     except Exception:
         return None
+
+
+HEARTBEAT_LEDGER_MAX_LINES = 2000
+HEARTBEAT_LEDGER_MAX_BYTES = 2_000_000
+
+
+def _prune_heartbeat_ledger(
+    ledger_path: Path,
+    *,
+    max_lines: int = HEARTBEAT_LEDGER_MAX_LINES,
+    max_bytes: int = HEARTBEAT_LEDGER_MAX_BYTES,
+) -> None:
+    """Bound the append-only heartbeat ledger to its most recent snapshots.
+
+    Cheap path: only rewrites once the file grows past ``max_bytes`` (so the
+    common case is a single ``stat``), then trims to the last ``max_lines`` lines.
+    """
+    try:
+        if ledger_path.stat().st_size <= max_bytes:
+            return
+        lines = ledger_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if len(lines) <= max_lines:
+            return
+        kept = lines[-max_lines:]
+        ledger_path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    except Exception:
+        return
 
 
 def build_heartbeat_snapshot(

@@ -251,6 +251,13 @@ class TelegramGateway:
                 self._deliver_reply(client, base, chat_key, reply or "stop requested", message_id=message_id)
                 return
             if chat_key in self.active_chats and clean_text.strip() and not clean_text.strip().startswith("/"):
+                # Enforce the same allowlist as the job path before steering text
+                # into a live turn — otherwise a non-authorized group member could
+                # inject into an active turn (auth was only checked in handle_text).
+                ok, msg = self.authorize_or_pair(str(sender_id), chat_type=str(chat_type or "private"))
+                if not ok:
+                    self._deliver_reply(client, base, chat_key, msg, message_id=message_id)
+                    return
                 injected = False
                 injector = getattr(self.agent, "add_live_steer", None)
                 if callable(injector):

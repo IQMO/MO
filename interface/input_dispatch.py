@@ -163,11 +163,14 @@ class InputDispatchMixin:
             self._app.invalidate()
         return True
 
-    def _handle_input(self, text: str):
+    def _handle_input(self, text: str, *, force_main: bool = False):
         if self._handle_prompt_enhance_input(text):
             return
-        # Ghost mode routing: ALWAYS goes to Ghost, never queued for main MO
-        if getattr(self, "_ghost_enabled", False):
+        # Ghost mode routing: messages go to Ghost, but slash commands stay control
+        # input (so /ghost off, /exit, /status work while ghost is on), and an
+        # explicit Ghost->main handoff (force_main) must reach the main agent rather
+        # than re-entering Ghost.
+        if getattr(self, "_ghost_enabled", False) and not force_main and not text.strip().startswith("/"):
             self._ghost_panel_ask(text)
             return
         if self._work_active() and not self._command_allowed_while_working(text):

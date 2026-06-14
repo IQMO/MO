@@ -1,12 +1,25 @@
 from types import SimpleNamespace
 
 from core.heartbeat import (
+    _prune_heartbeat_ledger,
     build_surface_continuity_context,
     read_recent_heartbeats,
     record_heartbeat,
     render_heartbeat_status,
 )
 from core.session.session import Session
+
+
+def test_prune_heartbeat_ledger_trims_to_recent(tmp_path):
+    # Regression: the append-only ledger used to grow unbounded.
+    path = tmp_path / "heartbeats.jsonl"
+    path.write_text("\n".join('{"n": %d}' % i for i in range(5000)) + "\n", encoding="utf-8")
+
+    _prune_heartbeat_ledger(path, max_lines=100, max_bytes=1000)
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 100
+    assert lines[-1] == '{"n": 4999}'  # newest snapshots kept
 
 
 class DummyAgent:

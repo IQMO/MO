@@ -128,6 +128,25 @@ def test_on_input_changed_opens_and_closes_palette_without_submitting():
     assert harness._app.invalidated is True
 
 
+def test_ghost_mode_swallows_plain_text_but_lets_slash_commands_through():
+    # Regression: while Ghost mode is on, plain messages go to Ghost, but slash
+    # commands (e.g. /ghost off) must still reach slash dispatch instead of being
+    # swallowed as a Ghost side-question.
+    harness = DispatchHarness()
+    dispatched = []
+    harness.agent.process_slash_command = lambda text: dispatched.append(text) or "[GHOST_OFF]"
+    harness._apply_ghost_on()
+    assert harness._ghost_enabled is True
+
+    harness._handle_input("what is the plan")
+    assert harness.ghost_questions == ["what is the plan"]
+
+    harness._handle_input("/ghost off")
+    assert dispatched == ["/ghost off"]
+    assert harness.ghost_questions == ["what is the plan"]  # not routed to Ghost
+    assert harness._ghost_enabled is False  # /ghost off actually took effect
+
+
 def test_dispatch_slash_command_result_handles_ghost_on_without_transcript_when_notice_mode():
     harness = DispatchHarness()
 

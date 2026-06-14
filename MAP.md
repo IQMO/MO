@@ -43,3 +43,4 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Prefer existing MO systems over new parallel mechanisms.
 - Keep protocols split into modules, not oversized root prompts.
 - Never print secrets or credential values.
+- Public/private: work in private `IQMO/rMO`; public `IQMO/MO` is a guarded `git archive` snapshot (`devmode/`+`docs/` export-ignored). Publish via `python tools/publish_public.py`, never by hand; operator-only commands use `operator_only=True`. See AGENTS.md "Public/Private Repository Boundary".

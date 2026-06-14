@@ -207,6 +207,21 @@ class TestShellPathsAllowed:
     def test_non_windows_command_slash_path_still_blocked(self):
         assert not shell_paths_allowed("cat /b", ["/home/user/repo"])
 
+    def test_windows_drive_path_outside_roots_is_blocked(self):
+        # Regression: drive-letter paths used to fall through to "allowed",
+        # letting `type C:\...secret` escape the configured roots on Windows.
+        assert not shell_paths_allowed(
+            r"type C:\Users\victim\secret.txt", [r"E:\my-project"]
+        )
+        assert not shell_paths_allowed(
+            r"Get-Content D:\secrets\creds.env", [r"E:\my-project"]
+        )
+
+    def test_windows_drive_path_inside_roots_is_allowed(self):
+        assert shell_paths_allowed(
+            r"type E:\my-project\README.md", [r"E:\my-project"]
+        )
+
     def test_html_closing_tags_in_code_strings_are_not_paths(self):
         command = "python3 -c \"html='<html></html>'; print(html.count('</html>'))\""
         assert shell_paths_allowed(command, ["/home/user/repo"])

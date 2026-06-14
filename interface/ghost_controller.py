@@ -625,7 +625,7 @@ class GhostControllerMixin:
         record = registry.create(kind="main", source="ghost", route="main", objective=objective, state="accepted", note="main MO accepted handoff")
         self._active_main_worker_id = record.id
         try:
-            self._handle_input(objective)
+            self._handle_input(objective, force_main=True)
         except Exception as exc:
             record = registry.update(record.id, "blocked", f"main MO handoff failed: {type(exc).__name__}") or record
             self._active_main_worker_id = ""

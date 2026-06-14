@@ -21,10 +21,34 @@ class SlashCommandSpec:
     help_lines: tuple[str, ...] = ()
     palette: bool = True
     legacy: bool = False
+    operator_only: bool = False
 
     @property
     def palette_desc(self) -> str:
         return self.description if self.palette_description is None else self.palette_description
+
+
+def _operator_protocols_visible() -> bool:
+    """True when the operator's private protocol pack is installed.
+
+    Operator-only commands stay fully dispatchable for everyone, but are hidden
+    from user-facing help/palette/completion on a public build (no pack), so a
+    user never sees operator-only machinery advertised. Imported lazily to avoid
+    an interface->core import cycle and to stay monkeypatchable in tests.
+    """
+    try:
+        from core.self_capability_preflight import operator_protocols_installed
+
+        return bool(operator_protocols_installed())
+    except Exception:
+        return False
+
+
+def _command_hidden(name: str) -> bool:
+    """True when *name* (or its root command) is operator-only and not installed."""
+    root = name.split()[0] if " " in name else name
+    spec = COMMAND_BY_NAME.get(root)
+    return bool(spec and spec.operator_only and not _operator_protocols_visible())
 
 
 COMMANDS: tuple[SlashCommandSpec, ...] = (
@@ -261,6 +285,9 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
             "/vs05             VS05 comparison/adoption mode",
             "                  /vs05 <current-path> <reference-path>",
         ),
+        # Operator-only protocol: dispatchable for all, but hidden from
+        # user-facing help/palette/completion unless the protocol pack is installed.
+        operator_only=True,
     ),
     SlashCommandSpec(
         name="/ghost",
@@ -401,9 +428,12 @@ HELP_ORDER: tuple[str, ...] = tuple(command for _section, commands in HELP_SECTI
 def build_help_text() -> str:
     lines = ["MO Agent commands:"]
     for section, commands in HELP_SECTIONS:
+        visible = [name for name in commands if not _command_hidden(name)]
+        if not visible:
+            continue
         lines.append("")
         lines.append(section)
-        for name in commands:
+        for name in visible:
             spec = COMMAND_BY_NAME[name]
             for line in spec.help_lines:
                 lines.append(f"  {line}")
@@ -436,7 +466,8 @@ def _palette_entry(command: str) -> tuple[str, str]:
 def build_palette_categories() -> list[tuple[str, list[tuple[str, str]]]]:
     categories: list[tuple[str, list[tuple[str, str]]]] = []
     for name, commands in PALETTE_ORDER:
-        categories.append((name, [_palette_entry(command) for command in commands]))
+        entries = [_palette_entry(command) for command in commands if not _command_hidden(command)]
+        categories.append((name, entries))
     return categories
 
 
@@ -445,9 +476,10 @@ DEFAULT_PALETTE_CATEGORY = 1
 
 
 def slash_command_names() -> list[str]:
-    return sorted(set(list(SLASH_COMMANDS.keys()) + list(SLASH_ALIASES.keys())))
+    names = list(SLASH_COMMANDS.keys()) + list(SLASH_ALIASES.keys())
+    return sorted({name for name in names if not _command_hidden(name)})
 
 
 def slash_command_with_desc() -> list[tuple[str, str]]:
     """Return (command, description) pairs for suggestion display."""
-    return [(cmd, desc) for cmd, desc in SLASH_COMMANDS.items()]
+    return [(cmd, desc) for cmd, desc in SLASH_COMMANDS.items() if not _command_hidden(cmd)]

@@ -195,17 +195,19 @@ def test_candidate_staging_dedupes_by_normalized_trigger_behavior(tmp_path):
     assert len(lines) == 2
 
 
-def test_stale_staged_candidates_expire(tmp_path):
+def test_stale_candidates_expire(tmp_path):
+    # Records use status "candidate"/"promoted" with created_at (not the fictional
+    # "staged"/"staged_at"): old candidates expire, promoted history is kept.
     import json, time
     from core.learning.workflow_learning import _append_candidate_record
 
     path = tmp_path / "workflow_candidates.jsonl"
     now = time.time()
-    old = {"id": "old1", "trigger": "old trigger", "behavior": "old behavior", "status": "staged", "staged_at": now - 86400 * 40}
-    promoted_old = {"id": "p1", "trigger": "kept trigger", "behavior": "kept behavior", "status": "promoted", "staged_at": now - 86400 * 90}
+    old = {"id": "old1", "trigger": "old trigger", "behavior": "old behavior", "status": "candidate", "created_at": now - 86400 * 40}
+    promoted_old = {"id": "p1", "trigger": "kept trigger", "behavior": "kept behavior", "status": "promoted", "created_at": now - 86400 * 90}
     path.write_text(json.dumps(old) + "\n" + json.dumps(promoted_old) + "\n", encoding="utf-8")
 
-    _append_candidate_record(path, {"id": "new1", "trigger": "fresh trigger", "behavior": "fresh behavior", "status": "staged", "staged_at": now})
+    _append_candidate_record(path, {"id": "new1", "trigger": "fresh trigger", "behavior": "fresh behavior", "status": "candidate", "created_at": now})
 
     ids = {json.loads(l)["id"] for l in path.read_text(encoding="utf-8").splitlines() if l.strip()}
-    assert ids == {"p1", "new1"}  # stale staged dropped; promoted history kept
+    assert ids == {"p1", "new1"}  # stale candidate dropped; promoted history kept

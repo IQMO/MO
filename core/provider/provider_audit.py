@@ -13,7 +13,7 @@ from typing import Any
 
 from ..backend_monitor import redact_monitor_text
 from ..env_utils import int_env
-from ..path_defaults import ENV_MO_STATE_HOME
+from ..path_defaults import resolve_state_path
 
 LOG_PATH = Path("logs/provider_audit.jsonl")
 DEFAULT_MAX_BYTES = 1_000_000
@@ -47,7 +47,7 @@ def append_provider_audit(
     try:
         if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MO_PROVIDER_AUDIT_FORCE") != "1":
             return
-        log_path = Path(os.environ.get(ENV_MO_STATE_HOME, "").strip()) / LOG_PATH if os.environ.get(ENV_MO_STATE_HOME, "").strip() else LOG_PATH
+        log_path = Path(resolve_state_path(str(LOG_PATH), default=str(LOG_PATH)))
         log_path.parent.mkdir(parents=True, exist_ok=True)
         payload: dict[str, Any] = {
             "ts": round(time.time(), 3),

@@ -209,6 +209,7 @@ def test_gateway_polling_ignores_unmentioned_group_without_working_message(tmp_p
 
 def test_gateway_active_chat_message_becomes_live_steer(tmp_path):
     gateway, agent, _router = _gateway(tmp_path)
+    _approve(gateway)  # steer enforces the same allowlist as the job path
     client = FakeClient({})
     gateway.active_chats.add("c")
 
@@ -219,10 +220,25 @@ def test_gateway_active_chat_message_becomes_live_steer(tmp_path):
     assert any("queued as steer" in payload.get("text", "") for _, payload in client.posts)
 
 
+def test_gateway_active_chat_steer_requires_authorization(tmp_path):
+    # Regression: an unauthorized sender must not be able to inject steer text
+    # into an active turn (the steer path used to skip the allowlist).
+    gateway, agent, _router = _gateway(tmp_path)
+    client = FakeClient({})
+    gateway.active_chats.add("c")
+
+    gateway.enqueue_text(sender_id="99", chat_id="c", text="malicious steer", chat_type="private", client=client, base="https://api.telegram.org/botTOKEN", message_id=1)
+
+    assert gateway.pop_steer("c") is None
+    assert not getattr(agent, "steer", [])
+    assert not any("queued as steer" in payload.get("text", "") for _, payload in client.posts)
+
+
 def test_gateway_active_chat_steer_buffer_remains_for_legacy_agent_without_live_steer(tmp_path):
     agent = LegacyRunApiAgent(tmp_path / "sessions")
     agent.add_live_steer = None
     gateway, _agent, _router = _gateway(tmp_path, agent=agent)
+    _approve(gateway)  # steer enforces the same allowlist as the job path
     client = FakeClient({})
     gateway.active_chats.add("c")
 

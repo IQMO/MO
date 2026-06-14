@@ -294,7 +294,14 @@ def _normalize_candidate_text(record: dict[str, Any]) -> str:
 
 
 def _expire_stale_candidates(path: Path, *, ttl_days: int | None = None) -> int:
-    """Drop staged (never-promoted) candidates older than the TTL."""
+    """Drop never-promoted candidates older than the TTL.
+
+    Candidates are written with ``status == "candidate"`` and ``created_at``;
+    promotion rewrites them to ``status == "promoted"``. The expiry keeps every
+    promoted record and any candidate newer than the cutoff. (Previously this
+    compared against ``"staged"``, a status no record ever has, so the TTL never
+    expired anything.)
+    """
     ttl = int(ttl_days if ttl_days is not None else int_env("MO_WORKFLOW_CANDIDATE_TTL_DAYS", 30))
     if ttl <= 0 or not path.exists():
         return 0
@@ -302,7 +309,7 @@ def _expire_stale_candidates(path: Path, *, ttl_days: int | None = None) -> int:
     records = _read_jsonl(path)
     kept = [
         r for r in records
-        if str(r.get("status") or "staged") != "staged" or float(r.get("staged_at") or r.get("created_at") or cutoff) >= cutoff
+        if str(r.get("status") or "candidate") != "candidate" or float(r.get("created_at") or cutoff) >= cutoff
     ]
     dropped = len(records) - len(kept)
     if dropped:

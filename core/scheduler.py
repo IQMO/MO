@@ -204,14 +204,29 @@ class SchedulerService:
             raise ValueError("Scheduled goal job missing prompt/objective")
         from .goal import GoalRunner
 
-        runner = GoalRunner(self.agent)
+        session_name = str(job.get("session") or job.get("session_name") or f"scheduler-{_job_id(job)}")
+        session = _load_scheduler_session(self.agent, session_name)
         max_iterations = max(1, int(job.get("max_iterations", 10) or 10))
-        parts = [str(runner.start(objective) or "")]
-        for _ in range(max_iterations - 1):
-            if not getattr(self.agent, "_goal_active", False):
-                break
-            parts.append(str(runner.continue_goal() or ""))
-        return "\n\n".join(part for part in parts if part)
+
+        def _run() -> str:
+            runner = GoalRunner(self.agent)
+            parts = [str(runner.start(objective) or "")]
+            for _ in range(max_iterations - 1):
+                if not getattr(self.agent, "_goal_active", False):
+                    break
+                parts.append(str(runner.continue_goal() or ""))
+            return "\n\n".join(part for part in parts if part)
+
+        # Isolate the goal's session like _run_turn_job so scheduled goal tool
+        # chains don't contaminate (or get contaminated by) the live conversation.
+        isolated = getattr(self.agent, "isolated_session", None)
+        if callable(isolated):
+            with isolated(session):
+                result = _run()
+        else:
+            result = _run()
+        _save_scheduler_session(self.agent, session_name, session)
+        return result
 
     def _record_run_and_update_job(self, claimed_job: dict[str, Any], run: SchedulerRun) -> None:
         current = run.finished_at

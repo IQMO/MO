@@ -28,7 +28,7 @@ def _make_tui():
 def test_ghost_to_main_handoff_registers_receiver_running(monkeypatch):
     tui = _make_tui()
     started = []
-    monkeypatch.setattr(tui, "_handle_input", lambda objective: started.append(objective))
+    monkeypatch.setattr(tui, "_handle_input", lambda objective, **_kw: started.append(objective))
 
     text = tui._execute_ghost_route(GhostRouteSuggestion("main", "review UI", "idle"))
 
@@ -44,7 +44,7 @@ def test_route_confirmation_uses_enhanced_pending_objective_and_starts_transitio
     started = []
     transitions = []
     tui._ghost_pending_route = GhostRouteSuggestion("main", "him lets dig into lgos and meterics and performance", "idle")
-    monkeypatch.setattr(tui, "_handle_input", lambda objective: started.append(objective))
+    monkeypatch.setattr(tui, "_handle_input", lambda objective, **_kw: started.append(objective))
     monkeypatch.setattr(tui, "_start_ghost_route_transition", lambda user_text, response: transitions.append((user_text, response)))
 
     assert tui._handle_ghost_route_reply("yes") is True

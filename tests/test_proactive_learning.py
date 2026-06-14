@@ -20,6 +20,20 @@ def test_mine_learning_suggestions_requires_repeated_pattern(tmp_path):
     assert suggestions == []
 
 
+def test_mine_learning_suggestions_ignores_assistant_self_echo(tmp_path):
+    # Regression: MO's own assistant prose ("I verified the tests") must not
+    # complete an operator-feedback pattern started by the user. With the trigger
+    # words only in the user turn and the evidence words only in the assistant
+    # turn, no suggestion should be mined.
+    memory = EpisodicMemory(tmp_path / "learning.sqlite")
+    memory.index_turn("t1", "you didn't do it", "I verified the tests and checked the logs and files")
+    memory.index_turn("t2", "you didn't finish", "I verified the runtime evidence and tests again")
+
+    suggestions = mine_learning_suggestions(memory.path, min_occurrences=2)
+
+    assert suggestions == []
+
+
 def test_mine_learning_suggestions_returns_reviewable_evidence(tmp_path):
     memory = EpisodicMemory(tmp_path / "learning.sqlite")
     memory.index_turn("t1", "feedback: verify evidence before claiming done", "understood and implemented")

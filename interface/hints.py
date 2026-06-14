@@ -7,10 +7,11 @@ Rotation is time-based: a new hint appears every HINT_INTERVAL seconds.
 
 from __future__ import annotations
 
-import os
 import random
 import time
 from pathlib import Path
+
+from core.path_defaults import mo_home
 
 HINT_INTERVAL: float = 20.0
 """Seconds between hint rotations on the idle line."""
@@ -62,7 +63,7 @@ DEFAULT_HINTS: tuple[str, ...] = (
     "/undo removes the last exchange. /retry re-runs your last prompt. /clear starts a fresh transcript.",
     # ── Slash commands: tools ──
     "/init checks your private MO home. /migrate dry-runs or applies legacy state migration.",
-    "/structural-graph shows or builds MO's code graph. /vs05 compares your codebase against the VS05 standard.",
+    "/structural-graph shows or builds MO's code graph — ask MO 'who calls X' to see relationships.",
     "Type /help to see all slash commands and shortcuts.",
     # ── Customization ──
     "Hooks: map runtime events to your own shell commands via ~/.mo/hooks.yaml.",
@@ -72,15 +73,9 @@ DEFAULT_HINTS: tuple[str, ...] = (
 )
 
 
-def _mo_home() -> Path:
-    """MO private runtime home, matching the runtime default."""
-    raw = os.getenv("MO_HOME") or os.getenv("MO_STATE_HOME") or "~/.mo"
-    return Path(raw).expanduser().resolve(strict=False)
-
-
 def hints_file_path() -> Path:
     """Return the resolved path to the hints file."""
-    return _mo_home() / HINTS_FILE_NAME
+    return mo_home() / HINTS_FILE_NAME
 
 
 def load_hints() -> list[str]:

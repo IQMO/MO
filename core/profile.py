@@ -148,6 +148,7 @@ class Profile:
             "user_alias": self.user_alias,
             "preferred_tools": self.preferred_tools,
             "default_roots": self.default_roots,
+            "important_paths": self.important_paths,
             "favorite_provider": self.favorite_provider,
             "favorite_model": self.favorite_model,
             "projects": projects_raw,
@@ -164,6 +165,7 @@ class Profile:
         self.user_alias = str(raw.get("user_alias") or "")
         self.preferred_tools = raw.get("preferred_tools") or self.preferred_tools
         self.default_roots = raw.get("default_roots") or []
+        self.important_paths = raw.get("important_paths") or []
         self.favorite_provider = str(raw.get("favorite_provider") or "")
         self.favorite_model = str(raw.get("favorite_model") or "")
         self.total_sessions = int(raw.get("total_sessions") or 0)

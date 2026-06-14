@@ -79,7 +79,11 @@ def mine_learning_suggestions(
         return []
     grouped: dict[str, list[SuggestionEvidence]] = {kind: [] for kind, _pattern, _rec in _PATTERNS}
     for row in rows:
-        text = f"{row.get('user', '')}\n{row.get('assistant', '')}"
+        # Mine the operator's words only. Concatenating the assistant text let MO's
+        # own evidence-first prose ("I verified the tests") complete an operator-
+        # feedback pattern started by the user ("you didn't ..."), feeding MO's own
+        # voice back as "learning".
+        text = str(row.get("user", "") or "")
         for kind, pattern, _recommendation in _PATTERNS:
             if pattern.search(text):
                 grouped[kind].append(SuggestionEvidence(

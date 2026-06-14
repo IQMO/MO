@@ -496,7 +496,7 @@ class AgentSlashCommands:
     def _cmd_telegram(self, rest: str) -> str:
         """Local Telegram gateway control. Never prints or stores token values."""
         try:
-            from .telegram.gateway import TelegramGateway, start_telegram_gateway_if_enabled
+            from ..telegram.gateway import TelegramGateway, start_telegram_gateway_if_enabled
         except Exception as exc:
             detail = clean_provider_error(str(exc))
             return "\n".join([

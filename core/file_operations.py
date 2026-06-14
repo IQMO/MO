@@ -6,23 +6,24 @@ used for continuity context, not as proof of current file state.
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
 
-from .path_defaults import ENV_MO_STATE_HOME
+from .path_defaults import resolve_state_path
 
 FILE_OPS_PATH = Path("memory/file_operations.jsonl")
 MAX_KEEP = 500
 
 
 def default_file_ops_path() -> Path:
-    """Active file-ops ledger: private state home when set, else legacy relative."""
-    state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-    if state_home:
-        return Path(state_home) / FILE_OPS_PATH
-    return FILE_OPS_PATH
+    """Active file-ops ledger: private state home when enabled, else legacy relative.
+
+    Resolves through ``path_defaults`` so the ledger follows the same private-home
+    rules as the rest of MO's state (``MO_STATE_HOME`` *and* ``MO_HOME``), instead
+    of only honoring ``MO_STATE_HOME`` and otherwise polluting the project tree.
+    """
+    return Path(resolve_state_path(str(FILE_OPS_PATH), default=str(FILE_OPS_PATH)))
 _READ_TOOLS = {"read_file"}
 _WRITE_TOOLS = {"write_file", "edit_file"}
 

@@ -1,6 +1,21 @@
 import sys
 
-from core.text_safety import configure_utf8_stdio, sanitize_unicode_text
+from core.text_safety import configure_utf8_stdio, contains_secret_value, sanitize_unicode_text
+
+
+def test_contains_secret_value_detects_standalone_high_confidence_tokens():
+    # Labeled forms (already covered before the hardening)
+    assert contains_secret_value("api_key=supersecretvalue123")
+    assert contains_secret_value("token: bearer abcdef123456")
+    # Standalone tokens — regression: invisible to the response/learning guard before
+    assert contains_secret_value("sk-ABCD1234efgh5678ijkl9012mnop3456")
+    assert contains_secret_value("ghp_16CharsOfGitHubPersonalAccessTokenABCDEFG")
+    assert contains_secret_value("AKIAIOSFODNN7EXAMPLE")
+    assert contains_secret_value(
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+    )
+    # Ordinary prose must not trip the detector
+    assert not contains_secret_value("the memory module passed all checks")
 
 
 class FakeStream:

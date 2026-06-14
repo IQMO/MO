@@ -43,7 +43,11 @@ def is_verification_step(title: str) -> bool:
 
 def has_failing_tests(text: str) -> bool:
     lowered = str(text or "").lower()
-    return any(m in lowered for m in ("failed", "failure", "exit code 1", "traceback", "error"))
+    # Note: bare "error" is intentionally excluded — it false-matches ordinary
+    # prose ("added error handling", "no errors found") and wrongly forced verify
+    # steps back to active. Real failures still surface via failed/failure/
+    # traceback/non-zero exit codes.
+    return any(m in lowered for m in ("failed", "failure", "exit code 1", "traceback"))
 
 
 def has_passing_verification(text: str, evidence: list[str]) -> bool:
@@ -54,8 +58,12 @@ def has_passing_verification(text: str, evidence: list[str]) -> bool:
     evidence_text = " ".join(str(e or "") for e in (evidence or []))
     if "verification_result:passed" in evidence_text.lower():
         return True
-    if "[exit code 0]" in lowered or "0 passed" not in lowered:
-        if "passed" in lowered and "failed" not in lowered:
+    # Accept a *test-shaped* pass — a clean exit or a non-zero "<N> passed" count —
+    # but not merely the word "passed" in prose, and never the degenerate "0 passed".
+    # (The previous `or "0 passed" not in lowered` was near-always true, collapsing
+    # the gate to "says passed, not failed".)
+    if "failed" not in lowered and "0 passed" not in lowered:
+        if "[exit code 0]" in lowered or re.search(r"\d+\s+passed", lowered):
             return True
     return False
 

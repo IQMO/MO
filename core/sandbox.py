@@ -458,6 +458,14 @@ def shell_paths_allowed(command: str, allowed_roots: list[str] | None) -> bool:
             and re.fullmatch(r"/[A-Za-z][A-Za-z0-9:.-]*", candidate)
         ):
             continue
+        # Windows drive-letter absolute paths (e.g. C:\..., d:/...) are real
+        # filesystem paths and must be scope-checked exactly like Unix paths.
+        # Without this they fell through to `return True`, letting shell reads
+        # such as `type C:\Users\victim\secret.txt` escape the configured roots.
+        if re.match(r"[A-Za-z]:[\\/]", candidate):
+            if not path_allowed(candidate, allowed_roots):
+                return False
+            continue
         if candidate.startswith("/") and not candidate.startswith("//"):
             # Only treat as path if it looks like a filesystem path (has letters/dots)
             if re.search(r"[a-zA-Z.]", candidate):
