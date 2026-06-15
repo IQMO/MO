@@ -25,9 +25,5 @@ personal/
 # Local-only operator tooling, kept in its own nested git repo. Not part of the
 # shipped project; ignored here and never recursed into.
 operator/
-# Dev/maintainer docs and notes — local-only, never shipped to users.
+# Dev/maintainer design docs, proposals, audits — internal, not shipped.
 docs/
-# Dev/operator instruction docs (auto-loaded locally by the agent; never shipped).
-AGENTS.md
-CLAUDE.md
-MAP.md
