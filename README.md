@@ -176,7 +176,6 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
-| Trace tooling | `mo_trace.py` can record and validate a session for behavior debugging |
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 

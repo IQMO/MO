@@ -29,7 +29,7 @@ def analyze_trace_file(
     """Return inert learning suggestions from one `.trace` file.
 
     The analyzer is deliberately small and bounded. It only inspects event and
-    validation metadata that `mo_trace.py` already redacts/captures.
+    validation metadata that the trace recorder already redacts/captures.
     """
     trace_path = Path(path)
     trace = _load_trace(trace_path, max_bytes=max_bytes)

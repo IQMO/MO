@@ -63,9 +63,9 @@ REQUIRED_DISCOVERY_AREAS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("turn/runtime hooks", ("core/agent/agent_turn.py", "core/agent/agent.py", "_record_turn_memory_and_learning", "_maybe_handle_workflow_control_turn")),
     ("graph/code map", ("core/graph/code_graph.py", "core/graph/structural_graph.py", "core/graph/search.py", "core/graph/callgraph.py", "memory/structural_graph")),
     ("learning/profile/workflow", ("core/learning/proactive_learning.py", "core/learning/workflow_learning.py", "learning_suggestions.jsonl", "workflow_candidates.jsonl")),
-    ("trace/session logs", ("memory/sessions", "session_closeouts", "heartbeats.jsonl", "tool_audit.jsonl", "provider_audit.jsonl", "logs/monitor/backend_monitor-*.jsonl", "mo_trace.py")),
+    ("trace/session logs", ("memory/sessions", "session_closeouts", "heartbeats.jsonl", "tool_audit.jsonl", "provider_audit.jsonl", "logs/monitor/backend_monitor-*.jsonl", "operator/mo_trace.py")),
     ("taskboard/evidence", ("core/tasking/agent_taskboard.py", "complete_task", "core/tasking/task_evidence.py")),
-    ("tests/docs", ("tests/", "docs/devmode", "devmode/DEVMODE05.md", "devmode/DEVMODE05/")),
+    ("tests/docs", ("tests/", "docs/devmode", "operator/devmode/DEVMODE05.md", "operator/devmode/DEVMODE05/")),
     ("duplication/stale/legacy", ("git grep", "rg", "dead code", "duplicate paths", "retention proof")),
 )
 
@@ -84,7 +84,7 @@ _CAPABILITY_FILES = (
     ("session closeout", "core/session/session_closeout.py", "captures dirty workspace, taskboard state, logs, and unresolved work"),
     ("heartbeat", "core/heartbeat.py", "records live taskboard/git/session continuity"),
     ("taskboard truth", "core/tasking/agent_taskboard.py", "task rows advance only via explicit complete_task evidence"),
-    ("live trace", "mo_trace.py", "session recorder and behavior validator; replay recent actions to see what MO actually did"),
+    ("live trace", "operator/mo_trace.py", "session recorder and behavior validator; replay recent actions to see what MO actually did"),
 )
 
 
@@ -92,7 +92,7 @@ def operator_protocols_installed() -> bool:
     """True when the operator's private protocol pack is present.
 
     DEVMODE05/VS05 are personal operator protocols, not product features. The
-    protocol documents live untracked under ``devmode/`` in the operator's
+    protocol documents live untracked under ``operator/devmode/`` in the operator's
     checkout; a user clone has no such files, so the activation terms are
     inert there by absence — no config, no redesign, nothing to leak.
     ``MO_OPERATOR_PROTOCOLS=1`` forces installed-state for tests.
@@ -101,7 +101,9 @@ def operator_protocols_installed() -> bool:
         return True
     try:
         root = Path(__file__).resolve().parents[1]
-        return (root / "devmode" / "DEVMODE05.md").exists() or (root / "devmode" / "VS05.md").exists()
+        return (root / "operator" / "devmode" / "DEVMODE05.md").exists() or (
+            root / "operator" / "devmode" / "VS05.md"
+        ).exists()
     except Exception:
         return False
 
@@ -544,8 +546,8 @@ def build_self_capability_preflight_context(user_input: str, *, cwd: str | None 
             "### MO Self-Capability Preflight — mandatory for this turn",
             "This request is about MO/DEVMODE05/VS05/self-behavior. Before any build, edit, or completion claim, produce a Capability Coverage Matrix from live evidence.",
             "If the operator said DEVMODE05 or start DEVMODE05, activation is already complete: do not ask what to investigate; immediately run the protocol preflight and diagnostics.",
-            "If the operator said VS05 or start VS05, activation is comparison/adoption mode: read devmode/VS05.md and its ordered modules, treat the current MO workspace as the default target, capture operator-supplied paths/links as read-only references unless the operator explicitly said `target <path>`, compare those references against current MO evidence, and stay read-only until the operator approves an adoption/implementation lane.",
-            "STARTUP EVIDENCE ORDER: for DEVMODE05, read devmode/DEVMODE05.md plus devmode/DEVMODE05/00-activation-and-behavior.md first; for VS05, read devmode/VS05.md plus devmode/VS05/00-activation-and-boundaries.md first. Then run bounded live-trace rewind/orientation (`python mo_trace.py list` plus replay/tail of the latest relevant trace), verify git cleanliness, read only the latest relevant summary/workflow/catalog plus longitudinal/comparison index when present, inspect runtime logs only by tail/targeted grep, read structural graph summary/context before broad grep, then build the Capability Coverage Matrix.",
+            "If the operator said VS05 or start VS05, activation is comparison/adoption mode: read operator/devmode/VS05.md and its ordered modules, treat the current MO workspace as the default target, capture operator-supplied paths/links as read-only references unless the operator explicitly said `target <path>`, compare those references against current MO evidence, and stay read-only until the operator approves an adoption/implementation lane.",
+            "STARTUP EVIDENCE ORDER: for DEVMODE05, read operator/devmode/DEVMODE05.md plus operator/devmode/DEVMODE05/00-activation-and-behavior.md first; for VS05, read operator/devmode/VS05.md plus operator/devmode/VS05/00-activation-and-boundaries.md first. Then run bounded live-trace rewind/orientation (`python operator/mo_trace.py list` plus replay/tail of the latest relevant trace), verify git cleanliness, read only the latest relevant summary/workflow/catalog plus longitudinal/comparison index when present, inspect runtime logs only by tail/targeted grep, read structural graph summary/context before broad grep, then build the Capability Coverage Matrix.",
             "REWIND FIRST (after loading this protocol): read your live trace — the latest memory/traces/trace_* directory or .trace file. This is what you actually did recently, not what you think you did. Find behavioral drift, convention violations, tool choice problems, and inefficiencies in your actual recent behavior. This is the first evidence step of diagnosis, not optional.",
             "GRAPH BEFORE BROAD SEARCH: for MO self-work, use the existing structural graph/code map to choose likely files and subsystems before broad grep/read sweeps. Graph hints are not proof; verify selected files with reads/tests before claims.",
             "CAPABILITY MATRIX BASELINE+DELTA RULE: do not rebuild the same matrix blindly every run. Read the latest docs/devmode summary/workflow/catalog plus longitudinal.md, reuse the previous matrix as the baseline, cheaply reconfirm unchanged stable capabilities, and spend deep probes on changed files, new trace anomalies, prior misses, and uncertainty. Current live trace wins over prior HEALTHY claims.",
@@ -587,9 +589,9 @@ def _runtime_evidence_lines(root: Path) -> list[str]:
     lines = [
         "Runtime evidence paths to inspect when relevant:",
         f"- private runtime home: {home} (sessions, session_closeouts, heartbeat, tool/provider audit logs)",
-        "- live trace: memory/traces/trace_* (directory-based from mo_trace.py serve or .trace files; replay with `python mo_trace.py replay <path>`; list with `python mo_trace.py list`)",
+        "- live trace: memory/traces/trace_* (directory-based from operator/mo_trace.py serve or .trace files; replay with `python operator/mo_trace.py replay <path>`; list with `python operator/mo_trace.py list`)",
         f"- backend monitor fallback: {home}/logs/monitor/backend_monitor-*.jsonl (when running mo.py directly)",
-        "- mo_trace.py: mo_trace.py serve <args> (launches mo.py wrapped with auto-tracing; traces saved to memory/traces/)",
+        "- mo_trace.py: operator/mo_trace.py serve <args> (launches mo.py wrapped with auto-tracing; traces saved to memory/traces/)",
         f"- repo-local fallback: {repo_memory} (legacy/dev checkout memory when private home is unavailable)",
         "- if private paths are sandbox-blocked, state that explicitly and inspect repo-local memory plus source hooks instead of claiming trace coverage.",
     ]

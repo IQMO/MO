@@ -22,10 +22,12 @@ nul
 with open*
 personal/
 .claude/
-# Operator-private lanes. `devmode/` is TRACKED in the private source tree (the
-# protocol pack + maintainer guide + operator context, for operator/agents/devs)
-# but is kept out of the public snapshot via .gitattributes export-ignore.
-# The bulky session records / archives below stay local-only.
-docs/devmode/
-docs/comparisons/
-docs/.archived/
+# Local-only operator tooling, kept in its own nested git repo. Not part of the
+# shipped project; ignored here and never recursed into.
+operator/
+# Dev/maintainer docs and notes — local-only, never shipped to users.
+docs/
+# Dev/operator instruction docs (auto-loaded locally by the agent; never shipped).
+AGENTS.md
+CLAUDE.md
+MAP.md

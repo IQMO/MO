@@ -102,12 +102,12 @@ def test_self_capability_preflight_context_lists_existing_systems(tmp_path):
 def test_vs05_preflight_context_points_to_vs05_protocol():
     text = build_self_capability_preflight_context("start VS05", cwd=".")
 
-    assert "devmode/VS05.md" in text
+    assert "operator/devmode/VS05.md" in text
     assert "comparison/adoption mode" in text
     assert "current MO workspace as the default target" in text
     assert "operator-supplied paths/links as read-only references" in text
     assert "stay read-only until the operator approves" in text
-    assert "devmode/VS05/00-activation-and-boundaries.md" in text
+    assert "operator/devmode/VS05/00-activation-and-boundaries.md" in text
     assert "VS05 TARGET RULE" in text
     assert "VS05 SEMANTIC DELTA RULE" in text
     assert "taskboard ledger/resume surfaces" in text

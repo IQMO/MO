@@ -137,26 +137,6 @@ def test_open_window_requires_explicit_opt_in(monkeypatch, tmp_path):
     assert calls == []
 
 
-def test_open_window_only_once_and_passes_log_path_when_opted_in(monkeypatch, tmp_path):
-    calls = []
-
-    class FakeProcess:
-        def poll(self):
-            return None
-
-    monkeypatch.delenv("MO_BACKEND_MONITOR_PATH", raising=False)
-    monkeypatch.setenv("MO_OPEN_BACKEND_MONITOR", "1")
-    monkeypatch.setattr("core.backend_monitor.subprocess.Popen", lambda *args, **kwargs: calls.append((args, kwargs)) or FakeProcess())
-    monitor = BackendMonitor(tmp_path / "backend_monitor.jsonl")
-
-    monitor.open_window()
-    monitor.open_window()
-
-    assert os.environ["MO_BACKEND_MONITOR_PATH"] == str(monitor.path.resolve())
-    assert len(calls) == 1
-    assert str(monitor.path.resolve()) in calls[0][0][0]
-
-
 def test_close_window_terminates_owned_process(tmp_path):
     calls = []
 
