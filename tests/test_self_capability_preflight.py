@@ -51,73 +51,27 @@ def test_vs05_readonly_source_roots_extracts_existing_absolute_paths(tmp_path):
     assert roots == [str(current.resolve()), str(reference.resolve())]
 
 
-def test_self_capability_preflight_context_lists_existing_systems(tmp_path):
-    text = build_self_capability_preflight_context("DEVMODE05 audit MO behavior", cwd=".")
+def test_preflight_context_user_clone_has_no_protocol_recipe(monkeypatch):
+    """RC2-lite: the detailed DEVMODE05/VS05 protocol rules live in the operator
+    pack (operator/devmode/preflight-rules.json), not in public code. A user clone
+    (no pack) gets only a generic self-review reminder — no protocol shape — plus
+    generic capability orientation. The detailed owner-path assertions live in
+    operator/tests/ so the recipe is not published in the public test suite either."""
+    import core.self_capability_preflight as scp
 
-    assert "Capability Coverage Matrix" in text
-    assert "do not ask what to investigate" in text
-    assert "STARTUP EVIDENCE ORDER" in text
-    assert "bounded live-trace rewind" in text
-    assert "structural graph summary/context before broad grep" in text
-    assert "EXISTING with source evidence" in text
-    assert "continue autonomously" in text
-    assert "/structural-graph" in text
-    assert "/learning" in text
-    assert "/profile" in text
+    monkeypatch.setattr(scp, "_load_owner_preflight_rules", lambda: [])
+    text = scp.build_self_capability_preflight_context(
+        "audit your workflow against the codebase", cwd="."
+    )
+    # generic reminder, never the protocol recipe
+    assert "inventory the capabilities MO already has" in text
+    assert "DEVMODE05" not in text
+    assert "VS05" not in text
+    assert "Capability Coverage Matrix" not in text
+    assert "STARTUP EVIDENCE ORDER" not in text
+    # still gives generic, non-recipe capability orientation (real public files)
+    assert "Relevant code-backed capabilities to check:" in text
     assert "core/graph/code_graph.py" in text
-    assert "core/graph/structural_graph.py" in text
-    assert "core/graph/search.py" in text     # BM25 fuzzy search is discoverable
-    assert "core/graph/callgraph.py" in text  # caller/callee walker is discoverable
-    assert "core/learning/proactive_learning.py" in text
-    # Guard against path rot: every capability file the preflight advertises must exist.
-    from core.self_capability_preflight import _CAPABILITY_FILES
-    from pathlib import Path
-    repo = Path(__file__).resolve().parents[1]
-    for _name, rel_path, _note in _CAPABILITY_FILES:
-        assert (repo / rel_path).exists(), f"preflight advertises missing file: {rel_path}"
-    assert "Required discovery areas" in text
-    assert "Verifier checklist" in text
-    assert "affected-method logic review" in text
-    assert "smallest evidence" in text
-    assert "model approval cannot override deterministic omissions" in text
-    assert "we might need it later" in text
-    assert "duplication/stale/legacy" in text
-    assert "private runtime home" in text
-    assert "repo-local fallback" in text
-    assert "sandbox-blocked" in text
-    assert "OS-SHELL RULE" in text
-    assert "active shell" in text
-    assert "python -c" in text
-    assert "SHADOW SELF-AUDIT" in text
-    assert "not raw tool telemetry" in text
-    assert "Budget boundaries are continuity handoffs" in text
-    assert "FINAL SELF-CLOSEOUT GATE" in text
-    assert "BASELINE+DELTA" in text
-    assert "taskboard must represent real protocol phases" in text
-    assert "cost impact" in text
-    assert "After open=0/completed task truth" in text
-    assert "taskboard_done_claim_conflict" in text
-
-
-def test_vs05_preflight_context_points_to_vs05_protocol():
-    text = build_self_capability_preflight_context("start VS05", cwd=".")
-
-    assert "operator/devmode/VS05.md" in text
-    assert "comparison/adoption mode" in text
-    assert "current MO workspace as the default target" in text
-    assert "operator-supplied paths/links as read-only references" in text
-    assert "stay read-only until the operator approves" in text
-    assert "operator/devmode/VS05/00-activation-and-boundaries.md" in text
-    assert "VS05 TARGET RULE" in text
-    assert "VS05 SEMANTIC DELTA RULE" in text
-    assert "taskboard ledger/resume surfaces" in text
-    assert "SQLite/profile/workflow learning surfaces" in text
-    assert "structural/code graph caches" in text
-    assert "VS05 BEHAVIOR ECONOMY RULE" in text
-    assert "provider-first smoothness" in text
-    assert "Ghost/taskboard owner split" in text
-    assert "VS05 TERMINAL SHAPE" in text
-    assert "Target, Matrix, Adoption, Reject, Defer/Recheck, Artifacts, Approval" in text
 
 
 def test_vs05_final_stop_requires_terminal_closeout():
@@ -333,7 +287,6 @@ def test_agent_injects_self_capability_preflight_for_devmode(monkeypatch, tmp_pa
     context = agent._build_extra_context("DEVMODE05 audit MO behavior")
 
     assert "MO Self-Capability Preflight" in context
-    assert "Capability Coverage Matrix" in context
     assert "hard gate for MO self/DEVMODE05 work" in context
     assert "code_graph" not in getattr(agent, "_last_turn_context_flags", {}) or not agent._last_turn_context_flags["code_graph"]
     assert agent._last_turn_context_flags["self_capability"] is True

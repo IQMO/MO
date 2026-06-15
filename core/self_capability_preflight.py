@@ -512,52 +512,59 @@ def _strip_leading_markdown_prefix(text: str) -> str:
     return re.sub(r"^[\s#>*_`-]+", "", str(text or "")).lstrip()
 
 
+def _load_owner_preflight_rules() -> list[str]:
+    """Load the owner-only protocol preflight rules from the operator pack.
+
+    The detailed DEVMODE05/VS05 protocol prose lives untracked in
+    ``operator/devmode/preflight-rules.json`` (never shipped). A user clone has no
+    such file, so the public code carries no protocol description — only a generic
+    self-review reminder is emitted there.
+    """
+    try:
+        root = Path(__file__).resolve().parents[1]
+        path = root / "operator" / "devmode" / "preflight-rules.json"
+        if not path.is_file():
+            return []
+        import json
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return [str(item) for item in data if str(item).strip()]
+    except Exception:
+        return []
+
+
 def build_self_capability_preflight_context(user_input: str, *, cwd: str | None = None) -> str:
-    """Build the mandatory preflight context for MO self/DEVMODE05 work."""
+    """Build the mandatory preflight context for MO self/DEVMODE05 work.
+
+    The detailed owner protocol rules are loaded from the operator pack when
+    present; absent the pack (a user clone), only a generic self-review reminder
+    plus live capability orientation is emitted.
+    """
     if not should_include_self_capability_preflight(user_input):
         return ""
     root = Path(cwd or ".").resolve()
-    commands = _relevant_command_lines()
-    files = _capability_file_lines(root)
-    return "\n".join(
-        [
-            "### MO Self-Capability Preflight — mandatory for this turn",
-            "This request is about MO/DEVMODE05/VS05/self-behavior. Before any build, edit, or completion claim, produce a Capability Coverage Matrix from live evidence.",
-            "If the operator said DEVMODE05 or start DEVMODE05, activation is already complete: do not ask what to investigate; immediately run the protocol preflight and diagnostics.",
-            "If the operator said VS05 or start VS05, activation is comparison/adoption mode: read operator/devmode/VS05.md and its ordered modules, treat the current MO workspace as the default target, capture operator-supplied paths/links as read-only references unless the operator explicitly said `target <path>`, compare those references against current MO evidence, and stay read-only until the operator approves an adoption/implementation lane.",
-            "STARTUP EVIDENCE ORDER: for DEVMODE05, read operator/devmode/DEVMODE05.md plus operator/devmode/DEVMODE05/00-activation-and-behavior.md first; for VS05, read operator/devmode/VS05.md plus operator/devmode/VS05/00-activation-and-boundaries.md first. Then run bounded live-trace rewind/orientation (`python operator/mo_trace.py list` plus replay/tail of the latest relevant trace), verify git cleanliness, read only the latest relevant summary/workflow/catalog plus longitudinal/comparison index when present, inspect runtime logs only by tail/targeted grep, read structural graph summary/context before broad grep, then build the Capability Coverage Matrix.",
-            "REWIND FIRST (after loading this protocol): read your live trace — the latest memory/traces/trace_* directory or .trace file. This is what you actually did recently, not what you think you did. Find behavioral drift, convention violations, tool choice problems, and inefficiencies in your actual recent behavior. This is the first evidence step of diagnosis, not optional.",
-            "GRAPH BEFORE BROAD SEARCH: for MO self-work, use the existing structural graph/code map to choose likely files and subsystems before broad grep/read sweeps. Graph hints are not proof; verify selected files with reads/tests before claims.",
-            "CAPABILITY MATRIX BASELINE+DELTA RULE: do not rebuild the same matrix blindly every run. Read the latest docs/devmode summary/workflow/catalog plus longitudinal.md, reuse the previous matrix as the baseline, cheaply reconfirm unchanged stable capabilities, and spend deep probes on changed files, new trace anomalies, prior misses, and uncertainty. Current live trace wins over prior HEALTHY claims.",
-            "Existing-capability rule: if MO already has the needed feature/hook/pattern, report it as EXISTING with source evidence and do not propose or build a duplicate enhancement.",
-            "DEVMODE05 TASKBOARD PHASE RULE: the taskboard must represent real protocol phases, not a single generic 'Start DEVMODE05' wrapper after bootstrap. Keep rows aligned to boot/prior context, live trace + matrix, catalog, fixes, verification, and final closeout; update/complete rows only from real evidence.",
-            "LIVE TRACE RULE: read your trace once at turn start. After every tool call, evaluate it from memory/recent context — was that the right tool? Match MO conventions? Any drift? Fix it right there. Do not re-read the full trace file after every call (that burns requests). Use targeted reads only when you detect specific drift.",
-            "SHADOW SELF-AUDIT: DEVMODE05 progress is not raw tool telemetry. At meaningful boundaries, narrate the behavioral diagnosis: what action you took, why that was or was not the right MO-native action, whether a built-in feature (structural graph, code graph, learning/profile, trace replay, taskboard evidence, scoped tests) should have been used first, whether tools/tokens/context were wasted, and what instruction/routing/test/doc repair prevents the drift next time.",
-            "OS-SHELL RULE: match commands to the active shell (see environment context above). Never use bash heredocs (`<<`). Do not use Unix `head`/`tail` on Windows; use bounded Python readers or confirmed shell-native commands such as PowerShell `Get-Content -Tail`. Use `python -c`, a temporary file under `tmp/`, or shell-native constructs. If you make an OS syntax mistake once, switch patterns immediately for the rest of the turn.",
-            "SELF-CHECK every turn: did I miss a feature that already exists? Did I surface-level this instead of digging? Did I assume something without evidence? What would be a quick win here? Do not proceed without answering these four questions.",
-            "ULTRA-REASON your own behavior before any conclusion: was this the most efficient approach? What cheaper alternative exists (graph, trace, batch tools, existing features)? Did I burn tokens unnecessarily? Am I over-engineering a band-aid instead of fixing the root cause? Did I fight my own tools instead of using them? Did I discover a behavioral misalignment or wrong implementation? Reason this for every action, not once at the end. If you find something wrong — fix it immediately, do not wait for approval. The operator already approved DEVMODE05, that covers self-fixes.\n\nPERSISTENT RULE (continuations): this applies every turn, including when you resume old work from memory/session closeout. Loading old unresolved tasks does not suspend these checks. They are active for the entire DEVMODE05 session, not just the first turn.",
-            "Phase gate: produce the matrix and weakness/catalog diagnosis before source edits; then continue autonomously unless the operator explicitly interrupts or a hard safety boundary blocks the action. For DEVMODE05 activation, a final answer is allowed only as [DEVMODE05 COMPLETE] when complete or [DEVMODE05 BLOCKED] for a real tool/provider/timeout/sandbox/permission/safety boundary; otherwise continue with tools/evidence. Never use [DEVMODE05 BLOCKED] merely because work remains, files are dirty, tests passed, a continuation capsule exists, or budget pressure is rising while tools/provider responses are still available. Budget boundaries are continuity handoffs, not completion: preserve completed work, unresolved finding IDs, dirty files, verification, and the exact next action so the next DEVMODE05/resume turn continues without re-asking or redoing completed discovery.",
-            "FINAL SELF-CLOSEOUT GATE: before [DEVMODE05 COMPLETE], verify live taskboard/trace truth: complete_task used if active, open=0, no later taskboard_done_claim_conflict, and no active deferred/open/failed work. After open=0/completed task truth, do not call more tools or reopen broad discovery in the same turn; produce [DEVMODE05 COMPLETE] from existing evidence. If not, fix it as a DEVMODE05 finding yourself.",
-            "VS05 TARGET RULE: current MO workspace is the adoption target by default. Never describe the running MO workspace as only the runtime vehicle or `not a comparison target` unless the operator explicitly named another target. Reference paths are evidence inputs, not edit targets.",
-            "VS05 SEMANTIC DELTA RULE: compare capabilities, not file names. Current MO already has taskboard ledger/resume surfaces, SQLite/profile/workflow learning surfaces, and structural/code graph caches. If a reference is stronger, name MO's existing mechanism first and classify only the exact delta (for example canonical current-task manager, categorized knowledge leaves, or unified map/query surface). Do not say tasks are lost on restart, no persistent knowledge exists, or no index exists without first disproving those current mechanisms.",
-            "VS05 BEHAVIOR ECONOMY RULE: include provider-first smoothness, tasking truth, build/design DNA, Ghost/taskboard owner split, token/tool/compression/handoff cost, and structured-evidence reuse in the comparison. Do not propose replacing Ghost, taskboard, work patterns, or routing unless current consumers are mapped and trace/tests prove the replacement is cheaper, smoother, or more accurate.",
-            "VS05 TERMINAL SHAPE: before [VS05 COMPLETE], verify taskboard/protocol truth is open=0 and the final answer contains these labels: Target, Matrix, Adoption, Reject, Defer/Recheck, Artifacts, Approval. Matrix may be literal matrix counts or status counts such as MO-STRONGER/REFERENCE-STRONGER, but do not use a summary-only closeout.",
-            "Matrix columns required: capability, source path, invocation/runtime hook, applies?, used?, if not used why not.",
-            "Matrix delta columns required: prior status, current status, changed evidence, new/changed risk, cost impact.",
-            "Required discovery areas: " + "; ".join(name for name, _anchors in REQUIRED_DISCOVERY_AREAS) + ".",
-            "Audit evidence requirement: provider audit and tool audit surfaces must be considered when diagnosing provider stability, tool errors, continuation, and trace truth.",
-            "Must compare the exact request and prior tool/session trace against existing capabilities before proposing fixes.",
-            "Approval rule: a verifier may help, but approval is invalid if any required discovery area is missing; model approval cannot override deterministic omissions.",
-            "Deletion rule: 'we might need it later' is not evidence; stale, duplicate, legacy, or dead paths require caller/trace/test/operator proof to keep, otherwise remove or propose deletion.",
-            "Relevant existing commands:",
-            *commands,
-            "Relevant code-backed capabilities to check:",
-            *files,
-            *_runtime_evidence_lines(root),
-            "Verifier checklist: reject if the report lacks exact request replay, command inventory, graph/code-map check, learning/workflow check, trace/session evidence, taskboard evidence, tests/docs coverage, affected-method logic review, scoped verification plan, or explicit matrix-before-edit statement.",
-            "Verification discipline: choose the smallest evidence that covers the touched behavior first; full-suite runs require a cross-cutting code/runtime change or explicit operator request, not habit.",
-        ]
-    )
+    lines = ["### MO Self-Capability Preflight — mandatory for this turn"]
+    owner_rules = _load_owner_preflight_rules()
+    if owner_rules:
+        lines.extend(owner_rules)
+        lines.append(
+            "Required discovery areas: "
+            + "; ".join(name for name, _anchors in REQUIRED_DISCOVERY_AREAS)
+            + "."
+        )
+    else:
+        lines.append(
+            "This request is about MO's own behavior or capabilities. Before building or "
+            "claiming completion, inventory the capabilities MO already has from live code "
+            "evidence, prefer existing systems over new ones, and verify changes with the "
+            "smallest sufficient tests."
+        )
+    lines.append("Relevant existing commands:")
+    lines.extend(_relevant_command_lines())
+    lines.append("Relevant code-backed capabilities to check:")
+    lines.extend(_capability_file_lines(root))
+    if owner_rules:
+        lines.extend(_runtime_evidence_lines(root))
+    return "\n".join(lines)
 
 
 def _runtime_evidence_lines(root: Path) -> list[str]:
