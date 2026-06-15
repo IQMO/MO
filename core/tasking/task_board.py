@@ -832,7 +832,7 @@ def _resume_from_current_json(*, max_age_hours: float = 24.0, ledger_path: str |
         # Determine root from ledger path, otherwise default to cwd
         if ledger_path:
             lp = Path(ledger_path)
-            root = lp.parent.parent.parent  # memory/taskboards/ledger.jsonl → root
+            root = lp.parent.parent.parent  # memory/taskboards/taskboards.jsonl → root
         else:
             root = Path.cwd()
         tm = TaskManager(root)

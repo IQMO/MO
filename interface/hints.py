@@ -125,10 +125,3 @@ def current_hint(now: float | None = None) -> str:
     current = time.time() if now is None else float(now)
     index = int(current / HINT_INTERVAL) % len(hints)
     return hints[index]
-
-
-def reload_hints() -> list[str]:
-    """Force reload hints from disk (e.g., after user edits the file)."""
-    global _HINTS_CACHE
-    _HINTS_CACHE = load_hints()
-    return _HINTS_CACHE

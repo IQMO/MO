@@ -802,7 +802,7 @@ def _artifact_references(
         "docs/audit/AUDIT.md",
         "docs/status/PROMPT-BOUNDARY.md",
         "README.md",
-        "MO.md",
+        "MAP.md",
         "core/prompts/system.md",
         "config.example.yaml",
     ]

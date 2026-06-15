@@ -78,7 +78,7 @@ class AgentStatusCommands:
 
     def _status_telegram_summary(self) -> str:
         try:
-            from .telegram.gateway import TelegramGateway
+            from ..telegram.gateway import TelegramGateway
             gateway = getattr(self, "telegram_gateway", None) or getattr(self, "_telegram_gateway", None)
             if gateway is None:
                 gateway = TelegramGateway.from_agent(self, gateway=getattr(self, "gateway", None))

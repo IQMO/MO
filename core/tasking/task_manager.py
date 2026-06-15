@@ -119,8 +119,3 @@ class TaskManager:
     @property
     def turn_id(self) -> str:
         return str(self._data.get("turn_id") or "")
-
-
-def task_manager_for_root(root: str | Path | None = None) -> TaskManager:
-    """Return a TaskManager scoped to *root* (defaults to cwd)."""
-    return TaskManager(root or Path.cwd())

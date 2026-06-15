@@ -401,7 +401,7 @@ class TestGuardToolCall:
         assert guard_tool_call("shell", {"command": command}, allowed_roots=self.ALLOWED_ROOTS) is None
 
     def test_windows_slash_flag_after_pipeline_allowed(self):
-        command = 'python mo_trace.py replay trace_20260607_033418 --tail 30 2>&1 | findstr /V "PASS\\|INFO"'
+        command = 'python operator/mo_trace.py replay trace_20260607_033418 --tail 30 2>&1 | findstr /V "PASS\\|INFO"'
 
         reason = guard_tool_call("shell", {"command": command}, allowed_roots=self.ALLOWED_ROOTS)
 
