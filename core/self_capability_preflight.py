@@ -88,17 +88,8 @@ _CAPABILITY_FILES = (
 )
 
 
-def operator_protocols_installed() -> bool:
-    """True when the operator's private protocol pack is present.
-
-    DEVMODE05/VS05 are personal operator protocols, not product features. The
-    protocol documents live untracked under ``operator/devmode/`` in the operator's
-    checkout; a user clone has no such files, so the activation terms are
-    inert there by absence — no config, no redesign, nothing to leak.
-    ``MO_OPERATOR_PROTOCOLS=1`` forces installed-state for tests.
-    """
-    if os.environ.get("MO_OPERATOR_PROTOCOLS") == "1":
-        return True
+def _pack_present() -> bool:
+    """True when the untracked operator protocol pack is on disk."""
     try:
         root = Path(__file__).resolve().parents[1]
         return (root / "operator" / "devmode" / "DEVMODE05.md").exists() or (
@@ -106,6 +97,37 @@ def operator_protocols_installed() -> bool:
         ).exists()
     except Exception:
         return False
+
+
+def _owner_token_present() -> bool:
+    """True when the operator's private owner token exists in the runtime home.
+
+    The token (``~/.mo/operator.token``) lives only in the operator's private
+    runtime home — never in any repo, never shipped. Copying the public repo, or
+    even the protocol pack files, does not grant it; a fresh user clone's ``~/.mo``
+    has no such token. This is what makes operator mode owner-bound rather than
+    unlocked by mere file presence.
+    """
+    try:
+        token = mo_home() / "operator.token"
+        return token.is_file() and bool(token.read_text(encoding="utf-8").strip())
+    except Exception:
+        return False
+
+
+def operator_protocols_installed() -> bool:
+    """True only for the real operator: the private pack AND the owner token.
+
+    DEVMODE05/VS05 are personal operator protocols, not product features. They
+    require BOTH the untracked ``operator/devmode/`` pack AND a private owner
+    token in ``~/.mo`` (``operator.token``) that a user clone never has — so the
+    copyable pack files alone cannot fake operator mode. On a user clone both are
+    absent, so the activation terms are inert by absence — no config, nothing to
+    leak. ``MO_OPERATOR_PROTOCOLS=1`` forces installed-state for tests.
+    """
+    if os.environ.get("MO_OPERATOR_PROTOCOLS") == "1":
+        return True
+    return _pack_present() and _owner_token_present()
 
 
 def is_devmode05_activation(user_input: str) -> bool:
@@ -197,33 +219,6 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     return False
 
 
-def protocol_artifacts_uncommitted(
-    paths: tuple[str, ...] = ("docs/devmode", "docs/comparisons/vs05"),
-    *,
-    cwd: str | None = None,
-) -> bool:
-    """True when protocol session artifacts sit uncommitted in the working tree.
-
-    Committing the session record is part of closeout for both protocols
-    (observed live: T1355 and T1810 declared COMPLETE with untracked session
-    dirs despite the written module-04 rule — written rules are not
-    enforcement). Fail-open on any git problem so the gate never blocks stops
-    outside MO's own checkout. Suppressed under pytest unless
-    MO_PROTOCOL_ARTIFACT_GATE_FORCE=1 (repo dirtiness must not flake tests).
-    """
-    if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MO_PROTOCOL_ARTIFACT_GATE_FORCE") != "1":
-        return False
-    import subprocess
-    try:
-        out = subprocess.run(
-            ["git", "status", "--porcelain", "--", *paths],
-            cwd=cwd or os.getcwd(), capture_output=True, text=True, timeout=10,
-        )
-        return out.returncode == 0 and bool(out.stdout.strip())
-    except Exception:
-        return False
-
-
 def devmode05_final_allows_stop(user_input: str, final_text: str) -> bool:
     """Return True only when a DEVMODE05 final answer is a real stop boundary."""
     if not is_devmode05_activation(user_input):
@@ -239,7 +234,7 @@ def devmode05_final_allows_stop(user_input: str, final_text: str) -> bool:
     if text.startswith("[DEVMODE05 COMPLETE]"):
         if _devmode05_completion_reports_open_work(text):
             return False
-        return not protocol_artifacts_uncommitted(("docs/devmode",))
+        return True
     allowed_prefixes = (
         "[MAX PROVIDER REQUESTS]",
         "[MAX TOOL ROUNDS]",
@@ -270,7 +265,7 @@ def vs05_final_allows_stop(user_input: str, final_text: str) -> bool:
             return False
         if _vs05_missing_closeout_terms(text):
             return False
-        return not protocol_artifacts_uncommitted(("docs/comparisons/vs05",))
+        return True
     allowed_prefixes = (
         "[MAX PROVIDER REQUESTS]",
         "[MAX TOOL ROUNDS]",
@@ -302,15 +297,6 @@ def devmode05_continuation_instruction(user_input: str, final_text: str) -> str:
             "the artifacts so active deferred work is zero. Finalize only when the report truth says "
             "Remaining: none, Deferred active work: none, Next: none, and there are no failed checks."
         )
-    if text.startswith("[DEVMODE05 COMPLETE]") and protocol_artifacts_uncommitted(("docs/devmode",)):
-        return (
-            "[DEVMODE05 AUTONOMY] Your last answer claimed [DEVMODE05 COMPLETE] while the session "
-            "artifacts under docs/devmode/ are still uncommitted (git status shows untracked or "
-            "modified protocol records). Committing the session record is part of closeout — "
-            "including zero-findings sessions. Run: git add docs/devmode/<this-session>/ "
-            "docs/devmode/longitudinal.md && git commit -m \"devmode05-closeout-<stamp>\", then "
-            "re-emit the same completion footer with the real final commit hash."
-        )
     if text.startswith("[DEVMODE05 BLOCKED]") and not _devmode05_blocked_has_hard_boundary(text):
         return (
             "[DEVMODE05 AUTONOMY] Your last answer used [DEVMODE05 BLOCKED] without a current hard "
@@ -338,14 +324,6 @@ def vs05_continuation_instruction(user_input: str, final_text: str) -> str:
             "[VS05 CONTINUATION] Your last answer claimed [VS05 COMPLETE] while still reporting "
             "remaining, deferred, open, failed, or carried-forward work. Continue from those named "
             "items now, or close them as reject/defer/no-action with evidence before completing."
-        )
-    if text.startswith("[VS05 COMPLETE]") and protocol_artifacts_uncommitted(("docs/comparisons/vs05",)):
-        return (
-            "[VS05 CONTINUATION] Your last answer claimed [VS05 COMPLETE] while the session "
-            "artifacts under docs/comparisons/vs05/ are still uncommitted. Committing the session "
-            "record is part of closeout — including zero-adoption sessions. Run: git add "
-            "docs/comparisons/vs05/<this-session>/ && git commit -m \"vs05-closeout-<stamp>\", "
-            "then re-emit the same completion footer."
         )
     if text.startswith("[VS05 COMPLETE]") and _vs05_reports_default_target_drift(user_input, text):
         return (

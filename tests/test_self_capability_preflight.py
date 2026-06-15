@@ -410,56 +410,47 @@ def test_devmode_activation_is_current_turn_self_change_approval(tmp_path):
     assert allowed_with_devmode is None
 
 
-def _git(repo, *args):
-    import subprocess
-    subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=15, check=False)
-
-
-def test_complete_footer_blocked_while_session_artifacts_uncommitted(tmp_path, monkeypatch):
-    """Written closeout rules were skipped twice live (T1355, T1810) — the stop
-    gate itself now refuses COMPLETE while the session record is uncommitted."""
+def test_clean_complete_stops_without_committing_artifacts(tmp_path, monkeypatch):
+    """Session artifacts live under gitignored docs/ — they are local-only and
+    must NOT be committed. A clean COMPLETE (no open work) is a valid stop; the
+    old 'commit docs/ artifacts before stopping' gate was removed (it forced the
+    machinery leak into the product repo and could never fire post-gitignore)."""
     from core.self_capability_preflight import (
-        devmode05_continuation_instruction,
         devmode05_final_allows_stop,
-        protocol_artifacts_uncommitted,
+        vs05_final_allows_stop,
     )
-    repo = tmp_path / "repo"
-    (repo / "docs" / "devmode").mkdir(parents=True)
-    _git(repo, "init"); _git(repo, "config", "user.email", "t@t"); _git(repo, "config", "user.name", "t")
-    (repo / "README.md").write_text("base\n", encoding="utf-8")
-    _git(repo, "add", "-A"); _git(repo, "commit", "-m", "base")
-    monkeypatch.chdir(repo)
-    monkeypatch.setenv("MO_PROTOCOL_ARTIFACT_GATE_FORCE", "1")
-
-    footer = "[DEVMODE05 COMPLETE]\n\nSession: zero findings. Remaining: none."
-    user = "start DEVMODE05"
-
-    # clean tree -> stop allowed
-    assert protocol_artifacts_uncommitted(("docs/devmode",)) is False
-    assert devmode05_final_allows_stop(user, footer) is True
-
-    # untracked session artifacts -> stop blocked with a commit instruction
-    (repo / "docs" / "devmode" / "2026-06-10T9999").mkdir()
-    (repo / "docs" / "devmode" / "2026-06-10T9999" / "summary.md").write_text("zero findings\n", encoding="utf-8")
-    assert protocol_artifacts_uncommitted(("docs/devmode",)) is True
-    assert devmode05_final_allows_stop(user, footer) is False
-    assert "uncommitted" in devmode05_continuation_instruction(user, footer)
-    assert "git add docs/devmode" in devmode05_continuation_instruction(user, footer)
-
-    # committing the artifacts unblocks the stop
-    _git(repo, "add", "-A"); _git(repo, "commit", "-m", "devmode05-closeout-test")
-    assert devmode05_final_allows_stop(user, footer) is True
+    assert devmode05_final_allows_stop(
+        "start DEVMODE05",
+        "[DEVMODE05 COMPLETE]\nSession report:\n- Deferred: none.\n- Remaining: 0.\n- Next: none.\n",
+    ) is True
+    assert vs05_final_allows_stop(
+        "start VS05",
+        "[VS05 COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nAdoption: none.\n"
+        "Reject: duplicate.\nArtifacts: docs/comparisons/vs05/run.\nApproval: required.",
+    ) is True
 
 
-def test_artifact_gate_fails_open_outside_git_and_under_plain_pytest(tmp_path, monkeypatch):
-    from core.self_capability_preflight import protocol_artifacts_uncommitted
-    # not a git repo (with force on): fail open
-    monkeypatch.setenv("MO_PROTOCOL_ARTIFACT_GATE_FORCE", "1")
-    monkeypatch.chdir(tmp_path)
-    assert protocol_artifacts_uncommitted(("docs/devmode",)) is False
-    # plain pytest (no force): suppressed regardless of real repo state
-    monkeypatch.delenv("MO_PROTOCOL_ARTIFACT_GATE_FORCE", raising=False)
-    assert protocol_artifacts_uncommitted(("docs/devmode",), cwd=str(tmp_path)) is False
+def test_operator_mode_requires_owner_token(monkeypatch, tmp_path):
+    """RC1: the copyable protocol pack alone must NOT unlock operator mode — a
+    private ~/.mo/operator.token (which a user clone never has) is also required."""
+    import core.self_capability_preflight as scp
+
+    monkeypatch.delenv("MO_OPERATOR_PROTOCOLS", raising=False)
+    monkeypatch.setattr(scp, "_pack_present", lambda: True)
+    monkeypatch.setattr(scp, "mo_home", lambda *a, **k: tmp_path)
+
+    # pack present but no owner token -> inert (pack files alone can't fake it)
+    assert scp.operator_protocols_installed() is False
+    assert scp.is_devmode05_activation("start DEVMODE05") is False
+
+    # owner token present -> operator mode active
+    (tmp_path / "operator.token").write_text("owner-secret\n", encoding="utf-8")
+    assert scp.operator_protocols_installed() is True
+    assert scp.is_devmode05_activation("start DEVMODE05") is True
+
+    # an empty token does not count
+    (tmp_path / "operator.token").write_text("   \n", encoding="utf-8")
+    assert scp.operator_protocols_installed() is False
 
 
 def test_protocol_activation_requires_operator_pack(monkeypatch):
