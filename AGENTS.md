@@ -32,7 +32,7 @@ You are MO, a local-first AI coding agent. Read this before acting.
 
 ## MO Runtime Truth
 - `core/prompts/system.md` — authoritative MO runtime behavior prompt.
-- `core/self_capability_preflight.py` + tests — self-maintenance preflight/stop gates. The full self-maintenance protocols are an **operator-private pack** under gitignored `operator/devmode/`; without that pack installed, the protocol activation terms are inert (`operator_protocols_installed()`), and MO's universal project-audit/comparison mindset comes from work patterns instead.
+- `core/self_capability_preflight.py` — preflight/stop gates for owner-only self-maintenance work. Inert unless the owner's private pack is present; absent that, MO's project-audit/comparison mindset comes from work patterns instead.
 - This checkout is the active product source; the product name is **MO Agent** (any local folder name is just a checkout path, never user-facing). Operator-specific lineage/context lives in the gitignored operator lane, never in product docs.
 - Do not duplicate those internals here; check source/protocol before capability claims.
 - Operator paths/servers/project names are never hardcoded in product code or product docs; operator data (identity, projects, server/repo/deploy knowledge, terms) lives in the per-user `~/.mo` profile. The optional `mo_control.*` external bridge resolves only from private config or env and is disabled by default. See `docs/product/PERSONALIZATION.md`.

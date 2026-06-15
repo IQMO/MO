@@ -4,9 +4,8 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 
 ## Runtime Truth
 - `core/prompts/system.md` — MO runtime behavior prompt.
-- `core/self_capability_preflight.py` — self-maintenance preflight and stop
-  gates (the full protocols are an operator-private pack under gitignored
-  `operator/devmode/`; inert when not installed).
+- `core/self_capability_preflight.py` — preflight and stop gates for owner-only
+  self-maintenance work (inert unless the owner's private pack is present).
 
 ## Core Surfaces
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).
@@ -27,8 +26,8 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `memory/traces/` — live trace artifacts and validator input.
 - `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
 - `memory/structural_graph/` — graph, code map, focused map artifacts.
-- `docs/devmode/` and `docs/comparisons/` — operator-private session records
-  (untracked; exist only in the operator's checkout).
+- Owner-private session records are gitignored and exist only in the owner's
+  local checkout (never tracked, never shipped).
 
 ## Verification
 - Focused tests first: `python -m pytest tests/<target>.py -q`.
