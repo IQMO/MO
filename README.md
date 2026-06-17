@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mo-banner.png" alt="MO — Local-first AI coding agent. Honest progress. Local runtime. Evidence-backed." width="100%">
+</p>
+
 # MO Agent
 
 **A local-first coding agent for people who want the work to stay honest.**
