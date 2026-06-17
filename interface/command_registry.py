@@ -68,6 +68,14 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         help_lines=("/init             initialize/check private MO home",),
     ),
     SlashCommandSpec(
+        name="/doctor",
+        description="health check: env, config, providers, imports",
+        category="Settings",
+        subcommands=(("--json", "machine-readable JSON output"),),
+        palette_description="one-shot health check (offline-safe)",
+        help_lines=("/doctor           health check; add --json for machine-readable output",),
+    ),
+    SlashCommandSpec(
         name="/migrate",
         description="dry-run/apply legacy state migration to private home",
         category="Settings",
@@ -417,7 +425,7 @@ SLASH_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
 HELP_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Work", ("/status", "/goal", "/ghost", "/gp", "/prt", "/vs05", "/structural-graph", "/learning", "/usage")),
     ("Sessions", ("/projects", "/sessions", "/session", "/new", "/resume", "/clear", "/undo", "/retry")),
-    ("Settings", ("/help", "/init", "/migrate", "/model", "/profile", "/moon", "/hints", "/reload", "/think", "/settings")),
+    ("Settings", ("/help", "/init", "/doctor", "/migrate", "/model", "/profile", "/moon", "/hints", "/reload", "/think", "/settings")),
     ("Remote", ("/heartbeat", "/telegram")),
     ("Exit", ("/exit",)),
 )

@@ -47,6 +47,7 @@ class AgentSlashCommands:
             "/help": self._cmd_help,
             "/h": self._cmd_help,
             "/init": self._cmd_init,
+            "/doctor": self._cmd_doctor,
             "/migrate": self._cmd_migrate,
             "/exit": lambda _: "[EXIT]",
             "/quit": lambda _: "[EXIT]",
@@ -359,6 +360,21 @@ class AgentSlashCommands:
 
         report = initialize_mo(home=getattr(self, "runtime_home", None), project_path=getattr(self, "project_cwd", None))
         return render_init_report(report)
+
+    def _cmd_doctor(self, rest: str) -> str:
+        """One-shot, offline-safe health check; `/doctor --json` for scripting."""
+        from ..doctor import build_doctor_report, render_doctor_json, render_doctor_report
+
+        args = str(rest or "").lower().split()
+        report = build_doctor_report(
+            home=getattr(self, "runtime_home", None),
+            config_path=getattr(self, "config_path", None),
+            project_path=getattr(self, "project_cwd", None),
+            config=getattr(self, "config", None),
+        )
+        if "--json" in args or "json" in args:
+            return render_doctor_json(report)
+        return render_doctor_report(report)
 
     def _cmd_migrate(self, rest: str) -> str:
         from ..state_migration import (
