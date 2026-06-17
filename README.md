@@ -166,6 +166,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Capability | What it means |
 | --- | --- |
 | Global `mo` command | `--init` creates POSIX/Windows shims so MO can be called from any terminal |
+| `/doctor` health check | One-shot offline check of env, config, providers, and core imports; `--json` for scripting |
 | Evidence task board | Runtime-owned checklist for real work; model text cannot complete it |
 | Sandboxed tools | File, shell, web, and git access pass through local safety gates |
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |

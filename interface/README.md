@@ -2,7 +2,7 @@
 
 This directory is being cleaned/certified by extraction and production-readiness checks, not redesigned.
 
-Active follow-up plan: `docs/INTERFACE-PRODUCTION-READINESS-PLAN.md`.
+Active follow-up: interface production-readiness and cleanup checks (maintainer notes).
 
 ## Why this matters
 
