@@ -95,33 +95,86 @@ class TestDiffReviewJson:
 
 # ── Taskboard: evidence gate (H1, H2) ─────────────────────────────────
 class TestTaskboardEvidence:
-    def test_born_completed_without_evidence_not_completed(self):
+    def test_born_completed_evidence_gated_row_coerced(self):
+        # H2: an evidence-gated row that arrives "completed" with no evidence is
+        # coerced to pending (model prose can't pre-close real work).
         b = TaskBoard()
         b.set_rows("w", [{"title": "edit", "kind": "edit", "status": "completed"}])
         assert b.tasks[0].status != "completed"
 
-    def test_born_completed_with_evidence_preserved(self):
+    def test_born_completed_evidence_gated_with_evidence_preserved(self):
         b = TaskBoard()
         b.set_rows("w", [{"title": "edit", "kind": "edit", "status": "completed", "evidence": ["edit_file:x.py"]}])
         assert b.tasks[0].status == "completed"
 
-    def test_complete_evidence_gated_row_without_evidence_blocks(self):
+    def test_born_completed_non_evidence_row_preserved(self):
+        # A row that requires no evidence (no kind/gate) keeps its normalized status.
         b = TaskBoard()
-        b.set_rows("w", [{"title": "edit", "kind": "edit", "status": "active"}])
-        b.complete(b.tasks[0].id)
-        assert b.tasks[0].status == "blocked"
-
-    def test_complete_with_evidence_completes(self):
-        b = TaskBoard()
-        b.set_rows("w", [{"title": "edit", "kind": "edit", "status": "active"}])
-        b.complete(b.tasks[0].id, evidence="edit_file:x.py")
+        b.set_rows("w", [{"id": "1", "title": "note", "status": "done"}])
         assert b.tasks[0].status == "completed"
 
-    def test_report_row_completes_without_evidence(self):
+    def test_closing_gate_audits_completions_across_rounds(self):
+        # H1: the turn-start snapshot makes the closing gate catch an evidence-gated
+        # row completed in an EARLIER round with no evidence (the prior scoping hole).
+        from core.tasking.contract import enforce_contract_gate
         b = TaskBoard()
-        b.set_rows("w", [{"title": "final", "kind": "report", "status": "active"}])
-        b.complete(b.tasks[0].id)
-        assert b.tasks[0].status == "completed"
+        b.set_rows("w", [
+            {"id": "1", "title": "edit", "kind": "edit", "status": "active"},
+            {"id": "2", "title": "report", "kind": "report", "status": "pending"},
+        ])
+        turn_initial = {t.id for t in b.tasks if t.status == "completed"}  # empty at turn start
+        b.complete("1")  # round 1: closed with no evidence
+        b.complete("2", evidence="final: summary")  # later round closes the board
+        just = {t.id for t in b.tasks if t.status == "completed"} - turn_initial
+        ok, reasons, _ = enforce_contract_gate(b, persisted_tasks=None, board_closing=True, task_ids=just)
+        assert not ok and any("missing_evidence:1" in r for r in reasons)
+
+
+# ── Graph search: product code outranks test files (LOW) ──────────────
+def test_search_deprioritizes_test_files(tmp_path):
+    (tmp_path / "widget.py").write_text("def build_widget():\n    return 1\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_widget.py").write_text(
+        "def test_build_widget():\n    assert True\n", encoding="utf-8"
+    )
+    from core.graph.search import search
+    res = search("build widget", cwd=tmp_path)
+    assert res, "no search results"
+    top_src = str(res[0].get("source_file") or res[0].get("id") or "")
+    assert "test" not in top_src.rsplit("/", 1)[-1], f"test file ranked first: {top_src}"
+
+
+# ── Session: created_at survives a /session switch (LOW) ──────────────
+def test_session_created_at_roundtrips_through_switch(tmp_path):
+    from core.session.session import Session
+    from core.session.sessions import SessionManager
+
+    mgr = SessionManager(str(tmp_path))  # current slot is "main"
+    s = Session("SYS")
+    s.created_at = 12345.0
+    mgr.save_snapshot("slot_a", s)  # write slot_a without making it current
+
+    other = Session("SYS")
+    other.created_at = 99999.0
+    mgr.switch("slot_a", other)  # from "main" → "slot_a"
+    assert other.created_at == 12345.0
+
+
+# ── Tasking: current.json written atomically, no stray tmp (LOW) ──────
+def test_task_manager_save_is_atomic_and_roundtrips(tmp_path):
+    from core.tasking.task_manager import TaskManager
+
+    mgr = TaskManager(str(tmp_path))
+    mgr.save({"board_id": "b1", "tasks": [{"id": "1", "title": "t", "status": "active"}], "state": "active"})
+    reloaded = TaskManager(str(tmp_path))
+    assert reloaded._data.get("board_id") == "b1"
+    assert not list(tmp_path.glob("**/*.tmp")), "atomic write left a stray .tmp file"
+
+
+# ── MCP: oversized-frame guard exists and is bounded (LOW) ────────────
+def test_mcp_max_line_cap_present():
+    from core.mcp.client import _MCP_MAX_LINE_BYTES
+    assert 1_000_000 <= _MCP_MAX_LINE_BYTES <= 64 * 1024 * 1024
 
 
 # ── Session: reasoning_content not re-sent (M7) ───────────────────────

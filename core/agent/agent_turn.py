@@ -127,6 +127,15 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         raw_tool_payload_fallback_attempted = False
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
+        done_claim_continued = False  # once-per-turn guard for the done-claim/open-board gate
+        # Snapshot rows already completed at TURN START so the closing contract
+        # gate audits every task completed during THIS turn (across all provider
+        # rounds), while still excluding rows completed in prior turns. Using a
+        # finalisation-time snapshot missed rows completed in an earlier round.
+        turn_initial_completed_ids = (
+            {t.id for t in task_board.tasks if t.status == "completed"}
+            if task_board and getattr(task_board, "tasks", None) else set()
+        )
         provider_limit_grace = False
         tool_limit_grace_used = False
         tool_call_counts: dict[str, int] = {}
@@ -615,9 +624,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # final/report row before consistency checks so diagnostics see
             # current task truth.  Mirror the streaming-path sequence.
             if task_board and task_board.tasks:
-                # Snapshot completed tasks before finalisation so the contract
-                # gate only enforces evidence on tasks completed this turn.
-                pre_completed_ids = {t.id for t in task_board.tasks if t.status == "completed"}
                 report_id = self._final_report_task_id(task_board)
                 if report_id and task_board.activate(report_id):
                     record_snapshot(task_board, "updated")
@@ -628,9 +634,10 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     _emit_task_board_update(task_board, update="completed" if task_board.open_count() == 0 else "updated", on_board_update=on_board_update, on_board_event=on_board_event)
             # ── VS05 GAP-01/05/06: contract gate on closing boards ──
             if task_board and task_board.tasks and task_board.open_count() == 0:
-                # Only enforce evidence on tasks completed this finalisation
+                # Enforce evidence on every task completed during THIS turn (the
+                # turn-start snapshot covers all rounds; prior-turn rows excluded).
                 post_completed_ids = {t.id for t in task_board.tasks if t.status == "completed"}
-                just_completed_ids = post_completed_ids - pre_completed_ids if pre_completed_ids else post_completed_ids
+                just_completed_ids = post_completed_ids - turn_initial_completed_ids
                 persisted = load_persisted_tasks_for_contract(task_board)
                 contract_ok, contract_reasons, contract_instruction = enforce_contract_gate(
                     task_board, persisted_tasks=persisted, board_closing=True,
@@ -646,6 +653,15 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 if on_activity:
                     on_activity("self protocol: completion conflicted with open work - continuing...")
                 self.session.add_assistant(self._self_protocol_task_truth_continuation_instruction(user_input))
+                continue
+            # Ordinary turns: a "done" claim while board rows are still open is fake
+            # progress. Force one continuation to make the model close rows with
+            # evidence or block them — bounded to once per turn to avoid loops.
+            if not done_claim_continued and self._boundary_has_done_claim_conflict(boundary_report):
+                done_claim_continued = True
+                if on_activity:
+                    on_activity("done-claim conflicts with open tasks - continuing to resolve...")
+                self.session.add_assistant(self._done_claim_task_truth_instruction())
                 continue
             self.session.add_assistant(final_text, reasoning_content=str(reasoning) if reasoning else None)
             # Turn-end security check on modified files and response text

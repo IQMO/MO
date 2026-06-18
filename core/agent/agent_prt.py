@@ -43,13 +43,25 @@ class AgentPRT:
             if not is_commit:
                 return
 
+            # Pin the just-created commit SHA now: by the time the deferred gate
+            # runs, another commit may have moved HEAD, so HEAD~1..HEAD would
+            # analyze the wrong change set.
+            cwd = str(getattr(self, "project_cwd", "") or getattr(self, "workspace", "") or os.getcwd())
+            try:
+                commit_sha = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"],
+                    text=True, encoding="utf-8", errors="replace",
+                    stderr=subprocess.DEVNULL, cwd=cwd,
+                ).strip() or "HEAD"
+            except Exception:
+                commit_sha = "HEAD"
+
             def gate_check():
                 import time
                 time.sleep(1.0)
                 try:
-                    cwd = str(getattr(self, "project_cwd", "") or getattr(self, "workspace", "") or os.getcwd())
                     diff_text = subprocess.check_output(
-                        ["git", "diff", "HEAD~1", "HEAD"],
+                        ["git", "diff", f"{commit_sha}~1", commit_sha],
                         text=True,
                         encoding="utf-8",
                         errors="replace",

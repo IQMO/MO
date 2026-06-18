@@ -107,10 +107,17 @@ def search(
     doc_tokens_list: list[list[str]] = [_tokenize(text) for _, text in doc_pairs]
     avg_dl = sum(len(dt) for dt in doc_tokens_list) / max(len(doc_tokens_list), 1)
     idf = _compute_idf(doc_tokens_list, query_terms)
+    # Unless the query is about tests, de-prioritize test files so product code
+    # ranks first (mirrors the structural-graph context scorer's 0.55 weight).
+    query_wants_tests = any(t in {"test", "tests", "testing"} for t in query_terms)
 
     results: list[dict[str, Any]] = []
     for (nid, text), doc_tokens in zip(doc_pairs, doc_tokens_list):
         score = _bm25_score(doc_tokens, len(doc_tokens), avg_dl, query_terms, idf)
+        if not query_wants_tests:
+            src = str(nodes[nid].get("source_file") or nid).replace("\\", "/")
+            if "/tests/" in src or src.startswith("tests/") or "test_" in src.rsplit("/", 1)[-1]:
+                score *= 0.55
         if score < min_score:
             continue
         node = nodes[nid]

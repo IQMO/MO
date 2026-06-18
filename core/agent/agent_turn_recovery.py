@@ -584,6 +584,24 @@ class AgentTurnRecoveryMixin:
     _devmode05_completion_boundary_requires_continuation = _self_protocol_completion_boundary_requires_continuation
 
     @staticmethod
+    def _boundary_has_done_claim_conflict(boundary_report: object | None) -> bool:
+        """True when the consistency boundary flagged a done-claim/open-board conflict."""
+        return any(
+            str(getattr(finding, "kind", "") or "") == "taskboard_done_claim_conflict"
+            for finding in (getattr(boundary_report, "findings", ()) or ())
+        )
+
+    @staticmethod
+    def _done_claim_task_truth_instruction() -> str:
+        """Instruction fed back when an ordinary turn claims done with open rows."""
+        return (
+            "[TASK TRUTH] Your answer reported completion, but tasks on the board are still open. "
+            "Do not claim done while work is open. For each finished task, call complete_task with the "
+            "tool evidence that proves it; for anything you cannot finish, block it with a one-line reason. "
+            "Then give your final answer."
+        )
+
+    @staticmethod
     def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
         if is_vs05_activation(user_input):
             return vs05_task_truth_continuation_instruction()

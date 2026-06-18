@@ -76,6 +76,7 @@ class SessionManager:
             "token_log": list(session.token_log or []),
             "compacted_messages_count": _safe_int(getattr(session, "compacted_messages_count", 0)),
             "last_compacted_at": _safe_float(getattr(session, "last_compacted_at", 0.0)),
+            "created_at": _safe_float(getattr(session, "created_at", 0.0)),
             "saved_at": saved_at,
         }
         meta = dict(extra_meta or {})
@@ -124,6 +125,11 @@ class SessionManager:
             session.token_log = list(data.get("token_log", []) or [])
             session.compacted_messages_count = _safe_int(data.get("compacted_messages_count", 0))
             session.last_compacted_at = _safe_float(data.get("last_compacted_at", 0.0))
+            # Restore the switched-in session's own birth time so age/learning-delta
+            # windows key off it, not the in-memory object's creation time.
+            restored_created = _safe_float(data.get("created_at", 0.0))
+            if restored_created:
+                session.created_at = restored_created
             session.sanitize_for_provider()
             session._loaded_meta = data.get("meta", {}) if isinstance(data.get("meta", {}), dict) else {}
             self._current_name = name

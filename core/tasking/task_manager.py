@@ -65,9 +65,12 @@ class TaskManager:
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         }
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
-        self.current_file.write_text(
-            json.dumps(self._data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        # Atomic write: a crash or a concurrent surface mid-write must not leave a
+        # truncated/half-written current.json that breaks board resume.
+        payload = json.dumps(self._data, indent=2, ensure_ascii=False)
+        tmp = self.current_file.with_name(self.current_file.name + ".tmp")
+        tmp.write_text(payload, encoding="utf-8")
+        tmp.replace(self.current_file)
 
     def clear(self) -> None:
         """Archive the current session then remove current.json."""

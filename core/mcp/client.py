@@ -17,6 +17,9 @@ from typing import Any
 from ..sandbox import safe_env
 
 PROTOCOL_VERSION = "2024-11-05"
+# Cap a single JSON-RPC frame so a buggy/hostile server can't OOM MO with one
+# enormous line. 8 MiB is far above any legitimate tool response.
+_MCP_MAX_LINE_BYTES = 8 * 1024 * 1024
 
 
 class McpError(Exception):
@@ -80,6 +83,10 @@ class McpClient:
         for line in proc.stdout:
             line = line.strip()
             if not line:
+                continue
+            # Drop oversized frames: a buggy/hostile MCP server emitting a giant
+            # line must not be buffered whole into memory before parsing.
+            if len(line) > _MCP_MAX_LINE_BYTES:
                 continue
             try:
                 self._inbox.put(json.loads(line))

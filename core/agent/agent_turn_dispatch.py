@@ -247,6 +247,10 @@ class AgentTurnDispatchMixin:
         self._tool_history.append((name, path_or_pattern, summary))
         if len(self._tool_history) > 80:
             self._tool_history = self._tool_history[-60:]
+            # Keep the warned-set bounded and in sync with retained history: a
+            # pattern that aged out can warn again, and the set can't grow forever.
+            live = {p for _t, p, _s in self._tool_history}
+            self._tool_abuse_warned &= live
         return warning
 
     @staticmethod

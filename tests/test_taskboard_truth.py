@@ -316,6 +316,50 @@ def test_vs05_completion_with_open_taskboard_forces_continuation():
     ) is True
 
 
+def test_ordinary_done_claim_with_open_board_continues_once():
+    """An ordinary (non-protocol) turn that claims done while rows are open must
+    be forced to continue exactly once — not silently accepted (M3), and not
+    looped forever even if the conflict persists."""
+    captured = {}
+    agent = _agent_with_boundary_capture(captured)
+    agent.max_provider_requests = 5
+    agent.max_tool_rounds = 5
+    agent.tool_definitions = [{"name": "grep"}]
+    agent.allowed_roots = ["."]
+    agent.sandbox_config = {"enabled": False}
+    agent._active_lane = None
+    agent.tool_compress_enabled = False
+    agent._project_scoped_tool_arguments = lambda _name, arguments: arguments
+    agent._self_mutation_block_reason = lambda *_args, **_kwargs: None
+    agent._operator_approved = lambda *_args, **_kwargs: False
+    agent._dispatch_tool = lambda *_args, **_kwargs: "grep:evidence"
+    agent._write_tool_audit = lambda *_args, **_kwargs: None
+    agent._cap_tool_result_for_context = lambda result, **_kwargs: result
+    agent._tool_result_is_error = lambda _result: False
+
+    assistant_messages = []
+    agent.session.add_assistant = lambda text, *a, **k: assistant_messages.append(text)
+    # Always flag the conflict — the once-per-turn guard must still terminate.
+    agent._run_consistency_boundary = lambda boundary, **kwargs: SimpleNamespace(
+        findings=(SimpleNamespace(kind="taskboard_done_claim_conflict", severity="major"),),
+        clean=False,
+    )
+    responses = iter([
+        SimpleNamespace(content="All done!", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="Done, with the open item noted.", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="should not be reached", tool_calls=[], usage=None, finish_reason="stop"),
+    ])
+    agent._call_provider = lambda **_kwargs: next(responses)
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Verify the fix", "active", kind="verify", completion_gate="verification"),
+    ])
+
+    result = agent.run_turn("fix the failing test", task_board=board)
+
+    assert result == "Done, with the open item noted."
+    assert sum("[TASK TRUTH]" in msg for msg in assistant_messages) == 1
+
+
 def test_devmode05_completed_taskboard_rejects_post_completion_tool_calls():
     captured = {}
     agent = _agent_with_boundary_capture(captured)

@@ -90,11 +90,12 @@ def _name_present(parent_mod: str, name: str, syms) -> bool:
     return _module_resolves(f"{parent_mod}.{name}")
 
 
-def _deferred_importfroms(tree: ast.AST):
+def _deferred_imports(tree: ast.AST):
+    """Function-local ``from X import Y`` AND plain ``import X`` statements."""
     class V(ast.NodeVisitor):
         def __init__(self):
             self.depth = 0
-            self.hits: list[ast.ImportFrom] = []
+            self.hits: list[ast.ImportFrom | ast.Import] = []
 
         def visit_FunctionDef(self, n):
             self.depth += 1
@@ -104,6 +105,11 @@ def _deferred_importfroms(tree: ast.AST):
         visit_AsyncFunctionDef = visit_FunctionDef
 
         def visit_ImportFrom(self, n):
+            if self.depth > 0:
+                self.hits.append(n)
+            self.generic_visit(n)
+
+        def visit_Import(self, n):
             if self.depth > 0:
                 self.hits.append(n)
             self.generic_visit(n)
@@ -122,7 +128,21 @@ def test_deferred_first_party_imports_resolve():
         except Exception as exc:
             violations.append(f"{f.relative_to(ROOT)}: parse failed: {exc}")
             continue
-        for n in _deferred_importfroms(tree):
+        for n in _deferred_imports(tree):
+            rel = f.relative_to(ROOT)
+            if isinstance(n, ast.Import):
+                # plain `import a.b.c` — verify first-party module targets exist
+                for alias in n.names:
+                    mod = alias.name
+                    if mod.split(".")[0] not in FIRST_PARTY:
+                        continue  # third-party / stdlib
+                    checked += 1
+                    if not _module_resolves(mod):
+                        violations.append(
+                            f"{rel}:{n.lineno}: deferred `import {mod}` target module does not "
+                            f"exist — telegram-/status bug class"
+                        )
+                continue
             level = n.level or 0
             mod = n.module
             if level > 0:

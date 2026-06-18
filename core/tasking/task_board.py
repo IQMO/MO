@@ -327,19 +327,11 @@ class TaskBoard:
         for idx, item in enumerate(rows, 1):
             if not isinstance(item, dict):
                 continue
-            row_status = str(item.get("status") or "pending")
-            row_evidence = _normalize_evidence(item.get("evidence") or [])
-            # Only the runtime may mint a completed row. A plan/Ghost-supplied row
-            # that arrives "completed"/"done" with no evidence is coerced to
-            # pending so model prose cannot pre-close work before any tool runs.
-            # Completed rows that carry evidence (e.g. a restored board) are kept.
-            if row_status in ("completed", "done") and not row_evidence:
-                row_status = "pending"
-            built.append(TaskItem(
+            row = TaskItem(
                 id=str(item.get("id") or idx),
                 title=str(item.get("text") or item.get("title") or f"Task {idx}"),
-                status=row_status,
-                evidence=row_evidence,
+                status=str(item.get("status") or "pending"),
+                evidence=_normalize_evidence(item.get("evidence") or []),
                 blocker=str(item.get("blocker") or ""),
                 kind=str(item.get("kind") or ""),
                 completion_gate=str(item.get("completion_gate") or item.get("gate") or ""),
@@ -348,7 +340,15 @@ class TaskBoard:
                 acceptance_criteria=item.get("acceptance_criteria") or [],
                 expected_evidence=item.get("expected_evidence") or [],
                 test_strategy=str(item.get("test_strategy") or ""),
-            ))
+            )
+            # Only the runtime may mint a completed row. A plan/Ghost-supplied
+            # evidence-gated row that arrives already "completed" with no evidence
+            # is coerced to pending so model prose cannot pre-close real work.
+            # (Status aliases like "done"/"complete" are already normalized by
+            # TaskItem; rows that don't require evidence keep their status.)
+            if row.status == "completed" and _task_requires_evidence(row) and not row.evidence:
+                row.status = "pending"
+            built.append(row)
         self.tasks = built
         self._ensure_one_active()
         self._touch()
@@ -386,16 +386,6 @@ class TaskBoard:
                 return
             if evidence is not None:
                 self.append_evidence(task_id, evidence)
-            # Evidence-gated rows must not close on a bare complete() with no
-            # evidence (e.g. a lone complete_task call before any real tool ran).
-            # Surface the gap as blocked instead of minting fake completion; this
-            # closes the gate-scoping hole at the root regardless of which
-            # provider round the completion happens in.
-            if _task_requires_evidence(row) and not row.evidence:
-                row.status = "blocked"
-                row.blocker = "missing evidence: run a real tool for this task before completing it"
-                self._touch()
-                return
             row.status = "completed"
             row.blocker = ""
             self._touch()
