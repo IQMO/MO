@@ -18,6 +18,28 @@ def _tool_name(tool_definition: dict) -> str:
     return str(tool_definition.get("name") or (tool_definition.get("function") or {}).get("name") or "")
 
 
+# Finding categories that warrant an auto-generated regression test, opt-in via
+# prt.regression_tests. Style/nitpick findings never get a test.
+_REGRESSION_CATEGORIES = {"bug_risk", "security", "missing_test", "breaking_change"}
+
+
+def regression_test_candidates(report: "ReviewReport") -> list:
+    """Actionable bug/security/missing-test findings that warrant a regression test."""
+    return [
+        f for f in report.findings
+        if f.is_actionable() and not f.resolved and f.category in _REGRESSION_CATEGORIES
+    ]
+
+
+def regression_prompt_block() -> str:
+    """Prompt guidance: write a test that fails-before / passes-after, kept only if it passes."""
+    return (
+        "\nRegression tests: for each bug/security/missing-test finding above, also write a focused test "
+        "under tests/ that FAILS on the pre-fix behavior and PASSES after your fix. Run it with test_runner; "
+        "if it does not pass, remove it. Do not add tests for style or nitpick findings.\n"
+    )
+
+
 def run_fix_loop(agent: "Agent", report: "ReviewReport"):
     """Starts a goal-driven fix loop to resolve actionable findings."""
     from core.goal import GoalPlan, GoalStep
@@ -28,6 +50,7 @@ def run_fix_loop(agent: "Agent", report: "ReviewReport"):
         print(f"PRT Fix Loop Aborted: {reason}")
         return report
         
+    regression_tests = bool((getattr(agent, "config", None) or {}).get("prt", {}).get("regression_tests", False))
     steps = []
     for i, finding in enumerate(report.findings):
         if finding.is_actionable() and not finding.resolved:
@@ -40,6 +63,14 @@ def run_fix_loop(agent: "Agent", report: "ReviewReport"):
     if not steps:
         return report
         
+    reg_candidates = regression_test_candidates(report) if regression_tests else []
+    if reg_candidates:
+        steps.append(GoalStep(
+            id="regression-tests",
+            title=f"Write regression tests for {len(reg_candidates)} bug/security finding(s)",
+            status="pending"
+        ))
+
     steps.append(GoalStep(
         id="amend",
         title="Commit --amend changes after fixing",
@@ -57,6 +88,8 @@ def run_fix_loop(agent: "Agent", report: "ReviewReport"):
     for finding in report.findings:
         if finding.is_actionable() and not finding.resolved:
             prompt += f"- [{finding.severity}] {finding.file} ({finding.line_range}): {finding.message}\n  Suggestion: {finding.suggestion}\n"
+    if reg_candidates:
+        prompt += regression_prompt_block()
     prompt += "\nUse edit_file to fix these issues. When done, use shell to 'git commit --amend --no-edit'. Stop when finished."
     
     try:

@@ -97,6 +97,9 @@ prt:
   fallback_model: "codex"
   ghost_suggest_medium: true
   score_target: 4.5
+  # Opt-in: when `/prt --fix` repairs a bug/security finding, also write a focused
+  # regression test (must fail pre-fix and pass after; kept only if it passes).
+  regression_tests: false
 
 heartbeat:
   enabled: true
