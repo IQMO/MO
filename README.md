@@ -92,8 +92,9 @@ findings and can surface issues without turning every change into a ceremony.
 
 ### Learning you approve
 
-MO can mine recurring corrections and workflow patterns from your sessions, but
-they stay reviewable until you confirm them. Learned guidance is local,
+MO mines recurring patterns and workflow rules from your sessions — those stay
+reviewable until you confirm them. Explicit corrections and term definitions you
+state directly are recorded to your local profile. Learned guidance is local,
 relevance-gated, and subordinate to the current request, sandbox, and runtime
 truth.
 
@@ -177,7 +178,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
 | PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |
-| Learning loop | Suggestions remain pending until you confirm or dismiss them |
+| Learning loop | Recurring-pattern & workflow suggestions stay pending until you confirm; direct corrections/term definitions apply to your local profile |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |

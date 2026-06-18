@@ -9,18 +9,24 @@ import hashlib
 from typing import Any
 
 
+# Markers must signal the operator is correcting MO's behaviour — not just that a
+# common word appears. Bare "feedback"/"stop"/"didn't" fire on normal technical chat
+# (e.g. "the test didn't verify the audit, stop") and would silently auto-bake wrong
+# learning, so they are intentionally excluded in favour of MO-directed phrases.
+# Forward-looking rules ("from now on", "next time") are workflow signals handled by
+# workflow_learning as confirm-gated candidates, not auto-applied here.
 FEEDBACK_MARKERS = (
     "what did you learn",
     "you learned",
+    "improve yourself",
     "self-improvement",
     "self improvement",
-    "improve yourself",
-    "feedback",
     "when corrected",
-    "did not",
-    "didn't",
     "not what i asked",
-    "stop",
+    "you did not",
+    "you didn't",
+    "you keep",
+    "i told you",
 )
 
 

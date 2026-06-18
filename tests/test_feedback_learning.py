@@ -28,6 +28,20 @@ def test_extract_feedback_learning_is_quiet_for_normal_chat():
     assert extract_feedback_learning("hello, how are you?") == {}
 
 
+def test_no_false_positive_learning_from_normal_technical_chat():
+    # Bare common words ("feedback"/"stop"/"did not"/"didn't") must NOT auto-bake
+    # learning from ordinary technical conversation — the accuracy fix.
+    assert extract_feedback_learning("the test didn't verify the legacy audit, stop") == {}
+    assert extract_feedback_learning("add a feedback form and stop the server") == {}
+    assert extract_feedback_learning("the build did not compile and the dirty cache stayed") == {}
+
+
+def test_mo_directed_correction_still_learns():
+    # Clear MO-directed corrections still produce learning.
+    assert extract_feedback_learning("you didn't verify the tests before claiming done") != {}
+    assert extract_feedback_learning("what did you learn? stop leaving dirty legacy behind") != {}
+
+
 def test_extract_feedback_learning_captures_self_improvement_feedback():
     insights = extract_feedback_learning(
         "what did you learn from this feedback? self improvement means audit exact, tested, no dirty legacy left behind, and don't make my terms sound crazy"
