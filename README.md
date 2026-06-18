@@ -181,6 +181,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
+| MCP tools | Optional: connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated (off by default) |
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 

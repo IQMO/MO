@@ -134,6 +134,19 @@ telegram:
     require_mention: true
     allow_from: []
 
+mcp:
+  # Model Context Protocol — connect MO to operator-configured local tool servers.
+  # Off by default. Each server is spawned as a local subprocess (stdio JSON-RPC);
+  # its tools appear to MO as `mcp__<name>__<tool>`, gated by the sandbox like any
+  # native tool. No marketplace, no model-side install — you list servers here.
+  enabled: false
+  servers: []
+    # - name: filesystem
+    #   command: npx
+    #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+    #   enabled: true
+    #   timeout: 30
+
 sandbox:
   enabled: true
   clean_env: true

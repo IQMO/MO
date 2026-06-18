@@ -501,6 +501,13 @@ class AgentTurnDispatchMixin:
 
         executor = TOOL_EXECUTORS.get(name)
         if not executor:
+            mgr = getattr(self, "mcp_manager", None)
+            if mgr is not None and mgr.is_mcp_tool(name):
+                result = mgr.call(name, arguments or {})
+                max_out = int(self.sandbox_config.get("max_output_chars", 50000) or 50000)
+                if len(result) > max_out:
+                    result = result[:max_out] + "\n[...output truncated at sandbox limit...]"
+                return result
             return f"Error: Unknown tool '{name}'"
 
         runtime_arguments = dict(arguments or {})

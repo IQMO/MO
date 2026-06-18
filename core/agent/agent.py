@@ -214,6 +214,23 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         from tools import TOOL_DEFINITIONS
         self.tool_definitions = self._ordered_tool_definitions(TOOL_DEFINITIONS)
 
+        # MCP (Model Context Protocol) — operator-configured, off by default.
+        # Bridges configured servers' tools into the model's tool set, sandbox-gated.
+        self.mcp_manager = None
+        try:
+            from core.mcp import McpManager
+            mgr = McpManager.from_config(getattr(self, "config", None) or {})
+            mcp_defs = mgr.tool_definitions()
+            if mcp_defs:
+                self.mcp_manager = mgr
+                self.tool_definitions = self.tool_definitions + mcp_defs
+                import atexit
+                atexit.register(mgr.shutdown)
+            else:
+                mgr.shutdown()  # off / no tools — release any subprocesses
+        except Exception:
+            traceback.print_exc()
+
         # Best-effort structural graph refresh on startup (no-op if up-to-date)
         try:
             from core.graph.structural_graph import maybe_update_graph_async
