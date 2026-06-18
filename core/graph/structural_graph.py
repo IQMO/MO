@@ -2,7 +2,7 @@
 
 MO can build its native community code map under ``memory/structural_graph`` and
 can also consume a compatible external ``graphify-out/graph.json`` input when it
-exists. The graph is orientation only; ``core.code_graph`` remains the public
+exists. The graph is orientation only; ``core.graph.code_graph`` remains the public
 fallback path when no useful structural graph is available.
 """
 from __future__ import annotations

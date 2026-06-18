@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-# Detection markers (MO Agent pattern: compiled regex lists like sandbox.py L18-25)
+# Detection markers (MO Agent pattern: compiled regex lists like those in sandbox.py)
 
 _GIT_DIFF_HEAD_RE = re.compile(r"^diff --git ", re.MULTILINE)
 _GIT_STATUS_HEAD_RE = re.compile(r"^On branch |^nothing to commit|^Changes |^Untracked files:", re.MULTILINE)

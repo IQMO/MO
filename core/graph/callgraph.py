@@ -6,9 +6,9 @@ graph data that structural_graph.py already builds.
 
 Usage (via shell):
     python -c "from core.graph.callgraph import get_callers; import json; \\
-        print(json.dumps(get_callers('handle_request'), indent=2))"
+        print(json.dumps(get_callers('run_turn'), indent=2))"
     python -c "from core.graph.callgraph import get_callees; import json; \\
-        print(json.dumps(get_callees('Agent.run'), indent=2))"
+        print(json.dumps(get_callees('run_turn'), indent=2))"
 """
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 Ghost is a side assistant/coordinator. This module gives it a concise, redacted
 snapshot of MO state so it can answer about the current chat/workers without
 seeing raw backend internals or secrets. Separate read-only scout context may be
-provided by core.ghost_tool_context; neither surface owns task truth.
+provided by core.ghost.ghost_tool_context; neither surface owns task truth.
 """
 from __future__ import annotations
 

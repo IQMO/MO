@@ -52,7 +52,7 @@ from .agent_turn import AgentTurn
 
 
 
-# Re-exports from core/agent_utils.py (DEVMODE05 — extracted to reduce god class size)
+# Re-exports from core/agent/agent_utils.py (DEVMODE05 — extracted to reduce god class size)
 from .agent_utils import (
     GHOST_PROPOSAL_SYSTEM,
     _usage_tokens,
