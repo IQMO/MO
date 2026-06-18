@@ -483,7 +483,7 @@ class AgentTurnRecoveryMixin:
             expose_notice=False,
         )
         # Both flags stay True for the remainder of THIS turn.
-        # The turn-start reset (run_turn/run_turn_streaming) will clear
+        # The turn-start reset (run_turn) will clear
         # them for the next turn.
 
     def _turn_health_tool_blocked_instruction(self, user_input: str | None = None) -> str:

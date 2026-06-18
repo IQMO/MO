@@ -171,45 +171,6 @@ def test_provider_call_consumes_handoff_only_after_success():
     assert agent.session._handoff_context == ""
 
 
-def test_stream_provider_call_consumes_handoff_only_after_success():
-    agent = _agent_with_session()
-    agent.temperature = 0
-    agent.max_tokens = 100
-    agent.tool_definitions = []
-    agent.session._handoff_context = "handoff seed"
-
-    class FailingStreamProvider:
-        def stream(self, **kwargs):
-            assert any("handoff seed" in str(m.get("content") or "") for m in kwargs["messages"] if m.get("role") == "system")
-
-            def events():
-                raise RuntimeError("temporary stream failure")
-                yield None
-
-            return events()
-
-    agent.providers = [FailingStreamProvider()]
-    agent.provider_index = 0
-
-    try:
-        list(Agent._call_provider_stream(agent))
-    except RuntimeError:
-        pass
-
-    assert agent.session._handoff_context == "handoff seed"
-
-    class OkStreamProvider:
-        def stream(self, **kwargs):
-            assert any("handoff seed" in str(m.get("content") or "") for m in kwargs["messages"] if m.get("role") == "system")
-            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="ok"), finish_reason="stop")], usage=None)
-
-    agent.providers = [OkStreamProvider()]
-    chunks = list(Agent._call_provider_stream(agent))
-
-    assert chunks
-    assert agent.session._handoff_context == ""
-
-
 def test_provider_context_overflow_handoff_retries_once(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     agent = _agent_with_session(budget_tokens=100_000)
@@ -467,54 +428,6 @@ def test_auto_handoff_activity_avoids_operator_facing_handoff_jargon(monkeypatch
 
     assert result == "ok"
     joined = "\n".join(activities).lower()
-    assert "handoff" not in joined
-    assert "clean session" not in joined
-    assert "context pressure" not in joined
-
-
-def test_streaming_auto_handoff_event_avoids_internal_jargon(monkeypatch):
-    from types import SimpleNamespace
-
-    agent = Agent.__new__(Agent)
-    
-    agent.session = SimpleNamespace(
-        messages=[],
-        add_user=lambda _text: None,
-        turn_count=0,
-        sanitize_for_provider=lambda **_kwargs: None,
-        get_messages=lambda extra_context=None: [{"role": "system", "content": extra_context or ""}],
-        record_usage=lambda **_kwargs: None,
-        add_assistant=lambda *_args, **_kwargs: None,
-    )
-    agent.profile = None
-    agent.memory = None
-    agent.context_summary_enabled = False
-    agent.context_handoff_enabled = True
-    agent.max_provider_requests = 1
-    agent.max_tool_rounds = 1
-    agent.provider_name = "fake"
-    agent.model = "fake"
-    agent.tool_definitions = []
-    agent.critic = SimpleNamespace(review=lambda text: SimpleNamespace(text=text))
-    agent._pending_turn_proposal = ""
-    agent._deep_review_analysis_rounds = 0
-    agent._thread_state = threading.local()
-    monkeypatch.setattr(Agent, "_pre_turn_context_handoff", lambda self, latest: False)
-    monkeypatch.setattr(Agent, "_maybe_context_handoff", lambda self, latest, extra_context="": True)
-
-    def fake_stream(**_kwargs):
-        yield SimpleNamespace(
-            choices=[SimpleNamespace(delta=SimpleNamespace(content="ok"), finish_reason="stop")],
-            usage=None,
-        )
-
-    agent._call_provider_stream = fake_stream
-
-    events = list(agent.run_turn_streaming("continue"))
-
-    event_types = {event["type"] for event in events}
-    assert {"status", "text", "done"} <= event_types
-    joined = "\n".join(str(event) for event in events).lower()
     assert "handoff" not in joined
     assert "clean session" not in joined
     assert "context pressure" not in joined

@@ -672,7 +672,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         monitor: BackendMonitor | None = None,
         request: int = 0,
         error_msg: str = "",
-        streaming: bool = False,
     ) -> bool:
         """Compact/handoff once after a provider rejects the payload as too large."""
         if not is_context_overflow_error(error_msg):
@@ -682,7 +681,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 monitor.emit("session_event", {
                     "kind": "provider_context_overflow_recovery",
                     "request": int(request or 0),
-                    "streaming": bool(streaming),
                     "recovered": False,
                     "reason": "not_foreground",
                 })
@@ -718,7 +716,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             monitor.emit("session_event", {
                 "kind": "provider_context_overflow_recovery",
                 "request": int(request or 0),
-                "streaming": bool(streaming),
                 "recovered": recovered,
                 "compacted": bool(compact_result.get("changed")),
                 "handoff": handoff_started,

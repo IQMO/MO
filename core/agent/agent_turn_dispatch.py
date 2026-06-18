@@ -34,7 +34,7 @@ from ..path_defaults import repo_root
 class AgentTurnDispatchMixin:
     """Deterministic turn-start intercepts and the per-tool-call dispatch phase."""
 
-    def _prepare_turn_start(self, user_input: str, *, monitor: BackendMonitor | None = None, cancel_event: object = None, streaming: bool = False) -> dict[str, object]:
+    def _prepare_turn_start(self, user_input: str, *, monitor: BackendMonitor | None = None, cancel_event: object = None) -> dict[str, object]:
         """Run shared pre-provider turn setup and deterministic local intercepts."""
         text = str(user_input or "").strip()
         if not text:
@@ -69,8 +69,6 @@ class AgentTurnDispatchMixin:
                 continue
             if monitor:
                 payload = {"kind": kind, "result_chars": len(response)}
-                if streaming:
-                    payload["streaming"] = True
                 monitor.emit("turn_intercept", payload)
             self.session.add_assistant(response)
             if record_memory:

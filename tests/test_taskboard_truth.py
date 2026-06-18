@@ -78,55 +78,6 @@ def test_agent_blocked_first_tool_does_not_materialize_task_board():
     assert boards == []
 
 
-def test_agent_streaming_blocked_first_tool_does_not_materialize_task_board():
-    captured = {}
-    agent = _agent_with_boundary_capture(captured)
-    agent.max_provider_requests = 2
-    agent.tool_definitions = [{"name": "edit_file"}]
-    agent.allowed_roots = ["."]
-    agent.sandbox_config = {"enabled": False}
-    agent._active_lane = None
-    agent.tool_compress_enabled = False
-    agent._project_scoped_tool_arguments = lambda _name, arguments: arguments
-    agent._self_mutation_block_reason = lambda *_args, **_kwargs: "[blocked] needs approval"
-    agent._operator_approved = lambda *_args, **_kwargs: False
-    agent._dispatch_tool = lambda *_args, **_kwargs: "should not run"
-    agent._write_tool_audit = lambda *_args, **_kwargs: None
-    agent._cap_tool_result_for_context = lambda result, **_kwargs: result
-    boards = []
-    streams = iter([
-        iter([
-            SimpleNamespace(
-                choices=[SimpleNamespace(
-                    delta=SimpleNamespace(tool_calls=[SimpleNamespace(
-                        index=0,
-                        id="call-1",
-                        function=SimpleNamespace(name="edit_file", arguments='{"path":"app.py","old_text":"a","new_text":"b"}'),
-                    )]),
-                    finish_reason="tool_calls",
-                )],
-                usage=None,
-            ),
-        ]),
-        iter([
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content="Blocked before editing."), finish_reason="stop")],
-                usage=None,
-            ),
-        ]),
-    ])
-    agent._call_provider_stream = lambda **_kwargs: next(streams)
-
-    events = list(agent.run_turn_streaming(
-        "do it",
-        on_first_tool=lambda *_args: boards.append(True) or TaskBoard(tasks=[TaskItem("1", "Edit", "active", kind="edit", completion_gate="tool")]),
-    ))
-
-    assert boards == []
-    assert not any(event.get("type") == "task_update" for event in events)
-    assert events[-1] == {"type": "done", "final_text": "Blocked before editing."}
-
-
 def test_agent_normal_final_boundary_receives_current_task_board():
     captured = {}
     agent = _agent_with_boundary_capture(captured)
@@ -147,27 +98,6 @@ def test_agent_normal_final_boundary_receives_current_task_board():
     assert events[-1]["type"] == "taskboard_update"
     assert events[-1]["update"] == "completed"
     assert events[-1]["board_id"] == board.board_id
-
-
-def test_agent_streaming_final_boundary_receives_current_task_board():
-    captured = {}
-    agent = _agent_with_boundary_capture(captured)
-
-    def fake_stream(**_kwargs):
-        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="Done, all fixed."), finish_reason="stop")], usage=None)
-
-    agent._call_provider_stream = fake_stream
-    board = TaskBoard(tasks=[
-        TaskItem("1", "Inspect", "completed", kind="inspect", completion_gate="tool"),
-        TaskItem("2", "Report", "active", kind="report", completion_gate="final", depends_on=["1"]),
-    ])
-
-    events = list(agent.run_turn_streaming("finish", task_board=board))
-
-    assert events[-1] == {"type": "done", "final_text": "Done, all fixed."}
-    assert captured["boundary"] == "turn_final"
-    assert captured["task_board"] is board
-    assert board.task("2").status == "completed"
 
 
 def test_agent_final_answer_leaves_unfinished_non_final_task_active_before_boundary():

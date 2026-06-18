@@ -206,49 +206,6 @@ def test_agent_injects_code_graph_context_into_provider_context(monkeypatch):
     assert "MO Internal Code Map" in captured["extra_context"]
 
 
-def test_agent_streaming_injects_code_graph_context(monkeypatch):
-    agent = Agent.__new__(Agent)
-    
-    agent.session = SimpleNamespace(
-        messages=[],
-        add_user=lambda _text: None,
-        turn_count=0,
-        sanitize_for_provider=lambda **_kwargs: None,
-        get_messages=lambda extra_context=None: [{"role": "system", "content": extra_context or ""}],
-        record_usage=lambda *a, **k: None,
-        add_assistant=lambda *a, **k: None,
-    )
-    agent.profile = None
-    agent.memory = None
-    agent.context_summary_enabled = False
-    agent.max_provider_requests = 1
-    agent.max_tool_rounds = 1
-    agent.provider_name = "fake"
-    agent.model = "fake"
-    agent.tool_definitions = []
-    agent.critic = SimpleNamespace(review=lambda text: SimpleNamespace(text=text))
-    agent._pending_turn_proposal = ""
-    agent._deep_review_analysis_rounds = 0
-    captured = {}
-
-    def fake_stream(extra_context=None):
-        captured["extra_context"] = extra_context
-        yield SimpleNamespace(
-            choices=[SimpleNamespace(delta=SimpleNamespace(content="streamed"), finish_reason="stop")],
-            usage=None,
-        )
-
-    agent._call_provider_stream = fake_stream
-    monkeypatch.setattr("core.agent.agent_turn.should_include_workspace_awareness", lambda _text: False)
-    monkeypatch.setattr("core.graph.code_graph.should_include_code_graph_context", lambda _text: True)
-    monkeypatch.setattr("core.graph.code_graph.build_code_graph_context", lambda _text: "### MO Internal Code Map - orientation only\n- file: core/agent.py")
-
-    events = list(agent.run_turn_streaming("investigate streaming context"))
-
-    assert events[-1] == {"type": "done", "final_text": "streamed"}
-    assert "MO Internal Code Map" in captured["extra_context"]
-
-
 def test_agent_injects_workspace_awareness_into_provider_context(monkeypatch):
     agent = Agent.__new__(Agent)
     
