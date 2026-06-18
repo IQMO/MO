@@ -50,7 +50,8 @@ def run_fix_loop(agent: "Agent", report: "ReviewReport"):
         print(f"PRT Fix Loop Aborted: {reason}")
         return report
         
-    regression_tests = bool((getattr(agent, "config", None) or {}).get("prt", {}).get("regression_tests", False))
+    _cfg = getattr(agent, "config", None)
+    regression_tests = bool(_cfg.get("prt", {}).get("regression_tests", False)) if isinstance(_cfg, dict) else False
     steps = []
     for i, finding in enumerate(report.findings):
         if finding.is_actionable() and not finding.resolved:

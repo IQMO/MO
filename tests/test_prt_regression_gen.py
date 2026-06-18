@@ -6,11 +6,15 @@ requires the test to fail pre-fix and pass after (kept only if it passes).
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from unittest.mock import patch
+
 from core.review.diff_review import ReviewFinding, ReviewReport
 from core.review.review_iteration import (
     _REGRESSION_CATEGORIES,
     regression_prompt_block,
     regression_test_candidates,
+    run_fix_loop,
 )
 
 
@@ -64,3 +68,54 @@ def test_prompt_block_demands_fail_before_pass_after_and_runs_it():
 def test_categories_cover_the_bug_classes():
     assert {"bug_risk", "security", "missing_test", "breaking_change"} <= _REGRESSION_CATEGORIES
     assert "style" not in _REGRESSION_CATEGORIES
+
+
+class _FakeAgent:
+    """Minimal running-agent stand-in that captures the fix-loop prompt."""
+
+    def __init__(self, config):
+        self.workspace = "/tmp/t"
+        self.system_message = "sys"
+        self.gateway = None
+        self.config = config
+        self.tool_definitions = [
+            {"type": "function", "function": {"name": "edit_file"}},
+            {"type": "function", "function": {"name": "test_runner"}},
+        ]
+        self.prompts: list[str] = []
+
+    @contextmanager
+    def isolated_session(self, session):
+        yield
+
+    @contextmanager
+    def provider_scope(self, surface, worker_id=""):
+        yield
+
+    def run_turn(self, prompt, monitor=None):
+        self.prompts.append(prompt)
+        return "done"
+
+
+@patch("core.workspace_awareness.prt_safe_to_mutate")
+def test_flag_on_injects_regression_guidance_into_prompt(mock_safe):
+    mock_safe.return_value = (True, "")
+    agent = _FakeAgent({"prt": {"regression_tests": True}})
+    run_fix_loop(agent, _report([_finding("major", "bug_risk")]))
+    assert agent.prompts and "Regression tests:" in agent.prompts[0]
+
+
+@patch("core.workspace_awareness.prt_safe_to_mutate")
+def test_flag_off_omits_regression_guidance(mock_safe):
+    mock_safe.return_value = (True, "")
+    agent = _FakeAgent({"prt": {"regression_tests": False}})
+    run_fix_loop(agent, _report([_finding("major", "bug_risk")]))
+    assert agent.prompts and "Regression tests:" not in agent.prompts[0]
+
+
+@patch("core.workspace_awareness.prt_safe_to_mutate")
+def test_non_dict_config_defaults_off(mock_safe):
+    mock_safe.return_value = (True, "")
+    agent = _FakeAgent(config=None)  # non-dict config must not error or enable the feature
+    run_fix_loop(agent, _report([_finding("major", "bug_risk")]))
+    assert agent.prompts and "Regression tests:" not in agent.prompts[0]
