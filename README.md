@@ -176,7 +176,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Session continuity | Long work preserves task state, evidence, files, and context orientation |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
-| PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings |
+| PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |
 | Learning loop | Suggestions remain pending until you confirm or dismiss them |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |

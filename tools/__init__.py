@@ -1,6 +1,6 @@
 """MO Agent — Tool implementations and definitions.
 
-All 12 tools defined. Full tool list sent to provider every turn.
+All 13 tools defined. Full tool list sent to provider every turn.
 Sandbox gates at dispatch time via core.sandbox.guard_tool_call().
 """
 
