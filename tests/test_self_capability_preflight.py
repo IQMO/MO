@@ -2,7 +2,6 @@ from types import SimpleNamespace
 
 from core.agent.agent import Agent
 from core.self_capability_preflight import (
-    build_self_capability_preflight_context,
     devmode05_continuation_instruction,
     devmode05_final_allows_stop,
     devmode05_task_truth_continuation_instruction,

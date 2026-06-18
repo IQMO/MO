@@ -177,7 +177,7 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "command": {"type": "string", "description": "Test command (default python -m pytest -q)"},
                     "workdir": {"type": "string", "description": "Working directory (default current working directory)"},
-                    "timeout": {"type": "integer", "description": "Timeout seconds (default 120)"},
+                    "timeout": {"type": "integer", "description": "Timeout seconds (default 420)"},
                 },
             },
         },
@@ -356,10 +356,29 @@ def _shell_command(command: str) -> tuple[list[str] | str, bool, str]:
     return [shell_exe, "-c", command], False, command
 
 
+def _looks_like_pytest_command(command: object) -> bool:
+    text = str(command or "").lower()
+    return bool(re.search(r"\b(pytest|python\s+-m\s+pytest|py\s+-m\s+pytest)\b", text))
+
+
+def _tool_timeout(command: object, requested: object, default: int) -> int:
+    try:
+        timeout = int(requested if requested is not None else default)
+    except (TypeError, ValueError):
+        timeout = default
+    if _looks_like_pytest_command(command):
+        return max(timeout, 420)
+    return timeout
+
+
+def _test_runner_timeout(command: object, requested: object = None) -> int:
+    return _tool_timeout(command, requested, 420)
+
+
 def execute_shell(arguments: dict[str, Any]) -> str:
     command = str(arguments.get("command", "")).strip()
     workdir = arguments.get("workdir") or os.getcwd()
-    timeout = arguments.get("timeout", 60)
+    timeout = _tool_timeout(command, arguments.get("timeout"), 60)
     cwd = workdir
 
     shell_cmd, use_shell, registered_command = _shell_command(command)
@@ -512,13 +531,11 @@ def execute_git_status(arguments: dict[str, Any]) -> str:
 
 
 def execute_test_runner(arguments: dict[str, Any]) -> str:
-    # Default must fit a FULL suite run (~3 min serial here) — a 120s default
-    # killed in-session full-suite runs and pushed the model into scoped
-    # substitutes (observed live: DEVMODE05 T1355, two test_runner timeouts).
+    command = arguments.get("command", "python -m pytest -q")
     return execute_shell({
-        "command": arguments.get("command", "python -m pytest -q"),
+        "command": command,
         "workdir": arguments.get("workdir"),
-        "timeout": arguments.get("timeout", 420),
+        "timeout": _test_runner_timeout(command, arguments.get("timeout")),
         "_clean_env": arguments.get("_clean_env", True),
     })
 

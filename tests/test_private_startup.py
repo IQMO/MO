@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -215,7 +216,7 @@ sandbox:
 
     agent = Agent(str(config))
 
-    assert agent.allowed_roots == [str(project.resolve()), str(home.resolve())]
+    assert agent.allowed_roots == [str(project.resolve())]
     assert agent.provider_name == "pro"
     assert agent.model == "deepseek-v4-pro"
 
@@ -224,6 +225,43 @@ sandbox:
     assert "metadata only" in message
     assert agent.provider_name == "pro"
     assert agent.model == "deepseek-v4-pro"
+
+
+def test_project_runtime_state_does_not_seed_private_state_home(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    config = tmp_path / "config.yaml"
+    project.mkdir()
+    config.write_text(
+        f"""
+runtime:
+  home: {home.as_posix()}
+  state: project
+providers:
+  - name: mock-local
+    type: mock
+    model: mock-model
+model:
+  default: mock-model
+access:
+  mode: project
+paths:
+  memory_file: memory/mo.db
+  critique_file: critique/ANSWER.md
+sandbox:
+  enabled: true
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MO_PROJECT_CWD", str(project))
+    monkeypatch.delenv("MO_STATE_HOME", raising=False)
+    monkeypatch.delenv("MO_HOME", raising=False)
+
+    agent = Agent(str(config))
+
+    assert agent.allowed_roots == [str(project.resolve())]
+    assert "MO_STATE_HOME" not in os.environ
 
 
 def test_agent_records_invocation_metadata(tmp_path, monkeypatch):

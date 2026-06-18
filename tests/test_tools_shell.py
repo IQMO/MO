@@ -1,4 +1,4 @@
-from tools import _shell_command, execute_shell
+from tools import _shell_command, _test_runner_timeout, _tool_timeout, execute_shell, execute_test_runner
 
 
 def test_execute_shell_clean_env_drops_secret_env(monkeypatch):
@@ -56,3 +56,34 @@ def test_shell_command_supports_explicit_powershell(monkeypatch):
     assert "LASTEXITCODE" in shell_cmd[5]
     assert use_shell is False
     assert registered == shell_cmd[5]
+
+
+def test_test_runner_timeout_default_fits_full_pytest():
+    assert _test_runner_timeout("python -m pytest -q") == 420
+
+
+def test_test_runner_timeout_floors_short_pytest_values():
+    assert _test_runner_timeout("python -m pytest tests -q", 120) == 420
+    assert _test_runner_timeout("pytest tests -q", 300) == 420
+
+
+def test_test_runner_timeout_preserves_higher_pytest_value():
+    assert _test_runner_timeout("python -m pytest -q", 900) == 900
+
+
+def test_shell_timeout_floors_raw_pytest_but_keeps_non_pytest_default():
+    assert _tool_timeout("python -m pytest tests -q", 120, 60) == 420
+    assert _tool_timeout("python -c \"print('ok')\"", None, 60) == 60
+
+
+def test_execute_test_runner_applies_pytest_timeout_floor(monkeypatch):
+    captured = {}
+
+    def fake_execute_shell(arguments):
+        captured.update(arguments)
+        return "ok"
+
+    monkeypatch.setattr("tools.execute_shell", fake_execute_shell)
+
+    assert execute_test_runner({"command": "python -m pytest tests -q", "timeout": 120}) == "ok"
+    assert captured["timeout"] == 420

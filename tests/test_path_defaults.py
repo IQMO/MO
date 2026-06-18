@@ -125,6 +125,7 @@ class TestPrivateStateEnabled:
         assert private_state_enabled({"runtime": {"state": "mo_home"}})
 
     def test_config_state_non_private(self):
+        assert not private_state_enabled({"runtime": {"home": "~/.mo", "state": "project"}})
         assert not private_state_enabled({"runtime": {"state": "project"}})
         assert not private_state_enabled({"runtime": {"state": ""}})
 
@@ -232,18 +233,17 @@ class TestDefaultProjectRoots:
     def test_env_override(self, monkeypatch, tmp_path):
         monkeypatch.setenv("MO_DEFAULT_ROOTS", str(tmp_path))
         result = default_project_roots()
-        assert len(result) >= 1
-        assert str(tmp_path.resolve()) in [str(Path(r).resolve()) for r in result]
-        assert str(mo_home()) in [str(Path(r).resolve()) for r in result]
+        assert [str(Path(r).resolve()) for r in result] == [str(tmp_path.resolve())]
 
-    def test_project_mode_includes_project_and_runtime_home(self, monkeypatch, tmp_path):
+    def test_project_mode_excludes_private_runtime_home(self, monkeypatch, tmp_path):
         home = tmp_path / "home"
         project = tmp_path / "project"
         project.mkdir()
         monkeypatch.setenv("MO_PROJECT_CWD", str(project))
         result = default_project_roots({"runtime": {"home": str(home)}, "access": {"mode": "project"}})
         resolved = [str(Path(r).resolve()) for r in result]
-        assert resolved == [str(project.resolve()), str(home.resolve())]
+        assert resolved == [str(project.resolve())]
+        assert str(home.resolve()) not in resolved
 
     def test_none_config(self):
         result = default_project_roots(None)

@@ -8,12 +8,13 @@ MO's sandbox gate before it reaches here.
 from __future__ import annotations
 
 import json
-import os
 import queue
 import subprocess
 import threading
 import time
 from typing import Any
+
+from ..sandbox import safe_env
 
 PROTOCOL_VERSION = "2024-11-05"
 
@@ -40,7 +41,7 @@ class McpClient:
 
     # ---- lifecycle ----------------------------------------------------------
     def start(self) -> "McpClient":
-        full_env = dict(os.environ)
+        full_env = safe_env()
         full_env.update({str(k): str(v) for k, v in self._env.items()})
         self._proc = subprocess.Popen(
             self._command,

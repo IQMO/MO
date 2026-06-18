@@ -37,6 +37,19 @@ def test_call_echo_and_add():
         c.stop()
 
 
+def test_mcp_server_env_is_sanitized(monkeypatch):
+    monkeypatch.setenv("MO_TEST_SECRET_TOKEN", "visible-secret")
+    c = _client()
+    try:
+        c.start()
+        value = c.call_tool("env", {"name": "MO_TEST_SECRET_TOKEN"})
+        texts = [x.get("text") for x in value.get("content", [])]
+        assert "visible-secret" not in texts
+        assert "missing" in texts
+    finally:
+        c.stop()
+
+
 def test_bad_command_raises_on_start():
     c = McpClient("broken", "definitely_not_a_real_cmd_xyz", [], timeout=5)
     with pytest.raises(Exception):

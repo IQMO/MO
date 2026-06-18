@@ -505,6 +505,20 @@ class TestGuardToolCall:
         assert reason is not None
         assert "PATH BLOCKED" in reason
 
+    def test_mcp_path_argument_outside_roots_blocked(self):
+        reason = guard_tool_call("mcp__files__read_file", {"path": "/etc/passwd"}, allowed_roots=self.ALLOWED_ROOTS)
+        assert reason is not None
+        assert "PATH BLOCKED" in reason
+
+    def test_mcp_path_argument_inside_roots_allowed(self):
+        reason = guard_tool_call("mcp__files__read_file", {"path": "/home/user/repo/README.md"}, allowed_roots=self.ALLOWED_ROOTS)
+        assert reason is None
+
+    def test_mcp_mutating_name_blocked_in_read_only_lane(self):
+        reason = guard_tool_call("mcp__files__write_file", {"path": "/home/user/repo/a.txt"}, lane="review-only", allowed_roots=self.ALLOWED_ROOTS)
+        assert reason is not None
+        assert "LANE LOCKED" in reason
+
 
 # ── Hard boundary pattern completeness ─────────────────────────────
 

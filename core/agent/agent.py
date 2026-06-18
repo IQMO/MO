@@ -29,7 +29,7 @@ from ..session.session import Session, _session_ended_clean
 from ..system_prompt import load_system_prompt
 from ..critic import AnswerCritic
 from ..sandbox import redact_sensitive_text
-from ..path_defaults import ENV_MO_STATE_HOME, default_config_path, default_project_roots, mo_home, project_cwd, repo_root, resolve_state_path
+from ..path_defaults import ENV_MO_STATE_HOME, default_config_path, default_project_roots, mo_home, private_state_enabled, project_cwd, repo_root, resolve_state_path
 from ..backend_monitor import BackendMonitor, get_monitor, preview_provider_messages, preview_provider_response
 from ..provider.provider_audit import append_provider_audit
 from ..work_patterns import build_ghost_work_guidance
@@ -69,7 +69,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self.project_cwd = str(project_cwd())
         self.runtime_home = str(mo_home(self.config))
         self.invoked_as = os.environ.get("MO_INVOKED_AS", "mo")
-        if (self.config.get("runtime") or os.environ.get("MO_HOME") or os.environ.get("MO_STATE_HOME")) and not os.environ.get("PYTEST_CURRENT_TEST"):
+        if private_state_enabled(self.config) and not os.environ.get("PYTEST_CURRENT_TEST"):
             os.environ.setdefault(ENV_MO_STATE_HOME, self.runtime_home)
 
         # Init provider chain

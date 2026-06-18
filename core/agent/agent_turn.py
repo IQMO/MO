@@ -5,6 +5,7 @@ dispatch phase and provider error/turn-limit recovery live in
 agent_turn_dispatch.py and agent_turn_recovery.py.
 """
 
+import json
 import os
 import traceback
 
@@ -62,6 +63,25 @@ from ..workspace_awareness import build_workspace_awareness, should_include_work
 from ..security_check import run_turn_security_check
 from interface.ghost import sanitize_proposal_for_context
 from interface.task_board_view import render_plain
+
+
+def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
+    if not task_board:
+        return ""
+    try:
+        summary = task_board.summary()
+        comparable = {
+            "state": summary.get("state"),
+            "open": summary.get("open"),
+            "done": summary.get("done"),
+            "active_task_id": summary.get("active_task_id"),
+            "ready_task_id": summary.get("ready_task_id"),
+            "tasks": summary.get("tasks"),
+        }
+        return json.dumps(comparable, sort_keys=True)
+    except Exception:
+        traceback.print_exc()
+        return ""
 
 
 class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
@@ -450,7 +470,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         # Auto-advance only when the tool plausibly satisfies the active row.
                         # Final/report rows wait for the actual final answer.
                         if task_board and task_board.tasks and not self._tool_result_is_error(result):
-                            if self._advance_task_board_after_tool(task_board, name, arguments, monitor=monitor):
+                            before_board = _task_board_change_fingerprint(task_board)
+                            advanced = self._advance_task_board_after_tool(task_board, name, arguments, monitor=monitor)
+                            if advanced or _task_board_change_fingerprint(task_board) != before_board:
                                 record_snapshot(task_board, "updated")
                         if on_board_update and task_board:
                             rendered = render_plain(task_board)
@@ -1379,7 +1401,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         # Auto-advance only when the tool plausibly satisfies the active row.
                         # Final/report rows wait for the actual final answer.
                         if task_board and task_board.tasks and not self._tool_result_is_error(result):
-                            if self._advance_task_board_after_tool(task_board, name, arguments, monitor=monitor):
+                            before_board = _task_board_change_fingerprint(task_board)
+                            advanced = self._advance_task_board_after_tool(task_board, name, arguments, monitor=monitor)
+                            if advanced or _task_board_change_fingerprint(task_board) != before_board:
                                 record_snapshot(task_board, "updated")
                         if task_board:
                             rendered = render_plain(task_board)

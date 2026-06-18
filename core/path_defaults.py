@@ -45,7 +45,10 @@ def private_state_enabled(config: dict[str, Any] | None = None) -> bool:
     runtime = cfg.get("runtime") if isinstance(cfg.get("runtime"), dict) else {}
     if os.getenv(ENV_MO_STATE_HOME) or os.getenv(ENV_MO_HOME):
         return True
-    return bool(runtime.get("home")) or str(runtime.get("state", "")).strip().lower() in {"private", "home", "mo_home"}
+    state = str(runtime.get("state", "")).strip().lower()
+    if state:
+        return state in {"private", "home", "mo_home"}
+    return bool(runtime.get("home"))
 
 
 def resolve_state_path(path: str | Path | None, config: dict[str, Any] | None = None, *, default: str = "") -> str:
@@ -116,7 +119,7 @@ def default_project_roots(config: dict[str, Any] | None = None) -> list[str]:
     if env:
         parts = [p.strip() for p in env.replace(";", "\n").splitlines() if p.strip()]
         if parts:
-            return _with_runtime_home_roots([_resolve_project_root_value(p) for p in parts], config)
+            return _dedupe_roots([_resolve_project_root_value(p) for p in parts])
 
     cfg = config or {}
     access = cfg.get("access") or {}
@@ -125,12 +128,12 @@ def default_project_roots(config: dict[str, Any] | None = None) -> list[str]:
 
     configured = access.get("default_roots") if isinstance(access, dict) else None
     if isinstance(configured, list) and configured:
-        return _with_runtime_home_roots([_resolve_project_root_value(str(p)) for p in configured], config)
+        return _dedupe_roots([_resolve_project_root_value(str(p)) for p in configured])
 
     if isinstance(access, dict) and str(access.get("mode", "")).lower() in {"project", "cwd", "safe"}:
-        return _with_runtime_home_roots([str(project_cwd())], config)
+        return _dedupe_roots([str(project_cwd())])
 
-    return _with_runtime_home_roots([repo_root()], config)
+    return _dedupe_roots([repo_root()])
 
 
 def _resolve_project_root_value(value: str) -> str:
@@ -140,11 +143,11 @@ def _resolve_project_root_value(value: str) -> str:
     return str((project_cwd() / p).resolve(strict=False))
 
 
-def _with_runtime_home_roots(roots: list[str], config: dict[str, Any] | None = None) -> list[str]:
-    """Include MO's private runtime home alongside normal project roots."""
+def _dedupe_roots(roots: list[str]) -> list[str]:
+    """Resolve and deduplicate model-visible project roots."""
     result: list[str] = []
     seen: set[str] = set()
-    for value in [*roots, str(mo_home(config))]:
+    for value in roots:
         resolved = str(Path(value).expanduser().resolve(strict=False))
         key = resolved.replace("\\", "/").lower()
         if key not in seen:

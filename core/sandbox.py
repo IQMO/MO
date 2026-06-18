@@ -543,6 +543,23 @@ _OPTIONAL_NONBLANK_TOOL_ARGS: dict[str, tuple[str, ...]] = {
     "test_runner": ("command",),
 }
 
+_MCP_PATH_ARGUMENT_NAMES = {
+    "path",
+    "root",
+    "workdir",
+    "cwd",
+    "dir",
+    "directory",
+    "file",
+    "file_path",
+    "filepath",
+}
+
+_MCP_MUTATING_NAME_PATTERN = re.compile(
+    r"(?:^|_)(write|edit|create|delete|remove|move|rename|patch|apply|update|commit|push|merge|deploy|run)(?:_|$)",
+    re.IGNORECASE,
+)
+
 
 def _validate_tool_arguments(name: str, arguments: dict[str, Any]) -> str | None:
     args = arguments or {}
@@ -679,6 +696,23 @@ def _guard_path_scope(
     return None
 
 
+def _guard_mcp_tool(
+    name: str,
+    arguments: dict[str, Any],
+    lane: str | None,
+    allowed_roots: list[str] | None,
+) -> str | None:
+    if not str(name or "").startswith("mcp__"):
+        return None
+    if lane in READ_ONLY_LANES and _MCP_MUTATING_NAME_PATTERN.search(str(name or "")):
+        return f"[LANE LOCKED] {name} blocked in {lane} lane."
+    for key in _MCP_PATH_ARGUMENT_NAMES:
+        value = arguments.get(key)
+        if value and not path_allowed(str(value), allowed_roots):
+            return f"[PATH BLOCKED] {name} path outside allowed roots: {value}"
+    return None
+
+
 def _guard_large_write(arguments: dict[str, Any], cfg: dict[str, Any]) -> str | None:
     """Check write_file for large existing-file rewrites. Return block reason or None."""
     if "path" not in arguments:
@@ -734,6 +768,10 @@ def guard_tool_call(
 
     # Path scope (file tools, shell workdir, find/grep/git/project_bridge)
     if reason := _guard_path_scope(name, arguments, allowed_roots):
+        return block(reason)
+
+    # MCP tools are dynamic; enforce generic path and read-only lane rules.
+    if reason := _guard_mcp_tool(name, arguments, lane, allowed_roots):
         return block(reason)
 
     # write_file large existing-file guard

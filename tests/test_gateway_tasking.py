@@ -101,6 +101,13 @@ class _BlockingAgent(_NoToolAgent):
         return "blocked"
 
 
+class _ProtocolCompleteWithOpenBoardAgent(_NoToolAgent):
+    def run_turn(self, user_input, monitor=None, on_first_tool=None, on_board_update=None, **_kwargs):
+        if on_first_tool:
+            on_first_tool("read_file", {"path": "README.md"})
+        return "[DEVMODE05 COMPLETE] done"
+
+
 class _ExplodingAfterBoardAgent(_NoToolAgent):
     def run_turn(self, user_input, monitor=None, on_first_tool=None, on_board_update=None, **_kwargs):
         if on_first_tool:
@@ -329,6 +336,26 @@ def test_gateway_terminal_snapshot_records_blocked_board_state(tmp_path, monkeyp
     assert recent[-1]["state"] == "blocked"
     assert recent[-1]["tasks"][0]["status"] == "blocked"
     assert recent[-1]["tasks"][0]["blocker"] == "needs approval"
+
+
+def test_gateway_blocks_devmode05_turn_that_exits_with_open_taskboard(tmp_path, monkeypatch):
+    ledger = tmp_path / "taskboards.jsonl"
+    monkeypatch.setenv(ENV_TASKBOARD_LEDGER_PATH, str(ledger))
+    agent = _ProtocolCompleteWithOpenBoardAgent()
+    gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
+
+    result = gateway.run_turn("start DEVMODE05", on_board_update=lambda _board: None)
+
+    assert result.startswith("[DEVMODE05 BLOCKED]")
+    assert gateway.last_task_board is not None
+    assert gateway.last_task_board.state == "blocked"
+    assert gateway.last_task_board.open_count() > 0
+    pending = getattr(agent, "_pending_interrupted_work", {})
+    assert pending["reason"] == "open_protocol_taskboard"
+    recent = read_recent_snapshots(limit=5, path=ledger)
+    assert recent[-1]["event"] == "blocked"
+    assert recent[-1]["state"] == "blocked"
+    assert any(task["status"] == "blocked" for task in recent[-1]["tasks"])
 
 
 def test_gateway_terminal_snapshot_records_abandoned_board_on_error(tmp_path, monkeypatch):

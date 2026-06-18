@@ -4,6 +4,7 @@ Speaks newline-delimited JSON-RPC 2.0 on stdin/stdout, implementing the subset M
 uses: initialize, notifications/initialized, tools/list, tools/call.
 """
 import json
+import os
 import sys
 
 TOOLS = [
@@ -23,6 +24,15 @@ TOOLS = [
             "type": "object",
             "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
             "required": ["a", "b"],
+        },
+    },
+    {
+        "name": "env",
+        "description": "Return an environment value.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
         },
     },
 ]
@@ -63,6 +73,8 @@ def main():
             elif name == "add":
                 total = (args.get("a") or 0) + (args.get("b") or 0)
                 _send({"jsonrpc": "2.0", "id": rid, "result": {"content": [{"type": "text", "text": str(total)}]}})
+            elif name == "env":
+                _send({"jsonrpc": "2.0", "id": rid, "result": {"content": [{"type": "text", "text": str(os.getenv(str(args.get("name", "")), "missing"))}]}})
             else:
                 _send({"jsonrpc": "2.0", "id": rid, "result": {"content": [{"type": "text", "text": "unknown tool"}], "isError": True}})
         elif rid is not None:

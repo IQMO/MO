@@ -204,6 +204,13 @@ class Gateway:
                     on_activity=on_activity,
                     has_open_board=lambda: bool(self.last_task_board and self.last_task_board.open_count() > 0),
                 )
+                result_text = _block_open_protocol_board_at_turn_end(
+                    self.agent,
+                    user_input,
+                    result_text,
+                    self.last_task_board,
+                    monitor=self.monitor,
+                )
 
             except Exception as exc:
                 status = "error"
@@ -484,6 +491,8 @@ def _runtime_should_create_board(
     text = str(user_input or "")
     if is_research_method_question(text):
         return False
+    if is_devmode05_activation(text):
+        return True
     if is_vs05_activation(text):
         return True
     if resume_intent:
@@ -539,6 +548,51 @@ def terminal_board_event(board: TaskBoard, status: str) -> tuple[str, str]:
 
 # Legacy alias — internal callers use the public name.
 _terminal_board_event = terminal_board_event
+
+
+def _block_open_protocol_board_at_turn_end(
+    agent: object,
+    user_input: str,
+    result_text: str,
+    board: TaskBoard | None,
+    *,
+    monitor: BackendMonitor,
+) -> str:
+    """Block protocol turns that claim terminal status with open task rows."""
+    if not board or not board.tasks or board.open_count() <= 0:
+        return result_text
+    protocol = ""
+    if is_devmode05_activation(user_input):
+        protocol = "DEVMODE05"
+    elif is_vs05_activation(user_input):
+        protocol = "VS05"
+    if not protocol:
+        return result_text
+    normalized = str(result_text or "").upper()
+    if f"[{protocol} COMPLETE]" not in normalized and f"[{protocol} BLOCKED]" not in normalized:
+        return result_text
+
+    task_id = board.active_task_id() or board.first_ready_pending_id()
+    if task_id:
+        board.block(task_id, "protocol terminal marker returned with open taskboard rows")
+    try:
+        agent._pending_interrupted_work = {
+            "user": user_input,
+            "reason": "open_protocol_taskboard",
+            "changed": True,
+        }
+    except Exception:
+        traceback.print_exc()
+    monitor.emit("protocol_open_taskboard_blocked", {
+        "protocol": protocol,
+        "board_id": board.board_id,
+        "open_count": board.open_count(),
+        "task_id": str(task_id or ""),
+    })
+    return (
+        f"[{protocol} BLOCKED] Protocol returned a terminal marker while the taskboard still has "
+        f"{board.open_count()} open row(s). Resume and close the board with evidence before final closeout."
+    )
 
 
 def record_terminal_snapshot(
