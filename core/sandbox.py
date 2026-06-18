@@ -15,6 +15,7 @@ from typing import Any
 import traceback
 
 from .tool_constants import MUTATING_TOOLS, READ_ONLY_LANES
+from .text_safety import SECRET_NAME_PATTERN, PROVIDER_TOKEN_PATTERN
 
 
 def _emit_sandbox_event(event_type: str, payload: dict[str, Any]) -> None:
@@ -139,10 +140,10 @@ SHELL_NETWORK_PATTERNS = [
 SENSITIVE_VALUE_PATTERNS = [
     (re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-+/=]+"), r"\1[redacted]"),
     (re.compile(r"(?i)([\"']?authorization[\"']?\s*[:=]\s*[\"']?(?:bearer\s+)?)[^\s\"',}]+"), r"\1[redacted]"),
-    (re.compile(r"(?i)([\"']?(?:api[_-]?key|x-api-key|access[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret[_-]?key|secret|token|password|passwd|private[_-]?key|session[_-]?cookie)[\"']?\s*[:=]\s*[\"']?)[^\s\"',}]+"), r"\1[redacted]"),
+    (re.compile(r"(?i)([\"']?(?:" + SECRET_NAME_PATTERN + r")[\"']?\s*[:=]\s*[\"']?)[^\s\"',}]+"), r"\1[redacted]"),
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}\b"), "sk-[redacted]"),
-    # High-confidence standalone provider tokens (parity with the answer-critic).
-    (re.compile(r"(?i)\b(?:gh[pousr]_[a-z0-9]{16,}|xox[baprs]-[a-z0-9-]{10,}|akia[0-9a-z]{12,}|aiza[0-9a-z_\-]{20,}|(?:sk|pk|rk)_(?:live|test)_[a-z0-9]{10,})\b"), "[redacted-token]"),
+    # High-confidence standalone provider tokens (single-sourced in text_safety).
+    (re.compile(r"(?i)\b(?:" + PROVIDER_TOKEN_PATTERN + r")\b"), "[redacted-token]"),
     # SSH user@host patterns — redact target to avoid leaking server access details
     (re.compile(r"\b([a-z_][a-z0-9_-]{1,32})@(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,})"), r"\1@[redacted-host]"),
     # PEM private key blocks (same as critic PRIVATE_KEY_BLOCK_RE)

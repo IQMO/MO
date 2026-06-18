@@ -12,23 +12,18 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .text_safety import SECRET_NAME_PATTERN, PROVIDER_TOKEN_PATTERN
+
 DEFAULT_CRITIQUE_PATH = "critique/ANSWER.md"
 
+# Name alternation + standalone token prefixes are single-sourced in text_safety
+# so this gate, the sandbox redactor, and the secret detector stay in lockstep.
 SECRET_ASSIGNMENT_RE = re.compile(
-    r"\b(?P<name>[A-Za-z0-9_-]*(?:api[_-]?key|x-api-key|access[_-]?key|access[_-]?token|refresh[_-]?token|"
-    r"id[_-]?token|auth[_-]?token|token|password|passwd|client[_-]?secret|secret))\b"
+    r"\b(?P<name>[A-Za-z0-9_-]*(?:" + SECRET_NAME_PATTERN + r"))\b"
     r"(?P<nq>[\"']?)(?P<sep>\s*[:=]\s*)(?P<quote>[\"']?)(?P<value>[^\s\"',;}]{8,})(?P=quote)",
     re.IGNORECASE,
 )
-# Standalone provider token prefixes (no assignment context needed — high signal).
-PROVIDER_TOKEN_RE = re.compile(
-    r"\b(?:gh[pousr]_[A-Za-z0-9]{16,}"          # GitHub PAT / OAuth / server / refresh
-    r"|xox[baprs]-[A-Za-z0-9-]{10,}"            # Slack
-    r"|AKIA[0-9A-Z]{12,}"                       # AWS access key id
-    r"|AIza[0-9A-Za-z_\-]{20,}"                 # Google API key
-    r"|(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,})"  # Stripe
-    r"\b",
-)
+PROVIDER_TOKEN_RE = re.compile(r"\b(?:" + PROVIDER_TOKEN_PATTERN + r")\b", re.IGNORECASE)
 PRIVATE_KEY_ASSIGNMENT_RE = re.compile(
     r"\b(?P<name>private[_\s-]?key)\b(?P<sep>\s*[:=]\s*)(?P<quote>[\"']?)(?P<value>[^\s\"',}]{8,})(?P=quote)",
     re.IGNORECASE,
