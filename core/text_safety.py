@@ -8,13 +8,19 @@ import traceback
 SECRET_VALUE_RE = re.compile(
     r"(?i)(?:"
     r"bearer\s+[a-z0-9._\-+/=]{8,}"
-    r"|(?:api[_-]?key|access[_-]?token|token|secret[_-]?key|secret|password|private[_-]?key|session[_-]?cookie)\s*[:=]\s*[^\s,;]{3,}"
-    # High-confidence standalone tokens — caught by the sandbox redactor but
-    # previously invisible to the final-response and learning-bundle guards.
-    r"|sk-[a-z0-9_\-]{16,}"                      # OpenAI-style keys
-    r"|gh[pousr]_[a-z0-9]{20,}"                  # GitHub tokens
-    r"|akia[0-9a-z]{16}"                         # AWS access key id
-    r"|-----begin[a-z0-9 ]*private\s+key-----"   # PEM private key block
+    # name = value / "name": value — the optional quote before the separator
+    # covers JSON/dict secret keys like {"api_key": "..."}.
+    r"|(?:api[_-]?key|access[_-]?key|access[_-]?token|refresh[_-]?token|token|"
+    r"secret[_-]?key|client[_-]?secret|secret|password|passwd|private[_-]?key|"
+    r"session[_-]?cookie)[\"']?\s*[:=]\s*[^\s,;]{3,}"
+    # High-confidence standalone tokens (parity with the answer-critic).
+    r"|sk-[a-z0-9_\-]{16,}"                          # OpenAI-style keys
+    r"|gh[pousr]_[a-z0-9]{20,}"                      # GitHub tokens
+    r"|xox[baprs]-[a-z0-9-]{10,}"                    # Slack tokens
+    r"|akia[0-9a-z]{16}"                             # AWS access key id
+    r"|aiza[0-9a-z_\-]{20,}"                         # Google API key
+    r"|(?:sk|pk|rk)_(?:live|test)_[a-z0-9]{10,}"     # Stripe keys
+    r"|-----begin[a-z0-9 ]*private\s+key-----"       # PEM private key block
     r")"
 )
 _UNSAFE_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")

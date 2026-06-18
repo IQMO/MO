@@ -177,6 +177,37 @@ def test_mcp_max_line_cap_present():
     assert 1_000_000 <= _MCP_MAX_LINE_BYTES <= 64 * 1024 * 1024
 
 
+# ── Secret coverage parity across all 3 surfaces (SEC-1) ──────────────
+class TestSecretCoverageParity:
+    """The turn-end security check (text_safety) and tool/web/audit redactor
+    (sandbox) must catch the same high-confidence secrets the answer-critic does,
+    so a secret can't slip a weaker guard."""
+
+    GAPS = [
+        '{"api_key": "randomSecret123456"}',
+        "export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIxyz1234",
+        "xoxb-fake-not-a-real-slack-token-000",  # matches our regex, not GitHub's validator
+        "client_secret: s3cr3tvalue9876",
+    ]
+
+    def test_text_safety_detects(self):
+        from core.text_safety import contains_secret_value
+        for t in self.GAPS:
+            assert contains_secret_value(t), t
+
+    def test_sandbox_redacts(self):
+        from core.sandbox import redact_sensitive_text
+        for t in self.GAPS:
+            assert redact_sensitive_text(t) != t, t
+
+    def test_no_false_positives(self):
+        from core.text_safety import contains_secret_value
+        from core.sandbox import redact_sensitive_text
+        for ok in ("the password field is required", "tokens and secrets in prose", "your_api_key_here"):
+            assert not contains_secret_value(ok), ok
+            assert redact_sensitive_text(ok) == ok, ok
+
+
 # ── Session: reasoning_content not re-sent (M7) ───────────────────────
 def test_reasoning_content_stripped_from_payload_but_stored():
     s = Session("SYS")
