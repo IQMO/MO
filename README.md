@@ -182,7 +182,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
-| MCP tools | Optional: connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated (off by default) |
+| MCP tools | Optional: connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments (off by default) |
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 
@@ -200,9 +200,14 @@ mcp:
 ```
 
 Each server is spawned as a local subprocess (stdio JSON-RPC); its tools appear to MO as
-`mcp__<server>__<tool>` and pass the same sandbox gate as native tools. There is no
-marketplace and no model-side install — you list the servers. `/doctor` shows MCP status,
-and a server that fails to start is reported degraded rather than crashing MO.
+`mcp__<server>__<tool>` and pass the same sandbox gate as native tools. MCP subprocesses
+inherit only MO's safe environment allowlist plus explicit server `env` entries, so ambient
+tokens and private shell credentials are not forwarded by default. Dynamic MCP tools are
+also path-scoped when they expose common path/root/workdir arguments, and mutating-looking
+MCP tool names stay blocked in read-only lanes.
+
+There is no marketplace and no model-side install — you list the servers. `/doctor` shows
+MCP status, and a server that fails to start is reported degraded rather than crashing MO.
 
 ## Public Boundaries
 
@@ -218,6 +223,8 @@ adapts through their own approved profile and learning surfaces.
 
 - Keys live in `~/.mo/.env`, shell environment, or configured secret files, not
   in the repo.
+- Private runtime state is not added to model-visible project roots by default;
+  project/safe access roots stay scoped to the project unless explicitly configured.
 - Tool calls pass through sandbox rules for path boundaries, shell safety,
   network policy, and secret redaction.
 - A secrets-focused critic checks outgoing answers, and modified files can be
