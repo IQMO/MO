@@ -79,6 +79,56 @@ PRT_REVIEW_SYSTEM = (
 )
 
 
+def _extract_json_root(content: str) -> Any:
+    """Parse the first complete JSON object or array from model output.
+
+    The reviewer prompt asks for ``{"findings":[...],"positives":[...]}``; a naive
+    ``\\[.*\\]`` grab mis-parses that object form (it slices the inner array plus
+    trailing text and ``json.loads`` raises). This tries a whole-string parse
+    first, tolerates a ```` ```json ```` fence, then does brace-/bracket-balanced
+    slicing from the first opening token. Returns the parsed dict/list or None.
+    """
+    text = str(content or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z0-9]*\s*", "", text)
+        text = re.sub(r"\s*```$", "", text).strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start = text.find(opener)
+        if start < 0:
+            continue
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == opener:
+                depth += 1
+            elif ch == closer:
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i + 1])
+                    except Exception:
+                        break
+    return None
+
+
 def _review_failure_finding(message: str, explanation: str) -> "ReviewFinding":
     return ReviewFinding(
         id=str(uuid.uuid4()),
@@ -436,10 +486,10 @@ def review_diff(agent: "Agent", diff_ref: str = "HEAD") -> ReviewReport:
             
             content = str(getattr(response, "content", ""))
             
-            # Extract JSON list
-            json_match = re.search(r"\[.*\]", content, re.DOTALL)
-            if json_match:
-                raw_root = json.loads(json_match.group(0))
+            # Extract JSON robustly: the prompt asks for an object with "findings"
+            # and "positives"; parse object/array forms (and fenced output) safely.
+            raw_root = _extract_json_root(content)
+            if raw_root is not None:
                 # Accept both a JSON list (old format) and a JSON object with "findings" key (new format)
                 if isinstance(raw_root, dict):
                     raw_findings = raw_root.get("findings", [])

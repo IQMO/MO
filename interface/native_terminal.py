@@ -158,7 +158,11 @@ def run_native_terminal_loop(agent: Any, gateway: Any, console: Any) -> None:
         if not user_input:
             continue
         if user_input.startswith("/"):
-            cmd_result = agent.process_slash_command(user_input)
+            try:
+                cmd_result = agent.process_slash_command(user_input)
+            except Exception as exc:  # a local command must never kill the REPL
+                print(f"Command failed: {user_input.split()[0]} ({type(exc).__name__}: {exc})")
+                continue
             if cmd_result is None:
                 print(f"Unknown command: {user_input.split()[0]}")
                 continue

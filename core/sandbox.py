@@ -43,6 +43,17 @@ HARD_BOUNDARY_PATTERNS: list[re.Pattern] = [
 
 ABSOLUTE_PATH_PATTERN = re.compile(r"([a-z]:[\\/][^\s\"'`;|&<>]+|(?<![\w.~-])/[^\s\"'`;|&<>]+)", re.IGNORECASE)
 
+# Shell variable / tilde expansion that resolves to a real path at execution time
+# (e.g. `~/secret`, `$HOME/x`, `%USERPROFILE%\x`, `$env:APPDATA\x`). The static path
+# scanner sees no path literal for these, so they would otherwise escape allowed
+# roots. Match a var/tilde reference immediately followed by a path separator.
+_SHELL_VAR_PATH_PATTERN = re.compile(
+    r"(?:~|%(?P<pv>[^%\s]+)%|\$\{(?P<bv>[^}\s]+)\}|\$env:(?P<ev>\w+)|\$(?P<sv>\w+))[\\/]"
+)
+# Variables that resolve to the current working directory (inside the project
+# root by construction), so expanding them does not escape scope.
+_SHELL_CWD_VARS = {"pwd", "cd", "oldpwd", "cwd"}
+
 _UNIX_ROOT_PATH_NAMES = {
     "bin", "boot", "dev", "etc", "home", "lib", "lib64", "media", "mnt",
     "opt", "proc", "root", "run", "sbin", "srv", "sys", "tmp", "usr", "var",
@@ -407,6 +418,13 @@ def shell_paths_allowed(command: str, allowed_roots: list[str] | None) -> bool:
     if not allowed_roots:
         return True
     raw_command = _path_scan_command_text(command or "")
+    # Variable/tilde expansion into a path escapes the static scope check; block
+    # it when roots are restricted unless it is a current-dir variable.
+    for m in _SHELL_VAR_PATH_PATTERN.finditer(raw_command):
+        var = (m.group("pv") or m.group("bv") or m.group("ev") or m.group("sv") or "").lower()
+        if var in _SHELL_CWD_VARS:
+            continue
+        return False
     first_token = (raw_command.strip().split(maxsplit=1) or [""])[0].lower()
     windows_slash_flags = {
         "dir",
@@ -545,20 +563,64 @@ _OPTIONAL_NONBLANK_TOOL_ARGS: dict[str, tuple[str, ...]] = {
 
 _MCP_PATH_ARGUMENT_NAMES = {
     "path",
+    "paths",
     "root",
+    "roots",
     "workdir",
     "cwd",
     "dir",
     "directory",
     "file",
+    "files",
     "file_path",
+    "file_paths",
     "filepath",
+    "source",
+    "src",
+    "destination",
+    "dest",
+    "target",
+    "to",
+    "from",
 }
 
+# Match a mutating verb at a word boundary, including camelCase (writeFile) and
+# snake_case (write_file). The verb alternation is case-insensitive via (?i:...);
+# the trailing camelCase boundary `(?=[A-Z])` stays case-sensitive on purpose.
 _MCP_MUTATING_NAME_PATTERN = re.compile(
-    r"(?:^|_)(write|edit|create|delete|remove|move|rename|patch|apply|update|commit|push|merge|deploy|run)(?:_|$)",
-    re.IGNORECASE,
+    r"(?:^|_)(?i:write|edit|create|delete|remove|move|rename|patch|apply|update|commit|push|"
+    r"merge|deploy|run|overwrite|truncate|drop|clear|unlink|mkdir|set|put|append|insert|upload)"
+    r"(?:_|$|(?=[A-Z]))",
 )
+
+
+def _iter_mcp_path_values(arguments: dict[str, Any]) -> "list[str]":
+    """Collect candidate path strings from MCP tool arguments.
+
+    Real MCP servers expose paths as scalars (``path``), lists
+    (``paths``/``file_paths``), and nested option objects
+    (``options.path``). A flat exact-key check misses the list/plural/nested
+    forms, so scope-checking must look one level into list and dict values.
+    """
+    found: list[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, str):
+            if value.strip():
+                found.append(value)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                if isinstance(item, str) and item.strip():
+                    found.append(item)
+
+    for key, value in (arguments or {}).items():
+        if str(key).lower() in _MCP_PATH_ARGUMENT_NAMES:
+            add(value)
+        elif isinstance(value, dict):
+            for nkey, nval in value.items():
+                if str(nkey).lower() in _MCP_PATH_ARGUMENT_NAMES:
+                    add(nval)
+    return found
 
 
 def _validate_tool_arguments(name: str, arguments: dict[str, Any]) -> str | None:
@@ -706,9 +768,8 @@ def _guard_mcp_tool(
         return None
     if lane in READ_ONLY_LANES and _MCP_MUTATING_NAME_PATTERN.search(str(name or "")):
         return f"[LANE LOCKED] {name} blocked in {lane} lane."
-    for key in _MCP_PATH_ARGUMENT_NAMES:
-        value = arguments.get(key)
-        if value and not path_allowed(str(value), allowed_roots):
+    for value in _iter_mcp_path_values(arguments):
+        if not path_allowed(value, allowed_roots):
             return f"[PATH BLOCKED] {name} path outside allowed roots: {value}"
     return None
 

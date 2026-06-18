@@ -278,6 +278,12 @@ def _build_graph(root: Path, files: list[str], fingerprints: dict[str, str]) -> 
                 edges.append({"source": item[0], "target": item[1], "type": item[2], "direction": "forward", "weight": 0.8})
                 edge_seen.add(item)
 
+    for edge in _python_relationship_edges(root, files, nodes):
+        item = (edge["source"], edge["target"], edge["type"])
+        if item not in edge_seen:
+            edges.append(edge)
+            edge_seen.add(item)
+
     return {
         "version": GRAPH_VERSION,
         "kind": "mo-private-code-map",
@@ -321,7 +327,8 @@ def _refresh_graph_delta(root: Path, graph: dict[str, Any], files: list[str], fi
     edges: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     for edge in graph.get("edges", []):
-        if not isinstance(edge, dict) or edge.get("type") == "imports":
+        # imports + relationship edges are recomputed globally below.
+        if not isinstance(edge, dict) or edge.get("type") in ("imports", "calls", "inherits"):
             continue
         source = str(edge.get("source") or "")
         target = str(edge.get("target") or "")
@@ -350,6 +357,12 @@ def _refresh_graph_delta(root: Path, graph: dict[str, Any], files: list[str], fi
             if item[0] in node_ids and item[1] in node_ids and item not in seen:
                 edges.append({"source": item[0], "target": item[1], "type": item[2], "direction": "forward", "weight": 0.8})
                 seen.add(item)
+
+    for edge in _python_relationship_edges(root, files, nodes):
+        item = (edge["source"], edge["target"], edge["type"])
+        if edge["source"] in node_ids and edge["target"] in node_ids and item not in seen:
+            edges.append(edge)
+            seen.add(item)
 
     graph = dict(graph)
     graph["project"] = {"root": str(root), "name": root.name, "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
@@ -521,6 +534,96 @@ def _python_import_targets(root: Path, rel: str, module_to_file: dict[str, str])
                     targets.append(target)
                     break
     return targets
+
+
+def _symbol_node_index(nodes: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """name -> ids of function/class nodes (targets for call/inherit edges)."""
+    index: dict[str, list[str]] = {}
+    for node in nodes:
+        if isinstance(node, dict) and node.get("type") in ("function", "class") and node.get("name"):
+            index.setdefault(str(node["name"]), []).append(str(node["id"]))
+    return index
+
+
+def _call_target_name(func: ast.AST) -> str:
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return ""
+
+
+def _base_class_name(base: ast.AST) -> str:
+    if isinstance(base, ast.Name):
+        return base.id
+    if isinstance(base, ast.Attribute):
+        return base.attr
+    return ""
+
+
+def _resolve_relationship_targets(name: str, rel: str, index: dict[str, list[str]]) -> list[str]:
+    candidates = index.get(name) or []
+    if len(candidates) <= 1:
+        return candidates
+    # Prefer a same-file definition to cut cross-file name collisions.
+    same_file = [c for c in candidates if c.split(":", 2)[1:2] == [rel]]
+    return same_file or candidates
+
+
+def _python_relationship_edges(
+    root: Path, files: list[str], nodes: list[dict[str, Any]], *, max_per_symbol: int = 40
+) -> list[dict[str, Any]]:
+    """Resolve intra-project ``calls`` and ``inherits`` edges between symbol nodes.
+
+    Resolution is name-based (orientation-grade, matching how MO documents graph
+    hints as "verify with file reads"): a name resolved to a same-file symbol
+    wins; otherwise it links to every project symbol of that name. Per-symbol
+    call-edge count is capped to keep the graph bounded.
+    """
+    index = _symbol_node_index(nodes)
+    if not index:
+        return []
+    edges: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def emit(src_id: str, name: str, relation: str, rel: str, count_state: list[int]) -> None:
+        if not name:
+            return
+        for tgt in _resolve_relationship_targets(name, rel, index):
+            if tgt == src_id:
+                continue
+            key = (src_id, tgt, relation)
+            if key in seen:
+                continue
+            seen.add(key)
+            edges.append({
+                "source": src_id, "target": tgt, "type": relation,
+                "direction": "forward", "weight": 0.6 if relation == "calls" else 0.9,
+            })
+            count_state[0] += 1
+
+    for rel in files:
+        if not rel.endswith(".py"):
+            continue
+        try:
+            tree = ast.parse((root / rel).read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        for item in tree.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            typ = "class" if isinstance(item, ast.ClassDef) else "function"
+            src_id = f"{typ}:{rel}:{item.name}"
+            if isinstance(item, ast.ClassDef):
+                for base in item.bases:
+                    emit(src_id, _base_class_name(base), "inherits", rel, [0])
+            count_state = [0]
+            for sub in ast.walk(item):
+                if count_state[0] >= max_per_symbol:
+                    break
+                if isinstance(sub, ast.Call):
+                    emit(src_id, _call_target_name(sub.func), "calls", rel, count_state)
+    return edges
 
 
 def _terms(text: str) -> list[str]:

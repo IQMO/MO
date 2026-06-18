@@ -15,10 +15,19 @@ from pathlib import Path
 DEFAULT_CRITIQUE_PATH = "critique/ANSWER.md"
 
 SECRET_ASSIGNMENT_RE = re.compile(
-    r"\b(?P<name>[A-Za-z0-9_-]*(?:api[_-]?key|x-api-key|access[_-]?token|refresh[_-]?token|"
-    r"id[_-]?token|auth[_-]?token|token|password|client[_-]?secret|secret))\b"
-    r"(?P<sep>\s*[:=]\s*)(?P<quote>[\"']?)(?P<value>[^\s\"',;}]{8,})(?P=quote)",
+    r"\b(?P<name>[A-Za-z0-9_-]*(?:api[_-]?key|x-api-key|access[_-]?key|access[_-]?token|refresh[_-]?token|"
+    r"id[_-]?token|auth[_-]?token|token|password|passwd|client[_-]?secret|secret))\b"
+    r"(?P<nq>[\"']?)(?P<sep>\s*[:=]\s*)(?P<quote>[\"']?)(?P<value>[^\s\"',;}]{8,})(?P=quote)",
     re.IGNORECASE,
+)
+# Standalone provider token prefixes (no assignment context needed — high signal).
+PROVIDER_TOKEN_RE = re.compile(
+    r"\b(?:gh[pousr]_[A-Za-z0-9]{16,}"          # GitHub PAT / OAuth / server / refresh
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"            # Slack
+    r"|AKIA[0-9A-Z]{12,}"                       # AWS access key id
+    r"|AIza[0-9A-Za-z_\-]{20,}"                 # Google API key
+    r"|(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,})"  # Stripe
+    r"\b",
 )
 PRIVATE_KEY_ASSIGNMENT_RE = re.compile(
     r"\b(?P<name>private[_\s-]?key)\b(?P<sep>\s*[:=]\s*)(?P<quote>[\"']?)(?P<value>[^\s\"',}]{8,})(?P=quote)",
@@ -124,8 +133,10 @@ class AnswerCritic:
             if self._is_placeholder_secret_value(value):
                 return match.group(0)
             changed = True
-            quote = match.groupdict().get("quote") or ""
-            return f"{match.group('name')}{match.group('sep')}{quote}[redacted]{quote}"
+            gd = match.groupdict()
+            nq = gd.get("nq") or ""
+            quote = gd.get("quote") or ""
+            return f"{match.group('name')}{nq}{match.group('sep')}{quote}[redacted]{quote}"
 
         def replace_bearer(match: re.Match[str]) -> str:
             nonlocal changed
@@ -153,6 +164,10 @@ class AnswerCritic:
         redacted = BEARER_RE.sub(replace_bearer, redacted)
         before = redacted
         redacted = OPENAI_KEY_RE.sub("sk-[redacted]", redacted)
+        if redacted != before:
+            changed = True
+        before = redacted
+        redacted = PROVIDER_TOKEN_RE.sub("[redacted-token]", redacted)
         if redacted != before:
             changed = True
         # Redact SSH user@host patterns (both IP and hostname)

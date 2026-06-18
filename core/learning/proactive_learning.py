@@ -409,11 +409,13 @@ def build_learning_context(
     confirmed = _read_confirmed_suggestions(suggestions_path)
     if not confirmed:
         return ""
-    # Simple relevance gate: recommendation shares words with user input
+    # Relevance gate: recommendation shares a MEANINGFUL word with user input.
+    # Bare stopword overlap ("the", "to") used to inject nearly every confirmed
+    # suggestion on every turn; require a real content-word match instead.
     relevant: list[LearningSuggestion] = []
-    user_words = set(user_text.lower().split())
+    user_words = _meaningful_words(user_text)
     for suggestion in confirmed:
-        rec_words = set(str(suggestion.recommendation or "").lower().split())
+        rec_words = _meaningful_words(str(suggestion.recommendation or ""))
         if user_words & rec_words:
             relevant.append(suggestion)
         elif _kind_is_universal(suggestion.kind):
@@ -434,6 +436,23 @@ def _read_confirmed_suggestions(path: str | Path) -> list[LearningSuggestion]:
     """Read only confirmed suggestions from the JSONL file."""
     return [s for s in read_learning_suggestions(path=str(path), include_inactive=True)
             if str(s.status).lower() == "confirmed"]
+
+
+_RELEVANCE_STOPWORDS = frozenset({
+    "the", "a", "an", "and", "or", "but", "to", "of", "in", "on", "for", "with",
+    "is", "are", "be", "was", "were", "this", "that", "it", "its", "at", "as",
+    "by", "from", "into", "please", "can", "could", "would", "should", "you",
+    "your", "i", "my", "me", "we", "do", "does", "did", "have", "has", "will",
+    "not", "no", "yes", "so", "if", "then", "than", "when", "what", "how",
+})
+
+
+def _meaningful_words(text: str) -> set[str]:
+    """Content words (>2 chars, non-stopword) for relevance matching."""
+    return {
+        w for w in re.findall(r"[a-z0-9]+", str(text or "").lower())
+        if len(w) > 2 and w not in _RELEVANCE_STOPWORDS
+    }
 
 
 def _kind_is_universal(kind: str) -> bool:

@@ -327,11 +327,19 @@ class TaskBoard:
         for idx, item in enumerate(rows, 1):
             if not isinstance(item, dict):
                 continue
+            row_status = str(item.get("status") or "pending")
+            row_evidence = _normalize_evidence(item.get("evidence") or [])
+            # Only the runtime may mint a completed row. A plan/Ghost-supplied row
+            # that arrives "completed"/"done" with no evidence is coerced to
+            # pending so model prose cannot pre-close work before any tool runs.
+            # Completed rows that carry evidence (e.g. a restored board) are kept.
+            if row_status in ("completed", "done") and not row_evidence:
+                row_status = "pending"
             built.append(TaskItem(
                 id=str(item.get("id") or idx),
                 title=str(item.get("text") or item.get("title") or f"Task {idx}"),
-                status=str(item.get("status") or "pending"),
-                evidence=_normalize_evidence(item.get("evidence") or []),
+                status=row_status,
+                evidence=row_evidence,
                 blocker=str(item.get("blocker") or ""),
                 kind=str(item.get("kind") or ""),
                 completion_gate=str(item.get("completion_gate") or item.get("gate") or ""),
@@ -378,6 +386,16 @@ class TaskBoard:
                 return
             if evidence is not None:
                 self.append_evidence(task_id, evidence)
+            # Evidence-gated rows must not close on a bare complete() with no
+            # evidence (e.g. a lone complete_task call before any real tool ran).
+            # Surface the gap as blocked instead of minting fake completion; this
+            # closes the gate-scoping hole at the root regardless of which
+            # provider round the completion happens in.
+            if _task_requires_evidence(row) and not row.evidence:
+                row.status = "blocked"
+                row.blocker = "missing evidence: run a real tool for this task before completing it"
+                self._touch()
+                return
             row.status = "completed"
             row.blocker = ""
             self._touch()

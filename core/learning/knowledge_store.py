@@ -66,9 +66,21 @@ class KnowledgeStore:
         content: str,
         metadata: dict[str, Any] | None = None,
     ) -> int:
-        """Record a knowledge entry. Returns the row id."""
+        """Record a knowledge entry, deduped on (kind, category, content).
+
+        Runtime writers call this with the same canned insight on every matching
+        turn; without dedup the table grew unbounded. If an identical entry
+        already exists, its row id is returned and no new row is written.
+        """
         metadata_json = json.dumps(metadata or {}, ensure_ascii=False, sort_keys=True)
         with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT id FROM knowledge_entries "
+                "WHERE kind = ? AND category = ? AND content = ? LIMIT 1",
+                (kind, category, content),
+            ).fetchone()
+            if existing:
+                return int(existing[0])
             cur = conn.execute(
                 "INSERT INTO knowledge_entries (kind, category, content, metadata_json, created_at) "
                 "VALUES (?, ?, ?, ?, ?)",

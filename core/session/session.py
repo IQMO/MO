@@ -114,7 +114,17 @@ class Session:
                 self._handoff_context = ""  # single-use: consume only for the real provider call
         if extra_context:
             dynamic_parts.append(extra_context)
-        payload = [{"role": "system", "content": self.system_message}] + list(self.messages)
+        # Drop stored chain-of-thought from the provider payload: prior-turn
+        # `reasoning_content` is re-billed as input on every call (and some
+        # providers reject the non-standard key). It stays in self.messages for
+        # local display/persistence; stripping here is deterministic so the
+        # cacheable prefix remains byte-stable across turns.
+        history = [
+            {k: v for k, v in m.items() if k != "reasoning_content"}
+            if isinstance(m, dict) and "reasoning_content" in m else m
+            for m in self.messages
+        ]
+        payload = [{"role": "system", "content": self.system_message}] + history
         if dynamic_parts:
             insert_at = len(payload)
             for i in range(len(payload) - 1, 0, -1):

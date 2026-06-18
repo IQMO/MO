@@ -47,7 +47,11 @@ class InputDispatchMixin:
 
     def _run_palette_command(self, text: str) -> bool:
         """Execute command-list actions as UI control, not transcript chat."""
-        cmd_result = self.agent.process_slash_command(text)
+        try:
+            cmd_result = self.agent.process_slash_command(text)
+        except Exception as exc:  # a local command must never crash the TUI loop
+            self._set_notice(f"Command failed: {text.split()[0]} ({type(exc).__name__}: {exc})")
+            return False
         if cmd_result is None:
             return False
         self._palette.record_command(text.split()[0])
@@ -183,7 +187,11 @@ class InputDispatchMixin:
             return
 
         if text.startswith("/"):
-            cmd_result = self.agent.process_slash_command(text)
+            try:
+                cmd_result = self.agent.process_slash_command(text)
+            except Exception as exc:  # a local command must never crash the TUI loop
+                self._set_notice(f"Command failed: {text.split()[0]} ({type(exc).__name__}: {exc})")
+                return
             if cmd_result is not None:
                 self._dispatch_slash_command_result(cmd_result, render_result=True)
                 return

@@ -229,6 +229,33 @@ def test_get_callers_returns_empty_for_unknown_symbol(tmp_path):
     assert results == []
 
 
+def test_callgraph_builds_real_call_and_inherit_edges_from_source(tmp_path):
+    """End-to-end guard: the BUILDER must emit call/inherit edges from real
+    source, not just traverse hand-written fixture edges. Previously the builder
+    produced only file-import edges, so caller/callee was empty on real code
+    while the fixture-based tests still passed — this catches that regression.
+    """
+    (tmp_path / "mod_a.py").write_text(
+        "class Base:\n    pass\n\n\ndef helper():\n    return 1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "mod_b.py").write_text(
+        "from mod_a import Base, helper\n\n\n"
+        "class Child(Base):\n    def run(self):\n        return helper()\n",
+        encoding="utf-8",
+    )
+
+    from core.graph.callgraph import get_callers
+
+    helper_callers = get_callers("helper", cwd=tmp_path)
+    assert helper_callers, "builder produced no caller edges for a real function call"
+    assert any(r["relation"] == "calls" for r in helper_callers)
+
+    base_callers = get_callers("Base", cwd=tmp_path)
+    assert any(r["relation"] == "inherits" for r in base_callers), \
+        "builder produced no inheritance edge for a real subclass"
+
+
 def test_search_and_callgraph_importable_from_package(tmp_path):
     _write_graph(tmp_path)
 
