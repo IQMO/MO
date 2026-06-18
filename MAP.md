@@ -18,6 +18,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `core/session/` — session, closeout, momentum.
 - `core/provider/` — providers, audit, capacity.
 - `core/ghost/` — ghost side-check routing, context, audit.
+- `core/mcp/` — MCP client + manager (operator-configured local tool servers, off by default).
 
 ## Runtime State
 - Live runtime state (logs, audits) lives under the private state home

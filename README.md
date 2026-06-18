@@ -185,6 +185,24 @@ export PATH="$HOME/.mo/bin:$PATH"
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 
+## MCP (Model Context Protocol)
+
+MO can use tools from operator-configured MCP servers — local-first and **off by default**. Add servers to `~/.mo/config.yaml`:
+
+```yaml
+mcp:
+  enabled: true
+  servers:
+    - name: filesystem
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+```
+
+Each server is spawned as a local subprocess (stdio JSON-RPC); its tools appear to MO as
+`mcp__<server>__<tool>` and pass the same sandbox gate as native tools. There is no
+marketplace and no model-side install — you list the servers. `/doctor` shows MCP status,
+and a server that fails to start is reported degraded rather than crashing MO.
+
 ## Public Boundaries
 
 This public repo is the product code. It does not include anyone's private MO

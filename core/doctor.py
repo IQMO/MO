@@ -161,6 +161,16 @@ def build_doctor_report(
     report.add("core_imports", OK if not broken else FAIL,
                "all core modules import" if not broken else "; ".join(broken))
 
+    # 7. MCP servers (config only — doctor is offline and does NOT spawn them)
+    mcp_cfg = config.get("mcp") or {}
+    if not mcp_cfg.get("enabled"):
+        report.add("mcp", OK, "disabled")
+    else:
+        servers = [s for s in (mcp_cfg.get("servers") or [])
+                   if isinstance(s, dict) and s.get("enabled") is not False and s.get("name") and s.get("command")]
+        report.add("mcp", OK if servers else WARN,
+                   f"enabled, {len(servers)} server(s) configured" if servers else "enabled but no valid servers configured")
+
     return report
 
 

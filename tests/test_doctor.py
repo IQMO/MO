@@ -77,3 +77,14 @@ def test_doctor_registered_as_command():
 
     names = {spec.name for spec in COMMANDS}
     assert "/doctor" in names
+
+
+def test_doctor_mcp_status(tmp_path):
+    off = build_doctor_report(home=tmp_path, config={})
+    assert _status(off, "mcp") == OK  # disabled by absence
+    disabled = build_doctor_report(home=tmp_path, config={"mcp": {"enabled": False}})
+    assert _status(disabled, "mcp") == OK
+    configured = build_doctor_report(home=tmp_path, config={"mcp": {"enabled": True, "servers": [{"name": "x", "command": "y"}]}})
+    assert _status(configured, "mcp") == OK
+    empty = build_doctor_report(home=tmp_path, config={"mcp": {"enabled": True, "servers": []}})
+    assert _status(empty, "mcp") == WARN  # enabled but nothing valid configured
