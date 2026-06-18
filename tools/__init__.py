@@ -216,7 +216,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "web_snapshot",
-            "description": "Low-cost web eyes: fetch a URL, cache raw HTML locally, and return compact clean Markdown.",
+            "description": "Low-cost web eyes: fetch a URL and return its main content as compact, readable Markdown (nav/boilerplate stripped, structure preserved).",
             "parameters": {
                 "type": "object",
                 "required": ["url"],
@@ -547,6 +547,51 @@ def execute_project_bridge(arguments: dict[str, Any]) -> str:
     return result
 
 
+_SNAPSHOT_DROP_TAGS = ("script", "style", "noscript", "svg", "head", "nav", "header", "footer", "aside", "form")
+
+
+def _extract_readable(html: str) -> str:
+    """Heuristic main-content extraction → clean markdown-ish text. Zero-dep.
+
+    Drops boilerplate (nav/header/footer/aside/script/style), prefers a <main> or
+    <article> region when present, and preserves heading/list/paragraph structure
+    instead of collapsing the whole page to a single line.
+    """
+    import html as _htmllib
+    import re as _re
+
+    title_match = _re.search(r"<title[^>]*>(.*?)</title>", html, _re.IGNORECASE | _re.DOTALL)
+    title = _htmllib.unescape(title_match.group(1).strip()) if title_match else ""
+
+    work = html
+    for tag in _SNAPSHOT_DROP_TAGS:
+        work = _re.sub(rf"<{tag}\b[^>]*>.*?</{tag}>", " ", work, flags=_re.DOTALL | _re.IGNORECASE)
+    work = _re.sub(r"<!--.*?-->", " ", work, flags=_re.DOTALL)
+
+    # Prefer the marked main-content region when the page provides one.
+    region = _re.search(r"<(main|article)\b[^>]*>(.*?)</\1>", work, _re.DOTALL | _re.IGNORECASE)
+    body = region.group(2) if region else work
+
+    # Preserve structure: headings → markdown, list items + block ends → newlines.
+    body = _re.sub(r"<h([1-6])\b[^>]*>", lambda m: "\n\n" + "#" * int(m.group(1)) + " ", body, flags=_re.IGNORECASE)
+    body = _re.sub(r"</h[1-6]>", "\n", body, flags=_re.IGNORECASE)
+    body = _re.sub(r"<li\b[^>]*>", "\n- ", body, flags=_re.IGNORECASE)
+    body = _re.sub(r"</?(p|div|section|tr|ul|ol|table|br)\b[^>]*>", "\n", body, flags=_re.IGNORECASE)
+
+    text = _re.sub(r"<[^>]+>", " ", body)            # strip remaining tags
+    text = _htmllib.unescape(text)                   # decode entities
+    text = _re.sub(r"[ \t]+", " ", text)             # collapse inline whitespace
+    text = _re.sub(r" *\n *", "\n", text)            # trim around newlines
+    text = _re.sub(r"\n{3,}", "\n\n", text).strip()  # collapse blank runs
+
+    # Prepend the title as a heading, but don't duplicate it when the body already
+    # opens with a matching heading (common when <title> == <h1>).
+    first_heading = text.lstrip().split("\n", 1)[0].lstrip("# ").strip() if text else ""
+    if title and first_heading.lower() != title.lower():
+        return f"# {title}\n\n{text}".strip()
+    return text
+
+
 def execute_web_snapshot(arguments: dict[str, Any]) -> str:
     url = arguments["url"]
     try:
@@ -572,15 +617,7 @@ def execute_web_snapshot(arguments: dict[str, Any]) -> str:
             status_code = response.status_code
     except Exception as e:
         return f"Error fetching {url}: {e}"
-    # Simple HTML-to-text conversion
-    import re as _re
-    text = _re.sub(r"<script[^>]*>.*?</script>", "", html, flags=_re.DOTALL | _re.IGNORECASE)
-    text = _re.sub(r"<style[^>]*>.*?</style>", "", text, flags=_re.DOTALL | _re.IGNORECASE)
-    text = _re.sub(r"<[^>]+>", " ", text)
-    text = _re.sub(r"\s+", " ", text).strip()
-    title_match = _re.search(r"<title[^>]*>(.*?)</title>", html, _re.IGNORECASE | _re.DOTALL)
-    title = title_match.group(1).strip() if title_match else ""
-    result = f"# {title}\n\n{text}" if title else text
+    result = _extract_readable(html)
     result = redact_sensitive_text(result)
     if len(result) > 10000:
         result = result[:10000] + f"\n\n[...truncated {len(result)} chars total]"
