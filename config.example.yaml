@@ -154,6 +154,12 @@ mcp:
     #   enabled: true
     #   timeout: 30
 
+skills:
+  # Local best-practice packs MO reads before acting on a matching task. Shipped
+  # packs live in skills/; add your own there or under ~/.mo/skills. The most
+  # relevant 1-2 packs are injected per turn. No marketplace, no install flow.
+  enabled: true
+
 sandbox:
   enabled: true
   clean_env: true

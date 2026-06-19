@@ -830,6 +830,19 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             datetime_context = f"Current date: {datetime.now():%A, %Y-%m-%d}."
         except Exception:
             datetime_context = ""
+        # Skills: read the relevant best-practice pack(s) before acting (Fable-parity).
+        skills_context = ""
+        try:
+            cfg = getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}
+            skills_cfg = cfg.get("skills", {}) if isinstance(cfg.get("skills", {}), dict) else {}
+            if skills_cfg.get("enabled", True):
+                from ..skills import select_skills_context, default_skill_roots
+                skills_context = select_skills_context(
+                    user_input,
+                    default_skill_roots(getattr(self, "project_cwd", None), getattr(self, "runtime_home", None)),
+                )
+        except Exception:
+            traceback.print_exc()
         self._last_turn_context_flags = {
             "profile": bool(profile_context),
             "memory": bool(recalled_context),
@@ -859,6 +872,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=3000),
                 ContextSource("ghost_proposal", "Ghost intent guardrails for this turn", proposal_context, 3, "scope guardrail only; not proof of completion", max_chars=1400),
                 ContextSource("work_pattern", "Active work pattern", work_pattern_context, 3, "process guidance for this turn; verify before claims", max_chars=1800),
+                ContextSource("skills", "Relevant skill packs", skills_context, 3, "best-practice packs for this task; follow before acting, verify with tools", max_chars=2200),
                 ContextSource("workspace", "Workspace / worker awareness", workspace_context, 3, "coordination context only; not proof of code correctness", max_chars=1600),
                 ContextSource("project_context", "Project-local instructions (current working directory)", project_context, 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", max_chars=3200),
                 ContextSource("mo_control", "MO control workspace authority", mo_control_context, 3, "active policy/orientation for cross-repo/server work; live checks still win", max_chars=2600),
