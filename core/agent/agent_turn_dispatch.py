@@ -21,6 +21,7 @@ from .agent_utils import (
     URL_RE,
     WORKFLOW_ADOPTION_RE,
     WORKFLOW_APPROVAL_RE,
+    WORKFLOW_EXPLICIT_RE,
     WORKFLOW_SOURCE_PATH_RE,
     _prune_tool_audit_log,
 )
@@ -134,6 +135,20 @@ class AgentTurnDispatchMixin:
                 return f"Workflow promotion blocked: {result.get('reason', 'unsafe workflow candidate')}"
             return f"No workflow promoted: {result.get('reason', 'no matching workflow candidate')}"
         if not WORKFLOW_ADOPTION_RE.search(text):
+            return None
+        # Fail open: WORKFLOW_ADOPTION_RE also matches bare "use the same method/skill
+        # to …", which is ordinary work, not an adoption command. Only treat this as a
+        # workflow-adoption turn when the intent is unambiguous (the literal word
+        # "workflow") OR a concrete source was supplied (URL / file path / pasted
+        # block). Otherwise return None so the provider handles the turn normally —
+        # never hijack an ordinary request with the "give me a workflow source" prompt.
+        has_explicit = bool(WORKFLOW_EXPLICIT_RE.search(text))
+        has_source = bool(
+            URL_RE.search(text)
+            or self._extract_workflow_source_path(text)
+            or self._extract_inline_workflow_source(text)
+        )
+        if not (has_explicit or has_source):
             return None
         loaded = self._load_workflow_adoption_source(text)
         if not loaded.get("ok"):

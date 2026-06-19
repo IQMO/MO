@@ -73,6 +73,21 @@ def test_inline_workflow_source_rejects_assistant_narration():
     assert Agent._extract_inline_workflow_source("adopt workflow: do x") == ""  # too short
 
 
+def test_bare_use_method_does_not_hijack_ordinary_turn(tmp_path):
+    # Regression: WORKFLOW_ADOPTION_RE matches everyday phrasing like
+    # "use the same method to fix …" / "use this skill to refactor …". With no
+    # concrete workflow source and no literal "workflow" word, the handler must fall
+    # through (return None) so the provider handles the turn — NOT hijack it with the
+    # "give me a workflow source" prompt.
+    agent = _agent(tmp_path)
+    for text in (
+        "use the same method to fix the other files",
+        "use this skill to refactor the parser",
+        "adopt the existing style for the new module",
+    ):
+        assert agent._maybe_handle_workflow_control_turn(text) is None, text
+
+
 def test_no_public_skill_command_registered():
     names = {spec.name for spec in COMMANDS} | {alias for spec in COMMANDS for alias in spec.aliases}
     assert "/skill" not in names

@@ -105,6 +105,11 @@ WORKFLOW_APPROVAL_RE = re.compile(
     r"\b(?:approve|promote|activate|use)\b.{0,80}\bworkflow(?: candidate| learning)?\b",
     re.I | re.S,
 )
+# An UNAMBIGUOUS workflow-adoption signal: the literal word "workflow"/"workflow-candidate".
+# WORKFLOW_ADOPTION_RE also fires on bare "use the same method/skill/style/process …",
+# which is ordinary English — those must NOT hijack a turn unless a concrete source is
+# also supplied. This regex distinguishes "adopt this workflow" from "use that method".
+WORKFLOW_EXPLICIT_RE = re.compile(r"\bworkflow(?:[-\s]candidate)?\b", re.I)
 URL_RE = re.compile(r"https?://[^\s)\]}>\"']+", re.I)
 WORKFLOW_SOURCE_PATH_RE = re.compile(
     r"(?:from|file|path)\s+[`\"']?([^`\"'\s]+\.(?:md|txt|ya?ml|json))[`\"']?|[`\"']([^`\"']+\.(?:md|txt|ya?ml|json))[`\"']",
