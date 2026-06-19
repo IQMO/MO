@@ -137,10 +137,45 @@ SHELL_NETWORK_PATTERNS = [
 
 # ── Secret redaction patterns ──────────────────────────────────────
 
+# Python type/keyword tokens that appear as the "value" in code like
+# `token: str` or `secret: Optional[int]` — these are annotations, not secrets.
+_CODE_VALUE_TOKENS = frozenset({
+    "str", "int", "float", "bool", "bytes", "none", "any", "optional", "list",
+    "dict", "set", "frozenset", "tuple", "callable", "sequence", "mapping",
+    "iterable", "object", "type", "true", "false", "null", "self", "cls",
+})
+
+
+def _redact_named_secret_value(match: "re.Match") -> str:
+    """Redact `name = value` only when *value* is a secret literal, not code.
+
+    Skips Python type annotations (`token: str`) and function-call / attribute
+    values (`secret = compute_value()`); the call form is excluded by the
+    pattern's trailing negative lookahead. This stops the redactor from mangling
+    code in session/compaction reads (which made MO chase phantom findings).
+    """
+    prefix, value = match.group(1), match.group(2)
+    # Quoted value is a secret literal → redact (`api_key = "hunter2"`).
+    if value[:1] in "\"'":
+        return prefix + "[redacted]"
+    # Function call or subscripted type → code, not a secret
+    # (`secret = compute_value()`, `key = cfg.get_key()`, `token: Optional[str]`).
+    if "(" in value or "[" in value:
+        return match.group(0)
+    # Bare Python type/keyword used as an annotation (`token: str`).
+    if value.rstrip(".,:;)").lower() in _CODE_VALUE_TOKENS:
+        return match.group(0)
+    return prefix + "[redacted]"
+
+
 SENSITIVE_VALUE_PATTERNS = [
     (re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-+/=]+"), r"\1[redacted]"),
     (re.compile(r"(?i)([\"']?authorization[\"']?\s*[:=]\s*[\"']?(?:bearer\s+)?)[^\s\"',}]+"), r"\1[redacted]"),
-    (re.compile(r"(?i)([\"']?(?:" + SECRET_NAME_PATTERN + r")[\"']?\s*[:=]\s*[\"']?)[^\s\"',}]+"), r"\1[redacted]"),
+    # Secret name = value. Only fires on secret-SHAPED values (quoted, or long
+    # unquoted high-entropy strings) so it never mangles type annotations or code
+    # like `token: str` / `secret = compute()` — which previously corrupted code
+    # reads in session/compaction and made MO chase phantom `[redacted]` findings.
+    (re.compile(r"(?i)([\"']?(?:" + SECRET_NAME_PATTERN + r")[\"']?\s*[:=]\s*)([^\s,;}]+)"), _redact_named_secret_value),
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}\b"), "sk-[redacted]"),
     # High-confidence standalone provider tokens (single-sourced in text_safety).
     (re.compile(r"(?i)\b(?:" + PROVIDER_TOKEN_PATTERN + r")\b"), "[redacted-token]"),

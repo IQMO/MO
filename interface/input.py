@@ -114,6 +114,12 @@ def prompt_toolkit_input(agent: Any) -> str:
     def _(event):
         event.app.exit(result=_STOP_INPUT)
 
+    @kb.add("c-l")
+    def _(event):
+        """Ctrl+L: redraw the terminal screen (convention from readline/shell)."""
+        event.app.renderer.clear()
+        event.app.invalidate()
+
     @kb.add("tab")
     def _(event):
         b = event.app.current_buffer
@@ -134,12 +140,14 @@ def prompt_toolkit_input(agent: Any) -> str:
         return HTML(f"<ansidim>{status}</ansidim>{' ' * max(0, padding)}<b><ansicyan>MO</ansicyan></b>")
 
     sep = terminal_separator(cols)
-    prompt_prefix = HTML("<ansicyan><b>&gt;</b></ansicyan> ")
-    from .layout import PlaceholderProcessor
+    # Use the canonical prompt glyph so the plain path matches the full TUI
+    # (was a hardcoded ">" — inconsistent brand between the two input paths).
+    from .layout import PlaceholderProcessor, prompt_prefix
+    prefix = prompt_prefix()
 
     body = HSplit([
         Window(height=1, content=FormattedTextControl(HTML(f"<ansidim>{sep}</ansidim>")), dont_extend_height=True),
-        Window(height=1, content=BufferControl(buffer=buf, input_processors=[BeforeInput(prompt_prefix), PlaceholderProcessor()]), dont_extend_height=True),
+        Window(height=1, content=BufferControl(buffer=buf, input_processors=[BeforeInput(prefix), PlaceholderProcessor()]), dont_extend_height=True),
         Window(height=1, content=FormattedTextControl(get_footer_html), dont_extend_height=True),
     ])
 

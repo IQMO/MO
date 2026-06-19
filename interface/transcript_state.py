@@ -1,7 +1,7 @@
 """Transcript storage and viewport mixin for the MO TUI."""
 from __future__ import annotations
 
-from .input import terminal_columns
+from .terminal_metrics import TerminalMetricsMixin
 from .transcript import (
     adjusted_scroll_from_bottom,
     logical_lines_from_snapshot,
@@ -11,7 +11,7 @@ from .transcript import (
 )
 
 
-class TranscriptStateMixin:
+class TranscriptStateMixin(TerminalMetricsMixin):
     def _add(self, style: str, text: str):
         """Append a styled line while preserving manual scroll position."""
         self._append_transcript_fragments([(style, text)])
@@ -80,11 +80,7 @@ class TranscriptStateMixin:
             return logical_lines_from_snapshot(self._snapshot)
 
     def _visual_transcript_rows(self) -> list[list[tuple[str, str]]]:
-        try:
-            width = self._app.output.get_size().columns if self._app else terminal_columns()
-        except Exception:
-            width = terminal_columns()
-        wrap_width = max(20, width - 1)
+        wrap_width = max(20, self._terminal_columns() - 1)
         logical = self._logical_transcript_lines()
         # Word-wrapping the whole transcript is the dominant per-frame cost.
         # self._snapshot only changes when the transcript is dirtied (append/
@@ -101,10 +97,7 @@ class TranscriptStateMixin:
         return len(self._visual_transcript_rows())
 
     def _visible_transcript_height(self) -> int:
-        try:
-            rows = self._app.output.get_size().rows if self._app else 24
-        except Exception:
-            rows = 24
+        rows = self._terminal_rows()
         from .layout import input_visual_height
         from .ghost_panel import content_rows as _ghost_content_rows
         ghost_lines = getattr(self, "_ghost_panel_lines", None) or []

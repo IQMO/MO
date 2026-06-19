@@ -13,6 +13,11 @@ def test_agent_exposes_and_dispatches_mcp_tools(tmp_path, monkeypatch):
     home = tmp_path / "mo_home"
     home.mkdir()
     monkeypatch.setenv("MO_HOME", str(home))
+    # Hermetic: the provider config below references api_key_env OPENCODE_API_KEY for
+    # agent construction, but the test never makes a real API call (base_url is invalid
+    # and only MCP/native tool dispatch is exercised). Inject a dummy so the suite stays
+    # green on a clean clone / CI without the live key in the ambient env.
+    monkeypatch.setenv("OPENCODE_API_KEY", "test-dummy-key")
 
     py = sys.executable.replace("\\", "/")
     mock = MOCK.replace("\\", "/")

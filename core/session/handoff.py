@@ -187,6 +187,7 @@ def build_handoff_document(agent: Any, *, focus: str = "", reason: str = "", lat
         "",
         "## Current objective",
         f"- {redact_monitor_text(objective, 700)}",
+        *_uncommitted_work_lines(changed),
         "",
         "## Operating rules for the continuation",
         "- This handoff is orientation, not proof. Re-read files and re-run verification before factual claims.",
@@ -521,6 +522,28 @@ def _recent_dialogue(messages: list[dict], *, limit: int = 12, exclude_latest_us
             continue
         rows.append(f"- {role}: {content}")
     return rows
+
+
+def _uncommitted_work_lines(changed: list[str]) -> list[str]:
+    """Prominent ground-truth block: files this session changed but hasn't committed.
+
+    Context compaction during a long turn can strip the tool-result history that
+    records edits/tests, leaving the model to guess it "did nothing" and emit a
+    false "[WORK BLOCKED] / no changes" capsule. Surfacing the uncommitted file
+    list high in the handoff — with an explicit do-not-misreport rule — keeps the
+    continuation honest even after the working memory is compacted away.
+    """
+    modified = [c for c in (changed or []) if not c.startswith("##")]
+    if not modified:
+        return []
+    return [
+        "",
+        "## Uncommitted work already done this session (GROUND TRUTH — not recollection)",
+        f"- {len(modified)} file(s) are modified and NOT yet committed. This work exists on disk; you did it:",
+        *[f"  - `{redact_monitor_text(m, 200)}`" for m in modified[:40]],
+        "- Do NOT report 'no changes', 'not started', or 'blocked' about this work. "
+        "Run `git status` / `git diff` to re-orient, then continue or finish — never claim it away.",
+    ]
 
 
 def _git_status_lines() -> list[str]:

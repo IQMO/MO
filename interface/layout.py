@@ -40,9 +40,9 @@ class PlaceholderProcessor(Processor):
 
 def input_visual_height(tui: Any, *, max_rows: int = INPUT_MAX_ROWS) -> int:
     """Return the visible input editor height, capped to keep transcript context."""
-    try:
-        cols = tui._app.output.get_size().columns if getattr(tui, "_app", None) else 80
-    except Exception:
+    if hasattr(tui, "_terminal_columns"):
+        cols = tui._terminal_columns()
+    else:
         cols = 80
     width = max(12, int(cols or 80) - 4)
     text = str(getattr(getattr(tui, "_input_buf", None), "text", "") or "")

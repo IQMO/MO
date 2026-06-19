@@ -105,6 +105,8 @@ class MoTui(
         self._ghost_route_flash_until = 0.0
         self._goal_done_unread = False
         self._input_history = InMemoryHistory()
+        # _terminal_columns()/_terminal_rows() are inherited from
+        # TerminalMetricsMixin (via the display/response/transcript mixins).
 
 
 # ── Entrypoints ──────────────────────────────────────────────────────

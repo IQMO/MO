@@ -20,29 +20,22 @@ from .ghost_panel import (
     panel_dimensions as ghost_panel_dimensions,
     panel_fragments as ghost_panel_fragments,
 )
-from .input import terminal_columns
 from .task_board_view import task_board_fragments_from_text
 from .moon_visuals import calculate_moon_glow
+from .terminal_metrics import TerminalMetricsMixin
 from .transcript import _board_max_height as _transcript_board_max_height
 
 
-class DisplayDelegatesMixin:
+class DisplayDelegatesMixin(TerminalMetricsMixin):
     def _board_max_height(self) -> int:
         """Dynamic max rows a board window may occupy.
 
         Delegates to the canonical implementation in transcript.py.
         """
-        try:
-            rows = self._app.output.get_size().rows if self._app else 24
-        except Exception:
-            rows = 24
-        return _transcript_board_max_height(int(rows or 24))
+        return _transcript_board_max_height(self._terminal_rows())
 
     def _ghost_panel_dimensions(self) -> tuple[int, int]:
-        try:
-            cols = self._app.output.get_size().columns if self._app else terminal_columns()
-        except Exception:
-            cols = terminal_columns()
+        cols = self._terminal_columns()
         return ghost_panel_dimensions(max(1, cols - 1))
 
     def _ghost_panel_content_rows(self) -> list[list[tuple[str, str]]]:
@@ -111,11 +104,7 @@ class DisplayDelegatesMixin:
         )
 
     def _get_footer_fragments(self):
-        try:
-            cols = self._app.output.get_size().columns if self._app else terminal_columns()
-        except Exception:
-            cols = terminal_columns()
-        cols = max(20, cols)
+        cols = max(20, self._terminal_columns())
         
         moon_style = ""
         if getattr(self.agent, "_moon_mode_active", False):
@@ -157,10 +146,7 @@ class DisplayDelegatesMixin:
             return [("", "")]
         if self._goal_worker_active and not self._goal_backgrounded:
             return [("", "")]  # activity spinner handles foreground goal
-        try:
-            cols = self._app.output.get_size().columns if self._app else terminal_columns()
-        except Exception:
-            cols = terminal_columns()
+        cols = self._terminal_columns()
             
         idle_style = "class:notification-idle"
         notifications = self._notification_items()
@@ -242,9 +228,5 @@ class DisplayDelegatesMixin:
         self._scroll_board(delta_from_bottom)
 
     def _get_separator_fragments(self):
-        try:
-            cols = self._app.output.get_size().columns if self._app else terminal_columns()
-        except Exception:
-            cols = terminal_columns()
-        cols = max(20, cols)
+        cols = max(20, self._terminal_columns())
         return [("class:separator", "─" * cols)]
