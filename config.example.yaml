@@ -160,6 +160,10 @@ sandbox:
   audit_log: logs/tool_audit.jsonl
   max_output_chars: 50000
   write_file_existing_max_lines: 250
+  # Block write_file/edit_file when the new content embeds an unambiguous hardcoded
+  # secret literal (API key/token/private key). Precise detector — env refs,
+  # placeholders, and expression RHS are never blocked. Operator approval bypasses.
+  block_write_secrets: true
 
 access:
   # Default install mode: tools operate inside the project cwd where MO was called.

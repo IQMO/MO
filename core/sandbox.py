@@ -15,7 +15,7 @@ from typing import Any
 import traceback
 
 from .tool_constants import MUTATING_TOOLS, READ_ONLY_LANES
-from .text_safety import SECRET_NAME_PATTERN, PROVIDER_TOKEN_PATTERN
+from .text_safety import SECRET_NAME_PATTERN, PROVIDER_TOKEN_PATTERN, contains_hardcoded_secret_literal
 
 
 def _emit_sandbox_event(event_type: str, payload: dict[str, Any]) -> None:
@@ -790,6 +790,31 @@ def _guard_large_write(arguments: dict[str, Any], cfg: dict[str, Any]) -> str | 
 
 # ── Main guard function ────────────────────────────────────────────
 
+def _guard_write_secret(name: str, arguments: dict[str, Any], cfg: dict[str, Any]) -> str | None:
+    """Block writing an unambiguous hardcoded secret literal into a file.
+
+    Closes the gap where the turn-end security_check only *reported* secrets in
+    written files (telemetry) — this stops the write at dispatch time. Uses the
+    precise literal detector (not the over-broad redaction pattern) so ordinary
+    code (env refs, placeholders, expression RHS) is never blocked.
+    """
+    if not cfg.get("block_write_secrets", True):
+        return None
+    if name == "write_file":
+        content = str((arguments or {}).get("content") or "")
+    elif name == "edit_file":
+        content = str((arguments or {}).get("new_text") or "")
+    else:
+        return None
+    if contains_hardcoded_secret_literal(content):
+        return (
+            "[TOOL BLOCKED] this write embeds a hardcoded secret value (API key/token/"
+            "private key). Use an environment variable or config reference instead of a "
+            "literal credential. If this is genuinely intended, the operator must approve it explicitly."
+        )
+    return None
+
+
 def guard_tool_call(
     name: str,
     arguments: dict[str, Any],
@@ -841,6 +866,12 @@ def guard_tool_call(
     # write_file large existing-file guard
     if name == "write_file":
         if reason := _guard_large_write(arguments, cfg):
+            return block(reason)
+
+    # Write-time secret guard: block hardcoded secret literals in file content.
+    # operator_override (explicit in-turn approval) bypasses, mirroring shell guards.
+    if name in {"write_file", "edit_file"} and not operator_override:
+        if reason := _guard_write_secret(name, arguments, cfg):
             return block(reason)
 
     # Test runner safety
