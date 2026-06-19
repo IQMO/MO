@@ -1,12 +1,16 @@
 """SQLite episodic memory search index for MO."""
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import sys
 import time
 from pathlib import Path
 import traceback
+from typing import Callable
+
+from .embeddings import cosine
 
 
 def _emit_memory_event(event_type: str, payload: dict) -> None:
@@ -25,9 +29,12 @@ class EpisodicMemory:
 
     _fts5_warned: bool = False
 
-    def __init__(self, path: str | Path = "memory/learning.sqlite"):
+    def __init__(self, path: str | Path = "memory/learning.sqlite",
+                 embedder: Callable[[str], list[float]] | None = None):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Optional semantic-recall backend. None → keyword (bm25) recall only.
+        self.embedder = embedder
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -64,6 +71,13 @@ class EpisodicMemory:
                         )
                         _emit_memory_event("memory_fts5_warning", {"message": "FTS5 unavailable — recall disabled"})
                     pass
+                # Optional embedding vectors for semantic recall (JSON-encoded list).
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS turn_vectors ("
+                    "  turn_id TEXT PRIMARY KEY,"
+                    "  vector TEXT"
+                    ")"
+                )
         except Exception as e:
             _emit_memory_event("memory_init_error", {"error": str(e)[:200]})
 
@@ -76,7 +90,15 @@ class EpisodicMemory:
             return
         
         u = str(user or "").strip()
-        
+
+        # Compute the embedding OUTSIDE the DB transaction (network I/O must not hold
+        # the sqlite lock). None when no embedder / on failure → keyword recall only.
+        vec_json = None
+        if self.embedder is not None:
+            vec = self._embed_safe(f"{u}\n{a}")
+            if vec:
+                vec_json = json.dumps(vec)
+
         # Async-safe try/except write to handle parallel workspace accesses gracefully
         try:
             with self._connect() as conn:
@@ -93,6 +115,11 @@ class EpisodicMemory:
                     )
                 except sqlite3.OperationalError:
                     pass
+                if vec_json is not None:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO turn_vectors (turn_id, vector) VALUES (?, ?)",
+                        (turn_id, vec_json)
+                    )
                 # Adaptive cleanup: keep max 200 turns, remove oldest
                 removed = self._cleanup(conn)
                 _emit_memory_event("memory_index", {"turn_id": turn_id, "chars": len(a), "cleanup_removed": removed})
@@ -114,6 +141,7 @@ class EpisodicMemory:
                         conn.execute("DELETE FROM turns_fts WHERE turn_id=?", (tid,))
                     except sqlite3.OperationalError:
                         pass
+                    conn.execute("DELETE FROM turn_vectors WHERE turn_id=?", (tid,))
                     removed += 1
                 new_count = conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0]
                 _emit_memory_event("memory_cleanup", {"removed": removed, "remaining": new_count})
@@ -122,10 +150,65 @@ class EpisodicMemory:
             _emit_memory_event("memory_cleanup_error", {"error": str(e)[:200]})
         return 0
 
+    def _embed_safe(self, text: str) -> list[float] | None:
+        if self.embedder is None:
+            return None
+        try:
+            vec = self.embedder(text)
+            return [float(x) for x in vec] if vec else None
+        except Exception:
+            _emit_memory_event("memory_embed_error", {"chars": len(str(text or ""))})
+            return None
+
+    def _semantic_recall(self, query: str, limit: int) -> list[dict[str, str]] | None:
+        """Cosine-rank stored turn vectors against the query embedding.
+
+        Returns ranked turns, or None to signal the caller to fall back to keyword
+        recall (no embedder, embedding failed, or nothing has been embedded yet).
+        """
+        qvec = self._embed_safe(query)
+        if not qvec:
+            return None
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT v.turn_id, v.vector, t.user, t.assistant FROM turn_vectors v "
+                    "JOIN turns t ON v.turn_id = t.turn_id"
+                ).fetchall()
+        except Exception:
+            return None
+        scored = []
+        for r in rows:
+            try:
+                vec = json.loads(r["vector"])
+            except Exception:
+                continue
+            score = cosine(qvec, vec)
+            if score > 0.0:
+                scored.append((score, r))
+        if not scored:
+            return None  # nothing embedded yet → let keyword recall handle it
+        scored.sort(key=lambda x: -x[0])
+        return [
+            {"turn_id": r["turn_id"], "user": r["user"], "assistant": r["assistant"]}
+            for _s, r in scored[:limit]
+        ]
+
     def recall(self, query: str, limit: int = 3) -> list[dict[str, str]]:
         q = str(query or "").strip()
         if not q:
             return []
+
+        # Semantic recall when an embedder is configured; falls back to keyword recall
+        # (below) when there's no embedder, the embed call fails, or nothing is embedded.
+        if self.embedder is not None:
+            try:
+                sem = self._semantic_recall(q, limit)
+                if sem is not None:
+                    _emit_memory_event("memory_recall", {"query": q[:80], "results": len(sem), "mode": "semantic"})
+                    return sem
+            except Exception:
+                traceback.print_exc()
 
         # Sanitize query for FTS5 (strip punctuation to prevent match syntax errors)
         clean_terms = [t for t in q.replace('"', '').replace("'", "").split() if len(t) > 2]

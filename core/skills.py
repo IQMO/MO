@@ -1,10 +1,10 @@
 """Skills — local domain best-practice packs read before acting on a matching task.
 
-Adopts Fable 5's most distinctive agentic pattern (read the relevant SKILL pack
-before writing code / running work) as SUBSTANCE, not Anthropic's product form: no
-marketplace, no install flow, no public `/skill` surface. A skill is just a markdown
-pack with a trigger line; when a turn matches, the relevant pack(s) are injected into
-the context bridge so MO follows the encoded best practice instead of rediscovering it.
+A read-before-acting pattern: read the relevant best-practice pack before writing code
+or running work. Kept deliberately minimal — no marketplace, no install flow, no public
+`/skill` surface. A skill is just a markdown pack with a trigger line; when a turn
+matches, the relevant pack(s) are injected into the context bridge so MO follows the
+encoded best practice instead of rediscovering it.
 
 Packs ship under the repo `skills/` dir and the operator may add more under
 `~/.mo/skills`. Detail that is too long/situational for the always-on system prompt

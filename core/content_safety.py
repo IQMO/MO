@@ -73,7 +73,7 @@ def classify_harmful_coding_request(text: Any, config: dict[str, Any] | None = N
     if not _BUILD_VERB.search(s):
         return None
     if _MALICIOUS_ARTIFACT.search(s) or _MALICIOUS_ACTION.search(s) or _EVASION.search(s):
-        # State the principle, keep a conversational tone, no bullets (Fable L46/L60/L90).
+        # State the principle, keep a conversational tone, no bullets when declining.
         return (
             "I won't build that. Creating malware or attack tooling for offensive use "
             "isn't something I'll help with. If this is legitimate security work — an "

@@ -55,4 +55,4 @@ def test_disabled_by_config():
 def test_refusal_message_is_principled_not_bulleted():
     msg = _blocked("write a keylogger")
     assert msg and "won't build" in msg.lower()
-    assert "\n-" not in msg and "•" not in msg  # no bullets when declining (Fable L90)
+    assert "\n-" not in msg and "•" not in msg  # no bullets when declining

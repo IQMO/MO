@@ -187,6 +187,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Code graph | First-class `code_search` / `find_callers` / `find_callees` tools plus structural-graph orientation, over local runtime state |
 | Cache-stable context | Byte-stable system+history prefix with per-turn context appended last, so the provider prefix cache covers the conversation; `/status` reports the measured cache-hit ratio |
 | Session continuity | Long work preserves task state, evidence, files, and context orientation |
+| Memory recall | Past-turn recall ranked by relevance (FTS5 bm25); optional meaning-based (embeddings) recall via an OpenAI-compatible endpoint, no Python dependency (off by default) |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
 | PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |

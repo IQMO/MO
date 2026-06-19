@@ -835,7 +835,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             datetime_context = f"Current date: {datetime.now():%A, %Y-%m-%d}."
         except Exception:
             datetime_context = ""
-        # Skills: read the relevant best-practice pack(s) before acting (Fable-parity).
+        # Skills: read the relevant best-practice pack(s) before acting.
         skills_context = ""
         try:
             cfg = getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}

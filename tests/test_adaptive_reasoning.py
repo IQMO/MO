@@ -1,4 +1,4 @@
-"""Adaptive reasoning: per-turn level (Fable 'auto' thinking mode) + the opt-in
+"""Adaptive reasoning: per-turn level (adaptive 'auto' thinking depth) + the opt-in
 per-provider reasoning_effort seam (default off → not sent, no breakage)."""
 from types import SimpleNamespace
 

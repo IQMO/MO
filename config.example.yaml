@@ -160,6 +160,16 @@ skills:
   # relevant 1-2 packs are injected per turn. No marketplace, no install flow.
   enabled: true
 
+embeddings:
+  # Semantic memory recall — recall past turns by meaning instead of keyword overlap.
+  # Off by default → keyword (bm25) recall. Uses an OpenAI-compatible /embeddings
+  # endpoint via stdlib HTTP (NO new Python dependency). Falls back to keyword recall
+  # if unset or the endpoint fails.
+  enabled: false
+  base_url: ""        # e.g. https://api.openai.com/v1
+  api_key_env: ""     # env var holding the embeddings API key (optional for local hosts)
+  model: ""           # e.g. text-embedding-3-small
+
 sandbox:
   enabled: true
   clean_env: true

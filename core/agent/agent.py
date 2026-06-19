@@ -168,7 +168,11 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         # Profile
         profile_path = resolve_state_path(self.config.get("paths", {}).get("memory_file", "memory/mo.db"), self.config)
         self.profile = Profile.load(profile_path)
-        self.memory = EpisodicMemory(resolve_state_path("memory/learning.sqlite", self.config))
+        from ..learning.embeddings import build_embedder
+        self.memory = EpisodicMemory(
+            resolve_state_path("memory/learning.sqlite", self.config),
+            embedder=build_embedder(self.config),
+        )
         # Auto-detect current project from working directory or default roots
         cwd = self.project_cwd or os.getcwd()
         if cwd and self.allowed_roots:
@@ -574,7 +578,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         return tokens * 4 if tokens > 0 else None
 
     def _adaptive_reasoning_level(self, user_input: str = "") -> str:
-        """Pick the reasoning level for this turn (Fable "auto" thinking mode).
+        """Pick the reasoning level for this turn (adaptive "auto" thinking depth).
 
         Conservative: only DROP to low on clearly-trivial turns (greetings, identity,
         term lookups) to save tokens/latency; everything else keeps the configured
