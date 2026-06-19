@@ -220,10 +220,15 @@ class TestLoadPersistedTasks:
         from core.tasking.task_manager import TaskManager
 
         monkeypatch.chdir(tmp_path)
+        # Point the ledger at the tmp dir so the contract read resolves to the SAME
+        # place we write the snapshot (record_snapshot/contract now share the resolved
+        # ledger dir instead of cwd/memory/taskboards).
+        ledger = tmp_path / "memory" / "taskboards" / "taskboards.jsonl"
+        monkeypatch.setenv("MO_TASKBOARD_LEDGER_PATH", str(ledger))
         live = TaskBoard(board_id="board-live", tasks=[
             TaskItem("1", "Verify", "completed", kind="verify", evidence=["pytest:ok"]),
         ])
-        tm = TaskManager(tmp_path)
+        tm = TaskManager(tmp_path, tasks_dir=ledger.parent)
         tm.save({
             "board_id": "board-live", "session_id": "now", "title": "Live",
             "state": "active",

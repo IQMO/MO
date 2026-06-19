@@ -1,5 +1,25 @@
+import shutil
 import pytest
 from pathlib import Path
+
+
+@pytest.fixture(autouse=True)
+def _no_checkout_state_pollution():
+    """Keep test artifacts out of the project checkout. The PRODUCT never writes state
+    to the cwd (it is private-by-default → ~/.mo). But some tests deliberately exercise
+    project-local mode (cwd-relative state) and don't all chdir to a tmp dir, so they
+    create memory/ or logs/ in the repo root. Left behind, that misleads a future dev
+    into thinking it is real MO state. Remove any such folder a test newly created —
+    only when absent before the test, so a folder a dev intentionally keeps is never
+    touched. Cleanup of test artifacts, not a product behavior."""
+    from core.path_defaults import repo_root
+    root = Path(repo_root())
+    watched = ("memory", "logs")
+    before = {d for d in watched if (root / d).exists()}
+    yield
+    for d in watched:
+        if d not in before and (root / d).exists():
+            shutil.rmtree(root / d, ignore_errors=True)
 
 
 def pytest_collection_modifyitems(config, items):

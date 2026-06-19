@@ -119,8 +119,15 @@ def load_persisted_tasks_for_contract(board: TaskBoard | None = None) -> list[di
     """
     try:
         from .task_manager import TaskManager
+        from .task_board import _resolve_ledger_path
 
-        tm = TaskManager(Path.cwd())
+        # Read current.json from the SAME place record_snapshot writes it (the resolved
+        # private ledger dir), not cwd/memory/taskboards — fixes a product read/write
+        # mismatch and stops a stray empty memory/ in the project checkout.
+        ledger = _resolve_ledger_path()
+        if ledger is None:
+            return []  # ledger disabled / no private home → nothing persisted to compare
+        tm = TaskManager(Path.cwd(), tasks_dir=ledger.parent)
         if board is not None:
             snapshot = tm.load_snapshot()
             persisted_board_id = str(snapshot.get("board_id") or "")
