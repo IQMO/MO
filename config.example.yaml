@@ -170,6 +170,9 @@ sandbox:
   shell_network_enabled: true   # allow shell commands to reach the network
   web_fetch_enabled: true       # allow the web_fetch/web_search tools
   web_fetch_allowed_hosts: []   # EMPTY = unrestricted. Add hosts to restrict, e.g. ["api.github.com"]
+  # web_search: keyless DuckDuckGo Instant Answer by default (limited). For full web
+  # results set env MO_WEB_SEARCH_PROVIDER=brave|serper and MO_WEB_SEARCH_API_KEY=<key>
+  # (free tiers exist). No Python dependency — uses stdlib HTTP. Falls back to DDG if unset.
   audit_log: logs/tool_audit.jsonl
   max_output_chars: 50000
   write_file_existing_max_lines: 250

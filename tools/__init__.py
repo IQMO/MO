@@ -729,12 +729,61 @@ def execute_web_fetch(arguments: dict[str, Any]) -> str:
 
 # ── Tool executor map ──────────────────────────────────────────────
 
-def execute_web_search(arguments: dict[str, Any]) -> str:
-    """Search DuckDuckGo and return top results."""
-    query = str(arguments.get("query", "")).strip()
-    limit = min(max(int(arguments.get("limit", 5) or 5), 1), 10)
-    if not query:
-        return "Error: empty search query"
+def _format_brave_results(data: dict, limit: int) -> str:
+    items = ((data.get("web") or {}).get("results") or [])[:limit]
+    out = []
+    for it in items:
+        title = str(it.get("title") or "").strip()
+        url = str(it.get("url") or "").strip()
+        desc = str(it.get("description") or "").strip()[:200]
+        out.append(f"- {title}\n  {url}" + (f"\n  {desc}" if desc else ""))
+    return "\n".join(out)
+
+
+def _format_serper_results(data: dict, limit: int) -> str:
+    items = (data.get("organic") or [])[:limit]
+    out = []
+    for it in items:
+        title = str(it.get("title") or "").strip()
+        url = str(it.get("link") or "").strip()
+        snippet = str(it.get("snippet") or "").strip()[:200]
+        out.append(f"- {title}\n  {url}" + (f"\n  {snippet}" if snippet else ""))
+    return "\n".join(out)
+
+
+def _web_search_keyed(query: str, limit: int) -> str | None:
+    """Real web search via an optional, operator-set API key (no Python dependency).
+
+    Reads MO_WEB_SEARCH_PROVIDER (brave|serper) + MO_WEB_SEARCH_API_KEY from the env.
+    Returns formatted results, or None to fall through to the keyless default. Opt-in:
+    absent key → None → DuckDuckGo fallback (current behavior preserved).
+    """
+    provider = os.environ.get("MO_WEB_SEARCH_PROVIDER", "").strip().lower()
+    key = os.environ.get("MO_WEB_SEARCH_API_KEY", "").strip()
+    if not key or provider not in {"brave", "serper"}:
+        return None
+    try:
+        import urllib.request
+        import urllib.parse
+        import json as _json
+        if provider == "brave":
+            url = f"https://api.search.brave.com/res/v1/web/search?q={urllib.parse.quote(query)}&count={limit}"
+            req = urllib.request.Request(url, headers={"X-Subscription-Token": key, "Accept": "application/json", "User-Agent": "MO-Agent/1.0"})
+            resp = urllib.request.urlopen(req, timeout=12)
+            formatted = _format_brave_results(_json.loads(resp.read().decode("utf-8")), limit)
+        else:  # serper
+            body = _json.dumps({"q": query, "num": limit}).encode("utf-8")
+            req = urllib.request.Request("https://google.serper.dev/search", data=body, headers={"X-API-KEY": key, "Content-Type": "application/json", "User-Agent": "MO-Agent/1.0"})
+            resp = urllib.request.urlopen(req, timeout=12)
+            formatted = _format_serper_results(_json.loads(resp.read().decode("utf-8")), limit)
+        return formatted or f"No results found for: {query}"
+    except Exception as e:
+        # Keyed backend failed — fall through to the keyless default rather than error out.
+        return None
+
+
+def _web_search_duckduckgo(query: str, limit: int) -> str:
+    """Keyless fallback: DuckDuckGo Instant Answer (encyclopedic; limited)."""
     try:
         import urllib.request
         import urllib.parse
@@ -759,10 +808,24 @@ def execute_web_search(arguments: dict[str, Any]) -> str:
         if abstract:
             results.insert(0, f"Summary: {abstract[:300]}")
         if not results:
-            return f"No results found for: {query}"
+            return (f"No results found for: {query}. (DuckDuckGo Instant Answer is limited; "
+                    "set MO_WEB_SEARCH_PROVIDER=brave|serper + MO_WEB_SEARCH_API_KEY for full web search.)")
         return "\n".join(results[:limit])
     except Exception as e:
         return f"Search error: {e}"
+
+
+def execute_web_search(arguments: dict[str, Any]) -> str:
+    """Search the web. Uses an operator-set API key (Brave/Serper) when present for full
+    results; otherwise falls back to DuckDuckGo Instant Answer. No Python dependency."""
+    query = str(arguments.get("query", "")).strip()
+    limit = min(max(int(arguments.get("limit", 5) or 5), 1), 10)
+    if not query:
+        return "Error: empty search query"
+    keyed = _web_search_keyed(query, limit)
+    if keyed is not None:
+        return keyed
+    return _web_search_duckduckgo(query, limit)
 
 
 def _format_graph_hits(hits: list[dict[str, Any]], fields: list[tuple[str, str]], empty: str, limit: int = 20) -> str:

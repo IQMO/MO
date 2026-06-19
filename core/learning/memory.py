@@ -138,10 +138,14 @@ class EpisodicMemory:
         try:
             with self._connect() as conn:
                 try:
+                    # Rank by relevance (FTS5 native BM25 — better/rarer term matches
+                    # score higher) instead of pure recency, so the most RELEVANT past
+                    # turn surfaces even if it isn't the newest. Recency breaks ties.
+                    # (BM25 is lexical relevance, not embedding/semantic similarity.)
                     rows = conn.execute(
                         "SELECT f.turn_id, f.user, f.assistant FROM turns_fts f "
                         "JOIN turns t ON f.turn_id = t.turn_id "
-                        "WHERE turns_fts MATCH ? ORDER BY t.updated_at DESC LIMIT ?",
+                        "WHERE turns_fts MATCH ? ORDER BY bm25(turns_fts), t.updated_at DESC LIMIT ?",
                         (fts_query, limit)
                     ).fetchall()
                     for r in rows:
