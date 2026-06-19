@@ -29,6 +29,16 @@ REVIEW_TRIGGERS = {
     "diff", "patch", "changes",
 }
 PROBLEM_TRIGGERS = {"fix", "debug", "solve", "bug", "problem", "broken"}
+# Interrogative / investigative diagnosis of a failure or symptom is problem-solving,
+# not chat — "figure out why X crashes", "look into the slow startup". Kept distinct
+# from analytical review words (audit/investigate/diagnose) so pure audits still map
+# to deep_review.
+_DIAGNOSIS_RE = re.compile(
+    r"\b(?:figure out|look into|find out|get to the bottom of|track down|trace down)\b"
+    r"|\bwhy\b.{0,40}\b(?:fail(?:s|ing|ed)?|broken|errors?|crash(?:es|ing|ed)?|"
+    r"hang(?:s|ing)?|slow|stuck|wrong|leak(?:s|ing)?|bug)\b",
+    re.I,
+)
 
 
 def select_template(user_input: str) -> str:
@@ -37,7 +47,7 @@ def select_template(user_input: str) -> str:
         return "simple_chat"
     text = str(user_input or "").lower()
     terms = words(text)
-    if terms & PROBLEM_TRIGGERS:
+    if terms & PROBLEM_TRIGGERS or _DIAGNOSIS_RE.search(text):
         return "problem_solving"
     STRONG_BUILD_TRIGGERS = BUILD_TRIGGERS - {"new"}
     if terms & STRONG_BUILD_TRIGGERS:

@@ -103,13 +103,17 @@ def select_work_pattern(user_input: str) -> WorkPattern | None:
         return WorkPattern("project_audit", "problem_solving", complexity)
     if _REFERENCE_COMPARISON_RE.search(str(user_input or "")):
         return WorkPattern("reference_comparison", "planning", complexity, requires_verification=False)
-    if select_template(user_input) == "deep_review":
+    template = select_template(user_input)
+    if template == "deep_review":
         return WorkPattern("review_evidence", "deep_review", complexity, requires_verification=False)
     if is_prd_request(user_input):
         return WorkPattern("prd_planning", "planning", complexity, requires_verification=False)
     design_action = bool(terms & _DESIGN_ACTION_WORDS)
     buildish = bool(terms & _BUILD_WORDS) or design_action
-    fixish = bool(terms & _FIX_WORDS)
+    # A problem_solving template (explicit fix/debug OR interrogative-failure
+    # diagnosis like "figure out why X crashes") is a fix/verify turn — without this
+    # a diagnosis turn fell through to None and got no verify-before-claiming guidance.
+    fixish = bool(terms & _FIX_WORDS) or template == "problem_solving"
     designish = design_action or bool(terms & _DESIGN_WORDS) or bool(terms & _REFERENCE_WORDS)
     if not (buildish or fixish):
         return None

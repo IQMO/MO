@@ -9,7 +9,7 @@ import threading
 from typing import Any, Callable
 import traceback
 
-from .gateway_helpers import select_template
+from .gateway_helpers import select_template, words
 from .provider.provider import clean_provider_error
 from .work_patterns import estimate_work_complexity
 from .session.session import Session
@@ -237,9 +237,25 @@ def _split_evidence(value: str) -> list[str]:
     return parts or ([value[:240]] if value else [])
 
 
+# Verbs that mean "make a change" — including ones the template classifier treats as
+# review ("patch") or doesn't classify ("harden"/"refactor"). A review objective that
+# ALSO asks for a change must not have its edit capability stripped.
+_CHANGE_INTENT_WORDS = frozenset({
+    "fix", "patch", "harden", "repair", "secure", "refactor", "rewrite", "implement",
+    "build", "add", "update", "modify", "improve", "optimize", "optimise", "migrate",
+    "remove", "replace",
+})
+
+
 def build_background_worker_prompt(objective: str) -> str:
     objective_text = str(objective or "").strip()
-    review_only = select_template(objective_text) == "deep_review"
+    # Only a PURE review forbids edits. "audit X and harden it" / "investigate the
+    # crash and patch it" carry change intent, so the worker keeps edit capability;
+    # the sandbox still gates actual writes.
+    review_only = (
+        select_template(objective_text) == "deep_review"
+        and not (words(objective_text) & _CHANGE_INTENT_WORDS)
+    )
     review_guard = "Review only: report findings, no edits. " if review_only else ""
     complexity = estimate_work_complexity(objective_text)
     return (

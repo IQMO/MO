@@ -101,6 +101,18 @@ def test_background_non_review_worker_prompt_does_not_force_read_only_lane():
     assert "Complexity: simple" in prompt
 
 
+def test_background_review_with_change_intent_keeps_edit_capability():
+    # Regression: "audit X and harden it" / "investigate the crash and patch it" were
+    # classified deep_review and told "no edits", stripping the change the operator
+    # explicitly asked for. A review objective that also carries change intent must
+    # keep edit capability (the sandbox still gates actual writes).
+    for objective in ("audit auth and harden it", "investigate the crash and patch it",
+                      "review the parser and refactor it"):
+        assert "Review only" not in build_background_worker_prompt(objective), objective
+    # A PURE review still forbids edits.
+    assert "Review only" in build_background_worker_prompt("audit the repo")
+
+
 def test_background_worker_runtime_marks_provider_error_blocked():
     agent = FakeAgent()
     agent.run_turn = lambda prompt, **kwargs: "MO provider error: unavailable"

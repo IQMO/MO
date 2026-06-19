@@ -89,6 +89,19 @@ class TestSelectTemplate:
         """Strong build triggers take priority over review."""
         assert select_template("build a review system") == "build_create"
 
+    def test_interrogative_failure_diagnosis_is_problem_solving(self):
+        # Regression: investigative diagnosis of a failure was treated as chat
+        # (no taskboard / no verify-before-claiming), so a real debug turn got none
+        # of the problem-solving discipline.
+        assert select_template("figure out why the worker keeps crashing") == "problem_solving"
+        assert select_template("look into the slow startup") == "problem_solving"
+        assert select_template("why does the build keep failing") == "problem_solving"
+        # Pure analytical review must still map to deep_review, not problem_solving.
+        assert select_template("investigate the issue") == "deep_review"
+        assert select_template("audit the repo") == "deep_review"
+        # Plain questions are still chat.
+        assert select_template("what does this do") == "simple_chat"
+
     def test_none_input(self):
         assert select_template(None) == "simple_chat"  # type: ignore[arg-type]
 
