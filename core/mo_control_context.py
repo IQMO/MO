@@ -20,10 +20,12 @@ ENV_MO_CONTROL_WORKSPACE = "MO_CONTROL_WORKSPACE"
 # Generic, operator-agnostic triggers only. Operator project/codename terms
 # come from private config: mo_control.trigger_terms (list of strings).
 _TRIGGER_RE = re.compile(
-    r"\b(github|repo|commit|push|pull|deploy|"
-    r"production|server|vps|telegram|service|systemd|scheduler|cron|secret|secrets|credential|"
+    r"\b(github|repo|commit|push|pull|deploy|deployment|prod|production|release|rollout|ship|publish|"
+    r"rsync|scp|restart|"
+    r"server|vps|telegram|service|systemd|scheduler|cron|secret|secrets|credential|"
     r"credentials|vault|key|keys|owner|ownership|responsib|responsab|overwrite|conflict|agent|agents|"
-    r"\.mo|mo agent)\b",
+    r"\.mo|mo agent)\b"
+    r"|\broll\b.{0,12}\bout\b",  # "roll it/this out", "roll out"
     re.I,
 )
 

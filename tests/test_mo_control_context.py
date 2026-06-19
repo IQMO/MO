@@ -8,6 +8,17 @@ def test_mo_control_context_triggers_on_cross_repo_operations():
     assert should_include_mo_control_context("hi") is False
 
 
+def test_mo_control_context_triggers_on_casual_deploy_phrasing():
+    # Regression: casual deploy/release phrasing must pull the operator-authority
+    # block (no-clobber, no-secrets, reviewed-paths-only), not just the formal word
+    # "deploy"/"production". And ordinary turns must NOT over-fire (cost).
+    for fires in ("ship it to prod", "roll this out to the box", "release the changes",
+                  "restart the service", "rsync to the host"):
+        assert should_include_mo_control_context(fires) is True, fires
+    for quiet in ("hi", "what does this function do", "figure out the bug", "write a haiku"):
+        assert should_include_mo_control_context(quiet) is False, quiet
+
+
 def test_operator_trigger_terms_come_from_config_not_code():
     """Operator project codenames are private config data, never hardcoded."""
     codename_only = "check acmeproj status"
