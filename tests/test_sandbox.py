@@ -563,3 +563,21 @@ class TestHardBoundaryPatterns:
     def test_num_patterns(self):
         """Should be exactly 7 hard boundary pattern classes."""
         assert len(HARD_BOUNDARY_PATTERNS) == 7
+
+
+def test_profile_dir_read_allowed_but_env_and_writes_blocked(tmp_path, monkeypatch):
+    # MO may READ its own ~/.mo/memory/profile (operator data) on demand, but never
+    # the rest of ~/.mo (.env/secrets) and never write/edit the profile via file tools.
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    (tmp_path / "memory" / "profile").mkdir(parents=True)
+    (tmp_path / "memory" / "profile" / "operator.md").write_text("profile prose", encoding="utf-8")
+    from core.sandbox import guard_tool_call
+
+    roots = [str(tmp_path / "project")]
+    prof = str(tmp_path / "memory" / "profile" / "operator.md")
+    env = str(tmp_path / ".env")
+
+    assert guard_tool_call("read_file", {"path": prof}, lane=None, allowed_roots=roots) is None
+    assert guard_tool_call("grep", {"pattern": "x", "root": str(tmp_path / "memory" / "profile")}, lane=None, allowed_roots=roots) is None
+    assert guard_tool_call("write_file", {"path": prof, "content": "x"}, lane=None, allowed_roots=roots) is not None
+    assert guard_tool_call("read_file", {"path": env}, lane=None, allowed_roots=roots) is not None

@@ -848,7 +848,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("coordination", "Active worker coordination warning", coordination_context, 1, "runtime coordination warning; avoid conflicting edits and verify current state", max_chars=1200),
                 ContextSource("environment", "Active surface environment", environment_context, 1, "current surface, OS, CWD, and shell; always verify live state", max_chars=300),
                 ContextSource("heartbeat", "Surface heartbeat continuity", heartbeat_context, 1, "surface continuity; re-check live state before claims", max_chars=900),
-                ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=13500),
+                ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=3000),
                 ContextSource("ghost_proposal", "Ghost intent guardrails for this turn", proposal_context, 3, "scope guardrail only; not proof of completion", max_chars=1400),
                 ContextSource("work_pattern", "Active work pattern", work_pattern_context, 3, "process guidance for this turn; verify before claims", max_chars=1800),
                 ContextSource("workspace", "Workspace / worker awareness", workspace_context, 3, "coordination context only; not proof of code correctness", max_chars=1600),
@@ -862,10 +862,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("memory", "Recalled past interactions", recalled_context, 5, "orientation only; not tool receipts or current proof", max_chars=2400),
                 ContextSource("code_graph", "Code map", code_graph_context, 5, "orientation only; graph hints must be verified with files/tools/tests", max_chars=1800),
             ),
-            # Raised from the 10k default so the (now near-full) operator profile is
-            # not clipped by the bridge total. Lowest-priority orientation sources
-            # still clip first if a turn is unusually large.
-            max_chars=26000,
         )
         extra_context = bridge.text
         monitor = get_monitor()

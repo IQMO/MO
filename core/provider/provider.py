@@ -729,23 +729,42 @@ def prt_review_provider_chain(
     default_model: str = "",
     fallback_model: str = "",
 ) -> list[BaseProvider]:
-    """Return the allowed PRT review chain: DeepSeek Pro, then Codex."""
-    candidates = [provider for provider in list(providers or []) if is_prt_review_provider(provider)]
+    """Return the PRT review provider chain.
+
+    Honors the configured prt.default_model -> prt.fallback_model order so PRT
+    works on whatever capable providers the user configured — not only the
+    DeepSeek/Codex default. Falls back to the explicit DeepSeek -> Codex order
+    when no review models are configured, and finally to the active provider so
+    PRT degrades gracefully on any provider stack instead of failing outright.
+    """
+    pool = list(providers or [])
     chain: list[BaseProvider] = []
 
     def add(provider: BaseProvider | None) -> None:
-        if not is_prt_review_provider(provider):
+        if provider is None:
             return
         if any(existing is provider for existing in chain):
             return
         chain.append(provider)
 
-    _ = (active_provider, default_model, fallback_model)  # PRT order is explicit: Pro → Codex.
-
-    for target in PRT_REVIEW_MODEL_ORDER:
-        for provider in candidates:
+    # 1. Configured review models win (user's explicit choice, any provider).
+    for target in (default_model, fallback_model):
+        if not str(target or "").strip():
+            continue
+        for provider in pool:
             if _provider_matches_review_target(provider, target):
                 add(provider)
+
+    # 2. No config match -> the explicit DeepSeek -> Codex default order.
+    if not chain:
+        for target in PRT_REVIEW_MODEL_ORDER:
+            for provider in pool:
+                if is_prt_review_provider(provider) and _provider_matches_review_target(provider, target):
+                    add(provider)
+
+    # 3. Graceful degrade: never hard-fail PRT — use the active provider.
+    if not chain:
+        add(active_provider)
 
     return chain
 

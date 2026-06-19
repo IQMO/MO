@@ -735,6 +735,24 @@ def _guard_test_runner(
     return None
 
 
+def _profile_read_root() -> str | None:
+    """The operator's profile dir (~/.mo/memory/profile) — read-allowed so MO can
+    read its OWN profile on demand. Only this subdir, never the rest of ~/.mo
+    (no .env/secrets), and never for write/edit tools."""
+    try:
+        from .path_defaults import mo_home
+        return str(Path(mo_home({})) / "memory" / "profile")
+    except Exception:
+        return None
+
+
+def _readable_under_profile(path: str | None) -> bool:
+    if not path:
+        return False
+    root = _profile_read_root()
+    return bool(root) and path_allowed(str(path), [root])
+
+
 def _guard_path_scope(
     name: str,
     arguments: dict[str, Any],
@@ -743,9 +761,12 @@ def _guard_path_scope(
     """Check file/path scope for find, grep, git, project_bridge tools.
     Also handles shell workdir path check.
     Return block reason or None."""
-    # File tools: read_file, write_file, edit_file
+    # File tools: read_file, write_file, edit_file. read_file may ALSO reach the
+    # operator's own profile dir (read-only); write/edit stay on allowed_roots.
     if name in {"read_file", "write_file", "edit_file"} and "path" in arguments:
-        if not path_allowed(str(arguments["path"]), allowed_roots):
+        path = str(arguments["path"])
+        readable_profile = name == "read_file" and _readable_under_profile(path)
+        if not readable_profile and not path_allowed(path, allowed_roots):
             return f"[PATH BLOCKED] {name} outside allowed roots: {arguments['path']}"
     # Shell workdir
     if name == "shell" and arguments.get("workdir"):
@@ -756,7 +777,8 @@ def _guard_path_scope(
         path_value = arguments.get("root") or arguments.get("workdir")
         if name == "project_bridge":
             path_value = path_value or arguments.get("path")
-        if path_value and not path_allowed(str(path_value), allowed_roots):
+        readable_profile = name in {"find_files", "grep"} and _readable_under_profile(str(path_value) if path_value else None)
+        if path_value and not readable_profile and not path_allowed(str(path_value), allowed_roots):
             return f"[PATH BLOCKED] {name} path outside allowed roots: {path_value}"
     return None
 

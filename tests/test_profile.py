@@ -12,24 +12,20 @@ def test_profile_context_includes_identity_file(tmp_path):
     assert "Runtime provider is not identity" in context
 
 
-def test_operator_md_project_section_not_truncated_off(tmp_path):
-    # RC-E regression: operator.md must be delivered (near-)whole. The earlier
-    # 650-char per-file cap severed the project/deploy section that lives later in
-    # the file, so MO knew project NAMES but guessed their locations.
+def test_profile_summary_is_light_and_points_to_full_file(tmp_path):
+    # Design: inject a LIGHT summary + a pointer to read the full operator.md on
+    # demand (the profile dir is read-allowed in the sandbox). Do NOT dump the
+    # whole profile every turn.
     profile = Profile(_path=str(tmp_path / "mo.db"), user_name="Ada")
     profile.ensure_operator_profile()
-    header_filler = "- Header detail line that pushes content past the old 650-char cap.\n" * 30
-    marker = "PROJECT_PATH_MARKER_FAR_INTO_THE_FILE"
-    (tmp_path / "profile" / "operator.md").write_text(
-        f"# Operator Profile\n{header_filler}\n## Projects And Deploy\n- {marker} lives here.\n",
-        encoding="utf-8",
-    )
+    big_operator_md = "- operator/project detail line\n" * 400  # ~12k chars
+    (tmp_path / "profile" / "operator.md").write_text(f"# Operator\n{big_operator_md}", encoding="utf-8")
 
     context = profile.build_profile_context()
 
-    assert len(header_filler) > 650  # the marker is well past the old cap
-    assert marker in context, "project/deploy section beyond 650 chars was truncated off"
-    assert "Projects And Deploy" in context
+    assert "read the full file with read_file" in context  # pointer to on-demand read
+    assert "operator.md" in context
+    assert len(context) < 6000, "profile context should be a light summary, not the whole file"
 
 
 def test_profile_structured_project_paths_injected(tmp_path):

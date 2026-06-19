@@ -250,24 +250,24 @@ class Profile:
         self._profile_cache_mtimes = None  # invalidate after sync writes
         self._profile_cache_text = None
 
-    def build_profile_context(self, max_chars: int = 13500) -> str:
+    def build_profile_context(self, max_chars: int = 3000) -> str:
         self.ensure_operator_profile()
         pdir = Path(self._path).parent / "profile"
 
         # Cache: skip 5 file reads when nothing changed since last build.
         # Profile files change only on explicit /profile edits or learning events,
         # so mtime-based invalidation is both safe and effective.
-        # operator.md is the user's authoritative project/deploy/ownership home —
-        # deliver it (near-)whole so MO knows WHERE its projects are and how to
-        # deploy them, instead of seeing only the header and guessing. The earlier
-        # 650-char cap severed the "Projects And Deploy" section entirely.
+        # Inject a compact SUMMARY only — operator essentials, structured project
+        # paths, and a pointer to the full files. MO reads the full operator.md on
+        # demand with read_file (its profile dir is read-allowed) instead of
+        # carrying the whole profile every turn.
         profile_files = (
-            ("operator.md", 9000, False),
-            ("thinking_model.md", 900, False),
-            ("behavior.md", 900, False),
-            ("learning.md", 1200, True),
-            ("terms.md", 600, False),
-            ("identity.md", 500, False),
+            ("operator.md", 1400, False),
+            ("thinking_model.md", 500, False),
+            ("behavior.md", 600, False),
+            ("learning.md", 700, True),
+            ("terms.md", 300, False),
+            ("identity.md", 250, False),
         )
         try:
             mtimes = tuple(
@@ -283,10 +283,13 @@ class Profile:
                 return cached
             return _cap_profile_text(cached, max_chars, "[operator profile context truncated]")
 
+        operator_md = pdir / "operator.md"
         lines = [
-            "## Active Operator Profile",
+            "## Active Operator Profile (summary — full detail on demand)",
             f"Current operator: {self.user_name or 'Operator'}",
-            "Profile files loaded: operator.md, thinking_model.md, behavior.md, learning.md, terms.md, identity.md",
+            "Profile files loaded below are SUMMARIES. For complete operator/project/"
+            f"deploy/path detail, read the full file with read_file: {operator_md}. "
+            "Never guess a project's location or scan the filesystem for it — read the profile.",
         ]
         if self.preferred_tools:
             lines.append("Preferred tool order: " + ", ".join(self.preferred_tools[:12]))

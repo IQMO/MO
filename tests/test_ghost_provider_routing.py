@@ -342,3 +342,23 @@ def test_agent_live_steer_is_provider_context_only_and_consumed_once():
     assert second == ""
     assert agent.workers.get(record.id).state == "completed"
     assert monitor.events and monitor.events[0][0] == "live_steer"
+
+
+def test_prt_chain_honors_configured_model_and_degrades_gracefully():
+    # PRT must work on the user's configured providers, not only DeepSeek/Codex,
+    # and must degrade to the active provider instead of hard-failing.
+    from core.provider.provider import prt_review_provider_chain
+
+    anthropic = FakeProvider("anthropic", "claude-opus-4-7", "[]")
+    main = FakeProvider("opencode", "deepseek-v4-flash", "[]")
+
+    # Configured to a non-default model -> PRT uses it.
+    chain = prt_review_provider_chain(
+        [anthropic, main], active_provider=main,
+        default_model="claude-opus-4-7", fallback_model="",
+    )
+    assert chain and chain[0].model == "claude-opus-4-7"
+
+    # Nothing configured + no DeepSeek/Codex present -> degrade to active provider.
+    chain2 = prt_review_provider_chain([main], active_provider=main, default_model="", fallback_model="")
+    assert chain2 == [main]
