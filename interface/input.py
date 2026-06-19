@@ -94,7 +94,7 @@ def prompt_toolkit_input(agent: Any) -> str:
     cols = terminal_columns()
 
     kb = KeyBindings()
-    buf = Buffer(completer=SlashAndPathCompleter(), complete_while_typing=True)
+    buf = Buffer(completer=SlashAndPathCompleter(), complete_while_typing=False)
 
     @kb.add("enter")
     def _(event):

@@ -331,4 +331,10 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
         tui._input_buf.insert_text(cleaned)
         event.app.invalidate()
 
+    @kb.add("c-l")
+    def _(event):
+        """Ctrl+L: redraw the terminal screen (convention from readline/shell)."""
+        event.app.renderer.clear()
+        event.app.invalidate()
+
     return kb

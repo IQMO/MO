@@ -4,7 +4,6 @@ from interface.theme import TUI_STYLE_DICT
 EXPECTED_STYLE_KEYS = [
     "separator",
     "footer",
-    "footer-logo",
     "spinner",
     "activity",
     "goal-detail",
@@ -59,7 +58,6 @@ def test_tui_theme_preserves_visual_freeze_style_keys():
 
 
 def test_tui_theme_preserves_critical_visual_values():
-    assert TUI_STYLE_DICT["footer-logo"] == "#00cccc bold"
     assert TUI_STYLE_DICT["user-msg"] == "bg:#1a3a4a #dddddd"
     assert TUI_STYLE_DICT["mo-marker"] == "#00cccc bold"
     assert TUI_STYLE_DICT["ghost-response"] == "#8fa7b8"

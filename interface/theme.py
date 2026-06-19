@@ -8,7 +8,6 @@ from __future__ import annotations
 TUI_STYLE_DICT: dict[str, str] = {
     "separator": "#555555",
     "footer": "#666666",
-    "footer-logo": "#00cccc bold",
     "spinner": "#dddddd",
     "activity": "#00cccc bold",
     "goal-detail": "#66d9ef bold",
