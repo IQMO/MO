@@ -581,3 +581,12 @@ def test_profile_dir_read_allowed_but_env_and_writes_blocked(tmp_path, monkeypat
     assert guard_tool_call("grep", {"pattern": "x", "root": str(tmp_path / "memory" / "profile")}, lane=None, allowed_roots=roots) is None
     assert guard_tool_call("write_file", {"path": prof, "content": "x"}, lane=None, allowed_roots=roots) is not None
     assert guard_tool_call("read_file", {"path": env}, lane=None, allowed_roots=roots) is not None
+
+
+def test_provider_tokens_redacted_from_tool_results_not_code():
+    from core.sandbox import redact_provider_tokens
+    assert "[redacted-token]" in redact_provider_tokens("leaked ghp_abcd1234efgh5678ijkl here")
+    assert "[redacted-token]" in redact_provider_tokens("xoxb-1234567890-abcdefghij")
+    # Source-code assignments must NOT be corrupted.
+    code = 'api_key = os.getenv("OPENAI_API_KEY")\nself.key: str = cfg["key"]'
+    assert redact_provider_tokens(code) == code

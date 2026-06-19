@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from .path_defaults import ENV_MO_STATE_HOME
+from .path_defaults import ENV_MO_STATE_HOME, mo_home, private_state_enabled
 
 SAFE_EVENT_TYPES = {
     "taskboard",
@@ -197,6 +197,8 @@ class BackendMonitor:
         state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
         if state_home:
             return Path(state_home) / "logs" / "monitor"
+        if private_state_enabled():
+            return mo_home() / "logs" / "monitor"  # private-by-default, not the cwd
         return Path("logs/monitor")
 
     @staticmethod

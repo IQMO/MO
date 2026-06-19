@@ -13,6 +13,7 @@ ENV_MO_CONFIG = "MO_CONFIG"
 ENV_MO_HOME = "MO_HOME"
 ENV_MO_PROJECT_CWD = "MO_PROJECT_CWD"
 ENV_MO_STATE_HOME = "MO_STATE_HOME"
+ENV_MO_STATE_LOCAL = "MO_STATE_LOCAL"  # opt OUT of private-by-default → project-relative state
 ENV_TASKBOARD_LEDGER_PATH = "MO_TASKBOARD_LEDGER_PATH"
 ENV_TASKBOARD_LEDGER_DISABLE = "MO_TASKBOARD_LEDGER_DISABLE"
 ENV_HEARTBEAT_LEDGER_PATH = "MO_HEARTBEAT_LEDGER_PATH"
@@ -40,15 +41,33 @@ def mo_home(config: dict[str, Any] | None = None) -> Path:
 
 
 def private_state_enabled(config: dict[str, Any] | None = None) -> bool:
-    """True when relative runtime state should resolve under `mo_home()`."""
+    """True when relative runtime state resolves under `mo_home()` (``~/.mo``).
+
+    Private-by-default: MO keeps its profile, memory, sessions, logs, and caches in
+    the user's private home regardless of the cwd it is launched from — like
+    ``~/.claude`` — instead of scattering state into whatever project folder it runs
+    in. This is the only safe default for a tool users run inside their own repos.
+
+    Explicit opt-out to project-relative state (for a dev checkout that wants state
+    in the tree): ``runtime.state: project`` (or ``local``/``cwd``/``relative``) in
+    config, or ``MO_STATE_LOCAL=1`` in the environment.
+    """
     cfg = config or {}
     runtime = cfg.get("runtime") if isinstance(cfg.get("runtime"), dict) else {}
-    if os.getenv(ENV_MO_STATE_HOME) or os.getenv(ENV_MO_HOME):
-        return True
     state = str(runtime.get("state", "")).strip().lower()
-    if state:
-        return state in {"private", "home", "mo_home"}
-    return bool(runtime.get("home"))
+    # 1. Explicit config state is the most specific signal — it wins over ambient env.
+    if state in {"private", "home", "mo_home"}:
+        return True
+    if state in {"project", "local", "cwd", "relative"}:
+        return False
+    # 2. Explicit config home implies private.
+    if runtime.get("home"):
+        return True
+    # 3. Ambient env opt-out to project-local.
+    if str(os.getenv(ENV_MO_STATE_LOCAL, "")).strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    # 4. Default: private home, never the project cwd.
+    return True
 
 
 def resolve_state_path(path: str | Path | None, config: dict[str, Any] | None = None, *, default: str = "") -> str:

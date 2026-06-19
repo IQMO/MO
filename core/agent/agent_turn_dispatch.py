@@ -7,7 +7,7 @@ import time
 import traceback
 from pathlib import Path
 
-from ..sandbox import guard_tool_call, redact_sensitive_text, shell_command_is_mutating
+from ..sandbox import guard_tool_call, redact_provider_tokens, redact_sensitive_text, shell_command_is_mutating
 from ..backend_monitor import BackendMonitor
 from ..session.handoff import context_pressure
 from ..learning.workflow_learning import (
@@ -388,7 +388,7 @@ class AgentTurnDispatchMixin:
         still avoid context growth through this fallback cap. Counting it here
         keeps `/usage`, goal-finish, closeout, and session metadata honest.
         """
-        text = str(result or "")
+        text = redact_provider_tokens(str(result or ""))  # strip leaked secret tokens before context/provider
         if str(tool_name or "").strip().lower() in _READ_FAMILY_TOOLS:
             return text  # self-bounded, model-requested data — never severed here
         limit = max(0, int(getattr(self, "tool_result_max_chars", 0) or 0))

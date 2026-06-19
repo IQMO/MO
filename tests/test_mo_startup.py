@@ -114,3 +114,5 @@ def _legacy_state_lane(monkeypatch):
     """This module asserts legacy project-relative state behavior; opt out of
     the conftest MO_STATE_HOME isolation (tests here chdir to tmp paths)."""
     monkeypatch.delenv("MO_STATE_HOME", raising=False)
+    monkeypatch.delenv("MO_HOME", raising=False)
+    monkeypatch.setenv("MO_STATE_LOCAL", "1")  # explicit project-local opt-out (state is private-by-default)

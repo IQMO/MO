@@ -48,6 +48,9 @@ def _isolate_runtime_state_home(monkeypatch, tmp_path):
     file ops) fall back to cwd-relative paths when no private home is set,
     which polluted the dev checkout's memory/ during suite runs (observed:
     junk 'MO AGENT is working' boards in memory/taskboards/taskboards.jsonl).
-    Every test gets an isolated private state home; tests asserting
-    legacy-relative behavior delete MO_STATE_HOME explicitly."""
+    Every test gets an isolated private state home. State is now private-by-default,
+    so tests that want project-local behavior must opt out explicitly (MO_STATE_LOCAL=1
+    via the per-module _legacy_state_lane fixture) — that opt-out resolves to cwd, never
+    the real ~/.mo, so no global MO_HOME net is needed (and MO_HOME would wrongly
+    override a test's own MO_STATE_HOME, since mo_home() prefers MO_HOME)."""
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path / "state-home"))

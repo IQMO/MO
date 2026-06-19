@@ -9,7 +9,7 @@ from typing import Any
 
 from ..backend_monitor import redact_monitor_text
 from ..env_utils import int_env
-from ..path_defaults import ENV_MO_STATE_HOME
+from ..path_defaults import ENV_MO_STATE_HOME, mo_home, private_state_enabled
 
 LOG_PATH = Path("logs/ghost_audit.jsonl")
 
@@ -47,7 +47,13 @@ def append_ghost_audit(
     try:
         if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MO_GHOST_AUDIT_FORCE") != "1":
             return
-        log_path = Path(os.environ.get(ENV_MO_STATE_HOME, "").strip()) / LOG_PATH if os.environ.get(ENV_MO_STATE_HOME, "").strip() else LOG_PATH
+        state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
+        if state_home:
+            log_path = Path(state_home) / LOG_PATH
+        elif private_state_enabled():
+            log_path = mo_home() / LOG_PATH  # private-by-default, not the cwd
+        else:
+            log_path = LOG_PATH
         log_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "ts": round(time.time(), 3),

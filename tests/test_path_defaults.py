@@ -105,8 +105,13 @@ class TestMoHome:
 
 
 class TestPrivateStateEnabled:
-    def test_default_false(self):
-        assert not private_state_enabled()
+    def test_default_is_private(self):
+        # Private-by-default: state belongs in ~/.mo, never the project cwd, unless
+        # explicitly opted out. This is the safe default for a multi-user tool.
+        assert private_state_enabled()
+        assert private_state_enabled({})
+        assert private_state_enabled({"runtime": {}})
+        assert private_state_enabled({"runtime": {"state": ""}})
 
     def test_env_mo_state_home_enables(self, monkeypatch):
         monkeypatch.setenv("MO_STATE_HOME", "~/.mo")
@@ -124,16 +129,29 @@ class TestPrivateStateEnabled:
         assert private_state_enabled({"runtime": {"state": "home"}})
         assert private_state_enabled({"runtime": {"state": "mo_home"}})
 
-    def test_config_state_non_private(self):
+    def test_explicit_project_local_opt_out(self, monkeypatch):
+        # Project-local is now an EXPLICIT opt-out, not the default.
+        monkeypatch.delenv("MO_STATE_LOCAL", raising=False)
+        for state in ("project", "local", "cwd", "relative"):
+            assert not private_state_enabled({"runtime": {"state": state}}), state
+        # Opt-out wins even when a home is configured.
         assert not private_state_enabled({"runtime": {"home": "~/.mo", "state": "project"}})
-        assert not private_state_enabled({"runtime": {"state": "project"}})
-        assert not private_state_enabled({"runtime": {"state": ""}})
+
+    def test_env_state_local_opt_out(self, monkeypatch):
+        monkeypatch.setenv("MO_STATE_LOCAL", "1")
+        assert not private_state_enabled()  # ambient opt-out → project-local
+        # ...but explicit config wins over the ambient env opt-out.
+        assert private_state_enabled({"runtime": {"home": "~/.mo"}})
+        assert private_state_enabled({"runtime": {"state": "private"}})
 
 
 class TestResolveStatePath:
     def test_absolute_path_preserved(self):
-        result = resolve_state_path("/absolute/path")
-        assert result == str(Path("/absolute/path"))
+        # Use a genuinely absolute path (drive-qualified on Windows); a drive-less
+        # POSIX path like "/x" is NOT absolute on Windows and is correctly anchored
+        # to the private home under private-by-default.
+        abs_path = str(Path.home() / "mo_state_dir")
+        assert resolve_state_path(abs_path) == abs_path
 
     def test_empty_string_returns_empty(self):
         assert resolve_state_path("") == ""
@@ -255,6 +273,8 @@ import pytest as _pytest_state_lane
 
 @_pytest_state_lane.fixture(autouse=True)
 def _legacy_state_lane(monkeypatch):
-    """This module asserts legacy project-relative state behavior; opt out of
-    the conftest MO_STATE_HOME isolation (tests here chdir to tmp paths)."""
+    """This module unit-tests path resolution directly, so clear the conftest
+    isolation env (MO_STATE_HOME + the MO_HOME safety net) to see true defaults."""
     monkeypatch.delenv("MO_STATE_HOME", raising=False)
+    monkeypatch.delenv("MO_HOME", raising=False)
+    monkeypatch.delenv("MO_STATE_LOCAL", raising=False)

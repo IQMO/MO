@@ -24,7 +24,7 @@ import traceback
 from ..backend_monitor import get_monitor, redact_monitor_text
 from ..env_utils import int_env
 from ..number_utils import as_optional_int as _as_int
-from ..path_defaults import ENV_MO_STATE_HOME, project_cache_dir
+from ..path_defaults import ENV_MO_STATE_HOME, private_state_enabled, project_cache_dir
 from ..text_utils import DEFAULT_CONTEXT_STOPWORDS
 
 STRUCTURAL_GRAPH_DIR = Path("memory") / "structural_graph"
@@ -77,7 +77,9 @@ def project_root(cwd: str | Path | None = None) -> Path:
 
 def native_graph_path(root: str | Path | None = None) -> Path:
     root_path = project_root(root)
-    if os.environ.get(ENV_MO_STATE_HOME):
+    # Private-by-default: the native graph cache lives under ~/.mo/cache, never the
+    # project tree — unless the user explicitly opted into project-local state.
+    if private_state_enabled():
         return project_cache_dir("structural_graph", root_path) / STRUCTURAL_GRAPH_FILE
     return root_path / STRUCTURAL_GRAPH_DIR / STRUCTURAL_GRAPH_FILE
 

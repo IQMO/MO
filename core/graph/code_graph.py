@@ -20,7 +20,7 @@ import traceback
 
 from ..backend_monitor import get_monitor, redact_monitor_text
 from ..env_utils import int_env
-from ..path_defaults import ENV_MO_STATE_HOME, project_cache_dir
+from ..path_defaults import ENV_MO_STATE_HOME, private_state_enabled, project_cache_dir
 from ..text_utils import DEFAULT_CONTEXT_STOPWORDS
 
 GRAPH_VERSION = "mo-code-graph-v1"
@@ -177,7 +177,8 @@ def _project_root(cwd: str) -> Path:
 
 
 def _graph_path(root: Path) -> Path:
-    if os.environ.get(ENV_MO_STATE_HOME):
+    # Private-by-default: cache under ~/.mo/cache, not the project tree.
+    if private_state_enabled():
         return project_cache_dir("code_graph", root) / "knowledge-graph.json"
     return root / "memory" / "code_graph" / "knowledge-graph.json"
 

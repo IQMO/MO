@@ -504,6 +504,25 @@ def redact_sensitive_text(text: str) -> str:
     return redacted
 
 
+# Only unambiguous provider-token shapes (ghp_/xoxb-/AKIA…/Stripe/Google). Unlike
+# redact_sensitive_text this does NOT touch `name = value` assignments, so it is safe
+# to run over every tool result without corrupting source-code reads.
+_PROVIDER_TOKEN_ONLY_RE = re.compile(r"(?i)\b(?:" + PROVIDER_TOKEN_PATTERN + r")\b")
+
+
+def redact_provider_tokens(text: str) -> str:
+    """Strip unambiguous secret tokens from text before it reaches the provider.
+
+    Defense-in-depth for the case where a secret value slips into a tool result
+    (e.g. a shell command that echoes a token). Conservative by design: only
+    well-known token prefixes, never generic key=value, so code reads are intact.
+    """
+    try:
+        return _PROVIDER_TOKEN_ONLY_RE.sub("[redacted-token]", str(text or ""))
+    except Exception:
+        return str(text or "")
+
+
 # ── Safe environment ───────────────────────────────────────────────
 
 SAFE_ENV_ALLOWLIST = {

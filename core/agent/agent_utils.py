@@ -7,7 +7,7 @@ from pathlib import Path
 import traceback
 
 from ..env_utils import int_env
-from ..path_defaults import ENV_MO_STATE_HOME
+from ..path_defaults import ENV_MO_STATE_HOME, mo_home, private_state_enabled
 from ..tasking.task_board import TaskBoard, board_update_event
 from ..text_utils import cap_by_tokens, token_aware_truncation_enabled
 from interface.task_board_view import render_rich
@@ -238,8 +238,9 @@ def _code_graph_age() -> float:
     """Return mtime of the code graph index file, or 0 if not found."""
     try:
         state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-        if state_home:
-            graphs = list((Path(state_home) / "cache" / "code_graph").glob("*/knowledge-graph.json"))
+        cache_base = Path(state_home) if state_home else (mo_home() if private_state_enabled() else None)
+        if cache_base is not None:
+            graphs = list((cache_base / "cache" / "code_graph").glob("*/knowledge-graph.json"))
             return max((path.stat().st_mtime for path in graphs if path.exists()), default=0.0)
         graph_path = Path("memory/code_graph/knowledge-graph.json")
         if graph_path.exists():
