@@ -12,6 +12,35 @@ def test_profile_context_includes_identity_file(tmp_path):
     assert "Runtime provider is not identity" in context
 
 
+def test_operator_md_project_section_not_truncated_off(tmp_path):
+    # RC-E regression: operator.md must be delivered (near-)whole. The earlier
+    # 650-char per-file cap severed the project/deploy section that lives later in
+    # the file, so MO knew project NAMES but guessed their locations.
+    profile = Profile(_path=str(tmp_path / "mo.db"), user_name="Ada")
+    profile.ensure_operator_profile()
+    header_filler = "- Header detail line that pushes content past the old 650-char cap.\n" * 30
+    marker = "PROJECT_PATH_MARKER_FAR_INTO_THE_FILE"
+    (tmp_path / "profile" / "operator.md").write_text(
+        f"# Operator Profile\n{header_filler}\n## Projects And Deploy\n- {marker} lives here.\n",
+        encoding="utf-8",
+    )
+
+    context = profile.build_profile_context()
+
+    assert len(header_filler) > 650  # the marker is well past the old cap
+    assert marker in context, "project/deploy section beyond 650 chars was truncated off"
+    assert "Projects And Deploy" in context
+
+
+def test_profile_structured_project_paths_injected(tmp_path):
+    # F3 regression: structured project paths reach the model, not just /profile.
+    profile = Profile(_path=str(tmp_path / "mo.db"), user_name="Ada")
+    profile.touch_project("/srv/widgets/checkout", name="checkout")
+    context = profile.build_profile_context()
+    assert "Known operator project paths" in context
+    assert "/srv/widgets/checkout" in context
+
+
 def test_sync_operator_profile_files_updates_generated_identity_lines(tmp_path):
     profile = Profile(_path=str(tmp_path / "mo.db"), user_name="Ada")
     profile.ensure_operator_profile()

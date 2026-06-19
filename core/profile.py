@@ -250,20 +250,24 @@ class Profile:
         self._profile_cache_mtimes = None  # invalidate after sync writes
         self._profile_cache_text = None
 
-    def build_profile_context(self, max_chars: int = 2500) -> str:
+    def build_profile_context(self, max_chars: int = 13500) -> str:
         self.ensure_operator_profile()
         pdir = Path(self._path).parent / "profile"
 
         # Cache: skip 5 file reads when nothing changed since last build.
         # Profile files change only on explicit /profile edits or learning events,
         # so mtime-based invalidation is both safe and effective.
+        # operator.md is the user's authoritative project/deploy/ownership home —
+        # deliver it (near-)whole so MO knows WHERE its projects are and how to
+        # deploy them, instead of seeing only the header and guessing. The earlier
+        # 650-char cap severed the "Projects And Deploy" section entirely.
         profile_files = (
-            ("operator.md", 650, False),
-            ("thinking_model.md", 450, False),
-            ("behavior.md", 500, False),
-            ("learning.md", 650, True),
-            ("terms.md", 300, False),
-            ("identity.md", 200, False),
+            ("operator.md", 9000, False),
+            ("thinking_model.md", 900, False),
+            ("behavior.md", 900, False),
+            ("learning.md", 1200, True),
+            ("terms.md", 600, False),
+            ("identity.md", 500, False),
         )
         try:
             mtimes = tuple(
@@ -296,7 +300,18 @@ class Profile:
                 "Profile default roots metadata (non-authoritative; sandbox roots come from access config/current project): "
                 + ", ".join(str(root) for root in self.default_roots[:8])
             )
-        
+        if self.projects:
+            proj_lines = []
+            for key, entry in list(self.projects.items())[:12]:
+                name = (getattr(entry, "name", "") or key).strip()
+                path = (getattr(entry, "path", "") or key).strip()
+                proj_lines.append(f"  - {name}: {path}")
+            if proj_lines:
+                lines.append(
+                    "Known operator project paths (projects MO has opened; verify live repo/runtime state before claims): "
+                    "\n" + "\n".join(proj_lines)
+                )
+
         def excerpt(path: Path, limit: int, *, include_recent_tail: bool = False) -> str:
             if not path.exists():
                 return ""

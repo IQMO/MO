@@ -14,7 +14,7 @@ from core.tasking.task_board import TaskBoard
 
 # ── Sandbox: shell variable/tilde path-scope (H3) ──────────────────────
 class TestShellVarPathScope:
-    ROOTS = ["E:\\MO-clean"]
+    ROOTS = ["/home/user/repo"]
 
     def _blocked(self, cmd: str) -> bool:
         return bool(guard_tool_call("shell", {"command": cmd}, lane=None, allowed_roots=self.ROOTS))

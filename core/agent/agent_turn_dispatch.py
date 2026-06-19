@@ -189,6 +189,16 @@ class AgentTurnDispatchMixin:
         value = next((part for part in match.groups() if part), "")
         return value.strip().strip("`'\".,;:()[]{}")
 
+    # Assistant-narration shapes that must NEVER be mined as an "adopted workflow"
+    # (a user-presented workflow is imperative/structured, not "Let me check … Now
+    # let me …"). Guards against staging MO's own multi-step narration — or
+    # carried-over session text — as a workflow candidate.
+    _NARRATION_MARKERS = (
+        "let me ", "let me.", "i'll ", "i will ", "now let me", "now i'", "let's ",
+        "found it", "found e:", "found the", "good —", "good, ", "okay,", "looking at",
+        "checking ", "likely what you meant", "let me now", "let me actually",
+    )
+
     @staticmethod
     def _extract_inline_workflow_source(text: str) -> str:
         raw = str(text or "")
@@ -196,6 +206,11 @@ class AgentTurnDispatchMixin:
             return ""
         inline = raw.split(":", 1)[1].strip()
         if len(inline) < 24:
+            return ""
+        low = inline.lower()
+        # Reject MO's own narration / contaminated session text — only stage an
+        # explicitly user-presented workflow, never the assistant's step prose.
+        if any(marker in low for marker in AgentTurnDispatchMixin._NARRATION_MARKERS):
             return ""
         return inline
 

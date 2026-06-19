@@ -300,6 +300,35 @@ def test_devmode_task_truth_continuation_instruction_names_complete_task():
     assert "only if `complete_task` is unavailable or fails" in instruction
 
 
+def test_profile_loads_on_operator_runtime_turn_not_just_greeting(monkeypatch, tmp_path):
+    # RC-A regression: an operator/project/runtime task (mo_control signals fire on
+    # generic words like "deploy"/"keys") must load the profile (the sole
+    # operator-data home) so MO uses its configured knowledge instead of guessing.
+    # Greetings must still skip the profile to save tokens.
+    agent = Agent.__new__(Agent)
+    agent.session = SimpleNamespace(created_at=0)
+    agent.profile = SimpleNamespace(build_profile_context=lambda: "[OPERATOR PROFILE BLOCK]")
+    agent.memory = None
+    agent.workers = None
+    agent.config = {"mo_control": {"workspace_path": "", "trigger_terms": []}}
+    agent.project_cwd = str(tmp_path)
+    agent.reasoning = ""
+    agent._pending_turn_proposal = ""
+    agent._goal_active = False
+    agent._thread_state = SimpleNamespace()
+
+    monkeypatch.setattr("core.agent.agent_turn.should_include_workspace_awareness", lambda _text: False)
+    monkeypatch.setattr("core.agent.agent_turn.should_include_code_graph_context", lambda _text: False)
+    monkeypatch.setattr("core.agent.agent_turn.build_workflow_learning_context", lambda *_a, **_k: "")
+    monkeypatch.setattr("core.agent.agent_turn.build_learning_context", lambda *_a, **_k: "")
+
+    agent._build_extra_context("check the production deploy keys and report")
+    assert agent._last_turn_context_flags["profile"] is True
+
+    agent._build_extra_context("hi mo")
+    assert agent._last_turn_context_flags["profile"] is False
+
+
 def test_agent_injects_self_capability_preflight_for_devmode(monkeypatch, tmp_path):
     agent = Agent.__new__(Agent)
     agent.session = SimpleNamespace(created_at=0)

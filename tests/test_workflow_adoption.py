@@ -57,6 +57,22 @@ def test_workflow_adoption_request_stays_simple_chat_even_for_review_words():
     assert select_template("learn this testing skill: always run pytest") == "simple_chat"
 
 
+def test_inline_workflow_source_rejects_assistant_narration():
+    # RC-C regression: MO's own multi-step narration (or carried-over session text)
+    # must never be mined as an "adopted workflow".
+    narration = (
+        "Let me check the config dir for the keys; Let me check the main project and "
+        "find the actual configuration; Now let me actually test the keys against the API"
+    )
+    legit = (
+        "Inspect relevant files before findings; separate verified and inferred "
+        "claims; report blockers and next move"
+    )
+    assert Agent._extract_inline_workflow_source(f"adopt workflow: {narration}") == ""
+    assert Agent._extract_inline_workflow_source(f"adopt workflow: {legit}") != ""
+    assert Agent._extract_inline_workflow_source("adopt workflow: do x") == ""  # too short
+
+
 def test_no_public_skill_command_registered():
     names = {spec.name for spec in COMMANDS} | {alias for spec in COMMANDS for alias in spec.aliases}
     assert "/skill" not in names

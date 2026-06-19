@@ -38,8 +38,6 @@ from .agent_utils import (
     _call_on_first_tool,
     _code_graph_age,
     _emit_task_board_update,
-    _looks_like_identity_question,
-    _looks_like_term_lookup,
     _looks_like_trivial_greeting,
     _truncate_recall,
     _usage_tokens,
@@ -744,27 +742,19 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         read to save tokens and disk I/O.
         """
         profile_context = ""
-        # The operator profile (~/.mo/memory/profile) is the SOLE home of operator
-        # + project knowledge since the mo_control bridge was retired. Load it
-        # whenever operator/project/runtime context matters — not only on
-        # greeting/identity/term turns — so MO uses its own configured project,
-        # deploy, and ownership knowledge on real task turns instead of guessing.
+        # Pure greetings/acks ("hi", "thanks") need no profile/recall/project read.
+        # EVERY other real turn loads the operator profile: it is the SOLE home of
+        # operator + project/deploy/ownership knowledge since the mo_control bridge
+        # was retired, so the old greeting/identity-only gate made MO guess project
+        # facts it actually had. Same "not a trivial greeting" bar as project_context
+        # below, so operator and project context load together and consistently.
+        trivial_greeting = _looks_like_trivial_greeting(user_input)
         mo_control_needed = should_include_mo_control_context(user_input, getattr(self, "config", {}))
-        include_profile = (
-            should_include_workspace_awareness(user_input)
-            or _looks_like_term_lookup(user_input)
-            or _looks_like_identity_question(user_input)
-            or mo_control_needed
-            or should_include_self_capability_preflight(user_input)
-        )
+        include_profile = not trivial_greeting
         if include_profile:
             profile = getattr(self, "profile", None)
             if profile:
                 profile_context = profile.build_profile_context()
-        # Pure greetings/acks ("hi", "thanks") need neither episodic recall nor a
-        # project-file read — skip both to save tokens + disk I/O. Strict match so
-        # real work turns are unaffected.
-        trivial_greeting = _looks_like_trivial_greeting(user_input)
         recalled_context = ""
         memory = getattr(self, "memory", None)
         if memory and not trivial_greeting:
@@ -858,11 +848,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("coordination", "Active worker coordination warning", coordination_context, 1, "runtime coordination warning; avoid conflicting edits and verify current state", max_chars=1200),
                 ContextSource("environment", "Active surface environment", environment_context, 1, "current surface, OS, CWD, and shell; always verify live state", max_chars=300),
                 ContextSource("heartbeat", "Surface heartbeat continuity", heartbeat_context, 1, "surface continuity; re-check live state before claims", max_chars=900),
-                ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=2600),
+                ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=13500),
                 ContextSource("ghost_proposal", "Ghost intent guardrails for this turn", proposal_context, 3, "scope guardrail only; not proof of completion", max_chars=1400),
                 ContextSource("work_pattern", "Active work pattern", work_pattern_context, 3, "process guidance for this turn; verify before claims", max_chars=1800),
                 ContextSource("workspace", "Workspace / worker awareness", workspace_context, 3, "coordination context only; not proof of code correctness", max_chars=1600),
-                ContextSource("project_context", "Project-local instructions", project_context, 3, "project policy/instructions; verify current files before factual claims", max_chars=3200),
+                ContextSource("project_context", "Project-local instructions (current working directory)", project_context, 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", max_chars=3200),
                 ContextSource("mo_control", "MO control workspace authority", mo_control_context, 3, "active policy/orientation for cross-repo/server work; live checks still win", max_chars=2600),
                 ContextSource("self_capability", "MO self-capability preflight", self_capability_context, 1, "hard gate for MO self/DEVMODE05 work; inventory existing capabilities before edits/builds", max_chars=7200),
                 ContextSource("pending_interrupted", "Paused interrupted work", pending_interrupted_context, 3, "continuity context only; do not resume unless relevant to current request", max_chars=1100),
@@ -872,6 +862,10 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("memory", "Recalled past interactions", recalled_context, 5, "orientation only; not tool receipts or current proof", max_chars=2400),
                 ContextSource("code_graph", "Code map", code_graph_context, 5, "orientation only; graph hints must be verified with files/tools/tests", max_chars=1800),
             ),
+            # Raised from the 10k default so the (now near-full) operator profile is
+            # not clipped by the bridge total. Lowest-priority orientation sources
+            # still clip first if a turn is unusually large.
+            max_chars=26000,
         )
         extra_context = bridge.text
         monitor = get_monitor()
