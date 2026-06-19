@@ -505,7 +505,9 @@ def test_agent_counts_truncation_as_context_savings():
         def emit(self, event_type, payload):
             events.append((event_type, payload))
 
-    result = agent._cap_tool_result_for_context("x" * 100, monitor=Monitor(), tool_name="read_file")
+    # Use a tool subject to the fallback cap (shell). Read-family tools (read_file,
+    # grep, find_files) are intentionally exempt — see _READ_FAMILY_TOOLS.
+    result = agent._cap_tool_result_for_context("x" * 100, monitor=Monitor(), tool_name="shell")
 
     assert result.endswith("[...truncated...]")
     assert agent.truncation_total_ops == 1
@@ -513,6 +515,27 @@ def test_agent_counts_truncation_as_context_savings():
     assert agent._compression_saved_tokens_estimate() > 0
     assert events[0][0] == "tool_compress"
     assert events[0][1]["format"] == "truncate"
+
+
+def test_read_family_tools_exempt_from_result_cap():
+    # Regression: the fallback cap silently severed the back of files MO chose to
+    # read (and throttled the on-demand profile read). Read-family tools are
+    # self-bounded by their own limits and must pass through uncapped.
+    from core.agent.agent import Agent
+
+    agent = object.__new__(Agent)
+    agent.tool_result_max_chars = 6000
+    agent.truncation_total_ops = 0
+    agent.truncation_total_saved = 0
+    big = "y" * 18000
+
+    for tool in ("read_file", "grep", "find_files"):
+        out = agent._cap_tool_result_for_context(big, tool_name=tool)
+        assert out == big, f"{tool} output must not be capped"
+    # shell (unbounded external output) is still capped
+    capped = agent._cap_tool_result_for_context(big, tool_name="shell")
+    assert capped.endswith("[...truncated...]")
+    assert len(capped) < len(big)
 
 
 def test_usage_includes_estimated_token_savings_when_compression_active():

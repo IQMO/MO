@@ -32,6 +32,15 @@ from ..self_capability_preflight import (
 from ..path_defaults import repo_root
 
 
+# Read-family tools return data the model EXPLICITLY requested and are already
+# self-bounded by their own limits (read_file caps at 2000 lines / 50k chars;
+# grep/find_files cap output at 50k and take explicit match limits). They are
+# exempt from the fallback tool-result cap so MO never has the back of a file it
+# chose to read silently severed. Only unbounded EXTERNAL output (shell, web_*)
+# still needs the cap.
+_READ_FAMILY_TOOLS = frozenset({"read_file", "grep", "find_files"})
+
+
 class AgentTurnDispatchMixin:
     """Deterministic turn-start intercepts and the per-tool-call dispatch phase."""
 
@@ -365,6 +374,8 @@ class AgentTurnDispatchMixin:
         keeps `/usage`, goal-finish, closeout, and session metadata honest.
         """
         text = str(result or "")
+        if str(tool_name or "").strip().lower() in _READ_FAMILY_TOOLS:
+            return text  # self-bounded, model-requested data — never severed here
         limit = max(0, int(getattr(self, "tool_result_max_chars", 0) or 0))
         if not limit or len(text) <= limit:
             return text
