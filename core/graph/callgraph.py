@@ -4,7 +4,8 @@ When MO needs to answer "who calls X?" or "what does X call?", this walks the
 structural graph's dependency edges. Zero new dependencies — reuses the existing
 graph data that structural_graph.py already builds.
 
-Usage (via shell):
+Exposed to MO as the first-class ``find_callers`` / ``find_callees`` tools
+(tools/__init__.py); the shell one-liners below are only a manual/debug fallback:
     python -c "from core.graph.callgraph import get_callers; import json; \\
         print(json.dumps(get_callers('run_turn'), indent=2))"
     python -c "from core.graph.callgraph import get_callees; import json; \\

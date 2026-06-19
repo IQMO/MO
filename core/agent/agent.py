@@ -56,6 +56,7 @@ from .agent_turn import AgentTurn
 from .agent_utils import (
     GHOST_PROPOSAL_SYSTEM,
     _usage_tokens,
+    _usage_cache_tokens,
 )
 
 
@@ -139,6 +140,9 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                         self.session.messages = data.get("messages", [])
                         self.session.total_tokens = data.get("total_tokens", 0)
                         self.session.output_tokens = data.get("output_tokens", 0)
+                        self.session.input_tokens = int(data.get("input_tokens", 0) or 0)
+                        self.session.cache_hit_tokens = int(data.get("cache_hit_tokens", 0) or 0)
+                        self.session.cache_miss_tokens = int(data.get("cache_miss_tokens", 0) or 0)
                         self.session.token_log = list(data.get("token_log", []) or [])
                         self.session.compacted_messages_count = int(data.get("compacted_messages_count", 0) or 0)
                         self.session.last_compacted_at = float(data.get("last_compacted_at", 0.0) or 0.0)
@@ -475,6 +479,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
 
             usage = getattr(response, "usage", None)
             usage_in, usage_out, usage_total = _usage_tokens(usage)
+            usage_cache_hit, usage_cache_miss = _usage_cache_tokens(usage)
             if usage:
                 self.session.record_usage(
                     provider=provider_name,
@@ -482,6 +487,8 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                     input_tokens=usage_in,
                     output_tokens=usage_out,
                     total_tokens=usage_total,
+                    cache_hit_tokens=usage_cache_hit,
+                    cache_miss_tokens=usage_cache_miss,
                 )
             text = str(getattr(response, "content", "") or "").strip()
             finish_reason = str(getattr(response, "finish_reason", "") or "")

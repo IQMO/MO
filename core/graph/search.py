@@ -4,7 +4,8 @@ When MO needs to find files/symbols from a loose natural-language query ("find t
 auth logic", "where is rate limiting?"), this ranks graph nodes by BM25 relevance.
 Zero dependencies, pure Python math — same algorithm used in Lucene/Elasticsearch.
 
-Usage (via shell):
+Exposed to MO as the first-class ``code_search`` tool (tools/__init__.py); the
+shell one-liner below is only a manual/debug fallback:
     python -c "from core.graph.search import search; import json; \\
         print(json.dumps(search('auth logic')[:5], indent=2))"
 """

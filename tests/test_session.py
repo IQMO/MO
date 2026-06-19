@@ -294,9 +294,10 @@ class TestSessionGetMessages:
         assert "Handoff" in dynamic[0]["content"]
         assert "Extra" in dynamic[0]["content"]
 
-    def test_dynamic_context_inserted_before_latest_user_message(self, session):
-        """Cache-stable layout: dynamic context sits just before the latest user
-        message so the stored history prefix stays byte-identical across calls."""
+    def test_dynamic_context_appended_at_end(self, session):
+        """Cache-stable layout: dynamic context is appended after the full stored
+        history (including the latest user turn) so the entire prefix stays
+        cacheable and the prior exchange is not re-billed every turn."""
         session.add_user("first question")
         session.add_assistant("first answer")
         session.add_user("second question")
@@ -304,9 +305,24 @@ class TestSessionGetMessages:
         messages = session.get_messages(extra_context="Turn context")
 
         roles = [m["role"] for m in messages]
-        assert roles == ["system", "user", "assistant", "system", "user"]
-        assert messages[3]["content"] == "Turn context"
-        assert messages[4]["content"] == "second question"
+        assert roles == ["system", "user", "assistant", "user", "system"]
+        assert messages[-1]["content"] == "Turn context"
+        assert messages[-1]["role"] == "system"
+        assert messages[-2]["content"] == "second question"
+
+    def test_history_prefix_stable_across_turns_with_dynamic_context(self, session):
+        """Trailing dynamic context must leave the entire stored history (system +
+        all messages) byte-identical to the no-context payload, so the provider's
+        prefix cache covers every message except the trailing dynamic block."""
+        session.add_user("first question")
+        session.add_assistant("first answer")
+        session.add_user("second question")
+
+        plain = session.get_messages()
+        with_ctx = session.get_messages(extra_context="Turn context")
+
+        assert with_ctx[:-1] == plain  # only the trailing dynamic block is new
+        assert with_ctx[-1]["role"] == "system"
 
     def test_static_prefix_is_byte_stable_across_turns(self, session):
         """The system prompt + stored history must not vary with extra_context."""

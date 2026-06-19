@@ -73,15 +73,23 @@ continue without silently forgetting the important parts.
 
 ### Code-aware, not grep-drunk
 
-MO includes local code intelligence: fuzzy symbol search, caller/callee lookup,
-and a structural graph under private runtime state. The goal is to spend model
-context on the problem, not on repeatedly rediscovering the repository.
+MO includes local code intelligence exposed as first-class tools — fuzzy symbol
+search (`code_search`), caller/callee lookup (`find_callers` / `find_callees`),
+and a structural graph under private runtime state. One graph call often replaces
+a long grep/read sweep, so model context is spent on the problem, not on
+repeatedly rediscovering the repository.
 
-### Concise output
+### Concise output, cache-stable context
 
 MO is answer-first. Tool output is structurally compressed before it reaches the
 model context, and final reports focus on the useful delta: what changed, what
 was verified, what failed, and what is still unknown.
+
+The provider payload is built cache-stable: the static system prompt and stored
+history stay byte-identical across turns, and per-turn dynamic context is
+appended after the history so the provider's automatic prefix cache covers the
+whole conversation. MO reads the provider's own cache-hit numbers, so `/status`
+shows the **measured** prefix-cache ratio rather than an estimate.
 
 ### Side-checks without stealing truth
 
@@ -173,7 +181,8 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
 | OpenCode/OpenAI providers | OpenCode-first config, OpenAI-compatible chat completions, and Codex/OpenAI fallback support |
 | Provider failover | Providers can fail over on rate, auth, balance, timeout, or empty-response errors |
-| Code graph | Local fuzzy search, caller/callee lookup, and structural graph orientation |
+| Code graph | First-class `code_search` / `find_callers` / `find_callees` tools plus structural-graph orientation, over local runtime state |
+| Cache-stable context | Byte-stable system+history prefix with per-turn context appended last, so the provider prefix cache covers the conversation; `/status` reports the measured cache-hit ratio |
 | Session continuity | Long work preserves task state, evidence, files, and context orientation |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |

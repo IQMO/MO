@@ -43,6 +43,12 @@ class Session:
         self.turn_count = 0
         self.total_tokens = 0
         self.output_tokens = 0
+        # Running input + cache totals so MO can MEASURE prefix-cache effectiveness
+        # instead of estimating it. cache_hit_tokens / input_tokens is the real
+        # provider-reported cache-hit ratio (DeepSeek/OpenAI/Anthropic usage).
+        self.input_tokens = 0
+        self.cache_hit_tokens = 0
+        self.cache_miss_tokens = 0
         self.token_log: list[dict[str, Any]] = []
         self.trimmed_messages_count = 0
         self.last_trimmed_at = 0.0
@@ -79,7 +85,8 @@ class Session:
         self.messages.append(sanitize_jsonish(msg))
         self._trim()
 
-    def record_usage(self, *, provider: str, model: str, input_tokens: int, output_tokens: int, total_tokens: int | None = None):
+    def record_usage(self, *, provider: str, model: str, input_tokens: int, output_tokens: int,
+                     total_tokens: int | None = None, cache_hit_tokens: int = 0, cache_miss_tokens: int = 0):
         total = int(total_tokens if total_tokens is not None else int(input_tokens or 0) + int(output_tokens or 0))
         entry = {
             "ts": time.time(),
@@ -88,11 +95,16 @@ class Session:
             "input_tokens": int(input_tokens or 0),
             "output_tokens": int(output_tokens or 0),
             "total_tokens": total,
+            "cache_hit_tokens": int(cache_hit_tokens or 0),
+            "cache_miss_tokens": int(cache_miss_tokens or 0),
             "source": "provider_usage",
         }
         self.token_log.append(entry)
         self.total_tokens += total
         self.output_tokens += int(output_tokens or 0)
+        self.input_tokens += int(input_tokens or 0)
+        self.cache_hit_tokens += int(cache_hit_tokens or 0)
+        self.cache_miss_tokens += int(cache_miss_tokens or 0)
         return entry
 
     def get_messages(self, extra_context: str | None = None, *, consume_handoff: bool = True) -> list[dict]:
@@ -101,10 +113,18 @@ class Session:
         The static system prompt and stored history must stay byte-identical
         across provider calls so OpenAI-compatible automatic prefix caching can
         reuse them. Per-turn dynamic context (handoff seed + context bridge)
-        therefore goes into a separate system message inserted just before the
-        latest user message — never merged into the leading system message,
-        which would invalidate the cached prefix for the whole conversation on
-        every turn.
+        therefore goes into a separate system message **appended at the very
+        end** of the payload — never merged into the leading system message.
+
+        Trailing placement (rather than inserting before the latest user
+        message) keeps the ENTIRE stored history — including the most recent
+        user turn and any in-progress tool chain — inside the cacheable prefix.
+        Mid-stream insertion forced the provider's prefix cache to break at the
+        injection point, re-billing the prior user+assistant exchange every
+        turn and the whole tool chain on every round of a tool loop. The codex
+        Responses path folds all system messages into ``instructions``
+        regardless of position, so this is purely a chat-completions cache win
+        with no behavior change there.
         """
         dynamic_parts: list[str] = []
         handoff = getattr(self, "_handoff_context", "")
@@ -126,12 +146,7 @@ class Session:
         ]
         payload = [{"role": "system", "content": self.system_message}] + history
         if dynamic_parts:
-            insert_at = len(payload)
-            for i in range(len(payload) - 1, 0, -1):
-                if payload[i].get("role") == "user":
-                    insert_at = i
-                    break
-            payload.insert(insert_at, {"role": "system", "content": "\n\n".join(dynamic_parts)})
+            payload.append({"role": "system", "content": "\n\n".join(dynamic_parts)})
         return payload
 
     @staticmethod

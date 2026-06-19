@@ -40,6 +40,7 @@ from .agent_utils import (
     _emit_task_board_update,
     _looks_like_identity_question,
     _looks_like_term_lookup,
+    _looks_like_trivial_greeting,
     _truncate_recall,
     _usage_tokens,
 )
@@ -131,6 +132,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
         done_claim_continued = False  # once-per-turn guard for the done-claim/open-board gate
+        # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
+        # few times to push for a clean closeout, but must not loop to
+        # max_provider_requests when a near-terminal completion keeps tripping the
+        # regex. After the cap, allow the stop with a logged disagreement note.
+        protocol_stop_gate_continuations: dict[str, int] = {}
+        PROTOCOL_STOP_GATE_MAX = 2
         # Snapshot rows already completed at TURN START so the closing contract
         # gate audits every task completed during THIS turn (across all provider
         # rounds), while still excluding rows completed in prior turns. Using a
@@ -614,22 +621,34 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 continue
 
             if not ifdev05_final_allows_stop(user_input, content):
+                if protocol_stop_gate_continuations.get("ifdev05", 0) < PROTOCOL_STOP_GATE_MAX:
+                    protocol_stop_gate_continuations["ifdev05"] = protocol_stop_gate_continuations.get("ifdev05", 0) + 1
+                    if on_activity:
+                        on_activity("continuing IFDEV05...")
+                    self.session.add_assistant(ifdev05_continuation_instruction(user_input, content))
+                    continue
                 if on_activity:
-                    on_activity("continuing IFDEV05...")
-                self.session.add_assistant(ifdev05_continuation_instruction(user_input, content))
-                continue
+                    on_activity("IFDEV05 stop-gate disagreement — allowing stop after cap")
 
             if not vs05_final_allows_stop(user_input, content):
+                if protocol_stop_gate_continuations.get("vs05", 0) < PROTOCOL_STOP_GATE_MAX:
+                    protocol_stop_gate_continuations["vs05"] = protocol_stop_gate_continuations.get("vs05", 0) + 1
+                    if on_activity:
+                        on_activity("continuing VS05...")
+                    self.session.add_assistant(vs05_continuation_instruction(user_input, content))
+                    continue
                 if on_activity:
-                    on_activity("continuing VS05...")
-                self.session.add_assistant(vs05_continuation_instruction(user_input, content))
-                continue
+                    on_activity("VS05 stop-gate disagreement — allowing stop after cap")
 
             if not devmode05_final_allows_stop(user_input, content):
+                if protocol_stop_gate_continuations.get("devmode05", 0) < PROTOCOL_STOP_GATE_MAX:
+                    protocol_stop_gate_continuations["devmode05"] = protocol_stop_gate_continuations.get("devmode05", 0) + 1
+                    if on_activity:
+                        on_activity("continuing DEVMODE05...")
+                    self.session.add_assistant(devmode05_continuation_instruction(user_input, content))
+                    continue
                 if on_activity:
-                    on_activity("continuing DEVMODE05...")
-                self.session.add_assistant(devmode05_continuation_instruction(user_input, content))
-                continue
+                    on_activity("DEVMODE05 stop-gate disagreement — allowing stop after cap")
 
             # 3. Finalize (secrets-only critique)
             if on_activity:
@@ -725,18 +744,30 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         read to save tokens and disk I/O.
         """
         profile_context = ""
+        # The operator profile (~/.mo/memory/profile) is the SOLE home of operator
+        # + project knowledge since the mo_control bridge was retired. Load it
+        # whenever operator/project/runtime context matters — not only on
+        # greeting/identity/term turns — so MO uses its own configured project,
+        # deploy, and ownership knowledge on real task turns instead of guessing.
+        mo_control_needed = should_include_mo_control_context(user_input, getattr(self, "config", {}))
         include_profile = (
             should_include_workspace_awareness(user_input)
             or _looks_like_term_lookup(user_input)
             or _looks_like_identity_question(user_input)
+            or mo_control_needed
+            or should_include_self_capability_preflight(user_input)
         )
         if include_profile:
             profile = getattr(self, "profile", None)
             if profile:
                 profile_context = profile.build_profile_context()
+        # Pure greetings/acks ("hi", "thanks") need neither episodic recall nor a
+        # project-file read — skip both to save tokens + disk I/O. Strict match so
+        # real work turns are unaffected.
+        trivial_greeting = _looks_like_trivial_greeting(user_input)
         recalled_context = ""
         memory = getattr(self, "memory", None)
-        if memory:
+        if memory and not trivial_greeting:
             try:
                 recalled = memory.recall(user_input, limit=3)
                 if recalled:
@@ -773,8 +804,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 workspace_context = build_workspace_awareness(self, cwd=getattr(self, "project_cwd", None))
             except TypeError:
                 workspace_context = build_workspace_awareness(self)
-        project_context = build_project_context(getattr(self, "project_cwd", os.getcwd()))
-        mo_control_context = build_mo_control_context(user_input=user_input, config=getattr(self, "config", {})) if should_include_mo_control_context(user_input, getattr(self, "config", {})) else ""
+        project_context = "" if trivial_greeting else build_project_context(getattr(self, "project_cwd", os.getcwd()))
+        mo_control_context = build_mo_control_context(user_input=user_input, config=getattr(self, "config", {})) if mo_control_needed else ""
         self_capability_context = ""
         if should_include_self_capability_preflight(user_input):
             self_capability_context = build_self_capability_preflight_context(user_input, cwd=getattr(self, "project_cwd", None))

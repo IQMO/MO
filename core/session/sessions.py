@@ -73,6 +73,9 @@ class SessionManager:
             "messages": cleaned_messages,
             "total_tokens": session.total_tokens,
             "output_tokens": session.output_tokens,
+            "input_tokens": _safe_int(getattr(session, "input_tokens", 0)),
+            "cache_hit_tokens": _safe_int(getattr(session, "cache_hit_tokens", 0)),
+            "cache_miss_tokens": _safe_int(getattr(session, "cache_miss_tokens", 0)),
             "token_log": list(session.token_log or []),
             "compacted_messages_count": _safe_int(getattr(session, "compacted_messages_count", 0)),
             "last_compacted_at": _safe_float(getattr(session, "last_compacted_at", 0.0)),
@@ -122,6 +125,9 @@ class SessionManager:
             session.messages = data.get("messages", [])
             session.total_tokens = data.get("total_tokens", 0)
             session.output_tokens = data.get("output_tokens", 0)
+            session.input_tokens = _safe_int(data.get("input_tokens", 0))
+            session.cache_hit_tokens = _safe_int(data.get("cache_hit_tokens", 0))
+            session.cache_miss_tokens = _safe_int(data.get("cache_miss_tokens", 0))
             session.token_log = list(data.get("token_log", []) or [])
             session.compacted_messages_count = _safe_int(data.get("compacted_messages_count", 0))
             session.last_compacted_at = _safe_float(data.get("last_compacted_at", 0.0))

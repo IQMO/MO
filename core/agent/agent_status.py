@@ -55,6 +55,21 @@ class AgentStatusCommands:
                 f"  session-compact: {getattr(self, 'session_compaction_total_ops', 0)} ops · "
                 f"{getattr(self, 'session_compaction_total_saved', 0):,} chars saved before handoff"
             )
+        sess = getattr(self, "session", None)
+        input_toks = self._safe_int(getattr(sess, "input_tokens", 0))
+        if input_toks > 0:
+            hit = self._safe_int(getattr(sess, "cache_hit_tokens", 0))
+            miss = self._safe_int(getattr(sess, "cache_miss_tokens", 0))
+            if hit or miss:
+                ratio = (hit / input_toks * 100) if input_toks else 0.0
+                lines.append(
+                    f"  cache:    {ratio:.0f}% prefix-cache hit "
+                    f"({hit:,}/{input_toks:,} input tokens; provider-reported)"
+                )
+            else:
+                lines.append(
+                    f"  cache:    provider reports no prefix-cache breakdown ({input_toks:,} input tokens)"
+                )
         lines.append(f"  profile:  {self.profile.total_sessions} sessions · {self.profile.total_turns} turns lifetime")
         return "\n".join(lines)
 

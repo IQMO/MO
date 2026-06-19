@@ -119,6 +119,20 @@ def _looks_like_term_lookup(text: str) -> bool:
     return bool(re.search(r"\b(what\s+(?:does|do|is)|define|meaning\s+of|remind\s+me)\b.{0,60}\b(mean|means|term|shorthand|definition|stand\s+for)\b", value))
 
 
+_TRIVIAL_GREETINGS = frozenset({
+    "hi", "hello", "hey", "yo", "hi mo", "hello mo", "hey mo",
+    "thanks", "thank you", "ok", "okay", "yes", "no", "y", "n", "sup", "gm",
+})
+
+
+def _looks_like_trivial_greeting(text: str) -> bool:
+    """True for bare greetings/acks where episodic recall + project-file reads add
+    no value. Deliberately strict (exact match on a small set) so real work turns
+    never lose memory recall or project context. Mirrors the greeting set that
+    should_include_code_graph_context already skips on."""
+    return str(text or "").strip().lower().strip("!.?") in _TRIVIAL_GREETINGS
+
+
 def _looks_like_identity_question(text: str) -> bool:
     """Identity/profile questions need the operator profile in context.
 
@@ -179,6 +193,40 @@ def _usage_tokens(usage: object) -> tuple[int, int, int]:
     output_tokens = _pick("output_tokens", "completion_tokens")
     total_tokens = _pick("total_tokens") or (input_tokens + output_tokens)
     return input_tokens, output_tokens, total_tokens
+
+
+def _usage_cache_tokens(usage: object) -> tuple[int, int]:
+    """Normalize a provider usage object to (cache_hit_tokens, cache_miss_tokens).
+
+    Without this, MO records gross input tokens but never the provider-reported
+    prefix-cache split, so the actual saving from the cache-stable payload
+    (`Session.get_messages`) is unmeasurable. Covers the three families MO talks
+    to: DeepSeek (``prompt_cache_hit_tokens`` / ``prompt_cache_miss_tokens``),
+    OpenAI/Codex (``prompt_tokens_details.cached_tokens``), and Anthropic
+    (``cache_read_input_tokens`` / ``cache_creation_input_tokens``). Returns
+    ``(0, 0)`` when the provider reports no cache info so callers never branch.
+    """
+    if not usage:
+        return 0, 0
+
+    def _get(obj: object, name: str) -> object:
+        if isinstance(obj, dict):
+            return obj.get(name)
+        return getattr(obj, name, None)
+
+    def _int(val: object) -> int:
+        try:
+            return int(val) if val else 0
+        except (TypeError, ValueError):
+            return 0
+
+    hit = _int(_get(usage, "prompt_cache_hit_tokens")) or _int(_get(usage, "cache_read_input_tokens"))
+    if not hit:
+        details = _get(usage, "prompt_tokens_details")
+        if details is not None:
+            hit = _int(_get(details, "cached_tokens"))
+    miss = _int(_get(usage, "prompt_cache_miss_tokens")) or _int(_get(usage, "cache_creation_input_tokens"))
+    return hit, miss
 
 
 def _code_graph_age() -> float:

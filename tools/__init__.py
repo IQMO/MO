@@ -1,7 +1,9 @@
 """MO Agent — Tool implementations and definitions.
 
-All 13 tools defined. Full tool list sent to provider every turn.
-Sandbox gates at dispatch time via core.sandbox.guard_tool_call().
+All 16 tools defined (incl. code_search / find_callers / find_callees, which
+surface MO's code graph as first-class tools instead of shell one-liners). Full
+tool list sent to provider every turn. Sandbox gates at dispatch time via
+core.sandbox.guard_tool_call().
 """
 
 import os
@@ -237,6 +239,51 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "query": {"type": "string", "description": "Search query"},
                     "limit": {"type": "integer", "description": "Max results (default 5)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_search",
+            "description": "Find files/symbols by a loose natural-language query using BM25 relevance over MO's code graph (e.g. 'where is rate limiting', 'auth logic'). Prefer this over a blind grep/read sweep for orientation — one call ranks the most relevant nodes and replaces many grep/read_file calls. Returns ranked source files + locations.",
+            "parameters": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {"type": "string", "description": "Natural-language description of what to find"},
+                    "top_n": {"type": "integer", "description": "Maximum results to return (default 10)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_callers",
+            "description": "Answer 'who calls / depends on X?' by walking MO's code graph backward. Far cheaper than grepping a symbol across the tree. Returns caller symbols, their files, and the relation.",
+            "parameters": {
+                "type": "object",
+                "required": ["symbol"],
+                "properties": {
+                    "symbol": {"type": "string", "description": "Function/class/module symbol to find callers of"},
+                    "max_depth": {"type": "integer", "description": "How many edges to walk back (default 2)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_callees",
+            "description": "Answer 'what does X call / depend on?' by walking MO's code graph forward. Returns callee symbols, their files, and the relation.",
+            "parameters": {
+                "type": "object",
+                "required": ["symbol"],
+                "properties": {
+                    "symbol": {"type": "string", "description": "Function/class/module symbol to find dependencies of"},
+                    "max_depth": {"type": "integer", "description": "How many edges to walk forward (default 2)"},
                 },
             },
         },
@@ -718,6 +765,91 @@ def execute_web_search(arguments: dict[str, Any]) -> str:
         return f"Search error: {e}"
 
 
+def _format_graph_hits(hits: list[dict[str, Any]], fields: list[tuple[str, str]], empty: str, limit: int = 20) -> str:
+    if not hits:
+        return empty
+    lines: list[str] = []
+    for hit in hits[:limit]:
+        parts = [f"{label}={hit.get(key)}" for label, key in fields if hit.get(key) not in (None, "")]
+        lines.append("- " + ", ".join(parts))
+    more = len(hits) - limit
+    if more > 0:
+        lines.append(f"... (+{more} more)")
+    return "\n".join(lines)
+
+
+def execute_code_search(arguments: dict[str, Any]) -> str:
+    query = str(arguments.get("query", "") or "").strip()
+    if not query:
+        return "Error: code_search requires a 'query'."
+    top_n = arguments.get("top_n")
+    try:
+        top_n = int(top_n) if top_n else 10
+    except (TypeError, ValueError):
+        top_n = 10
+    try:
+        from core.graph.search import search
+    except Exception as exc:
+        return f"Error: code graph search unavailable: {exc}"
+    try:
+        hits = search(query, cwd=os.getcwd(), top_n=top_n)
+    except Exception as exc:
+        return f"Error running code_search: {exc}"
+    return _format_graph_hits(
+        hits,
+        [("file", "source_file"), ("symbol", "label"), ("at", "source_location"), ("score", "score")],
+        empty=f"No code-graph matches for {query!r}. The graph may be empty/stale — fall back to grep/read_file.",
+    )
+
+
+def execute_find_callers(arguments: dict[str, Any]) -> str:
+    symbol = str(arguments.get("symbol", "") or "").strip()
+    if not symbol:
+        return "Error: find_callers requires a 'symbol'."
+    max_depth = arguments.get("max_depth")
+    try:
+        max_depth = int(max_depth) if max_depth else 2
+    except (TypeError, ValueError):
+        max_depth = 2
+    try:
+        from core.graph.callgraph import get_callers
+    except Exception as exc:
+        return f"Error: code graph unavailable: {exc}"
+    try:
+        hits = get_callers(symbol, cwd=os.getcwd(), max_depth=max_depth)
+    except Exception as exc:
+        return f"Error running find_callers: {exc}"
+    return _format_graph_hits(
+        hits,
+        [("caller", "caller_label"), ("file", "caller_file"), ("relation", "relation"), ("depth", "depth")],
+        empty=f"No callers found for {symbol!r} in the code graph (it may be a leaf, or the graph is stale).",
+    )
+
+
+def execute_find_callees(arguments: dict[str, Any]) -> str:
+    symbol = str(arguments.get("symbol", "") or "").strip()
+    if not symbol:
+        return "Error: find_callees requires a 'symbol'."
+    max_depth = arguments.get("max_depth")
+    try:
+        max_depth = int(max_depth) if max_depth else 2
+    except (TypeError, ValueError):
+        max_depth = 2
+    try:
+        from core.graph.callgraph import get_callees
+    except Exception as exc:
+        return f"Error: code graph unavailable: {exc}"
+    try:
+        hits = get_callees(symbol, cwd=os.getcwd(), max_depth=max_depth)
+    except Exception as exc:
+        return f"Error running find_callees: {exc}"
+    return _format_graph_hits(
+        hits,
+        [("callee", "callee_label"), ("file", "callee_file"), ("relation", "relation"), ("depth", "depth")],
+        empty=f"No callees found for {symbol!r} in the code graph (it may have no outgoing edges, or the graph is stale).",
+    )
+
+
 def execute_complete_task(arguments: dict[str, Any]) -> str:
     task_id = str(arguments.get("task_id", "") or "").strip()
     if task_id:
@@ -738,5 +870,8 @@ TOOL_EXECUTORS = {
     "web_fetch": execute_web_fetch,
     "web_snapshot": execute_web_snapshot,
     "web_search": execute_web_search,
+    "code_search": execute_code_search,
+    "find_callers": execute_find_callers,
+    "find_callees": execute_find_callees,
     "complete_task": execute_complete_task,
 }
