@@ -5,7 +5,10 @@ from core.self_capability_preflight import (
     devmode05_continuation_instruction,
     devmode05_final_allows_stop,
     devmode05_task_truth_continuation_instruction,
+    ifdev05_continuation_instruction,
+    ifdev05_final_allows_stop,
     is_devmode05_activation,
+    is_ifdev05_activation,
     is_vs05_activation,
     should_include_self_capability_preflight,
     vs05_continuation_instruction,
@@ -27,6 +30,36 @@ def test_self_capability_preflight_detection_is_scoped():
 
     assert should_include_self_capability_preflight("hi mo") is False
     assert should_include_self_capability_preflight("can you fix this bug in parser.py") is False
+
+
+def test_ifdev05_activation_detection_and_scope():
+    assert is_ifdev05_activation("IFDEV05") is True
+    assert is_ifdev05_activation("start IFDEV05") is True
+    assert is_ifdev05_activation("diagnose the interface") is False
+    assert should_include_self_capability_preflight("IFDEV05") is True
+    assert should_include_self_capability_preflight("start IFDEV05") is True
+
+
+def test_ifdev05_final_stop_gate():
+    # Clean completion is a terminal stop; open-work / mid-turn prose are not.
+    assert ifdev05_final_allows_stop("IFDEV05", "[IFDEV05 COMPLETE] catalog closed; remaining: none") is True
+    assert ifdev05_final_allows_stop("IFDEV05", "[IFDEV05 COMPLETE] remaining: 2 findings deferred") is False
+    assert ifdev05_final_allows_stop("IFDEV05", "Here is my UX analysis so far") is False
+    assert ifdev05_final_allows_stop("IFDEV05", "[IFDEV05 BLOCKED] more work to do") is False
+    # Non-IFDEV05 turns are never gated by this function.
+    assert ifdev05_final_allows_stop("normal request", "anything") is True
+
+
+def test_ifdev05_cross_gate_defers_to_other_protocols():
+    # An IFDEV05 turn must not block the other protocols' terminal markers.
+    assert ifdev05_final_allows_stop("IFDEV05", "[DEVMODE05 COMPLETE] done") is True
+    assert ifdev05_final_allows_stop("IFDEV05", "[VS05 COMPLETE] done") is True
+
+
+def test_ifdev05_continuation_instruction_targets_open_work():
+    msg = ifdev05_continuation_instruction("IFDEV05", "[IFDEV05 COMPLETE] remaining: 1 open finding")
+    assert "[IFDEV05 CONTINUATION]" in msg
+    assert "open" in msg.lower()
 
 
 def test_self_capability_preflight_ignores_incidental_mo_substrings():

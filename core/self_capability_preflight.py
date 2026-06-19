@@ -92,8 +92,9 @@ def _pack_present() -> bool:
     """True when the untracked operator protocol pack is on disk."""
     try:
         root = Path(__file__).resolve().parents[1]
-        return (root / "operator" / "devmode" / "DEVMODE05.md").exists() or (
-            root / "operator" / "devmode" / "VS05.md"
+        devmode = root / "operator" / "devmode"
+        return (devmode / "DEVMODE05.md").exists() or (devmode / "VS05.md").exists() or (
+            devmode / "IFDEV05.md"
         ).exists()
     except Exception:
         return False
@@ -146,6 +147,16 @@ def is_vs05_activation(user_input: str) -> bool:
     if not text:
         return False
     if not re.search(r"\b(?:start\s+)?vs\s*05\b", text):
+        return False
+    return operator_protocols_installed()
+
+
+def is_ifdev05_activation(user_input: str) -> bool:
+    """Return True when the operator has activated IFDEV05 interface-diagnosis mode."""
+    text = " ".join(str(user_input or "").strip().lower().split())
+    if not text:
+        return False
+    if not re.search(r"\b(?:start\s+)?ifdev\s*05\b", text):
         return False
     return operator_protocols_installed()
 
@@ -205,7 +216,7 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     text = " ".join(str(user_input or "").strip().lower().split())
     if not text:
         return False
-    if is_devmode05_activation(text) or is_vs05_activation(text):
+    if is_devmode05_activation(text) or is_vs05_activation(text) or is_ifdev05_activation(text):
         return True
     scope_hit = any(_marker_in_text(marker, text) for marker in _SELF_SCOPE_MARKERS)
     action_hit = any(_marker_in_text(word, text) for word in _SELF_ACTION_WORDS)
@@ -376,6 +387,78 @@ def vs05_task_truth_continuation_instruction() -> str:
         "inspect taskboard source, storage, or trace paths before that `complete_task` call; inspect "
         "implementation only if `complete_task` is unavailable or fails. Use [VS05 BLOCKED] "
         "only for a real hard runtime/tool/provider/safety boundary."
+    )
+
+
+def ifdev05_final_allows_stop(user_input: str, final_text: str) -> bool:
+    """Return True only when an IFDEV05 final answer is a real stop boundary.
+
+    Mirrors the DEVMODE05 gate (IFDEV05's improve lane is DEVMODE05-shaped):
+    completion is rejected while open work is reported; BLOCKED requires a real
+    hard boundary. Other protocols' markers are deferred to their own gates.
+    """
+    if not is_ifdev05_activation(user_input):
+        return True
+    text = _devmode05_terminal_prefix_text(final_text)
+    if not text:
+        return False
+    if text.startswith(("[DEVMODE05 COMPLETE]", "[DEVMODE05 BLOCKED]", "[VS05 COMPLETE]", "[VS05 BLOCKED]")):
+        return True
+    if text.startswith("[IFDEV05 BLOCKED]"):
+        return _devmode05_blocked_has_hard_boundary(text)
+    if text.startswith("[IFDEV05 COMPLETE]"):
+        if _devmode05_completion_reports_open_work(text):
+            return False
+        return True
+    allowed_prefixes = (
+        "[MAX PROVIDER REQUESTS]",
+        "[MAX TOOL ROUNDS]",
+        "MO provider error:",
+        "MO interface error:",
+        "Provider returned no visible answer",
+        "Provider repeatedly produced malformed",
+    )
+    return text.startswith(allowed_prefixes)
+
+
+def ifdev05_continuation_instruction(user_input: str, final_text: str) -> str:
+    """Explain why an IFDEV05 stop claim was rejected and what must happen next."""
+    base = (
+        "[IFDEV05 CONTINUATION] Do not stop at a checkpoint, partial UX audit, or approval "
+        "question. Continue the interface diagnosis/adoption protocol with the next "
+        "evidence-backed action. Finalize only with [IFDEV05 COMPLETE] when the protocol is "
+        "complete or [IFDEV05 BLOCKED] for a real tool/provider/timeout/sandbox/permission/safety "
+        "boundary."
+    )
+    if not is_ifdev05_activation(user_input):
+        return base
+    text = _devmode05_terminal_prefix_text(final_text)
+    if text.startswith("[IFDEV05 COMPLETE]") and _devmode05_completion_reports_open_work(text):
+        return (
+            "[IFDEV05 CONTINUATION] Your last answer claimed [IFDEV05 COMPLETE] while also "
+            "reporting deferred, remaining, open, or failed UX work. That is not a terminal state. "
+            "Continue from the named open findings now: fix them with verification, adopt/reject "
+            "the comparison candidates, or close them as explicit no-action. Finalize only when "
+            "Remaining: none, Deferred active work: none, Next: none, and no checks failed."
+        )
+    if text.startswith("[IFDEV05 BLOCKED]") and not _devmode05_blocked_has_hard_boundary(text):
+        return (
+            "[IFDEV05 CONTINUATION] Your last answer used [IFDEV05 BLOCKED] without a current hard "
+            "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a "
+            "blocker. Continue from the next unresolved UX finding now."
+        )
+    return base
+
+
+def ifdev05_task_truth_continuation_instruction() -> str:
+    """Tell IFDEV05 how to recover from a terminal claim with open task truth."""
+    return (
+        "[IFDEV05 CONTINUATION] Completion is not allowed while MO's task/protocol truth still "
+        "has open work. Do not repeat the same completion report. Continue from the active "
+        "IFDEV05 taskboard row: run the next evidence-backed action, or if the active row is "
+        "genuinely done, call `complete_task` and verify open task count is zero before the final "
+        "[IFDEV05 COMPLETE]. Use [IFDEV05 BLOCKED] only for a real hard "
+        "runtime/tool/provider/safety boundary."
     )
 
 

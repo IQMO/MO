@@ -51,7 +51,10 @@ from ..self_capability_preflight import (
     build_self_capability_preflight_context,
     devmode05_continuation_instruction,
     devmode05_final_allows_stop,
+    ifdev05_continuation_instruction,
+    ifdev05_final_allows_stop,
     is_devmode05_activation,
+    is_ifdev05_activation,
     is_vs05_activation,
     should_include_self_capability_preflight,
     vs05_continuation_instruction,
@@ -578,6 +581,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # Without tool evidence, even a correctly-prefixed completion is fabrication.
             devmode05_active = is_devmode05_activation(user_input)
             vs05_active = is_vs05_activation(user_input)
+            ifdev05_active = is_ifdev05_activation(user_input)
             total_tool_calls = sum(tool_call_counts.values())
             if devmode05_active and total_tool_calls == 0 and not self._devmode05_taskboard_completed(task_board):
                 if on_activity:
@@ -597,6 +601,22 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     "Read the VS05 protocol, capture source roles, inspect structured evidence surfaces, "
                     "and build the comparison matrix from actual files/traces before any closeout."
                 )
+                continue
+
+            if ifdev05_active and total_tool_calls == 0:
+                if on_activity:
+                    on_activity("IFDEV05: no tool evidence - continuing...")
+                self.session.add_assistant(
+                    "[IFDEV05 CONTINUATION] No tool evidence gathered this turn. "
+                    "Read the IFDEV05 protocol and inspect the real interface code (read_file on "
+                    "interface/*.py) and live UX behavior before any UX-audit closeout."
+                )
+                continue
+
+            if not ifdev05_final_allows_stop(user_input, content):
+                if on_activity:
+                    on_activity("continuing IFDEV05...")
+                self.session.add_assistant(ifdev05_continuation_instruction(user_input, content))
                 continue
 
             if not vs05_final_allows_stop(user_input, content):

@@ -91,7 +91,9 @@ class AgentTaskBoard:
 
         from ..self_capability_preflight import (
             devmode05_final_allows_stop,
+            ifdev05_final_allows_stop,
             is_devmode05_activation,
+            is_ifdev05_activation,
             is_vs05_activation,
             vs05_final_allows_stop,
         )
@@ -104,6 +106,10 @@ class AgentTaskBoard:
             if not devmode05_final_allows_stop(user_input, final_text):
                 return False
             evidence = "final:devmode05_protocol_closeout"
+        elif is_ifdev05_activation(user_input):
+            if not ifdev05_final_allows_stop(user_input, final_text):
+                return False
+            evidence = "final:ifdev05_protocol_closeout"
         else:
             return False
 

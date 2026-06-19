@@ -11,7 +11,9 @@ from ..session.session_momentum import maybe_compact_session
 from .agent_utils import _emit_task_board_update
 from ..self_capability_preflight import (
     devmode05_task_truth_continuation_instruction,
+    ifdev05_task_truth_continuation_instruction,
     is_devmode05_activation,
+    is_ifdev05_activation,
     is_vs05_activation,
     vs05_task_truth_continuation_instruction,
 )
@@ -568,10 +570,16 @@ class AgentTurnRecoveryMixin:
         """Force self-protocol modes to continue when completion conflicts with task truth."""
         devmode05 = is_devmode05_activation(user_input)
         vs05 = is_vs05_activation(user_input)
-        if not (devmode05 or vs05):
+        ifdev05 = is_ifdev05_activation(user_input)
+        if not (devmode05 or vs05 or ifdev05):
             return False
         prefix = str(final_text or "").lstrip()[:240].lower()
-        expected_marker = "[devmode05 complete]" if devmode05 else "[vs05 complete]"
+        if devmode05:
+            expected_marker = "[devmode05 complete]"
+        elif vs05:
+            expected_marker = "[vs05 complete]"
+        else:
+            expected_marker = "[ifdev05 complete]"
         if expected_marker not in prefix:
             return False
         findings = list(getattr(boundary_report, "findings", ()) or ())
@@ -605,4 +613,6 @@ class AgentTurnRecoveryMixin:
     def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
         if is_vs05_activation(user_input):
             return vs05_task_truth_continuation_instruction()
+        if is_ifdev05_activation(user_input):
+            return ifdev05_task_truth_continuation_instruction()
         return devmode05_task_truth_continuation_instruction()
