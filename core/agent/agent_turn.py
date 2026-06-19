@@ -8,6 +8,7 @@ agent_turn_dispatch.py and agent_turn_recovery.py.
 import json
 import os
 import traceback
+from datetime import datetime
 
 from ..provider.provider import (
     clean_provider_error,
@@ -823,6 +824,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     "### MO Internal Code Map — may be stale (graph older than session), verify with tools",
                 )
         reasoning_context = self._reasoning_context(user_input)
+        # Current date in the dynamic (non-cached) layer so MO can reason about
+        # recency/versions/"latest" without assuming a stale training cutoff.
+        try:
+            datetime_context = f"Current date: {datetime.now():%A, %Y-%m-%d}."
+        except Exception:
+            datetime_context = ""
         self._last_turn_context_flags = {
             "profile": bool(profile_context),
             "memory": bool(recalled_context),
@@ -846,6 +853,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             user_input,
             (
                 ContextSource("coordination", "Active worker coordination warning", coordination_context, 1, "runtime coordination warning; avoid conflicting edits and verify current state", max_chars=1200),
+                ContextSource("datetime", "Current date", datetime_context, 1, "today's actual date; use it for recency/version reasoning, not a training cutoff", max_chars=80),
                 ContextSource("environment", "Active surface environment", environment_context, 1, "current surface, OS, CWD, and shell; always verify live state", max_chars=300),
                 ContextSource("heartbeat", "Surface heartbeat continuity", heartbeat_context, 1, "surface continuity; re-check live state before claims", max_chars=900),
                 ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=3000),
