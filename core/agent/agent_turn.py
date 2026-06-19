@@ -822,7 +822,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     "### MO Internal Code Map - orientation only",
                     "### MO Internal Code Map — may be stale (graph older than session), verify with tools",
                 )
-        reasoning_context = self._reasoning_context()
+        reasoning_context = self._reasoning_context(user_input)
         self._last_turn_context_flags = {
             "profile": bool(profile_context),
             "memory": bool(recalled_context),

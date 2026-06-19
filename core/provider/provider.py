@@ -91,11 +91,15 @@ class ChatCompletionsProvider(BaseProvider):
 
     api_mode = "chat_completions"
 
-    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None):
+    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None, reasoning_effort: str | None = None):
         super().__init__(model=model)
         self.name = name
         self.base_url = base_url
         self.timeout = float(timeout or 60.0)
+        # Optional per-provider OpenAI-style reasoning_effort. Default None → NOT sent,
+        # so providers that reject unknown params (unverified support) are unaffected.
+        # Operators enable it only for providers known to accept it (o-series, etc.).
+        self.reasoning_effort = str(reasoning_effort).strip().lower() if reasoning_effort else None
         self.client = OpenAI(api_key=api_key, base_url=base_url, default_headers=headers or None, timeout=self.timeout, max_retries=0)
 
     def stream(self, *, messages: list[dict], tools: list[dict], temperature: float, max_tokens: int):
@@ -111,6 +115,8 @@ class ChatCompletionsProvider(BaseProvider):
         if tools:
             request["tools"] = tools
             request["tool_choice"] = "auto"
+        if self.reasoning_effort:
+            request["reasoning_effort"] = self.reasoning_effort
         request["stream_options"] = {"include_usage": True}
         try:
             stream = self.client.chat.completions.create(**request)
@@ -137,6 +143,8 @@ class ChatCompletionsProvider(BaseProvider):
             if tools:
                 request["tools"] = tools
                 request["tool_choice"] = "auto"
+            if self.reasoning_effort:
+                request["reasoning_effort"] = self.reasoning_effort
             response = self.client.chat.completions.create(**request)
             _capture_response_headers(self.name, response)
             message = response.choices[0].message
@@ -295,10 +303,12 @@ class CodexOAuthProvider(BaseProvider):
     api_mode = "codex_responses"
     base_url = "https://chatgpt.com/backend-api/codex"
 
-    def __init__(self, *, model: str = "gpt-5.5", auth_path: str | None = None, timeout: float = 60.0):
+    def __init__(self, *, model: str = "gpt-5.5", auth_path: str | None = None, timeout: float = 60.0, reasoning_effort: str | None = None):
         super().__init__(model=model)
         self.base_url = type(self).base_url
         self.auth_path = Path(auth_path).expanduser() if auth_path else Path.home() / ".codex" / "auth.json"
+        # Responses API reasoning effort; default None → not sent (no behavior change).
+        self.reasoning_effort = str(reasoning_effort).strip().lower() if reasoning_effort else None
         self.timeout_seconds = float(timeout or 60.0)
         self.timeout = httpx.Timeout(self.timeout_seconds, connect=min(30.0, self.timeout_seconds))
         access_token = self._read_access_token()
@@ -419,6 +429,8 @@ class CodexOAuthProvider(BaseProvider):
         if response_tools:
             request["tools"] = response_tools
             request["tool_choice"] = "auto"
+        if self.reasoning_effort:
+            request["reasoning"] = {"effort": self.reasoning_effort}
 
         headers = {
             **getattr(self, "default_headers", {}),
@@ -654,6 +666,7 @@ def _provider_from_config(provider_cfg: dict, model: str) -> BaseProvider:
             model=model,
             auth_path=codex_auth_path(provider_cfg.get("auth_path")),
             timeout=float(provider_cfg.get("timeout", 60.0) or 60.0),
+            reasoning_effort=provider_cfg.get("reasoning_effort"),
         )
 
     api_key_env = provider_cfg.get("api_key_env")
@@ -667,6 +680,7 @@ def _provider_from_config(provider_cfg: dict, model: str) -> BaseProvider:
         model=model,
         timeout=float(provider_cfg.get("timeout", 60.0) or 60.0),
         headers=provider_cfg.get("_headers") or provider_cfg.get("headers"),
+        reasoning_effort=provider_cfg.get("reasoning_effort"),
     )
 
 

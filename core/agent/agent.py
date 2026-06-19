@@ -568,8 +568,30 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         tokens = int(getattr(self, "context_budget_tokens", 0) or 0)
         return tokens * 4 if tokens > 0 else None
 
-    def _reasoning_context(self) -> str:
-        level = str(getattr(self, "reasoning", "") or "").strip().lower()
+    def _adaptive_reasoning_level(self, user_input: str = "") -> str:
+        """Pick the reasoning level for this turn (Fable "auto" thinking mode).
+
+        Conservative: only DROP to low on clearly-trivial turns (greetings, identity,
+        term lookups) to save tokens/latency; everything else keeps the configured
+        ceiling so real work never under-reasons.
+        """
+        base = str(getattr(self, "reasoning", "") or "").strip().lower()
+        if base not in {"high", "medium", "low"}:
+            base = "high"
+        text = str(user_input or "").strip()
+        if text:
+            from .agent_utils import (
+                _looks_like_trivial_greeting,
+                _looks_like_identity_question,
+                _looks_like_term_lookup,
+            )
+            if (_looks_like_trivial_greeting(text) or _looks_like_identity_question(text)
+                    or _looks_like_term_lookup(text)):
+                return "low"
+        return base
+
+    def _reasoning_context(self, user_input: str = "") -> str:
+        level = self._adaptive_reasoning_level(user_input)
         if level not in {"high", "medium", "low"}:
             return ""
         return f"### Runtime reasoning preference\nReasoning level: {level}. Match effort to this setting while preserving evidence-first verification."
