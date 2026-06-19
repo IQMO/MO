@@ -22,12 +22,11 @@ class FindingPatterns:
     """
     def __init__(self, history_dir: str | None = None):
         if history_dir is None:
-            # Resolve under the runtime state home so reviews, the fix-loop
-            # learning, and system_health all read/write the same patterns file.
-            import os
-            from ..path_defaults import ENV_MO_STATE_HOME
-            base = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-            history_dir = str(Path(base) / "memory" / "review_history") if base else "memory/review_history"
+            # Resolve under the runtime state home (config OR MO_STATE_HOME) so
+            # reviews, the fix-loop learning, and system_health share one patterns
+            # file — and it never lands in the project cwd.
+            from ..path_defaults import resolve_state_path
+            history_dir = resolve_state_path("memory/review_history")
         self.history_dir = Path(history_dir)
         self.patterns_file = self.history_dir / "patterns.json"
         

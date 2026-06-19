@@ -1045,9 +1045,14 @@ import pytest as _pytest_state_lane
 
 
 @_pytest_state_lane.fixture(autouse=True)
-def _legacy_state_lane(monkeypatch):
+def _legacy_state_lane(monkeypatch, tmp_path):
     """This module asserts legacy project-relative state behavior; opt out of
-    the conftest MO_STATE_HOME isolation (tests here chdir to tmp paths)."""
+    the conftest MO_STATE_HOME isolation. chdir to a tmp so 'project-local'
+    state lands there, never the repo root; MO_PROJECT_CWD still points at the
+    real checkout for any code that reads project source."""
+    from core.path_defaults import repo_root
     monkeypatch.delenv("MO_STATE_HOME", raising=False)
     monkeypatch.delenv("MO_HOME", raising=False)
     monkeypatch.setenv("MO_STATE_LOCAL", "1")  # explicit project-local opt-out (state is private-by-default)
+    monkeypatch.setenv("MO_PROJECT_CWD", str(repo_root()))
+    monkeypatch.chdir(tmp_path)

@@ -3,23 +3,64 @@ import pytest
 from pathlib import Path
 
 
-@pytest.fixture(autouse=True)
-def _no_checkout_state_pollution():
-    """Keep test artifacts out of the project checkout. The PRODUCT never writes state
-    to the cwd (it is private-by-default → ~/.mo). But some tests deliberately exercise
-    project-local mode (cwd-relative state) and don't all chdir to a tmp dir, so they
-    create memory/ or logs/ in the repo root. Left behind, that misleads a future dev
-    into thinking it is real MO state. Remove any such folder a test newly created —
-    only when absent before the test, so a folder a dev intentionally keeps is never
-    touched. Cleanup of test artifacts, not a product behavior."""
+# State must live under ~/.mo (or MO_STATE_HOME), NEVER the project checkout.
+# Every state writer routes its default through resolve_state_path; this guard
+# is the permanent backstop. If a checkout `memory/`/`logs/` appears during the
+# run, a NEW writer bypassed the resolver — we FAIL the session loudly (not the
+# old silent create-then-remove, which hid the problem) and then clean up so the
+# tree is left tidy. A failing run points straight at the offending writer.
+_WATCHED_STATE_DIRS = ("memory", "logs")
+
+
+def pytest_configure(config):
     from core.path_defaults import repo_root
     root = Path(repo_root())
-    watched = ("memory", "logs")
-    before = {d for d in watched if (root / d).exists()}
+    config._state_dirs_before = {d for d in _WATCHED_STATE_DIRS if (root / d).exists()}
+
+
+@pytest.fixture(autouse=True)
+def _reset_module_state_singletons():
+    """The knowledge-store singleton caches its resolved db path. Under the
+    per-test state isolation, a singleton built in one test (esp. a legacy
+    project-local lane, where the path resolves RELATIVE) would otherwise bleed
+    into a later test with a different cwd and re-create memory/learning.sqlite
+    in the checkout. Reset it around every test so each resolves its own path."""
+    try:
+        from core.learning import knowledge_store as _ks
+        _ks._store = None
+    except Exception:
+        pass
     yield
-    for d in watched:
-        if d not in before and (root / d).exists():
+    try:
+        from core.learning import knowledge_store as _ks
+        _ks._store = None
+    except Exception:
+        pass
+
+
+def pytest_sessionfinish(session, exitstatus):
+    # Only the xdist controller (or a non-xdist run) adjudicates the shared cwd.
+    if hasattr(session.config, "workerinput"):
+        return
+    from core.path_defaults import repo_root
+    root = Path(repo_root())
+    before = getattr(session.config, "_state_dirs_before", set())
+    leaked = [d for d in _WATCHED_STATE_DIRS if d not in before and (root / d).exists()]
+    if leaked:
+        sample = []
+        for d in leaked:
+            for f in sorted((root / d).rglob("*")):
+                if f.is_file():
+                    sample.append(str(f.relative_to(root)))
+        print(
+            f"\n[STATE-POLLUTION] Test run created {leaked} in the project checkout "
+            f"({root}). A state writer bypassed resolve_state_path() and wrote to cwd "
+            "instead of ~/.mo. Find it and route its default through resolve_state_path.\n"
+            "  files: " + ", ".join(sample[:40])
+        )
+        for d in leaked:
             shutil.rmtree(root / d, ignore_errors=True)
+        session.exitstatus = 1
 
 
 def pytest_collection_modifyitems(config, items):

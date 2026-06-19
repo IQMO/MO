@@ -36,6 +36,7 @@ You are MO, a local-first AI coding agent. Read this before acting.
 - This checkout is the active product source; the product name is **MO Agent** (any local folder name is just a checkout path, never user-facing). Operator-specific lineage/context lives in the gitignored operator lane, never in product docs.
 - Do not duplicate those internals here; check source/protocol before capability claims.
 - Operator paths/servers/project names are never hardcoded in product code or product docs; operator data (identity, projects, server/repo/deploy knowledge, terms) lives in the per-user `~/.mo` profile. The optional `mo_control.*` external bridge resolves only from private config or env and is disabled by default.
+- **State is private-by-default and lives under `~/.mo` (or `MO_STATE_HOME`), from any cwd — never the project checkout.** Every runtime-state path (`memory/...`, `logs/...`) MUST resolve through `core.path_defaults.resolve_state_path()`; never default a writer to a bare cwd-relative `"memory/..."` literal. A pytest session guard (`tests/conftest.py`) fails the run and the routing test (`tests/test_state_routing.py`) enforce this, so a stray `memory/` can never reappear in the checkout.
 
 ## Boundary (what never ships)
 - Operator-private material — the owner's `~/.mo` profile, the self-maintenance protocol pack, and owner-only tooling/docs — lives in gitignored `operator/` (its own nested repo), `docs/`, and `~/.mo`. It is never tracked, so a plain `git push` cannot carry it.

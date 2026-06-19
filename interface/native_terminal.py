@@ -243,6 +243,14 @@ def continue_goal_plain(agent: Any) -> None:
 
 
 def record_session(agent: Any) -> None:
+    # Idempotent: the normal exit path and the atexit/hard-close backstop may
+    # both call this — run the closeout bookkeeping at most once per session.
+    if getattr(agent, "_session_recorded", False):
+        return
+    try:
+        agent._session_recorded = True
+    except Exception:
+        pass
     try:
         runtime = getattr(agent, "worker_runtime", None)
         if runtime and hasattr(runtime, "wait_for"):

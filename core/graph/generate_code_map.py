@@ -35,13 +35,15 @@ MAX_COMMITS = 12
 
 
 def generate_code_map(
-    path: str | Path = DEFAULT_GRAPH,
+    path: str | Path | None = None,
     *,
     output: str | Path | None = None,
     iterations: int = 50,
 ) -> dict[str, Any]:
     """Generate the unified map HTML and task annotations from a structural graph."""
-    graph_path = Path(path)
+    from ..path_defaults import resolve_state_path
+    # Default to the private-state graph location, never cwd/memory.
+    graph_path = Path(path) if path is not None else Path(resolve_state_path(str(DEFAULT_GRAPH)))
     data = _load_graph(graph_path)
     nodes, links, degrees = _normalize_graph(data)
     out_path = Path(output) if output else graph_path.parent / HTML_NAME
@@ -49,7 +51,7 @@ def generate_code_map(
     cache_path = out_path.parent / LAYOUT_CACHE_NAME
     root = graph_path.resolve().parents[2] if len(graph_path.resolve().parents) > 2 else Path(".")
     annotations = build_task_annotations(
-        goal_dir=Path("memory/goal-runs"),
+        goal_dir=Path(resolve_state_path("memory/goal-runs")),
         tool_audit=Path("logs/tool_audit.jsonl"),
         root=root,
     )

@@ -68,13 +68,16 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
 
 
 def mine_learning_suggestions(
-    memory_path: str | Path = "memory/learning.sqlite",
+    memory_path: str | Path | None = None,
     *,
     min_occurrences: int = 2,
     max_items: int = 5,
 ) -> list[LearningSuggestion]:
     """Return reviewable recurring learning suggestions from episodic memory."""
-    rows = _load_turns(memory_path)
+    from ..path_defaults import resolve_state_path
+    # sqlite connect creates the file even on read — route the default to private
+    # state so a default call never materializes cwd/memory/learning.sqlite.
+    rows = _load_turns(resolve_state_path(memory_path or "memory/learning.sqlite"))
     if not rows:
         return []
     grouped: dict[str, list[SuggestionEvidence]] = {kind: [] for kind, _pattern, _rec in _PATTERNS}
@@ -112,10 +115,11 @@ def mine_learning_suggestions(
 def write_learning_suggestions(
     suggestions: list[LearningSuggestion],
     *,
-    path: str | Path = "memory/learning_suggestions.jsonl",
+    path: str | Path | None = None,
 ) -> Path:
     """Append unique reviewable suggestions to JSONL and return the path."""
-    out = Path(path)
+    from ..path_defaults import resolve_state_path
+    out = Path(resolve_state_path(path or "memory/learning_suggestions.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
     existing = _existing_ids(out)
     with out.open("a", encoding="utf-8") as fh:

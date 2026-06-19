@@ -1,6 +1,7 @@
 """Terminal loop composition for MO."""
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import traceback
@@ -56,6 +57,12 @@ def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool) -> Non
     if monitor_opened:
         gateway.monitor.open_window()
     set_terminal_title("MO")
+    # Backstop: if the process is torn down past the normal finally (terminal
+    # window closed, SIGTERM, unhandled exit), still run the closeout once. The
+    # conversation is already autosaved per turn; this preserves the end-of-session
+    # bookkeeping (closeout + profile session stats) that the finally would do.
+    # record_session is idempotent, so the normal path + atexit don't double-run.
+    atexit.register(record_session, agent)
     try:
         for line in startup_identity_lines(agent):
             print(line)

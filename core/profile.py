@@ -111,7 +111,12 @@ class Profile:
     # ── persistence ──────────────────────────────────────────────
 
     @classmethod
-    def load(cls, path: str = DEFAULT_PROFILE_PATH) -> Profile:
+    def load(cls, path: str | None = None) -> Profile:
+        from .path_defaults import resolve_state_path
+        # Route the default through private-state resolution so a default-path
+        # Profile lands in ~/.mo (or MO_STATE_HOME), never the project cwd.
+        # Explicit absolute paths (what the agent passes in production) are kept.
+        path = resolve_state_path(path or DEFAULT_PROFILE_PATH)
         p = Path(path)
         if not p.exists():
             profile = cls(_path=path)

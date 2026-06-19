@@ -257,6 +257,7 @@ sandbox:
     monkeypatch.setenv("MO_PROJECT_CWD", str(project))
     monkeypatch.delenv("MO_STATE_HOME", raising=False)
     monkeypatch.delenv("MO_HOME", raising=False)
+    monkeypatch.chdir(project)  # project-relative state writes go to tmp, not the repo cwd
 
     agent = Agent(str(config))
 

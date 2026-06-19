@@ -29,9 +29,13 @@ class EpisodicMemory:
 
     _fts5_warned: bool = False
 
-    def __init__(self, path: str | Path = "memory/learning.sqlite",
+    def __init__(self, path: str | Path | None = None,
                  embedder: Callable[[str], list[float]] | None = None):
-        self.path = Path(path)
+        from ..path_defaults import resolve_state_path
+        # Route the default through private-state resolution so it lands in
+        # ~/.mo (or MO_STATE_HOME), never the project cwd. Explicit paths pass
+        # through unchanged (absolute preserved by resolve_state_path).
+        self.path = Path(resolve_state_path(path or "memory/learning.sqlite"))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Optional semantic-recall backend. None → keyword (bm25) recall only.
         self.embedder = embedder

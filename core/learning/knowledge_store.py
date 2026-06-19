@@ -22,8 +22,9 @@ class KnowledgeStore:
     Query supports full-text search across content and metadata.
     """
 
-    def __init__(self, path: str | Path = "memory/learning.sqlite"):
-        self.path = Path(path)
+    def __init__(self, path: str | Path | None = None):
+        from ..path_defaults import resolve_state_path
+        self.path = Path(resolve_state_path(path or "memory/learning.sqlite"))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -210,7 +211,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 _store: KnowledgeStore | None = None
 
 
-def get_knowledge_store(path: str | Path = "memory/learning.sqlite") -> KnowledgeStore:
+def get_knowledge_store(path: str | Path | None = None) -> KnowledgeStore:
     """Get or create the singleton KnowledgeStore instance."""
     global _store
     if _store is None:

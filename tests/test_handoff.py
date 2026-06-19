@@ -45,15 +45,16 @@ def _agent_with_session(*, budget_tokens=250, max_history=50):
 
 
 def test_compact_handoff_summary_includes_file_refs_and_graph(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    memory = tmp_path / "memory"
-    memory.mkdir()
+    # Seed at the resolved private state path (where the handoff reads), not cwd.
+    from core.path_defaults import resolve_state_path
+    memory = Path(resolve_state_path("memory"))
+    memory.mkdir(parents=True, exist_ok=True)
     (memory / "file_operations.jsonl").write_text(
         json.dumps({"session_id": "s1", "files_read": ["core/agent.py"], "files_modified": ["core/handoff.py"]}) + "\n",
         encoding="utf-8",
     )
     graph_dir = memory / "structural_graph"
-    graph_dir.mkdir()
+    graph_dir.mkdir(parents=True, exist_ok=True)
     (graph_dir / "graph.json").write_text(json.dumps({"nodes": [], "links": []}), encoding="utf-8")
     agent = _agent_with_session()
     agent.session.add_user("continue handoff work")
@@ -594,9 +595,11 @@ import pytest as _pytest_state_lane
 
 
 @_pytest_state_lane.fixture(autouse=True)
-def _legacy_state_lane(monkeypatch):
-    """This module asserts legacy project-relative state behavior; opt out of
-    the conftest MO_STATE_HOME isolation (tests here chdir to tmp paths)."""
-    monkeypatch.delenv("MO_STATE_HOME", raising=False)
+def _legacy_state_lane(monkeypatch, tmp_path):
+    """Handoff reference-gathering reads the repo (graph slice built from source
+    in cwd, docs), so cwd must stay the checkout — no chdir. State is isolated to
+    a private tmp home (MO_STATE_HOME), so graph/state writes land there, never
+    the checkout. Tests that seed state write to the resolved state path."""
+    monkeypatch.delenv("MO_STATE_LOCAL", raising=False)
     monkeypatch.delenv("MO_HOME", raising=False)
-    monkeypatch.setenv("MO_STATE_LOCAL", "1")  # explicit project-local opt-out (state is private-by-default)
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path / "state-home"))
