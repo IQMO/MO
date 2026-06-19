@@ -32,6 +32,25 @@ def test_build_embedder_configured():
     assert callable(emb)
 
 
+def test_local_backend_falls_back_when_fastembed_missing(monkeypatch):
+    import core.learning.embeddings as e
+
+    def _raise(_model):
+        raise ImportError("No module named 'fastembed'")
+
+    monkeypatch.setattr(e, "_local_embedder", _raise)
+    # backend: local but fastembed unavailable → None (→ bm25), never raises.
+    assert build_embedder({"embeddings": {"enabled": True, "backend": "local"}}) is None
+
+
+def test_local_backend_routes_when_available(monkeypatch):
+    import core.learning.embeddings as e
+    sentinel = lambda _t: [1.0, 0.0]
+    monkeypatch.setattr(e, "_local_embedder", lambda _model: sentinel)
+    emb = build_embedder({"embeddings": {"enabled": True, "backend": "local", "model": "x"}})
+    assert emb is sentinel
+
+
 def test_semantic_recall_matches_by_meaning(tmp_path):
     mem = EpisodicMemory(path=tmp_path / "m.sqlite", embedder=_fake_embed)
     mem.index_turn("auth", "the authentication flow validates the password on sign-in",

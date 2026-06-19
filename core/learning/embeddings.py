@@ -1,24 +1,35 @@
 """Optional embeddings backend for semantic memory recall.
 
-Off by default. When the operator configures an OpenAI-compatible ``/embeddings``
-endpoint, MO recalls past turns by meaning (vector cosine) instead of keyword overlap.
-Uses stdlib HTTP only — NO new Python dependency (no torch / sentence-transformers). If
-unconfigured or the endpoint fails, callers fall back to the bm25 keyword recall.
+Off by default. When enabled, MO recalls past turns by meaning (vector cosine) instead
+of keyword overlap. Two backends; if unconfigured or the backend fails, callers fall
+back to the bm25 keyword recall.
+
+- ``backend: api`` (default) — an OpenAI-compatible ``/embeddings`` endpoint over stdlib
+  HTTP. NO Python dependency. Best quality, but sends recall text to that endpoint.
+- ``backend: local`` — a slim on-device ONNX model via the OPTIONAL ``fastembed``
+  package (no torch). Fully offline/private; nothing leaves the machine. Lazy-imported,
+  so the base install stays lean — if ``fastembed`` isn't installed, MO logs once and
+  falls back to keyword recall rather than failing.
 
 Config (``embeddings`` section):
     enabled: true
-    base_url: https://api.openai.com/v1     # any OpenAI-compatible /embeddings host
-    api_key_env: OPENAI_API_KEY             # env var holding the key
-    model: text-embedding-3-small
+    backend: api                            # api | local
+    base_url: https://api.openai.com/v1     # api: any OpenAI-compatible /embeddings host
+    api_key_env: OPENAI_API_KEY             # api: env var holding the key
+    model: text-embedding-3-small           # api model, OR local model (default BAAI/bge-small-en-v1.5)
 """
 from __future__ import annotations
 
 import json
 import math
 import os
+import sys
 import traceback
 import urllib.request
 from typing import Any, Callable
+
+_DEFAULT_LOCAL_MODEL = "BAAI/bge-small-en-v1.5"
+_local_warned = False
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -50,19 +61,55 @@ def _http_embedder(base_url: str, api_key: str, model: str, timeout: float = 12.
     return embed
 
 
+def _local_embedder(model: str) -> Callable[[str], list[float]]:
+    """On-device ONNX embedder via the optional ``fastembed`` package (no torch).
+
+    Imported lazily so the dependency is only needed when local embeddings are enabled.
+    The model is downloaded once on first use, then runs fully offline.
+    """
+    from fastembed import TextEmbedding  # optional dependency: pip install fastembed
+
+    embedder = TextEmbedding(model_name=model or _DEFAULT_LOCAL_MODEL)
+
+    def embed(text: str) -> list[float]:
+        vecs = list(embedder.embed([str(text or "")[:8000]]))
+        return [float(x) for x in vecs[0]] if vecs else []
+
+    return embed
+
+
 def build_embedder(config: dict[str, Any] | None) -> Callable[[str], list[float]] | None:
     """Return an embedder callable from config, or None when semantic recall is off.
 
-    Returns None (→ bm25 fallback) unless ``embeddings.enabled`` is true AND a base_url
-    and model are set. Never raises on config problems — degrades to None.
+    Returns None (→ bm25 fallback) unless ``embeddings.enabled`` is true and the chosen
+    backend is usable. Never raises on config/availability problems — degrades to None.
     """
+    global _local_warned
     try:
         cfg = config if isinstance(config, dict) else {}
         emb = cfg.get("embeddings", {}) if isinstance(cfg.get("embeddings", {}), dict) else {}
         if not emb.get("enabled"):
             return None
-        base_url = str(emb.get("base_url") or "").strip()
+        backend = str(emb.get("backend") or "api").strip().lower()
         model = str(emb.get("model") or "").strip()
+
+        if backend == "local":
+            try:
+                return _local_embedder(model)
+            except ImportError:
+                if not _local_warned:
+                    _local_warned = True
+                    sys.stderr.write(
+                        "[embeddings] local backend needs `pip install fastembed`; "
+                        "falling back to keyword (bm25) recall.\n"
+                    )
+                return None
+            except Exception:
+                traceback.print_exc()
+                return None
+
+        # Default: OpenAI-compatible HTTP endpoint.
+        base_url = str(emb.get("base_url") or "").strip()
         if not base_url or not model:
             return None
         api_key = ""

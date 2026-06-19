@@ -161,14 +161,18 @@ skills:
   enabled: true
 
 embeddings:
-  # Semantic memory recall — recall past turns by meaning instead of keyword overlap.
-  # Off by default → keyword (bm25) recall. Uses an OpenAI-compatible /embeddings
-  # endpoint via stdlib HTTP (NO new Python dependency). Falls back to keyword recall
-  # if unset or the endpoint fails.
+  # Semantic memory recall — recall past turns by MEANING instead of keyword overlap
+  # (it does NOT touch the internet; it only searches your own past conversations).
+  # Off by default → keyword (bm25) recall. Falls back to keyword recall if the chosen
+  # backend is unconfigured/unavailable.
   enabled: false
-  base_url: ""        # e.g. https://api.openai.com/v1
-  api_key_env: ""     # env var holding the embeddings API key (optional for local hosts)
-  model: ""           # e.g. text-embedding-3-small
+  backend: api        # "api" (OpenAI-compatible endpoint, stdlib HTTP, no dependency)
+                      # or "local" (on-device ONNX, fully offline/private; needs
+                      # `pip install fastembed` — see requirements-embeddings.txt)
+  base_url: ""        # api backend: e.g. https://api.openai.com/v1
+  api_key_env: ""     # api backend: env var holding the key (optional for local hosts)
+  model: ""           # api model (e.g. text-embedding-3-small) OR local model
+                      # (default BAAI/bge-small-en-v1.5 when backend: local)
 
 sandbox:
   enabled: true
