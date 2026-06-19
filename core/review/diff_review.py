@@ -427,7 +427,19 @@ def review_diff(agent: "Agent", diff_ref: str = "HEAD") -> ReviewReport:
         agent.compression_last_pct = compress_stats["saved_pct"]
         
     from core.model_limits import resolve_context_budget_tokens
+    # Budget against the provider/model that will ACTUALLY run the review (head of
+    # the review chain), not a hardcoded opencode/deepseek-v4-pro. A reviewer with a
+    # smaller context window would otherwise be handed an over-long diff and overflow.
     budget = resolve_context_budget_tokens("auto", provider="opencode", model="deepseek-v4-pro")
+    try:
+        review_chain = agent.providers_for_surface("review")
+        if review_chain:
+            rp = review_chain[0]
+            budget = int(agent._context_budget_tokens_for(
+                str(getattr(rp, "name", "") or ""), str(getattr(rp, "model", "") or "")
+            ))
+    except Exception:
+        pass  # keep the safe default budget
     max_chars = budget * 3
     if len(diff_text) > max_chars:
         diff_text = diff_text[:max_chars] + f"\n... (truncated {len(diff_text) - max_chars} chars due to context budget)"
