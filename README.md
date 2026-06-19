@@ -178,6 +178,9 @@ export PATH="$HOME/.mo/bin:$PATH"
 | `/doctor` health check | One-shot offline check of env, config, providers, and core imports; `--json` for scripting |
 | Evidence task board | Runtime-owned checklist for real work; model text cannot complete it |
 | Sandboxed tools | File, shell, web, and git access pass through local safety gates |
+| Content safety | Refuses to write malware/attack tooling (dual-use-aware: authorized pentest/CTF/defensive work passes) and blocks writing hardcoded secret literals into files — both before execution, on any provider |
+| Skills | Local read-before-acting best-practice packs (`skills/`, `~/.mo/skills`); the most relevant pack loads per task. No marketplace, no install |
+| Adaptive reasoning | Per-turn reasoning level (deep for real work, light for chatter) plus an opt-in per-provider `reasoning_effort` |
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
 | OpenCode/OpenAI providers | OpenCode-first config, OpenAI-compatible chat completions, and Codex/OpenAI fallback support |
 | Provider failover | Providers can fail over on rate, auth, balance, timeout, or empty-response errors |
