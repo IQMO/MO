@@ -82,6 +82,11 @@ agent:
   # replaces them, so exact results stay recoverable with read_file.
   context_momentum_tool_chars_threshold: 48000
   reasoning: high
+  # Refuse clearly-malicious code generation (malware/attack tooling) before any
+  # provider call. Conservative + dual-use-aware: authorized pentest/CTF/own-system/
+  # defensive/detection work passes. Set false to disable for dedicated offensive
+  # security research on your own trusted setup.
+  block_malicious_code: true
   temperature: 0.7
   max_tokens: 8192
   # Ghost proposal/side-chat: Flash first, then DeepSeek v4 Pro, then Codex.

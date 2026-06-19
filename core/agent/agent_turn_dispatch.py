@@ -15,6 +15,7 @@ from ..learning.workflow_learning import (
     stage_workflow_source_candidate,
 )
 from ..consistency_boundary import changed_proposal_paths_for_last_commit
+from ..content_safety import classify_harmful_coding_request
 from ..mo_control_context import resolve_mo_control_workspace
 from .agent_utils import (
     URL_RE,
@@ -49,6 +50,14 @@ class AgentTurnDispatchMixin:
             if threat.get("blocked"):
                 final_text = f"Input blocked by local safety scan: {threat.get('reason') or 'unsafe instruction pattern'}. Rephrase without prompt-override, deception, or secret-exfiltration content."
                 return {"final_text": final_text, "kind": "threat_blocked", "user_input": text, "pre_handoff": False}
+
+        # Content safety: refuse clearly-malicious code generation (provider-agnostic).
+        # Conservative + dual-use-aware — authorized/defensive/CTF/own-system work passes.
+        harmful = classify_harmful_coding_request(text, getattr(self, "config", {}))
+        if harmful:
+            if monitor:
+                monitor.emit("content_safety", {"blocked": True, "kind": "malicious_code"})
+            return {"final_text": harmful, "kind": "content_blocked", "user_input": text, "pre_handoff": False}
 
         quarantine_meta = self._quarantine_unfinished_tail_before_turn(text, monitor=monitor)
         self._pause_interrupted_work_for_return(text, quarantine_meta, monitor=monitor)
