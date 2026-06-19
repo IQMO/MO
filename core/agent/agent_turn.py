@@ -131,6 +131,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
         done_claim_continued = False  # once-per-turn guard for the done-claim/open-board gate
+        self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
         # few times to push for a clean closeout, but must not loop to
         # max_provider_requests when a near-terminal completion keeps tripping the
@@ -687,7 +688,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     self.session.add_assistant(contract_instruction)
                     continue
             boundary_report = self._run_consistency_boundary("turn_final", user_text=user_input, final_text=final_text, learning_notes=notes, task_board=task_board)
-            if self._self_protocol_completion_boundary_requires_continuation(user_input, final_text, boundary_report):
+            if (
+                self_protocol_truth_continuations < PROTOCOL_STOP_GATE_MAX
+                and self._self_protocol_completion_boundary_requires_continuation(user_input, final_text, boundary_report)
+            ):
+                self_protocol_truth_continuations += 1
                 if on_activity:
                     on_activity("self protocol: completion conflicted with open work - continuing...")
                 self.session.add_assistant(self._self_protocol_task_truth_continuation_instruction(user_input))

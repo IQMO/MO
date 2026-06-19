@@ -290,6 +290,54 @@ def test_ordinary_done_claim_with_open_board_continues_once():
     assert sum("[TASK TRUTH]" in msg for msg in assistant_messages) == 1
 
 
+def test_self_protocol_truth_continuation_is_bounded():
+    """The self-protocol completion-truth gate must fire a BOUNDED number of times
+    (PROTOCOL_STOP_GATE_MAX), not loop to max_provider_requests when a completion
+    keeps conflicting — mirroring the ordinary done-claim once-per-turn guard. Before
+    the fix this gate had no per-turn cap and could re-inject ~max_provider_requests
+    times (the historical self-check-fight loop)."""
+    captured = {}
+    agent = _agent_with_boundary_capture(captured)
+    agent.max_provider_requests = 8
+    agent.max_tool_rounds = 8
+    agent.tool_definitions = [{"name": "grep"}]
+    agent.allowed_roots = ["."]
+    agent.sandbox_config = {"enabled": False}
+    agent._active_lane = None
+    agent.tool_compress_enabled = False
+    agent._project_scoped_tool_arguments = lambda _name, arguments: arguments
+    agent._self_mutation_block_reason = lambda *_args, **_kwargs: None
+    agent._operator_approved = lambda *_args, **_kwargs: False
+    agent._dispatch_tool = lambda *_args, **_kwargs: "grep:evidence"
+    agent._write_tool_audit = lambda *_args, **_kwargs: None
+    agent._cap_tool_result_for_context = lambda result, **_kwargs: result
+    agent._tool_result_is_error = lambda _result: False
+
+    assistant_messages = []
+    agent.session.add_assistant = lambda text, *a, **k: assistant_messages.append(text)
+    # Clean boundary so only the self-protocol gate (forced below) is exercised.
+    agent._run_consistency_boundary = lambda boundary, **kwargs: SimpleNamespace(findings=(), clean=True)
+    # Force the gate CONDITION true every iteration; the BOUND must still terminate it.
+    agent._self_protocol_completion_boundary_requires_continuation = lambda *a, **k: True
+    agent._self_protocol_task_truth_continuation_instruction = lambda _u: "[SELF-PROTO TRUTH]"
+
+    responses = iter([
+        SimpleNamespace(content=f"answer {i}", tool_calls=[], usage=None, finish_reason="stop")
+        for i in range(8)
+    ])
+    agent._call_provider = lambda **_kwargs: next(responses)
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Verify the fix", "active", kind="verify", completion_gate="verification"),
+    ])
+
+    result = agent.run_turn("fix the failing test", task_board=board)
+
+    # Fired at most twice (bounded), then fell through and terminated cleanly —
+    # NOT looped to max_provider_requests.
+    assert sum("[SELF-PROTO TRUTH]" in msg for msg in assistant_messages) == 2
+    assert result.startswith("answer")
+
+
 def test_devmode05_completed_taskboard_rejects_post_completion_tool_calls():
     captured = {}
     agent = _agent_with_boundary_capture(captured)
