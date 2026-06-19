@@ -337,7 +337,12 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
 
         providers = list(getattr(self, "providers", []) or [])
         configured = self._configured_ghost_provider()
-        if configured is not None and self._is_non_free_flash_provider(configured):
+        # An explicitly configured ghost provider is the operator's deliberate
+        # choice — honor it regardless of model name. The flash→pro→codex
+        # predicates below are only the NO-CONFIG fallback chain; gating the
+        # configured provider behind "flash" silently dropped a valid config
+        # (e.g. a haiku/mini ghost) and ran the expensive main model instead.
+        if configured is not None:
             add(configured)
         for provider in providers:
             if self._is_non_free_flash_provider(provider):

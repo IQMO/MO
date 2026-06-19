@@ -83,6 +83,20 @@ def test_ghost_prefers_configured_provider_without_switching_main_model():
     assert agent.model == "slow-main"
 
 
+def test_ghost_honors_configured_non_flash_provider():
+    # Regression: a configured ghost provider whose model name lacks "flash"
+    # (e.g. a cheap haiku/mini) was silently dropped, falling through to the
+    # expensive main model. An explicit config must be honored regardless of name.
+    main = FakeProvider("opencode", "deepseek-v4-pro", "main")
+    ghost = FakeProvider("anthropic", "claude-haiku-4-5", "side check")
+    agent = make_agent([main, ghost], {"agent": {"ghost_provider": "anthropic", "ghost_model": "claude-haiku-4-5"}})
+
+    chain = [(p.name, p.model) for p in agent.providers_for_surface("ghost_panel")]
+
+    assert ("anthropic", "claude-haiku-4-5") in chain
+    assert chain[0] == ("anthropic", "claude-haiku-4-5")  # configured ghost goes first
+
+
 def test_ghost_falls_back_to_flash_model_when_no_config():
     main = FakeProvider("main", "slow-main", "main")
     ghost = FakeProvider("fast", "some-flash-model", "side check")
