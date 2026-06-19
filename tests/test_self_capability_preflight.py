@@ -32,6 +32,30 @@ def test_self_capability_preflight_detection_is_scoped():
     assert should_include_self_capability_preflight("can you fix this bug in parser.py") is False
 
 
+def test_self_capability_preflight_catches_self_diagnosis_without_overfiring():
+    # Regression: self-diagnosis phrasing (the turns where MO most needs to inventory
+    # its own capabilities) was skipped because the verb/noun wasn't in the fixed
+    # lists. These must fire — but ordinary work must NOT trip the heavy preflight.
+    fires = (
+        "why is MO guessing project facts it should know",
+        "figure out why you cost so much per turn",
+        "your profile gating is broken, investigate",
+        "MO keeps drifting on self-work",
+    )
+    for text in fires:
+        assert should_include_self_capability_preflight(text) is True, text
+    quiet = (
+        "fix the bug in the parser",
+        "can you fix this bug",
+        "investigate the crash and patch it",
+        "reduce the cost of this query",
+        "can you figure out the codebase",
+        "add a retry to the poller",
+    )
+    for text in quiet:
+        assert should_include_self_capability_preflight(text) is False, text
+
+
 def test_ifdev05_activation_detection_and_scope():
     assert is_ifdev05_activation("IFDEV05") is True
     assert is_ifdev05_activation("start IFDEV05") is True

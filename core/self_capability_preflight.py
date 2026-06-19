@@ -34,6 +34,21 @@ _SELF_ACTION_WORDS = {
     "skipped",
     "trace",
     "workflow",
+    # Self-diagnosis verbs (corrective/forensic phrasing). Kept to terms that rarely
+    # describe ordinary feature work, so they only fire the heavy preflight when
+    # paired with a self scope marker (MO / your … ) — not on generic requests.
+    "guess",
+    "guessing",
+    "guessed",
+    "drift",
+    "drifting",
+    "drifted",
+    "investigate",
+    "investigating",
+    "misbehave",
+    "misbehaving",
+    "misbehavior",
+    "misbehaviour",
 }
 
 _SELF_SCOPE_MARKERS = {
@@ -51,6 +66,11 @@ _SELF_SCOPE_MARKERS = {
     "your reasoning",
     "your source",
     "your workflow",
+    "your profile",
+    "your behaviour",
+    "your gating",
+    "your drift",
+    "your context",
     "yourself",
 }
 
@@ -225,7 +245,14 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     # Angry/corrective operator feedback often says "you" rather than "MO".
     # Require both self-action language and code/runtime nouns to avoid matching
     # ordinary "can you fix this bug" work.
-    if "you" in text and action_hit and any(noun in text for noun in ("codebase", "feature", "graph", "skill", "tool", "trace", "workflow")):
+    if "you" in text and action_hit and any(noun in text for noun in ("codebase", "feature", "graph", "skill", "tool", "trace", "workflow", "profile", "drift")):
+        return True
+    # MO runtime economy is self-work: "why do you cost so much per turn", "your
+    # token spend". Require self scope (you/MO) + a cost noun + an economy phrase so
+    # generic perf/cost talk ("reduce the cost of this query") does NOT fire.
+    if ("you" in text or _marker_in_text("mo", text)) and \
+            any(_marker_in_text(noun, text) for noun in ("cost", "costs", "token", "tokens", "spend", "expensive")) and \
+            any(phrase in text for phrase in ("per turn", "per request", "each turn", "every turn", "per message", "so much", "so high")):
         return True
     return False
 
