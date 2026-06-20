@@ -78,6 +78,11 @@ agent:
   # outputs are archived under logs/compacted_chains/ before the summary
   # replaces them, so exact results stay recoverable with read_file.
   context_momentum_tool_chars_threshold: 48000
+  # When the model resolves a work unit (completes a task), the next compaction
+  # may trigger at this fraction of the tool-chars threshold above — freeing
+  # resolved chains proactively. Still requires meaningful old content so the
+  # freed bytes justify the single prefix-cache miss. 1.0 disables the effect.
+  context_momentum_resolved_threshold_factor: 0.5
   reasoning: high
   # Refuse clearly-malicious code generation (malware/attack tooling) before any
   # provider call. Conservative + dual-use-aware: authorized pentest/CTF/own-system/
