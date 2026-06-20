@@ -722,15 +722,26 @@ def _large_existing_write_reason(arguments: dict[str, Any], *, max_lines: int = 
 
 def _guard_web_tools(name: str, arguments: dict[str, Any], cfg: dict[str, Any]) -> str | None:
     """Check web/network tool restrictions. Return block reason or None."""
-    if name not in {"web_fetch", "web_snapshot", "web_search"}:
+    if name not in {"web_fetch", "web_snapshot", "web_search", "browser_open"}:
         return None
     if cfg.get("enabled") and not cfg.get("web_fetch_enabled", True):
         return f"[SANDBOX BLOCKED] {name} network access disabled."
+    # browser_open: always reject file:/data: schemes (bypasses path scope)
+    if name == "browser_open" and cfg.get("enabled"):
+        from urllib.parse import urlparse
+        raw_url = str(arguments.get("url", "") or "")
+        scheme = (urlparse(raw_url).scheme or "").lower()
+        if scheme in {"file", "data"}:
+            return f"[SANDBOX BLOCKED] browser_open does not allow {scheme}: URLs."
     if cfg.get("enabled") and cfg.get("web_fetch_allowed_hosts"):
         from urllib.parse import urlparse
-        host = "api.duckduckgo.com" if name == "web_search" else (
-            urlparse(str(arguments.get("url", ""))).hostname or ""
-        ).lower()
+        if name == "web_search":
+            host = "api.duckduckgo.com"
+        elif name == "browser_open":
+            raw_url = str(arguments.get("url", "") or "")
+            host = (urlparse(raw_url).hostname or "").lower()
+        else:
+            host = (urlparse(str(arguments.get("url", ""))).hostname or "").lower()
         allowed = {str(h).lower() for h in (cfg.get("web_fetch_allowed_hosts") or [])}
         if host not in allowed:
             return f"[SANDBOX BLOCKED] {name} host not allowed: {host or '?'}"
