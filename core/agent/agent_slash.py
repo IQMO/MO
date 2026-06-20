@@ -87,6 +87,7 @@ class AgentSlashCommands:
             "/hints": self._cmd_hints,
             "/ghost": self._cmd_ghost,
             "/gh": self._cmd_ghost,
+            "/companion": self._cmd_companion,
         }
 
         handler = handlers.get(cmd)
@@ -781,6 +782,21 @@ class AgentSlashCommands:
             registry.update(record.id, "blocked", result[:240])
             append_ghost_audit("side_chat_command_error", user_text=rest, response_text=result)
             return result
+
+    def _cmd_companion(self, rest: str) -> str:
+        """Toggle the desktop companion surface on/off."""
+        companion = getattr(self, "_companion", None)
+        if companion is None:
+            return "Companion not started. Enable `desktop_companion.enabled` in config."
+        rest_lower = (rest or "").strip().lower()
+        if rest_lower == "show":
+            companion.show()
+            return "[COMPANION SHOWN]"
+        if rest_lower == "hide":
+            companion.hide()
+            return "[COMPANION HIDDEN]"
+        companion.toggle()
+        return "[COMPANION TOGGLED]"
 
     @staticmethod
     def _ghost_safe_messages(raw_messages: list[dict], prompt: str) -> list[dict]:

@@ -120,6 +120,7 @@ def main(argv: list[str] | None = None):
     gateway = Gateway(agent)
     telegram = None
     heartbeat = None
+    companion = None
     try:
         from core.telegram import start_telegram_gateway_if_enabled
         telegram = start_telegram_gateway_if_enabled(agent, gateway)
@@ -130,10 +131,22 @@ def main(argv: list[str] | None = None):
         heartbeat = start_heartbeat_service_if_enabled(agent, gateway, surface="terminal")
     except Exception:
         heartbeat = None
+    try:
+        from interface.companion import start_companion_if_enabled
+        companion = start_companion_if_enabled(agent, gateway)
+        if companion:
+            try:
+                setattr(agent, "_companion", companion)
+            except Exception:
+                pass
+    except Exception:
+        companion = None
     console = Console() if HAS_RICH else None
     try:
         run_main_loop(agent, gateway, console, HAS_RICH)
     finally:
+        if companion and hasattr(companion, "stop"):
+            companion.stop()
         if telegram and hasattr(telegram, "stop"):
             telegram.stop()
         if heartbeat and hasattr(heartbeat, "stop"):

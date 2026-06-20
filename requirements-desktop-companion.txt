@@ -1,0 +1,8 @@
+# Optional: desktop companion surface (on-screen text-input window + global hotkey).
+# The companion is a MO-branded minimal GUI that runs alongside the TUI.
+# All of them degrade gracefully to a clear error if the matching package is
+# absent, so the core agent runs fine without these.
+#
+#   companion window            -> tkinter (built into Python)
+#   global hotkey (Win+Alt+M)   -> keyboard (local desktop only; needs a display)
+keyboard>=0.13.5
