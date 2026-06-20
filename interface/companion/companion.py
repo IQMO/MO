@@ -9,12 +9,15 @@ Architecture
                                  → Ghost shapes → MO executes → overlay bubble
 
 No voice/tray yet — those are Phase 3 and 4.
+Phase 3 (voice): push-to-talk STT/TTS via faster-whisper + piper-tts.
 """
 from __future__ import annotations
 
 import threading
 import traceback
 from typing import Any
+
+from interface.companion.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
 
 CYAN = "#00cccc"
 CARD = "#04141a"
@@ -26,9 +29,11 @@ _ENTRY_BG = "#0a2028"
 class CompanionSurface:
     """On-screen MO companion with text input and result display."""
 
-    def __init__(self, agent: Any, gateway: Any) -> None:
+    def __init__(self, agent: Any, gateway: Any, voice_config: dict | None = None) -> None:
         self._agent = agent
         self._gateway = gateway
+        self._voice_cfg = voice_config or {}
+        self._voice: CompanionVoice | None = None
         self._root: Any = None
         self._entry: Any = None
         self._response: Any = None
@@ -52,6 +57,7 @@ class CompanionSurface:
             return False  # tkinter missing (unusual but possible on headless)
 
         self._running = True
+        self._init_voice()
         thread = threading.Thread(target=self._gui_loop, name="mo-companion", daemon=True)
         thread.start()
         self._try_register_hotkey()
@@ -94,6 +100,47 @@ class CompanionSurface:
         self.hide() if self._visible else self.show()
 
     # ------------------------------------------------------------------
+    # Voice (Phase 3)
+    # ------------------------------------------------------------------
+
+    def _init_voice(self) -> None:
+        """Initialize STT + TTS if configured."""
+        if not self._voice_cfg:
+            self._voice = None
+            return
+        stt_enabled = self._voice_cfg.get("stt_enabled", False)
+        tts_enabled = self._voice_cfg.get("tts_enabled", False)
+        if not stt_enabled and not tts_enabled:
+            self._voice = None
+            return
+        recognizer = VoiceRecognizer(
+            model_size=self._voice_cfg.get("stt_model", "base"),
+        ) if stt_enabled else None
+        speaker = VoiceSpeaker(
+            voice_model_path=self._voice_cfg.get("tts_model", ""),
+            voice_name=self._voice_cfg.get("tts_voice", "en_US-lessac-medium"),
+        ) if tts_enabled else None
+        self._voice = CompanionVoice(recognizer=recognizer, speaker=speaker)
+
+    def _on_voice_input(self) -> None:
+        """Push-to-talk: record, transcribe, submit."""
+        voice = self._voice
+        if voice is None or not voice.stt_available:
+            self._set_status("Voice input not available (install faster-whisper + sounddevice)", "#ffcc44")
+            return
+        self._set_status("Recording… (speak now, press Enter to stop)", CYAN)
+
+        def _record_and_submit() -> None:
+            text = voice.listen_and_transcribe()
+            if text and not text.startswith("[STT"):
+                # Submit via the same pipeline as text input
+                self._run_turn(text)
+            else:
+                self._set_status(text or "[No speech detected]", "#ff4444")
+
+        threading.Thread(target=_record_and_submit, name="mo-companion-voice", daemon=True).start()
+
+    # ------------------------------------------------------------------
     # GUI
     # ------------------------------------------------------------------
 
@@ -134,12 +181,21 @@ class CompanionSurface:
                                       anchor="w")
         self._status_label.pack(fill="x", padx=10, pady=(0, 4))
 
-        # text entry
-        self._entry = tk.Entry(card, font=("Segoe UI", 11),
+        # text entry + voice button
+        entry_frame = tk.Frame(card, bg=CARD)
+        entry_frame.pack(fill="x", padx=10, pady=(0, 6))
+
+        # voice mic button (🎤)
+        self._voice_btn = tk.Label(entry_frame, text="🎤", fg=CYAN, bg=CARD,
+                                   font=("Segoe UI", 14), cursor="hand2")
+        self._voice_btn.pack(side="right", padx=(6, 0))
+        self._voice_btn.bind("<Button-1>", lambda _e: self._on_voice_input())
+
+        self._entry = tk.Entry(entry_frame, font=("Segoe UI", 11),
                                fg=TEXT, bg=_ENTRY_BG,
                                insertbackground=CYAN, relief="flat",
                                borderwidth=4)
-        self._entry.pack(fill="x", padx=10, pady=(0, 6))
+        self._entry.pack(side="left", fill="x", expand=True)
         self._entry.bind("<Return>", self._on_submit)
         self._entry.bind("<Escape>", lambda _e: self.hide())
 
@@ -150,7 +206,7 @@ class CompanionSurface:
         self._response.pack(fill="both", padx=10, pady=(0, 8))
 
         # bottom hint
-        tk.Label(card, text="Esc to hide  ·  Win+Alt+M to summon",
+        tk.Label(card, text="Esc to hide  ·  Win+Alt+M to summon  ·  🎤 for voice",
                  fg="#3a6677", bg=CARD, font=("Segoe UI", 8)).pack(
                      fill="x", padx=10, pady=(0, 6))
 
@@ -219,6 +275,9 @@ class CompanionSurface:
                 on_board_event=self._on_board_event,
             )
             self._set_result(result)
+            # Speak result if TTS enabled
+            if self._voice and self._voice.tts_available:
+                self._voice.speak_result(result)
         except Exception as exc:
             self._set_status(f"Error: {exc}", "#ff4444")
             traceback.print_exc()
@@ -317,7 +376,8 @@ def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | N
         return None
 
     try:
-        companion = CompanionSurface(agent, gateway)
+        companion = CompanionSurface(agent, gateway,
+                                     voice_config=companion_cfg.get("voice", {}))
         if companion.start():
             return companion
     except Exception:

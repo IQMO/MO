@@ -6,3 +6,11 @@
 #   companion window            -> tkinter (built into Python)
 #   global hotkey (Win+Alt+M)   -> keyboard (local desktop only; needs a display)
 keyboard>=0.13.5
+
+# Optional: voice (Phase 3) — local speech-to-text + text-to-speech
+#   speech-to-text (STT)        -> faster-whisper (CTranslate2-backed Whisper)
+#   text-to-speech (TTS)        -> piper-tts (neural TTS with espeak-ng)
+#   audio capture/playback      -> sounddevice (cross-platform PortAudio wrapper)
+faster-whisper>=1.0.0
+piper-tts>=1.2.0
+sounddevice>=0.4.6
