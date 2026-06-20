@@ -165,7 +165,7 @@ class VoiceSpeaker:
         except ImportError as exc:
             self._load_error = f"{exc}"
             return False
-        except Exception as exc:
+        except Exception:
             traceback.print_exc()
             return False
 
@@ -213,7 +213,6 @@ class PushToTalkRecorder:
             return False
         try:
             import sounddevice as sd
-            import numpy as np
             self._buffer = []
             self._stream = sd.InputStream(
                 samplerate=self._sample_rate,
@@ -224,7 +223,7 @@ class PushToTalkRecorder:
             self._stream.start()
             self._recording = True
             return True
-        except Exception as exc:
+        except Exception:
             traceback.print_exc()
             return False
 
@@ -247,14 +246,13 @@ class PushToTalkRecorder:
                 if len(audio) > max_samples:
                     audio = audio[:max_samples]
                 return audio
-        except Exception as exc:
+        except Exception:
             traceback.print_exc()
         self._buffer = []
         return None
 
     def _audio_callback(self, indata: Any, _frames: int, _time: Any, _status: Any) -> None:
         if self._recording:
-            import numpy as np
             self._buffer.append(indata.copy())
 
 

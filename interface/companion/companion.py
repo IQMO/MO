@@ -10,14 +10,18 @@ Architecture
 
 No voice/tray yet — those are Phase 3 and 4.
 Phase 3 (voice): push-to-talk STT/TTS via faster-whisper + piper-tts.
+Phase 4 (tray, modes, log, panic): system-tray icon, Guide/Do modes,
+    visible action log, run-at-startup, panic-stop.
 """
 from __future__ import annotations
 
 import threading
+import time
 import traceback
 from typing import Any
 
 from interface.companion.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
+from interface.companion.tray import CompanionTray, start_tray_if_enabled
 
 CYAN = "#00cccc"
 CARD = "#04141a"
@@ -34,6 +38,12 @@ class CompanionSurface:
         self._gateway = gateway
         self._voice_cfg = voice_config or {}
         self._voice: CompanionVoice | None = None
+        self._tray: CompanionTray | None = None
+        self._action_log: list[dict[str, Any]] = []
+        self._panic_stop_requested = False
+        self._cancel_event: threading.Event | None = None
+        self._stream_buf = ""
+        self._mode: str = "guide"  # "guide" or "do"
         self._root: Any = None
         self._entry: Any = None
         self._response: Any = None
@@ -51,13 +61,13 @@ class CompanionSurface:
         """Start the companion in a daemon GUI thread. Returns True on success."""
         if self._running:
             return True
-        try:
-            import tkinter as tk
-        except ImportError:
+        import importlib.util
+        if importlib.util.find_spec("tkinter") is None:
             return False  # tkinter missing (unusual but possible on headless)
 
         self._running = True
         self._init_voice()
+        self._init_tray()
         thread = threading.Thread(target=self._gui_loop, name="mo-companion", daemon=True)
         thread.start()
         self._try_register_hotkey()
@@ -98,6 +108,114 @@ class CompanionSurface:
     def toggle(self) -> None:
         """Toggle the companion window visibility."""
         self.hide() if self._visible else self.show()
+
+    # ------------------------------------------------------------------
+    # Tray + startup + panic-stop (Phase 4)
+    # ------------------------------------------------------------------
+
+    def _init_tray(self) -> None:
+        """Start system tray if configured."""
+        self._tray = start_tray_if_enabled(self, self._voice_cfg)
+
+    @property
+    def mode(self) -> str:
+        return self._tray.mode if self._tray else self._mode
+
+    def panic_stop(self) -> None:
+        """Emergency stop: interrupt the in-flight turn and block the next one."""
+        self._panic_stop_requested = True
+        # Actually interrupt a running turn (the Gateway loop checks cancel_event).
+        if self._cancel_event is not None:
+            self._cancel_event.set()
+        self._set_status("PANIC STOP — turn interrupted, desktop blocked", "#ff4444")
+        self._log_action("panic_stop", "Emergency stop triggered")
+
+    def show_action_log(self) -> None:
+        """Show the action log in a popup."""
+        if not self._root:
+            return
+        try:
+            self._root.event_generate("<<CompanionShowLog>>")
+        except Exception:
+            pass
+
+    def _show_log_popup(self, root: Any) -> None:
+        """Create and display the action log popup window."""
+        import tkinter as tk
+
+        popup = tk.Toplevel(root)
+        popup.title("MO Companion — Action Log")
+        popup.overrideredirect(True)
+        popup.attributes("-topmost", True)
+        try:
+            popup.attributes("-alpha", 0.95)
+        except Exception:
+            pass
+
+        border = tk.Frame(popup, bg=CYAN)
+        border.pack()
+        card = tk.Frame(border, bg=CARD)
+        card.pack(padx=2, pady=2)
+
+        # Header
+        header = tk.Frame(card, bg=CARD)
+        header.pack(fill="x", padx=10, pady=(8, 4))
+        tk.Label(header, text=GLYPH, fg=CYAN, bg=CARD,
+                 font=("Segoe UI", 16, "bold")).pack(side="left", padx=(0, 8))
+        tk.Label(header, text="Action Log", fg=CYAN, bg=CARD,
+                 font=("Segoe UI", 12, "bold")).pack(side="left")
+
+        # Scrollable log text
+        text_frame = tk.Frame(card, bg=CARD)
+        text_frame.pack(fill="both", expand=True, padx=10, pady=(4, 6))
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side="right", fill="y")
+        log_text = tk.Text(text_frame, fg=TEXT, bg=_ENTRY_BG,
+                           font=("Consolas", 9), wrap="word",
+                           yscrollcommand=scrollbar.set,
+                           relief="flat", borderwidth=4,
+                           width=60, height=16)
+        log_text.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=log_text.yview)
+
+        # Populate log entries
+        if self._action_log:
+            for entry in reversed(self._action_log):
+                log_text.insert("end", f"[{entry['time']}] {entry['kind']}: {entry['detail']}\n")
+        else:
+            log_text.insert("end", "(no actions logged yet)\n")
+        log_text.config(state="disabled")
+
+        # Close button
+        btn_frame = tk.Frame(card, bg=CARD)
+        btn_frame.pack(fill="x", padx=10, pady=(0, 8))
+        tk.Button(btn_frame, text="Close", command=popup.destroy,
+                  fg=CARD, bg=CYAN, font=("Segoe UI", 9, "bold"),
+                  relief="flat", padx=12, pady=2).pack(side="right")
+
+        # Geometry — right-side of screen
+        popup.update_idletasks()
+        sw = popup.winfo_screenwidth()
+        sh = popup.winfo_screenheight()
+        ww, wh = 480, 360
+        wx = max(0, sw - ww - 40)
+        wy = max(0, (sh - wh) // 3)
+        popup.geometry(f"{ww}x{wh}+{wx}+{wy}")
+        popup.minsize(360, 200)
+
+        # Close on Escape
+        popup.bind("<Escape>", lambda _e: popup.destroy())
+
+    def _log_action(self, kind: str, detail: str) -> None:
+        entry = {
+            "time": time.strftime("%H:%M:%S"),
+            "kind": kind,
+            "detail": detail[:200],
+        }
+        self._action_log.append(entry)
+        # Keep last 50 entries
+        if len(self._action_log) > 50:
+            self._action_log = self._action_log[-50:]
 
     # ------------------------------------------------------------------
     # Voice (Phase 3)
@@ -237,6 +355,7 @@ class CompanionSurface:
         root.bind("<<CompanionShow>>", _do_show)
         root.bind("<<CompanionHide>>", _do_hide)
         root.bind("<<CompanionStop>>", _do_stop)
+        root.bind("<<CompanionShowLog>>", lambda _e: self._show_log_popup(root))
 
         while self._running:
             try:
@@ -259,6 +378,7 @@ class CompanionSurface:
         self._entry.delete(0, "end")
         self._set_status("Thinking…", CYAN)
         self._set_response("")
+        self._log_action("submit", text)
 
         self._turn_thread = threading.Thread(
             target=self._run_turn, args=(text,), name="mo-companion-turn", daemon=True
@@ -266,6 +386,12 @@ class CompanionSurface:
         self._turn_thread.start()
 
     def _run_turn(self, user_input: str) -> None:
+        if self._panic_stop_requested:
+            self._set_status("Turn blocked — panic stop active. Right-click tray → restart.", "#ff4444")
+            return
+        # Fresh cancel signal per turn so panic_stop can interrupt an in-flight turn.
+        self._cancel_event = threading.Event()
+        self._stream_buf = ""
         try:
             result = self._gateway.run_turn(
                 user_input,
@@ -273,13 +399,16 @@ class CompanionSurface:
                 on_activity=self._on_activity,
                 on_assistant_text=self._on_assistant_text,
                 on_board_event=self._on_board_event,
+                cancel_event=self._cancel_event,
             )
             self._set_result(result)
+            self._log_action("turn_complete", result[:200])
             # Speak result if TTS enabled
             if self._voice and self._voice.tts_available:
                 self._voice.speak_result(result)
         except Exception as exc:
             self._set_status(f"Error: {exc}", "#ff4444")
+            self._log_action("turn_error", str(exc)[:200])
             traceback.print_exc()
 
     # ------------------------------------------------------------------
@@ -296,13 +425,16 @@ class CompanionSurface:
             self._set_status(text, CYAN if kind == "task_completed" else "#5a8899")
 
     def _on_assistant_text(self, delta: str) -> None:
-        # append streaming text to response label
-        if self._root and self._response:
-            try:
-                current = self._response.cget("text")
-                self._response.config(text=current + delta)
-            except Exception:
-                pass
+        # Called from the Gateway thread — tkinter is NOT thread-safe, so never
+        # touch widgets here. Accumulate and schedule the update on the GUI thread.
+        if not self._root:
+            return
+        self._stream_buf += str(delta or "")
+        buf = self._stream_buf[:600]
+        try:
+            self._root.after(0, lambda: self._response.config(text=buf) if self._response else None)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # UI helpers (thread-safe via tkinter event queue)
