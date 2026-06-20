@@ -72,15 +72,25 @@ def test_sec2_desktop_actuation_still_in_actuation_tools():
     assert "press_key" in ACTUATION_TOOLS
 
 
-def test_sec2_browser_snapshot_eval_not_actuation():
-    """browser_snapshot and browser_eval are read-only — NOT in ACTUATION_TOOLS."""
+def test_sec2_browser_snapshot_is_read_only():
+    """browser_snapshot reads the DOM only — NOT actuation; passes read-only lanes."""
     from core.tool_constants import ACTUATION_TOOLS
     from core.sandbox import guard_tool_call
     assert "browser_snapshot" not in ACTUATION_TOOLS
-    assert "browser_eval" not in ACTUATION_TOOLS
-    # They should pass read-only lanes
     cfg = {"enabled": True}
     assert guard_tool_call("browser_snapshot", {}, lane="investigate",
                            allowed_roots=["."], sandbox_config=cfg) is None
+
+
+def test_browser_eval_is_actuation_gated_in_read_only_lanes():
+    """browser_eval runs arbitrary JS (can navigate/click/mutate/read page state),
+    so it is gated as actuation (review F1): allowed in normal lanes, blocked in
+    read-only lanes. Supersedes the original SEC-2 read-only classification."""
+    from core.tool_constants import ACTUATION_TOOLS
+    from core.sandbox import guard_tool_call
+    assert "browser_eval" in ACTUATION_TOOLS
+    cfg = {"enabled": True}
     assert guard_tool_call("browser_eval", {"expression": "1+1"}, lane="investigate",
-                           allowed_roots=["."], sandbox_config=cfg) is None
+                           allowed_roots=["."], sandbox_config=cfg)  # blocked in read-only lane
+    assert guard_tool_call("browser_eval", {"expression": "1+1"}, lane=None,
+                           allowed_roots=["."], sandbox_config=cfg) is None  # allowed normally
