@@ -848,6 +848,75 @@ def _guard_path_scope(
     return None
 
 
+# Credential-file basenames that must never be read from outside the workspace
+# while drifting. Matches whole filenames / extensions, not substrings of code.
+_CREDENTIAL_FILE_RE = re.compile(
+    r"^(\.env(\.[\w-]+)?|[\w.-]*credentials?[\w.-]*|[\w.-]*secrets?[\w.-]*|auth\.json"
+    r"|id_rsa|id_ed25519|[\w.-]*\.(key|pem|pfx|p12|keystore))$",
+    re.I,
+)
+
+
+def _is_credential_filename(path: str) -> bool:
+    return bool(_CREDENTIAL_FILE_RE.match(Path(str(path)).name.strip()))
+
+
+def _within_workspace_or_profile(path: str) -> bool:
+    """True if *path* resolves under the current workspace cwd or the ~/.mo home.
+
+    Used by the credential guard: the project's own .env and the operator's
+    ~/.mo credentials are legitimate; an unrelated project's credential file is not.
+    """
+    try:
+        target = Path(path).expanduser().resolve()
+    except Exception:
+        return False
+    bases: list[Path] = []
+    for candidate in (
+        os.getcwd(),
+        str(Path.home() / ".mo"),
+        os.environ.get("MO_HOME"),
+        os.environ.get("MO_STATE_HOME"),
+    ):
+        if not candidate:
+            continue
+        try:
+            bases.append(Path(candidate).expanduser().resolve())
+        except Exception:
+            continue
+    for base in bases:
+        try:
+            target.relative_to(base)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _guard_credential_read(name: str, arguments: dict[str, Any], operator_override: bool) -> str | None:
+    """Block reading a credential file from OUTSIDE the workspace/profile.
+
+    Fires even in full-access mode (empty allowed_roots), because drift — not a
+    scoped lane — is the failure: MO wandered into another project's backups and
+    read its `.env` / credential files. The operator's own project `.env`
+    (under cwd) and `~/.mo` credentials are still readable; an explicit in-turn
+    operator direction (operator_override) still allows a specific path.
+    """
+    if operator_override or name != "read_file":
+        return None
+    path = str((arguments or {}).get("path") or "").strip()
+    if not path:
+        return None
+    if _is_credential_filename(path) and not _within_workspace_or_profile(path):
+        return (
+            f"[CREDENTIAL BLOCKED] refusing to read credential file '{Path(path).name}' "
+            "outside the workspace. Consult the operator profile for where keys live, or "
+            "have the operator explicitly direct this exact path. Report validity via "
+            "secret_status — never read raw credential values from unrelated locations."
+        )
+    return None
+
+
 def _guard_mcp_tool(
     name: str,
     arguments: dict[str, Any],
@@ -940,6 +1009,12 @@ def guard_tool_call(
 
     # Shell safety
     if reason := _guard_shell_tool(name, arguments, cfg, lane, allowed_roots, operator_override):
+        return block(reason)
+
+    # Credential-read guard: even in full-access mode, never read an unrelated
+    # project's credential file while drifting (the cross-project drift incident). Operator may
+    # still direct a specific path explicitly (operator_override).
+    if reason := _guard_credential_read(name, arguments, operator_override):
         return block(reason)
 
     # Path scope (file tools, shell workdir, find/grep/git/project_bridge)
