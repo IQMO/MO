@@ -195,13 +195,13 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
-| MCP tools | Optional: connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments (off by default) |
+| MCP tools | Connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments. Enabled by default but inert until you list a server (an empty `servers:` spawns nothing) |
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 
 ## MCP (Model Context Protocol)
 
-MO can use tools from operator-configured MCP servers — local-first and **off by default**. Add servers to `~/.mo/config.yaml`:
+MO can use tools from operator-configured MCP servers — local-first and **enabled by default, but inert until you list a server** (an empty `servers:` spawns nothing, so MO gains no MCP tools until you add one). Add servers to `~/.mo/config.yaml`:
 
 ```yaml
 mcp:
