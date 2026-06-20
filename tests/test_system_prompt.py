@@ -10,6 +10,15 @@ def test_internal_system_prompt_is_packaged_under_core():
     assert "Provider-first" in text
 
 
+def test_internal_prompt_carries_honesty_directive():
+    # VS05 2026-06-20 (Fable 5): MO must default to honest pushback over flattery
+    # and own mistakes without groveling.
+    text, _source = load_system_prompt("")
+
+    assert "Be honest over agreeable" in text
+    assert "no groveling" in text
+
+
 def test_legacy_root_system_md_config_resolves_to_internal_prompt(tmp_path, monkeypatch):
     root_prompt = tmp_path / "system.md"
     root_prompt.write_text("ROOT PROMPT MUST NOT BE DEFAULT", encoding="utf-8")
