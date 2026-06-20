@@ -251,12 +251,15 @@ def build_focused_map(
     root_path = project_root(root)
     data = load_or_build_graph_data(root_path)
     status = graph_status(root_path)
+    # Private-by-default: complement graph.json in its resolved dir (~/.mo/cache
+    # when private state is on), never unconditionally in the checkout's memory/.
+    focused_map_path = native_graph_path(root_path).parent / "focused_map.html"
     if not data:
-        return {"built": False, "reason": "graph_unavailable", "path": str(output or root_path / STRUCTURAL_GRAPH_DIR / "focused_map.html")}
+        return {"built": False, "reason": "graph_unavailable", "path": str(output or focused_map_path)}
 
     board_summary = _focused_board_summary(task_board)
     files = _focused_files(data, board_summary, query=query)
-    out_path = Path(output) if output else root_path / STRUCTURAL_GRAPH_DIR / "focused_map.html"
+    out_path = Path(output) if output else focused_map_path
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(_render_focused_map(status, board_summary, files, query=query), encoding="utf-8")
     return {
