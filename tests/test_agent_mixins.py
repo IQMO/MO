@@ -150,3 +150,38 @@ def test_quarantine_drop_surfaces_user_notice():
     notice = agent.consume_quarantine_notice()
     assert "dropped 2 stale message" in notice
     assert agent.consume_quarantine_notice() == ""  # consumed once, then cleared
+
+
+def test_quarantine_parks_dropped_objective_as_anchor():
+    """Drift fix: dropping an unfinished tail parks the objective so the next
+    (often vague) continuation turn re-anchors instead of free-associating."""
+    agent = _agent()
+    agent.last_quarantine_notice = ""
+    agent._looks_like_return_greeting = lambda _t: False
+    agent._pending_interrupted_work = {}
+    agent.session = SimpleNamespace(
+        quarantine_unfinished_tail=lambda drop_unanswered_user=False: {
+            "changed": True, "dropped_messages": 3, "reason": "unfinished_tool_turn",
+            "user": "build the companion tray",
+        }
+    )
+
+    agent._quarantine_unfinished_tail_before_turn("try again")
+
+    assert agent._pending_interrupted_work.get("user") == "build the companion tray"
+
+
+def test_quarantine_without_objective_parks_nothing():
+    agent = _agent()
+    agent.last_quarantine_notice = ""
+    agent._looks_like_return_greeting = lambda _t: False
+    agent._pending_interrupted_work = {}
+    agent.session = SimpleNamespace(
+        quarantine_unfinished_tail=lambda drop_unanswered_user=False: {
+            "changed": True, "dropped_messages": 1, "reason": "unfinished_tool_turn",
+        }
+    )
+
+    agent._quarantine_unfinished_tail_before_turn("hello")
+
+    assert not agent._pending_interrupted_work.get("user")

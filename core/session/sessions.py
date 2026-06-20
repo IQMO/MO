@@ -63,6 +63,29 @@ class SessionManager:
         _emit_session_event("save_snapshot", name=name, session_id=str(getattr(session, "session_id", "") or ""), turns=int(getattr(session, "turn_count", 0) or 0), messages=len(getattr(session, "messages", []) or []))
         return f"Session snapshot saved: {name} ({session.turn_count} turns, {len(session.messages)} messages)"
 
+    def prune_handoff_snapshots(self, base_name: str, *, keep: int = 30) -> int:
+        """Cap '<base>-pre-handoff-*.json' snapshots at *keep* most-recent.
+
+        These are written every context handoff and are historical only (the
+        active session is its own file). Unpruned they accumulate unbounded
+        (hundreds of files), which makes 'the last session' ambiguous and feeds
+        drift. Mirrors prune_session_closeouts. Returns the count removed.
+        """
+        try:
+            base = "".join(c for c in str(base_name or "main") if c.isalnum() or c in "-_.")[:64] or "main"
+            snaps = sorted(self.dir.glob(f"{base}-pre-handoff-*.json"),
+                           key=lambda p: p.stat().st_mtime, reverse=True)
+            removed = 0
+            for old in snaps[max(0, keep):]:
+                try:
+                    old.unlink()
+                    removed += 1
+                except Exception:
+                    continue
+            return removed
+        except Exception:
+            return 0
+
     def _write_session(self, name: str, session: Any, *, extra_meta: dict | None = None) -> None:
         cleaned_messages, clean_meta = self._clean_messages_with_meta(session.messages)
         saved_at = time.time()

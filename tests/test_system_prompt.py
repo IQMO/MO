@@ -19,6 +19,17 @@ def test_internal_prompt_carries_honesty_directive():
     assert "no groveling" in text
 
 
+def test_internal_prompt_carries_anti_drift_contract():
+    # Drift fix (2026-06-21): MO must stay on the current request, treat the
+    # profile as background, re-anchor (or ask) after an interruption, and never
+    # take an unasked sensitive/outward action.
+    text, _source = load_system_prompt("")
+
+    assert "Stay on the operator's CURRENT request" in text
+    assert "do NOT guess what you were doing" in text
+    assert "Never take a sensitive or outward action unasked" in text
+
+
 def test_internal_prompt_carries_batched_reads_directive():
     # A1 (2026-06-20): the prompt must tell the model to batch independent reads
     # so the runtime's concurrent read dispatch actually gets exercised.

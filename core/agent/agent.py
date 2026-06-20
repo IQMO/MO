@@ -771,6 +771,10 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         if getattr(self, "_sessions", None) and hasattr(self._sessions, "save_snapshot"):
             try:
                 self._sessions.save_snapshot(archive_name, self.session, extra_meta=self._session_save_extra_meta())
+                # Cap historical pre-handoff snapshots so they don't accumulate
+                # unbounded and make "the last session" ambiguous (drift hygiene).
+                if hasattr(self._sessions, "prune_handoff_snapshots"):
+                    self._sessions.prune_handoff_snapshots(current_name)
             except Exception:
                 archive_name = "snapshot-unavailable"
         visible_messages = recent_visible_report_messages(
@@ -1111,6 +1115,15 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         if not meta.get("changed"):
             return meta
         self._last_interrupted_turn = meta
+        # Drift root cause: dropping the unfinished tail used to leave the NEXT
+        # (often vague: "try again") turn with no thread, so MO free-associated
+        # from the profile/recall and wandered into an unrelated project. Park the
+        # dropped objective into the existing interrupted-work anchor so the next
+        # turn re-anchors to what was actually happening (or asks), via
+        # _pending_interrupted_work_context — instead of guessing.
+        dropped_objective = str(meta.get("user") or "").strip()
+        if dropped_objective:
+            self._pending_interrupted_work = {"user": dropped_objective}
         # Surface the drop to the user (not just the monitor): a resumed chat
         # should never silently feel like it lost context.
         dropped = int(meta.get("dropped_messages") or 0)
