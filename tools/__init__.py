@@ -81,6 +81,18 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "open_url",
+            "description": "Open a URL in the operator's DEFAULT browser, visibly (their own profile and logins). THIS is the tool for 'open / show me / pull up <site>' — the operator wants to look at it themselves. Do NOT use shell (e.g. `start chrome`) for this, and do NOT use browser_open (that is an isolated, invisible browser for autonomous tasks).",
+            "parameters": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {"url": {"type": "string", "description": "URL to open (https:// added if missing)"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "capture_screen",
             "description": "Capture a screenshot of the operator's primary display so MO can SEE what is currently on screen. Use when the operator asks about what's on their screen, to read an on-screen error/dialog/diagram/UI, or to check the result of a desktop action. Returns a confirmation; the image itself is attached for vision analysis. Requires a vision-capable provider.",
             "parameters": {
@@ -1085,6 +1097,29 @@ def execute_find_callees(arguments: dict[str, Any]) -> str:
     )
 
 
+def execute_open_url(arguments: dict[str, Any]) -> str:
+    """Open a URL in the operator's DEFAULT browser, visibly (their profile/logins).
+
+    This is the right tool for "open/show me/pull up <site>" — it uses the OS
+    default-browser handler (whatever the operator set), not a hardcoded browser
+    and not the isolated CDP browser. For autonomous web *tasks* (read/click/fill
+    programmatically) use the browser_* tools instead.
+    """
+    import webbrowser
+    url = str(arguments.get("url", "") or "").strip()
+    if not url:
+        return "Error: open_url requires a 'url'."
+    if not url.startswith(("http://", "https://", "file:", "mailto:", "about:")):
+        url = "https://" + url
+    try:
+        opened = webbrowser.open(url)
+    except Exception as exc:  # noqa: BLE001
+        return f"Error: could not open the default browser: {type(exc).__name__}: {exc}"
+    if opened:
+        return f"Opened {url} in your default browser."
+    return f"Requested to open {url}, but no default browser handler confirmed success."
+
+
 def execute_complete_task(arguments: dict[str, Any]) -> str:
     task_id = str(arguments.get("task_id", "") or "").strip()
     if task_id:
@@ -1094,6 +1129,7 @@ def execute_complete_task(arguments: dict[str, Any]) -> str:
 
 TOOL_EXECUTORS = {
     "capture_screen": execute_capture_screen,
+    "open_url": execute_open_url,
     "screen_size": execute_screen_size,
     "point_on_screen": execute_point_on_screen,
     "move_pointer": execute_move_pointer,
