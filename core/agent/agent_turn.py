@@ -132,6 +132,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
         done_claim_continued = False  # once-per-turn guard for the done-claim/open-board gate
+        verify_edits_continued = False  # A2: once-per-turn guard for the changed-file verify-and-self-heal gate
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
         # few times to push for a clean closeout, but must not loop to
@@ -738,6 +739,20 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     on_activity("done-claim conflicts with open tasks - continuing to resolve...")
                 self.session.add_assistant(self._done_claim_task_truth_instruction())
                 continue
+            # A2 (VS05): before finishing a code-editing turn, run the changed
+            # files' affected tests; if they fail, self-heal — force one bounded
+            # continuation with the failure so the model fixes it before claiming
+            # done. Fail-open and gated (prt.run_affected_tests); reuses PRT's
+            # bounded/recursion-guarded affected-test runner. No-op for doc-only
+            # turns or when no affected tests exist.
+            if not verify_edits_continued:
+                _verify_instr = self._affected_test_failure_instruction(turn_modified_files)
+                if _verify_instr:
+                    verify_edits_continued = True
+                    if on_activity:
+                        on_activity("changed-file tests failing - fixing before finishing...")
+                    self.session.add_assistant(_verify_instr)
+                    continue
             self.session.add_assistant(final_text, reasoning_content=str(reasoning) if reasoning else None)
             # Turn-end security check on modified files and response text
             if turn_modified_files:
@@ -768,6 +783,48 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             on_board_update=on_board_update,
             on_board_event=on_board_event,
         )
+
+    def _affected_test_failure_instruction(self, turn_modified_files: list) -> str | None:
+        """A2 (VS05): run the affected tests for code files this turn changed;
+        return a self-heal instruction if they fail, else None.
+
+        Fail-open: any error returns None so the verifier never blocks a turn.
+        Reuses PRT's bounded/recursion-guarded/config-gated affected-test runner
+        (``prt.run_affected_tests``) — no duplicate test machinery. No-op for
+        doc-only turns or when no affected tests exist.
+        """
+        py_paths = [p for p, _ in (turn_modified_files or []) if str(p).endswith(".py")]
+        if not py_paths:
+            return None
+        try:
+            import subprocess
+            from pathlib import Path
+            from ..path_defaults import repo_root
+            from ..graph.code_graph import affected_tests
+            from ..review.diff_review import _run_affected_tests
+
+            root = Path(repo_root())
+            diff = subprocess.run(
+                ["git", "diff", "--", *py_paths],
+                cwd=str(root), text=True, capture_output=True, timeout=10,
+            ).stdout
+            if not diff.strip():
+                return None
+            tests = affected_tests(diff, str(root))
+            if not tests:
+                return None
+            findings, _summary = _run_affected_tests(self, tests, root)
+            if not findings:
+                return None
+            detail = getattr(findings[0], "explanation", "") or getattr(findings[0], "message", "")
+            return (
+                "[VERIFY] The affected tests for the files you changed this turn are FAILING — "
+                "do not finish yet.\n\n"
+                f"{detail}\n\n"
+                "Fix the code or the tests, re-verify, then give your answer."
+            )
+        except Exception:
+            return None  # fail-open — never block a turn on the verifier's own error
 
     def _build_extra_context(self, user_input: str) -> str:
         """Assemble the dynamic context block injected into the system message each turn.
