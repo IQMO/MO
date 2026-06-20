@@ -564,6 +564,9 @@ SAFE_ENV_ALLOWLIST = {
     "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP",
     "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
     "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432",
+    # SYSTEMDRIVE/PROGRAMDATA are non-secret and needed by ordinary Windows
+    # commands; omitting them left `%SystemDrive%` unexpanded → literal-dir litter.
+    "SYSTEMDRIVE", "PROGRAMDATA", "PUBLIC", "ALLUSERSPROFILE",
     "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
     "LANG", "LC_ALL", "PYTHONIOENCODING", "PYTHONUTF8",
 }
@@ -722,22 +725,22 @@ def _large_existing_write_reason(arguments: dict[str, Any], *, max_lines: int = 
 
 def _guard_web_tools(name: str, arguments: dict[str, Any], cfg: dict[str, Any]) -> str | None:
     """Check web/network tool restrictions. Return block reason or None."""
-    if name not in {"web_fetch", "web_snapshot", "web_search", "browser_open"}:
+    if name not in {"web_fetch", "web_snapshot", "web_search", "browser_open", "open_url"}:
         return None
     if cfg.get("enabled") and not cfg.get("web_fetch_enabled", True):
         return f"[SANDBOX BLOCKED] {name} network access disabled."
-    # browser_open: always reject file:/data: schemes (bypasses path scope)
-    if name == "browser_open" and cfg.get("enabled"):
+    # browser_open / open_url: always reject file:/data: schemes (bypasses path scope)
+    if name in {"browser_open", "open_url"} and cfg.get("enabled"):
         from urllib.parse import urlparse
         raw_url = str(arguments.get("url", "") or "")
         scheme = (urlparse(raw_url).scheme or "").lower()
         if scheme in {"file", "data"}:
-            return f"[SANDBOX BLOCKED] browser_open does not allow {scheme}: URLs."
+            return f"[SANDBOX BLOCKED] {name} does not allow {scheme}: URLs."
     if cfg.get("enabled") and cfg.get("web_fetch_allowed_hosts"):
         from urllib.parse import urlparse
         if name == "web_search":
             host = "api.duckduckgo.com"
-        elif name == "browser_open":
+        elif name in {"browser_open", "open_url"}:
             raw_url = str(arguments.get("url", "") or "")
             host = (urlparse(raw_url).hostname or "").lower()
         else:
@@ -932,6 +935,17 @@ def guard_tool_call(
     # Guide mode: block actuation (taking control) but allow reads/answers/edits.
     if lane in ACTUATION_BLOCKED_LANES and name in ACTUATION_TOOLS:
         return block(f"[GUIDE MODE] {name} blocked — Guide mode points and explains; switch to Do mode to act.")
+    # Computer-use: screen-capture privacy kill-switch.
+    if name == "capture_screen" and cfg.get("enabled") and not cfg.get("screen_capture_enabled", True):
+        return block("[SANDBOX BLOCKED] screen capture disabled (sandbox.screen_capture_enabled=false).")
+    # Block the most direct shell-launch key shortcuts in actuation (win+r Run,
+    # win+x power menu) — they bypass command safety. A speed-bump, not a wall:
+    # full actuation is Do-mode by design; use Guide mode to block actuation entirely.
+    if name == "press_key" and cfg.get("enabled"):
+        keys = arguments.get("keys")
+        flat = " ".join(str(k) for k in keys) if isinstance(keys, list) else str(keys or "")
+        if re.search(r"\bwin\s*\+\s*(?:r|x)\b", flat, re.I):
+            return block("[SANDBOX BLOCKED] win+r / win+x launch a shell and bypass command safety. Open apps via the Start menu instead: press 'win', type the name, press 'enter'.")
 
     argument_error = _validate_tool_arguments(name, arguments)
     if argument_error:

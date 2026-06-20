@@ -109,6 +109,10 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             "shell_network_enabled": sandbox_cfg.get("shell_network_enabled", True),
             "web_fetch_enabled": sandbox_cfg.get("web_fetch_enabled", True),
             "web_fetch_allowed_hosts": sandbox_cfg.get("web_fetch_allowed_hosts", []),
+            # Computer-use: capture_screen sends a screenshot to the provider.
+            # On by default (it is user-requested), but a privacy-conscious setup
+            # can disable it as a hard kill-switch.
+            "screen_capture_enabled": sandbox_cfg.get("screen_capture_enabled", True),
             "max_output_chars": sandbox_cfg.get("max_output_chars", 50000),
             "audit_log": resolve_state_path(sandbox_cfg.get("audit_log"), self.config) if sandbox_cfg.get("audit_log") else None,
         }

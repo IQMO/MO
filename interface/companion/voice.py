@@ -281,12 +281,16 @@ class CompanionVoice:
     def tts_available(self) -> bool:
         return self.speaker.available
 
-    def listen_and_transcribe(self) -> str:
-        """Record (blocking call with keyboard wait) and return transcription."""
+    def start_recording(self) -> bool:
+        """Begin push-to-talk capture. GUI-driven — no blocking input()."""
+        if not self.stt_available:
+            return False
+        return self.recorder.start()
+
+    def stop_and_transcribe(self) -> str:
+        """Stop capture (closes the mic — never left open) and transcribe."""
         if not self.stt_available:
             return "[Voice input not available]"
-        self.recorder.start()
-        input("Recording... Press Enter to stop.")
         audio = self.recorder.stop()
         if audio is None:
             return ""

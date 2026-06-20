@@ -20,6 +20,7 @@ import time
 import traceback
 from typing import Any
 
+from core.sandbox import redact_sensitive_text
 from interface.companion.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
 from interface.companion.tray import CompanionTray, start_tray_if_enabled
 
@@ -43,6 +44,7 @@ class CompanionSurface:
         self._panic_stop_requested = False
         self._cancel_event: threading.Event | None = None
         self._stream_buf = ""
+        self._recording_voice = False
         self._mode: str = "guide"  # "guide" or "do"
         self._root: Any = None
         self._entry: Any = None
@@ -210,7 +212,7 @@ class CompanionSurface:
         entry = {
             "time": time.strftime("%H:%M:%S"),
             "kind": kind,
-            "detail": detail[:200],
+            "detail": redact_sensitive_text(str(detail or ""))[:200],
         }
         self._action_log.append(entry)
         # Keep last 50 entries
@@ -241,22 +243,38 @@ class CompanionSurface:
         self._voice = CompanionVoice(recognizer=recognizer, speaker=speaker)
 
     def _on_voice_input(self) -> None:
-        """Push-to-talk: record, transcribe, submit."""
+        """Push-to-talk TOGGLE (GUI-driven): click to record, click again to stop.
+        No blocking input(); the mic is closed on the second click — never left open."""
         voice = self._voice
         if voice is None or not voice.stt_available:
             self._set_status("Voice input not available (install faster-whisper + sounddevice)", "#ffcc44")
             return
-        self._set_status("Recording… (speak now, press Enter to stop)", CYAN)
+        if self._recording_voice:
+            # second click → stop, transcribe, submit
+            self._recording_voice = False
+            self._set_status("Transcribing…", CYAN)
 
-        def _record_and_submit() -> None:
-            text = voice.listen_and_transcribe()
-            if text and not text.startswith("[STT"):
-                # Submit via the same pipeline as text input
-                self._run_turn(text)
-            else:
-                self._set_status(text or "[No speech detected]", "#ff4444")
+            def _finish() -> None:
+                text = voice.stop_and_transcribe()
+                if text and not text.startswith("[STT") and not text.startswith("[Voice"):
+                    self._panic_stop_requested = False  # explicit action resumes after panic
+                    self._turn_thread = threading.Thread(
+                        target=self._run_turn, args=(text,), name="mo-companion-turn", daemon=True)
+                    self._turn_thread.start()
+                else:
+                    self._set_status(text or "[No speech detected]", "#ff4444")
 
-        threading.Thread(target=_record_and_submit, name="mo-companion-voice", daemon=True).start()
+            threading.Thread(target=_finish, name="mo-companion-voice", daemon=True).start()
+            return
+        # first click → start (don't start over a running turn)
+        if self._turn_thread is not None and self._turn_thread.is_alive():
+            self._set_status("Still working on the previous request…", "#ffcc44")
+            return
+        if voice.start_recording():
+            self._recording_voice = True
+            self._set_status("Recording… click 🎤 again to stop", CYAN)
+        else:
+            self._set_status("Could not start the microphone.", "#ff4444")
 
     # ------------------------------------------------------------------
     # GUI
@@ -375,7 +393,14 @@ class CompanionSurface:
         text = (self._entry.get() or "").strip()
         if not text:
             return
+        # C6: don't overlap turns — one in-flight turn at a time.
+        if self._turn_thread is not None and self._turn_thread.is_alive():
+            self._set_status("Still working on the previous request…", "#ffcc44")
+            return
         self._entry.delete(0, "end")
+        # C2: an explicit new request resumes after a panic-stop (the operator
+        # acting again is the in-app reset — no permanent block, no restart).
+        self._panic_stop_requested = False
         self._set_status("Thinking…", CYAN)
         self._set_response("")
         self._log_action("submit", text)
@@ -387,7 +412,7 @@ class CompanionSurface:
 
     def _run_turn(self, user_input: str) -> None:
         if self._panic_stop_requested:
-            self._set_status("Turn blocked — panic stop active. Right-click tray → restart.", "#ff4444")
+            self._set_status("Stopped (panic). Type a new request to resume.", "#ff4444")
             return
         # Fresh cancel signal per turn so panic_stop can interrupt an in-flight turn.
         self._cancel_event = threading.Event()

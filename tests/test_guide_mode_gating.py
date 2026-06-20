@@ -28,3 +28,20 @@ def test_guide_lane_allows_reads_and_code_edits():
 def test_do_mode_normal_lane_allows_actuation():
     for name in ACTUATION_TOOLS:
         assert _guard(name, None) is None, name
+
+
+def test_capture_screen_kill_switch():
+    base = {"enabled": True}
+    assert guard_tool_call("capture_screen", {}, lane=None, allowed_roots=None, sandbox_config=base) is None
+    off = {"enabled": True, "screen_capture_enabled": False}
+    reason = guard_tool_call("capture_screen", {}, lane=None, allowed_roots=None, sandbox_config=off)
+    assert reason and "screen capture disabled" in reason
+
+
+def test_press_key_blocks_shell_launch_shortcuts():
+    for keys in ("win+r", "win + r", ["win+r"], "win+x"):
+        reason = guard_tool_call("press_key", {"keys": keys}, lane=None, allowed_roots=None, sandbox_config={"enabled": True})
+        assert reason and "BLOCKED" in reason, keys
+    # ordinary keys (incl. the Start-menu 'win' used to open apps) stay allowed
+    for keys in ("enter", "win", "ctrl+c"):
+        assert guard_tool_call("press_key", {"keys": keys}, lane=None, allowed_roots=None, sandbox_config={"enabled": True}) is None, keys
