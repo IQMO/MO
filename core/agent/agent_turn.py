@@ -28,6 +28,7 @@ from ..backend_monitor import (
 )
 from ..session.handoff import context_pressure
 from ..tool_compress import compress as tool_compress
+from ..claim_verification import unverified_claim_signal
 from ..learning.proactive_learning import build_learning_context
 from ..learning.workflow_learning import build_workflow_learning_context
 from ..learning.feedback_learning import record_feedback_learning
@@ -674,6 +675,18 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 on_activity("finalizing response...")
             critique_result = self._review_final_answer(content, monitor=monitor)
             final_text = critique_result.text
+
+            # FB1 (VS05 vs Fable 5): observable verify-before-claiming signal —
+            # flag a stale-prone current-state/version claim shipped with zero
+            # verifying tools this turn. Observability only (feeds DEVMODE05);
+            # no answer change, no forced continuation.
+            if monitor:
+                _claim_label = unverified_claim_signal(final_text, tool_call_counts)
+                if _claim_label:
+                    monitor.emit("unverified_claim", {
+                        "label": _claim_label,
+                        "tool_calls": sum(tool_call_counts.values()),
+                    })
 
             reasoning = getattr(response, "reasoning_content", None) or getattr(response, "reasoning", None)
             notes = self._record_turn_memory_and_learning(user_input, final_text)
