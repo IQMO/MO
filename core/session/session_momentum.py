@@ -342,6 +342,17 @@ def maybe_compact_session(
     # own.  One compaction pass costs a single prefix-cache miss but removes the
     # bulk from every later provider call, so the threshold is deliberately high.
     tool_chars_threshold = _as_int(agent_cfg.get("context_momentum_tool_chars_threshold", 48_000), 48_000)
+    # A3 (VS05): a model "work resolved" hint (set by the runtime on complete_task)
+    # lowers the old-content bar for one check, so resolved tool chains are freed
+    # proactively instead of waiting for full pressure. Still requires meaningful
+    # old content (reduced, not zeroed) so freed bytes justify the single
+    # prefix-cache miss — no eager-compaction cost regression. Consumed once.
+    resolved_hint = bool(getattr(agent, "_work_resolved_hint", False))
+    if resolved_hint:
+        setattr(agent, "_work_resolved_hint", False)
+        factor = float(agent_cfg.get("context_momentum_resolved_threshold_factor", 0.5) or 0.5)
+        factor = min(1.0, max(0.25, factor))
+        tool_chars_threshold = int(tool_chars_threshold * factor)
     old_tool_chars = _old_tool_result_chars(
         [m for m in list(getattr(session, "messages", []) or []) if isinstance(m, dict)],
         keep_recent,
@@ -356,6 +367,7 @@ def maybe_compact_session(
     result = compact_completed_tool_chains(session, keep_recent=keep_recent, max_chains=max_chains, archive_dir=archive_dir)
     result["old_tool_chars"] = old_tool_chars
     result["tool_chars_trigger"] = tool_chars_exceeded
+    result["resolved_hint"] = resolved_hint
     result.update({"stage": stage, "pressure": pressure, "message_ratio": message_ratio, "force": bool(force), "latest_user_preview": _preview(latest_user, 160)})
     if result.get("changed"):
         saved = _as_int(result.get("saved_chars"))

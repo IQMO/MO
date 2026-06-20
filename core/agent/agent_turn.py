@@ -531,7 +531,13 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         file_content = arguments.get("new_text" if name == "edit_file" else "content", "")
                         if file_path:
                             turn_modified_files.append((file_path, file_content))
-
+                    # A3 (VS05): completing a task is the model's semantic
+                    # "this work is resolved" signal — hint the next compaction to
+                    # free old resolved tool chains proactively. Runtime still
+                    # decides (old completed chains only, never recent/prefix, and
+                    # only when freed bytes justify the cache miss).
+                    if not block_reason and not self._tool_result_is_error(result) and name == "complete_task":
+                        self._work_resolved_hint = True
 
                     # Compress tool output (MO Agent native: lossless structural compression)
                     if not block_reason and getattr(self, 'tool_compress_enabled', True):

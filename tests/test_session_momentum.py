@@ -195,3 +195,65 @@ def test_maybe_compact_session_emits_monitor_event_under_pressure(tmp_path):
     text = monitor_path.read_text(encoding="utf-8")
     assert '"type": "session_compact"' in text
     assert '"kind": "session_compact"' in text
+
+
+# ── A3 (VS05): model "work resolved" hint -> proactive compaction ──
+
+def _agent_with_moderate_old_tool_chars(*, resolved_hint=False, factor=None):
+    """~30K of old tool content — between the half (24K) and full (48K) bars,
+    so it compacts ONLY when the resolved hint halves the threshold."""
+    session = Session("system", max_history=200)
+    session.add_user("run the suite")
+    session.add_message({"role": "assistant", "content": "", "tool_calls": [_tool_call("c1", "shell", {"command": "pytest -q"})]})
+    session.add_tool_result("c1", "test output line\n" * 1800)  # ~30.6K chars
+    session.add_assistant("Suite ran.")
+    for idx in range(20):
+        session.add_user(f"recent {idx}")
+        session.add_assistant(f"answer {idx}")
+    agent_cfg = {"context_momentum_compact_threshold": 0.80, "context_momentum_keep_recent": 18}
+    if factor is not None:
+        agent_cfg["context_momentum_resolved_threshold_factor"] = factor
+    agent = SimpleNamespace(
+        session=session,
+        config={"agent": agent_cfg},
+        _provider_context_max_chars=lambda: 10_000_000,  # pressure ~ 0
+        _is_foreground_session=lambda: True,
+        session_compaction_total_ops=0,
+        session_compaction_total_saved=0,
+    )
+    if resolved_hint:
+        agent._work_resolved_hint = True
+    return agent
+
+
+def test_moderate_old_tool_chars_idle_without_resolved_hint():
+    # 30K < 48K default bar, pressure ~0 -> no compaction.
+    agent = _agent_with_moderate_old_tool_chars(resolved_hint=False)
+    result = maybe_compact_session(agent, stage="pre_turn")
+    assert result["changed"] is False
+    assert result.get("reason") == "below_threshold"
+
+
+def test_resolved_hint_lowers_bar_and_compacts():
+    # Same 30K, but the model resolved work -> bar halves to 24K -> compacts.
+    agent = _agent_with_moderate_old_tool_chars(resolved_hint=True)
+    result = maybe_compact_session(agent, stage="pre_turn")
+    assert result["changed"] is True
+    assert result["resolved_hint"] is True
+    assert result["tool_chars_trigger"] is True
+
+
+def test_resolved_hint_is_consumed_once():
+    agent = _agent_with_moderate_old_tool_chars(resolved_hint=True)
+    maybe_compact_session(agent, stage="pre_turn")
+    # Hint cleared after one use; a second pass with no new hint stays idle.
+    assert getattr(agent, "_work_resolved_hint") is False
+    second = maybe_compact_session(agent, stage="pre_turn")
+    assert second["changed"] is False
+
+
+def test_resolved_threshold_factor_one_keeps_default_bar():
+    # factor=1.0 -> hint has no effect; 30K still below the 48K bar.
+    agent = _agent_with_moderate_old_tool_chars(resolved_hint=True, factor=1.0)
+    result = maybe_compact_session(agent, stage="pre_turn")
+    assert result["changed"] is False
