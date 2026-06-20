@@ -21,7 +21,7 @@ TUI_STYLE_DICT: dict[str, str] = {
     "mo-marker": "#00cccc bold",
     "mo-response": "#bbccdd",
     "response-heading": "#00cccc bold",
-    "response-bullet-marker": "#ffffff",
+    "response-bullet-marker": "#00cccc",
     "response-bullet-head": "#ffffff bold",
     "response-bullet-rest": "#8a949e",
     "response-code": "#a0c4ff italic",

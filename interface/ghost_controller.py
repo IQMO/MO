@@ -1,6 +1,7 @@
 """Ghost side-panel controller and routing mixin for the MO TUI."""
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 import re as _re
@@ -150,23 +151,14 @@ class GhostControllerMixin:
                     prompt = "\n\n".join(context_parts) + "\n\n" + prompt
                 raw_messages = list(getattr(self.agent.session, "messages", []) or [])
                 messages = self._ghost_provider_messages(raw_messages, prompt)
-                if hasattr(self.agent, "provider_scope"):
-                    with self.agent.provider_scope("ghost_panel", worker_id=ghost_record.id):
-                        response, _provider = self.agent.complete_ghost_no_tools(
-                            surface="ghost_panel",
-                            request=f"ghost-panel-{request_id}",
-                            messages=messages,
-                            max_tokens=min(int(self.agent.max_tokens or 2000), 2000),
-                            monitor=monitor,
-                        )
-                else:
-                    response, _provider = self.agent.complete_ghost_no_tools(
-                        surface="ghost_panel",
-                        request=f"ghost-panel-{request_id}",
-                        messages=messages,
-                        max_tokens=min(int(self.agent.max_tokens or 2000), 2000),
-                        monitor=monitor,
-                    )
+                response, _provider = self._ghost_complete(
+                    surface="ghost_panel",
+                    request=f"ghost-panel-{request_id}",
+                    messages=messages,
+                    max_tokens=min(int(self.agent.max_tokens or 2000), 2000),
+                    monitor=monitor,
+                    worker_id=ghost_record.id,
+                )
                 result = self._ghost_visible_response(response, route_suggestion)
                 finish_reason = str(getattr(response, "finish_reason", "") or "")
                 if self._ghost_response_incomplete(result, finish_reason):
@@ -174,23 +166,14 @@ class GhostControllerMixin:
                         {"role": "assistant", "content": result},
                         {"role": "user", "content": "Finish the Ghost answer in 3 concise bullets using visible final text only. Do not repeat earlier text."},
                     ]
-                    if hasattr(self.agent, "provider_scope"):
-                        with self.agent.provider_scope("ghost_panel_retry", worker_id=ghost_record.id):
-                            retry, _retry_provider = self.agent.complete_ghost_no_tools(
-                                surface="ghost_panel_retry",
-                                request=f"ghost-panel-{request_id}-retry",
-                                messages=retry_messages,
-                                max_tokens=min(int(self.agent.max_tokens or 1200), 1200),
-                                monitor=monitor,
-                            )
-                    else:
-                        retry, _retry_provider = self.agent.complete_ghost_no_tools(
-                            surface="ghost_panel_retry",
-                            request=f"ghost-panel-{request_id}-retry",
-                            messages=retry_messages,
-                            max_tokens=min(int(self.agent.max_tokens or 1200), 1200),
-                            monitor=monitor,
-                        )
+                    retry, _retry_provider = self._ghost_complete(
+                        surface="ghost_panel_retry",
+                        request=f"ghost-panel-{request_id}-retry",
+                        messages=retry_messages,
+                        max_tokens=min(int(self.agent.max_tokens or 1200), 1200),
+                        monitor=monitor,
+                        worker_id=ghost_record.id,
+                    )
                     retry_text = str(getattr(retry, "content", "") or "").strip()
                     if retry_text:
                         result = f"{result.rstrip()}\n{retry_text}"
@@ -250,6 +233,25 @@ class GhostControllerMixin:
             objective = enhance_route_objective(route_suggestion.objective or question)
             lines.append(f"Suggested ask: {objective}")
         return "\n".join(lines)
+
+    def _ghost_complete(self, *, surface: str, request: str, messages: list[dict], max_tokens: int, monitor: object, worker_id: str):
+        """Run ``complete_ghost_no_tools`` inside ``provider_scope`` when available.
+
+        Dedup of the scope / no-scope branches that were copy-pasted for both the
+        main Ghost reply and its retry (IFDEV05 P1-003).
+        """
+        if hasattr(self.agent, "provider_scope"):
+            scope = self.agent.provider_scope(surface, worker_id=worker_id)
+        else:
+            scope = contextlib.nullcontext()
+        with scope:
+            return self.agent.complete_ghost_no_tools(
+                surface=surface,
+                request=request,
+                messages=messages,
+                max_tokens=max_tokens,
+                monitor=monitor,
+            )
 
     @staticmethod
     def _ghost_provider_messages(raw_messages: list[dict], prompt: str) -> list[dict]:

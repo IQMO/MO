@@ -221,14 +221,10 @@ def _normalize_markdown_table_lines(text: str, *, columns: int = DEFAULT_RESPONS
                 formatted = _format_markdown_table(header, rows, max_width=max(40, int(columns or DEFAULT_RESPONSE_COLUMNS) - 4))
                 output.extend((formatted_line, True) for formatted_line in formatted)
                 continue
-        if not in_code and not stripped.startswith(("|", "#", "-", "*", ">")):
-            # Split sentences on ". ", "? ", "! " followed by capital letter
-            # Use negative lookbehind to avoid splitting e.g., i.e., vs.
-            split_lines = re.split(r'(?<=[a-z0-9A-Z]{2}[\.\?\!])\s+(?=[A-Z])', line)
-            for split_line in split_lines:
-                output.append((split_line, False))
-        else:
-            output.append((line, False))
+        # Prose lines pass through unchanged — natural word-wrap (visual_rows)
+        # handles width. (IFDEV05 P1-004: an earlier sentence-split here chopped
+        # every multi-sentence paragraph onto separate lines, breaking flow.)
+        output.append((line, False))
         index += 1
     return output
 

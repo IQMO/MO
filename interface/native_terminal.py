@@ -144,7 +144,8 @@ def run_native_terminal_loop(agent: Any, gateway: Any, console: Any) -> None:
     runtime = _startup_runtime_summary(agent, gateway)
     if runtime:
         print(f"Runtime: {runtime}")
-    print("Type /help for commands, /status for details, /exit to quit.")
+    from .layout import STARTUP_HINT
+    print(f"{STARTUP_HINT}, /exit to quit.")
     if _input_module.HAS_PROMPT_TOOLKIT and sys.stdin.isatty():
         print("Native terminal loop enabled. Unset MO_NATIVE_SCROLL for the prompt-toolkit TUI.")
     print()

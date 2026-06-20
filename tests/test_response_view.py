@@ -42,6 +42,13 @@ def test_response_formats_markdown_section_labels_without_double_marker():
     assert any(("class:response-heading", "Tokens:") in line for line in lines)
 
 
+def test_multi_sentence_prose_is_not_split_onto_separate_lines():
+    # IFDEV05 P1-004: prose must pass through unchanged so natural word-wrap
+    # (not a sentence-boundary split) controls line breaks.
+    prose = "The fix works. It routes through the resolver. Done now."
+    assert normalize_markdown_tables(prose) == prose
+
+
 def test_markdown_tables_render_as_bordered_aligned_rows():
     text = "Recent commits:\n\n| Commit | What |\n|---|---|\n| ea68a5c | Refine interface goal finish visuals |\n| 73a7355 | Harden sandbox + ghost route handoff |"
 

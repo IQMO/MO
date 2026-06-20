@@ -23,6 +23,7 @@ LOGO_LINES: tuple[str, ...] = (
 def startup_header_fragment_lines(agent, gateway) -> list[list[tuple[str, str]]]:
     """Return the TUI landing header: logo first, orientation beside it."""
     from .native_terminal import _startup_runtime_summary
+    from .layout import STARTUP_HINT
 
     provider = str(getattr(agent, "provider_name", "") or "unknown")
     model = str(getattr(agent, "model", "") or "unknown")
@@ -32,7 +33,7 @@ def startup_header_fragment_lines(agent, gateway) -> list[list[tuple[str, str]]]
         ("class:response-heading", f"MO v1.0 — {provider} / {model}"),
         ("class:dim", f"Project: {project}"),
         ("class:dim", f"Runtime: {runtime}" if runtime else "Runtime: clear"),
-        ("class:dim", "Type /help for commands, /status for details"),
+        ("class:dim", STARTUP_HINT),
     )
     rows: list[list[tuple[str, str]]] = []
     for index, logo in enumerate(LOGO_LINES):
