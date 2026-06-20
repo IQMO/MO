@@ -36,11 +36,6 @@ providers:
     api_key_env: OPENCODE_API_KEY
     model: big-pickle
 
-  - name: agentrouter
-    type: agentrouter
-    base_url: https://agentrouter.org/v1
-    api_key_env: AGENTROUTER_API_KEY
-
   - name: openai-codex
     type: codex_responses
     base_url: https://chatgpt.com/backend-api/codex
@@ -143,10 +138,11 @@ telegram:
 
 mcp:
   # Model Context Protocol — connect MO to operator-configured local tool servers.
-  # Off by default. Each server is spawned as a local subprocess (stdio JSON-RPC);
-  # its tools appear to MO as `mcp__<name>__<tool>`, gated by the sandbox like any
-  # native tool. No marketplace, no model-side install — you list servers here.
-  enabled: false
+  # Enabled, but INERT until you list at least one server below — with servers: []
+  # nothing is spawned. Each server you add is started as a local subprocess (stdio
+  # JSON-RPC); its tools appear to MO as `mcp__<name>__<tool>`, gated by the sandbox
+  # like any native tool. No marketplace, no model-side install — you list servers here.
+  enabled: true
   servers: []
     # - name: filesystem
     #   command: npx

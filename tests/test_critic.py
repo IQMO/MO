@@ -8,7 +8,7 @@ def test_critic_allows_secret_placeholders_in_run_instructions():
 
 ```env
 OPENCODE_API_KEY=your_key_here
-AGENTROUTER_API_KEY=your_key_here
+DEEPSEEK_API_KEY=your_key_here
 ```
 """
 

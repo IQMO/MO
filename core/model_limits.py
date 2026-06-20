@@ -1,8 +1,8 @@
 """Model context/output limits used for provider-facing budget decisions.
 
-AgentRouter model discovery stays dynamic.  When a provider does not expose token
-limits, this module only applies public upstream model-family limits for known
-model names; otherwise callers keep their configured/default budget.
+When a provider does not expose token limits, this module only applies public
+upstream model-family limits for known model names; otherwise callers keep their
+configured/default budget.
 """
 from __future__ import annotations
 
@@ -38,11 +38,8 @@ def _claude_limits(model: str) -> ModelLimits | None:
 
 
 def infer_model_limits(provider: str, model: str) -> ModelLimits:
-    provider_l = str(provider or "").lower()
     model_s = str(model or "")
     model_l = model_s.lower()
-    if provider_l == "agentrouter" and model_l == "@opus":
-        return ModelLimits(1_000_000, 128_000, "agentrouter_opus_alias_anthropic_doc")
     claude = _claude_limits(model_s)
     if claude:
         return claude

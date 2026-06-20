@@ -80,12 +80,6 @@ class BaseProvider:
         raise NotImplementedError
 
 
-AGENTROUTER_HEADERS = {
-    "User-Agent": "codex_cli_rs/0.0.0 (MO Agent)",
-    "originator": "codex_cli_rs",
-}
-
-
 class ChatCompletionsProvider(BaseProvider):
     """OpenAI-compatible chat completions provider."""
 
@@ -588,70 +582,12 @@ def _load_runtime_env(config: dict) -> None:
     load_dotenv(override=False)
 
 
-def _read_pi_auth_api_key(provider_name: str) -> str:
-    try:
-        auth_path = Path.home() / ".pi" / "agent" / "auth.json"
-        if not auth_path.exists():
-            return ""
-        data = json.loads(auth_path.read_text(encoding="utf-8"))
-        cred = data.get(provider_name) or {}
-        key = str(cred.get("key") or "").strip() if cred.get("type") == "api_key" else ""
-        if not key or key.startswith("!"):
-            return ""
-        return os.getenv(key, key)
-    except Exception:
-        return ""
-
-
 def _resolve_api_key(provider_cfg: dict) -> str:
-    name = provider_cfg.get("name", "")
     api_key_env = provider_cfg.get("api_key_env")
     api_key = os.getenv(api_key_env or "") if api_key_env else ""
     if not api_key:
         api_key = str(provider_cfg.get("api_key") or "").strip()
-    if not api_key and name == "agentrouter":
-        api_key = _read_pi_auth_api_key("agentrouter")
     return api_key
-
-
-def _agentrouter_model_ids(provider_cfg: dict, api_key: str) -> list[str]:
-    base_url = str(provider_cfg.get("base_url") or "https://agentrouter.org/v1").rstrip("/")
-    timeout = float(provider_cfg.get("timeout", 60.0) or 60.0)
-    try:
-        response = httpx.get(
-            f"{base_url}/models",
-            headers={**AGENTROUTER_HEADERS, "Authorization": f"Bearer {api_key}", "Accept": "application/json"},
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return [str(item.get("id")) for item in data.get("data", []) if item.get("id")]
-    except Exception as exc:
-        raise ProviderError(f"AgentRouter model discovery failed: {exc}") from exc
-
-
-def _expand_provider_configs(providers_cfg: list[dict], model_cfg: dict) -> list[dict]:
-    expanded: list[dict] = []
-    for pcfg in providers_cfg:
-        kind = pcfg.get("type") or pcfg.get("api_mode") or "chat_completions"
-        if pcfg.get("name") != "agentrouter" and kind != "agentrouter":
-            expanded.append(pcfg)
-            continue
-        api_key = _resolve_api_key(pcfg)
-        api_key_env = pcfg.get("api_key_env")
-        if not api_key:
-            raise ProviderError(f"API key not found for provider agentrouter. env={api_key_env or '<none>'}")
-        model_ids = _agentrouter_model_ids(pcfg, api_key)
-        if not model_ids:
-            raise ProviderError("AgentRouter model discovery returned no models")
-        for model_id in model_ids:
-            item = dict(pcfg)
-            item["type"] = "chat_completions"
-            item["model"] = model_id
-            item["_api_key"] = api_key
-            item["_headers"] = AGENTROUTER_HEADERS
-            expanded.append(item)
-    return expanded
 
 
 def _provider_from_config(provider_cfg: dict, model: str) -> BaseProvider:
@@ -820,12 +756,6 @@ def init_provider(config: dict = None):
     providers: list[BaseProvider] = []
     setup_errors: list[str] = []
 
-    try:
-        providers_cfg = _expand_provider_configs(providers_cfg, model_cfg)
-    except Exception as exc:
-        setup_errors.append(f"agentrouter/*: {type(exc).__name__}: {exc}")
-        providers_cfg = [p for p in providers_cfg if p.get("name") != "agentrouter" and p.get("type") != "agentrouter"]
-
     for pcfg in providers_cfg:
         try:
             model = pcfg.get("model") or model_cfg.get("default")
@@ -866,11 +796,6 @@ def review_providers(config: dict = None) -> list[BaseProvider]:
 
     providers_cfg = list(config.get("providers") or [])
     providers: list[BaseProvider] = []
-
-    try:
-        providers_cfg = _expand_provider_configs(providers_cfg, {"default": review_model, "fallback": fallback_model})
-    except Exception:
-        traceback.print_exc()
 
     for pcfg in providers_cfg:
         try:

@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from core.provider import provider as provider_module
-from core.provider.provider import CodexOAuthProvider, MockProvider, init_provider, load_config, review_providers
+from core.provider.provider import CodexOAuthProvider, MockProvider, init_provider, review_providers
 
 
 def test_mock_provider_streams_text_tokens():
@@ -63,17 +63,6 @@ def test_review_providers_restricts_prt_to_deepseek_and_codex():
         ("pro", "deepseek-v4-pro"),
         ("codex", "gpt-5.5"),
     ]
-
-
-def test_config_example_includes_switchable_agentrouter_provider():
-    config = load_config("config.example.yaml")
-
-    provider = next((p for p in config["providers"] if p.get("name") == "agentrouter"), None)
-
-    assert provider is not None
-    assert provider["type"] == "agentrouter"
-    assert provider["base_url"] == "https://agentrouter.org/v1"
-    assert provider["api_key_env"] == "AGENTROUTER_API_KEY"
 
 
 def test_codex_provider_keeps_backend_base_url(tmp_path):
@@ -147,18 +136,10 @@ def test_codex_provider_raw_sse_handles_completed_response_with_null_output(monk
     assert captured["headers"]["Authorization"] == "Bearer test-token"
 
 
-def test_init_provider_can_include_agentrouter_when_key_is_set(monkeypatch):
-    monkeypatch.setenv("AGENTROUTER_API_KEY", "test-agentrouter-key")
-    monkeypatch.setattr(provider_module, "_agentrouter_model_ids", lambda _cfg, _key: ["claude-opus-4-6"])
+def test_init_provider_keeps_listed_providers(monkeypatch):
     config = {
         "providers": [
             {"name": "mock-local", "type": "mock", "model": "mock-model"},
-            {
-                "name": "agentrouter",
-                "type": "agentrouter",
-                "base_url": "https://agentrouter.org/v1",
-                "api_key_env": "AGENTROUTER_API_KEY",
-            },
         ],
         "model": {"default": "mock-model"},
         "agent": {},
@@ -169,5 +150,4 @@ def test_init_provider_can_include_agentrouter_when_key_is_set(monkeypatch):
     providers = result["providers"]
     assert [(p.name, p.api_mode, p.base_url, p.model) for p in providers] == [
         ("mock-local", "mock", "", "mock-model"),
-        ("agentrouter", "chat_completions", "https://agentrouter.org/v1", "claude-opus-4-6"),
     ]

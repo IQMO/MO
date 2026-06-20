@@ -152,7 +152,6 @@ def _ensure_env_file(path: Path, report: InitReport) -> None:
     path.write_text(
         "# MO private environment file. Keep secret values here or in your shell env.\n"
         "# OPENCODE_API_KEY=\n"
-        "# AGENTROUTER_API_KEY=\n"
         "# TELEGRAM_BOT_TOKEN=\n",
         encoding="utf-8",
     )
