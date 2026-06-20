@@ -450,8 +450,13 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     msg["reasoning_content"] = reasoning
                 self.session.add_message(msg)
 
+                # Pre-execute independent read-only calls concurrently (no-op
+                # unless this response carried >=2 reads). The loop below stays
+                # the single authority for gating/board/audit/ordering.
+                prefetched_reads = self._prefetch_read_family_results(tool_calls_data, user_input)
+
                 # Dispatch each tool call through the sandbox
-                for tc_data in tool_calls_data:
+                for idx, tc_data in enumerate(tool_calls_data):
                     if getattr(cancel_event, "is_set", lambda: False)():
                         return "[ABORTED] Current turn stopped."
                     name = tc_data["function"]["name"]
@@ -485,7 +490,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         # blocked tool attempts do not appear as active work.
                         if not task_board and on_first_tool:
                             task_board = _call_on_first_tool(on_first_tool, name, arguments)
-                        result = self._dispatch_tool(name, arguments)
+                        # Reuse the concurrently-prefetched read result when present
+                        # (gate already passed identically here); else execute inline.
+                        result = prefetched_reads[idx] if idx in prefetched_reads else self._dispatch_tool(name, arguments)
                         # Auto-advance only when the tool plausibly satisfies the active row.
                         # Final/report rows wait for the actual final answer.
                         if task_board and task_board.tasks and not self._tool_result_is_error(result):

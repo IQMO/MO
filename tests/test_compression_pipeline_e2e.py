@@ -403,3 +403,48 @@ def test_e2e_compression_still_activates_in_full_turn(tmp_path):
     # Model-driven: board is just a container, completion is model's decision
     # Compression still works — raw output is passed to session
     assert result == "verified"
+
+
+# ── Pipeline: A1 concurrent read prefetch in a real turn ───────────
+
+def test_e2e_parallel_reads_dispatched_once_and_stored_in_order(monkeypatch):
+    """Two independent read_file calls in one response: served from the
+    concurrent prefetch (each dispatched exactly once, not re-run by the loop),
+    with tool results stored in original order. Proves A1 integrates with the
+    real run_turn loop without disturbing gating/ordering."""
+    monkeypatch.setattr("core.agent.agent_turn.guard_tool_call", lambda *a, **k: "")
+    monkeypatch.setattr("core.agent.agent_turn_dispatch.guard_tool_call", lambda *a, **k: "")
+    agent, messages = _mock_agent_for_compression_turn()
+    agent.tool_compress_enabled = False  # keep read payloads verbatim for assertions
+    agent._project_scoped_tool_arguments = lambda name, args: args
+    agent._operator_approved = lambda *a, **k: False
+    agent._effective_allowed_roots_for_tool = lambda *a, **k: None
+    agent._self_mutation_block_reason = lambda *a, **k: None
+
+    dispatched = []
+
+    def dispatch(name, arguments):
+        path = arguments.get("path")
+        dispatched.append(path)
+        return f"CONTENT::{path}"
+
+    agent._dispatch_tool = dispatch
+
+    responses = iter([
+        SimpleNamespace(content="", tool_calls=[
+            {"id": "c1", "function": {"name": "read_file", "arguments": '{"path":"core/a.py"}'}},
+            {"id": "c2", "function": {"name": "read_file", "arguments": '{"path":"core/b.py"}'}},
+        ], usage=None, finish_reason="tool_calls"),
+        SimpleNamespace(content="done", tool_calls=[], usage=None, finish_reason="stop"),
+    ])
+    agent._call_provider = lambda **kw: next(responses)
+
+    result = agent.run_turn("read a and b")
+
+    assert result == "done"
+    tool_msgs = [m for m in messages if m.get("role") == "tool"]
+    assert [m["tool_call_id"] for m in tool_msgs] == ["c1", "c2"]      # order preserved
+    assert tool_msgs[0]["content"] == "CONTENT::core/a.py"
+    assert tool_msgs[1]["content"] == "CONTENT::core/b.py"
+    assert sorted(dispatched) == ["core/a.py", "core/b.py"]            # each read run
+    assert len(dispatched) == 2                                        # exactly once — no double dispatch

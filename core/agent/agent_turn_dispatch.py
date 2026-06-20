@@ -5,6 +5,7 @@ import os
 import re
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from ..sandbox import guard_tool_call, redact_provider_tokens, redact_sensitive_text, shell_command_is_mutating
@@ -536,6 +537,57 @@ class AgentTurnDispatchMixin:
         target = bool(re.search(r"\b(mo|mo agent|yourself|your own files|self[- ]?change|self[- ]?edit)\b", text))
         explicit_work = bool(re.search(r"\b(fix|change|edit|update|modify|implement|patch)\b", text))
         return approval and (target or explicit_work)
+
+    def _prefetch_read_family_results(self, tool_calls_data: list, user_input: str) -> dict[int, str]:
+        """Execute independent read-only tool calls concurrently before the serial
+        dispatch loop, returning {index: result} for read-family calls.
+
+        Only ``read_file``/``grep``/``find_files`` qualify — they are pure
+        filesystem reads with no shared-state side effects (verified: ``_dispatch_tool``
+        for these skips SSH tracking and only reads). The serial loop stays the
+        single authority for gating, abuse detection, board, audit, compression,
+        and ordered ``add_tool_result``; it just reuses these precomputed results
+        instead of running the read inline. Running reads in parallel changes only
+        wall-clock, never the outcome or ordering of any bookkeeping.
+
+        A gate pre-filter guarantees a read the sandbox would block never executes
+        here; the loop re-evaluates the same deterministic gate as the authority.
+        Returns ``{}`` (full serial fallback) unless ≥2 independent reads qualify.
+        """
+        indices = [
+            i for i, tc in enumerate(tool_calls_data)
+            if (tc.get("function") or {}).get("name") in _READ_FAMILY_TOOLS
+        ]
+        if len(indices) < 2:
+            return {}
+        runnable: dict[int, tuple[str, dict]] = {}
+        for i in indices:
+            tc = tool_calls_data[i]
+            name = tc["function"]["name"]
+            args = self._project_scoped_tool_arguments(name, self._parsed_tool_arguments(tc))
+            operator_ok = self._operator_approved(user_input, name, args)
+            roots = self._effective_allowed_roots_for_tool(user_input, name, args)
+            blocked = self._self_mutation_block_reason(user_input, name, args) or guard_tool_call(
+                name, args,
+                lane=self._active_lane,
+                allowed_roots=roots,
+                sandbox_config=self.sandbox_config,
+                operator_override=operator_ok,
+            )
+            if not blocked:
+                runnable[i] = (name, args)
+        if len(runnable) < 2:
+            return {}
+        results: dict[int, str] = {}
+        with ThreadPoolExecutor(max_workers=min(len(runnable), 8)) as pool:
+            futures = {pool.submit(self._dispatch_tool, n, a): i for i, (n, a) in runnable.items()}
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                try:
+                    results[idx] = fut.result()
+                except Exception as exc:  # mirror _dispatch_tool's own failure contract
+                    results[idx] = f"Error executing tool: {exc}"
+        return results
 
     def _dispatch_tool(self, name: str, arguments: dict) -> str:
         """Execute a tool and return the result. Sandbox already approved it."""

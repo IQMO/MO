@@ -19,6 +19,14 @@ def test_internal_prompt_carries_honesty_directive():
     assert "no groveling" in text
 
 
+def test_internal_prompt_carries_batched_reads_directive():
+    # A1 (2026-06-20): the prompt must tell the model to batch independent reads
+    # so the runtime's concurrent read dispatch actually gets exercised.
+    text, _source = load_system_prompt("")
+
+    assert "Batch independent reads" in text
+
+
 def test_legacy_root_system_md_config_resolves_to_internal_prompt(tmp_path, monkeypatch):
     root_prompt = tmp_path / "system.md"
     root_prompt.write_text("ROOT PROMPT MUST NOT BE DEFAULT", encoding="utf-8")
