@@ -106,6 +106,18 @@ state directly are recorded to your local profile. Learned guidance is local,
 relevance-gated, and subordinate to the current request, sandbox, and runtime
 truth.
 
+### Sees and drives your machine
+
+MO can take a screenshot and reason over it with a vision-capable provider, drive
+a real Chrome through the DevTools Protocol (open pages, read a numbered element
+list, click and type), and — when you want it to act — control the actual mouse
+and keyboard to carry a task through end to end (e.g. open an app from the Start
+menu). It picks the right tool from a plain request and confirms the result by
+looking at the screen. Actuation is failsafe-guarded and lives in its own sandbox
+lane; the capability is built on MO's own code (no third-party automation
+framework) and needs only optional, local-only packages — the core agent and
+headless servers are unaffected.
+
 ## Who This Release Is For
 
 Try MO now if you:
@@ -198,7 +210,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | MCP tools | Connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments. Enabled by default but inert until you list a server (an empty `servers:` spawns nothing) |
 | Screen vision | `capture_screen` lets MO see the operator's display (on-demand screenshot) and reason over it with a vision-capable provider — read an error dialog, a diagram, or a running UI. Image rides MO's normal tool/provider flow; non-vision providers degrade to text |
 | Browser control | Native browser automation over the Chrome DevTools Protocol (no third-party framework): `browser_open` / `browser_snapshot` (numbered interactive elements) / `browser_click` / `browser_type` / `browser_eval` / `browser_close`. Drives a real Chrome in an isolated debug profile, sandbox-gated like any tool |
-| Desktop control | Drive the real machine to carry out a task end to end: `move_pointer` / `mouse_click` / `type_text` / `press_key` (actuation, `pyautogui`, corner-slam failsafe) and `point_on_screen` (safe Guided pointing — an on-screen MO bubble, no control). Actuation tools sit in a dedicated lane, blocked in read-only lanes |
+| Desktop control | Drive the real machine to carry out a task end to end: `move_pointer` / `mouse_click` / `type_text` / `press_key` (actuation, `pyautogui`, corner-slam failsafe) and `point_on_screen` (safe Guided pointing — an on-screen MO bubble, no control). Actuation tools sit in a dedicated lane, blocked in read-only lanes. The three computer-use rows need optional, local-only deps (`pip install -r requirements-computer-use.txt`); each tool degrades to a clear error if its package is absent, so the core agent and headless servers are unaffected |
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 

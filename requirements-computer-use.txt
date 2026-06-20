@@ -1,0 +1,12 @@
+# Optional: computer-use (see the screen, drive a browser, control the desktop).
+# Only needed when you actually use the computer-use tools. All of them degrade
+# gracefully to a clear error if the matching package is absent, so the core
+# agent runs fine without these — and a headless server (no display) should NOT
+# install pyautogui.
+#
+#   capture_screen           -> Pillow (screenshot)
+#   browser_* (CDP)          -> websocket-client
+#   move_pointer/click/type  -> pyautogui (local desktop only; needs a display)
+Pillow>=10.0
+websocket-client>=1.6
+pyautogui>=0.9.54
