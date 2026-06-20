@@ -266,12 +266,14 @@ class Profile:
         # paths, and a pointer to the full files. MO reads the full operator.md on
         # demand with read_file (its profile dir is read-allowed) instead of
         # carrying the whole profile every turn.
+        # Order matters: operator identity + terms first so MO has the user's
+        # vocabulary even when the summary is truncated at max_chars.
         profile_files = (
             ("operator.md", 1400, False),
+            ("terms.md", 450, False),
             ("thinking_model.md", 500, False),
             ("behavior.md", 600, False),
             ("learning.md", 700, True),
-            ("terms.md", 300, False),
             ("identity.md", 250, False),
         )
         try:
@@ -319,6 +321,19 @@ class Profile:
                     "Known operator project paths (projects MO has opened; verify live repo/runtime state before claims): "
                     "\n" + "\n".join(proj_lines)
                 )
+
+        # Profile Index — compact auto-generated map of what each file contains.
+        # Always comes BEFORE the per-file excerpts so MO knows what exists even
+        # when individual excerpts are truncated.  Tells MO which file to
+        # read_file when it needs a term/section that was cut.
+        index_entries: list[str] = []
+        for file_name, _limit, _tail in profile_files:
+            entry = _profile_index_line(pdir / file_name)
+            if entry:
+                index_entries.append(f"- {file_name}: {entry}")
+        if index_entries:
+            lines.append("### Profile Index (what's where)")
+            lines.extend(index_entries)
 
         def excerpt(path: Path, limit: int, *, include_recent_tail: bool = False) -> str:
             if not path.exists():
@@ -440,6 +455,31 @@ class Profile:
 
         lines.append(f"Created: {_fmt_time(self.created_at)}")
         return "\n".join(lines)
+
+
+def _profile_index_line(path: Path) -> str:
+    """Build one compact index line from a profile file's ## headers and bold terms.
+
+    Returns a short comma-joined string of section names (or defined terms when
+    the file has no ## headers).  This gives MO a MAP of what lives where so it
+    can decide to read_file the full file on demand.
+    """
+    if not path.exists():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
+    headers = re.findall(r"^## (.+)$", text, re.MULTILINE)
+    if headers:
+        return ", ".join(headers)
+    # Flat file without sections — list the bold terms (e.g. terms.md)
+    terms = []
+    for m in re.finditer(r"^\s*-\s*\*\*(.+?)\*\*", text, re.MULTILINE):
+        term = m.group(1).strip()
+        if term and term not in terms:
+            terms.append(term)
+    return ", ".join(terms[:10]) if terms else ""
 
 
 def _cap_profile_text(text: str, limit: int, marker: str) -> str:
