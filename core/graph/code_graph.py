@@ -20,7 +20,7 @@ import traceback
 
 from ..backend_monitor import get_monitor, redact_monitor_text
 from ..env_utils import int_env
-from ..path_defaults import ENV_MO_STATE_HOME, private_state_enabled, project_cache_dir
+from ..path_defaults import private_state_enabled, project_cache_dir
 from ..text_utils import DEFAULT_CONTEXT_STOPWORDS
 
 GRAPH_VERSION = "mo-code-graph-v1"

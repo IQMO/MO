@@ -1,0 +1,27 @@
+# MO Agent — consolidated tooling config.
+#
+# Lint (ruff) and test (pytest) config live here in one place instead of
+# separate ruff.toml + pytest.ini files. Runtime/dev/optional dependencies stay
+# in the requirements*.txt files (install with `pip install -r requirements.txt`);
+# they are not declared here because MO is run as an app (`python mo.py`), not
+# installed as a package.
+
+[tool.ruff]
+# MO Agent lint gate. Pyflakes (F) catches the real, runtime-relevant problems —
+# undefined names, unused imports, f-string placeholder mistakes — without
+# drowning in style noise. Enforce locally/CI with: `python -m ruff check .`
+line-length = 120
+target-version = "py310"
+extend-exclude = ["tmp", "logs", "memory", "docs", "personal"]
+
+[tool.ruff.lint]
+select = ["F", "E9"]  # pyflakes + syntax errors
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["tmp", ".git", "__pycache__", ".pytest_cache", ".ruff_cache", "logs", "memory", "operator", "docs", "personal"]
+markers = [
+    "smoke: fast core verification (<3KB test files, typically <5s)",
+    "unit: standard unit tests (3-15KB, typically <30s)",
+    "full: comprehensive tests (>15KB, may be slow)",
+]

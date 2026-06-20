@@ -777,7 +777,7 @@ def _web_search_keyed(query: str, limit: int) -> str | None:
             resp = urllib.request.urlopen(req, timeout=12)
             formatted = _format_serper_results(_json.loads(resp.read().decode("utf-8")), limit)
         return formatted or f"No results found for: {query}"
-    except Exception as e:
+    except Exception:
         # Keyed backend failed — fall through to the keyless default rather than error out.
         return None
 

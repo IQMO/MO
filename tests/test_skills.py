@@ -1,5 +1,4 @@
 """Skills system: load packs, select the relevant one(s) per turn, skip greetings."""
-from pathlib import Path
 
 from core.skills import (
     load_skills,
