@@ -483,6 +483,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         operator_override=operator_ok,
                     )
 
+                    screen_image_uri = None
                     if block_reason:
                         result = block_reason
                     else:
@@ -493,6 +494,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         # Reuse the concurrently-prefetched read result when present
                         # (gate already passed identically here); else execute inline.
                         result = prefetched_reads[idx] if idx in prefetched_reads else self._dispatch_tool(name, arguments)
+                        # Computer-use vision: lift a capture_screen screenshot out of
+                        # the temp file into an image part for the model to SEE.
+                        if name == "capture_screen":
+                            from tools.screen import SCREEN_IMAGE_MARKER, load_image_data_uri
+                            if SCREEN_IMAGE_MARKER in result:
+                                text_part, _, path = result.partition(f"{SCREEN_IMAGE_MARKER}:")
+                                screen_image_uri = load_image_data_uri(path.strip())
+                                result = text_part.strip() or "[screen captured]"
                         # Auto-advance only when the tool plausibly satisfies the active row.
                         # Final/report rows wait for the actual final answer.
                         if task_board and task_board.tasks and not self._tool_result_is_error(result):
@@ -540,7 +549,10 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
 
                     result = self._cap_tool_result_for_context(result, monitor=monitor, tool_name=name)
 
-                    self.session.add_tool_result(tc_data["id"], result)
+                    if screen_image_uri:
+                        self.session.add_tool_result(tc_data["id"], result, image_data_uri=screen_image_uri)
+                    else:
+                        self.session.add_tool_result(tc_data["id"], result)
                 if getattr(cancel_event, "is_set", lambda: False)():
                     return "[ABORTED] Current turn stopped."
 

@@ -51,7 +51,8 @@ def test_graph_tools_registered():
     for name in ("code_search", "find_callers", "find_callees"):
         assert name in tools.TOOL_EXECUTORS
         assert any(d["function"]["name"] == name for d in tools.TOOL_DEFINITIONS)
-    assert len(tools.TOOL_DEFINITIONS) == len(tools.TOOL_EXECUTORS) == 16
+    # 16 base + computer-use: capture_screen + 6 browser_* + 6 desktop = 29
+    assert len(tools.TOOL_DEFINITIONS) == len(tools.TOOL_EXECUTORS) == 29
 
 
 def test_graph_tool_executors_return_strings_without_raising():

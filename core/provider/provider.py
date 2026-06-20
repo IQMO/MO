@@ -96,7 +96,27 @@ class ChatCompletionsProvider(BaseProvider):
         self.reasoning_effort = str(reasoning_effort).strip().lower() if reasoning_effort else None
         self.client = OpenAI(api_key=api_key, base_url=base_url, default_headers=headers or None, timeout=self.timeout, max_retries=0)
 
+    @staticmethod
+    def _normalize_messages(messages: list[dict]) -> list[dict]:
+        """Flatten list-content (image-bearing computer-use tool results) to plain
+        text for chat-completions providers. The chat-completions ``tool`` role
+        only accepts string content and these providers may not be vision-capable,
+        so keep the text parts and drop the image rather than send a bad payload."""
+        out: list[dict] = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, list):
+                texts = [str(p.get("text", "")) for p in content if isinstance(p, dict) and p.get("type") in ("text", "input_text", "output_text")]
+                has_image = any(isinstance(p, dict) and p.get("type") in ("image", "image_url", "input_image") for p in content)
+                flat = "\n".join(t for t in texts if t)
+                if has_image:
+                    flat = (flat + "\n[image omitted: active provider is not vision-capable]").strip()
+                msg = {**msg, "content": flat}
+            out.append(msg)
+        return out
+
     def stream(self, *, messages: list[dict], tools: list[dict], temperature: float, max_tokens: int):
+        messages = self._normalize_messages(messages)
         request = {
             "model": self.model,
             "messages": messages,
@@ -128,7 +148,7 @@ class ChatCompletionsProvider(BaseProvider):
         if on_token is None:
             request = {
                 "model": self.model,
-                "messages": messages,
+                "messages": self._normalize_messages(messages),
                 "max_tokens": max_tokens,
                 "timeout": self.timeout,
             }
@@ -296,6 +316,8 @@ class CodexOAuthProvider(BaseProvider):
     name = "openai-codex"
     api_mode = "codex_responses"
     base_url = "https://chatgpt.com/backend-api/codex"
+    oauth_token_url = "https://auth.openai.com/oauth/token"
+    oauth_client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
 
     def __init__(self, *, model: str = "gpt-5.5", auth_path: str | None = None, timeout: float = 60.0, reasoning_effort: str | None = None):
         super().__init__(model=model)
@@ -306,6 +328,10 @@ class CodexOAuthProvider(BaseProvider):
         self.timeout_seconds = float(timeout or 60.0)
         self.timeout = httpx.Timeout(self.timeout_seconds, connect=min(30.0, self.timeout_seconds))
         access_token = self._read_access_token()
+        if self._access_token_expired(access_token):
+            refreshed = self._refresh_access_token()
+            if refreshed:
+                access_token = refreshed
         headers = self._codex_headers(access_token)
         self.access_token = access_token
         self.default_headers = headers
@@ -316,6 +342,67 @@ class CodexOAuthProvider(BaseProvider):
             timeout=self.timeout,
             max_retries=0,
         )
+
+    @staticmethod
+    def _jwt_exp(token: str) -> int | None:
+        try:
+            payload = token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            return int(json.loads(base64.urlsafe_b64decode(payload)).get("exp"))
+        except Exception:
+            return None
+
+    @classmethod
+    def _access_token_expired(cls, token: str, *, skew_seconds: int = 120) -> bool:
+        """True only when we can prove the token is at/near expiry. If exp can't be
+        read, return False (don't force an unnecessary refresh)."""
+        import time
+        exp = cls._jwt_exp(token)
+        if not exp:
+            return False
+        return time.time() >= (exp - skew_seconds)
+
+    def _refresh_access_token(self) -> str | None:
+        """Mint a fresh access token from the stored refresh_token and persist it.
+
+        Same OAuth refresh the Codex CLI performs on use; MO reads the token file
+        directly, so without this an expired access token (tokens last only days)
+        hard-fails every call with 401. Best-effort: any failure returns None and
+        the caller proceeds with the existing token.
+        """
+        try:
+            data = json.loads(self.auth_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        tokens = data.get("tokens") or {}
+        refresh_token = str(tokens.get("refresh_token") or "").strip()
+        if not refresh_token:
+            return None
+        payload = {
+            "client_id": self.oauth_client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "scope": "openid profile email",
+        }
+        try:
+            resp = httpx.post(self.oauth_token_url, json=payload, timeout=self.timeout, follow_redirects=True)
+            if resp.status_code >= 400:
+                return None
+            body = resp.json()
+        except Exception:
+            return None
+        new_access = str(body.get("access_token") or "").strip()
+        if not new_access:
+            return None
+        for key in ("access_token", "id_token", "refresh_token"):
+            if body.get(key):
+                tokens[key] = body[key]
+        data["tokens"] = tokens
+        try:
+            self.auth_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        return new_access
 
     def _read_access_token(self) -> str:
         if not self.auth_path.exists():
@@ -345,31 +432,70 @@ class CodexOAuthProvider(BaseProvider):
         return headers
 
     @staticmethod
-    def _to_instructions_and_input(messages: list[dict]) -> tuple[str, list[dict]]:
+    def _responses_content_parts(content: Any, mapped_role: str) -> list[dict]:
+        """Map a message ``content`` (str or list-of-parts) to Responses API parts.
+
+        Backward compatible: a plain string yields the same single text part as
+        before. A list lets a turn mix text and images — image parts become
+        ``input_image`` data-URI parts so vision-capable models can see them
+        (computer-use ``capture_screen``). Assistant text uses ``output_text``.
+        """
+        text_type = "output_text" if mapped_role == "assistant" else "input_text"
+        if not isinstance(content, list):
+            text = str(content or "")
+            return [{"type": text_type, "text": text}] if text else []
+        parts: list[dict] = []
+        for part in content:
+            if not isinstance(part, dict):
+                if str(part):
+                    parts.append({"type": text_type, "text": str(part)})
+                continue
+            ptype = part.get("type")
+            if ptype in {"text", "input_text", "output_text"}:
+                text = str(part.get("text") or "")
+                if text:
+                    parts.append({"type": text_type, "text": text})
+            elif ptype in {"image", "image_url", "input_image"}:
+                url = part.get("image_url") or part.get("url") or part.get("data")
+                if isinstance(url, dict):
+                    url = url.get("url")
+                if url:
+                    parts.append({"type": "input_image", "image_url": str(url)})
+        return parts
+
+    @classmethod
+    def _to_instructions_and_input(cls, messages: list[dict]) -> tuple[str, list[dict]]:
         system_parts: list[str] = []
         input_items: list[dict] = []
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content") or ""
             if role == "system":
-                system_parts.append(str(content))
+                system_parts.append(str(content) if not isinstance(content, list) else "".join(p.get("text", "") for p in content if isinstance(p, dict)))
             elif role in {"user", "assistant"}:
                 mapped_role = "assistant" if role == "assistant" else "user"
-                content_type = "output_text" if mapped_role == "assistant" else "input_text"
-                if content:
+                parts = cls._responses_content_parts(content, mapped_role)
+                if parts:
                     input_items.append({
                         "role": mapped_role,
-                        "content": [{"type": content_type, "text": str(content)}],
+                        "content": parts,
                     })
                 # Do not serialize internal tool-call metadata as assistant prose.
                 # The Responses API receives available tools separately; turning
                 # prior calls into text like "[tool calls requested]" teaches
                 # models to print raw tool-call payloads instead of using tools.
             elif role == "tool":
-                input_items.append({
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": f"[tool result]\n{str(content)}"}],
-                })
+                if isinstance(content, list):
+                    # Image-bearing tool result (computer-use capture_screen): map
+                    # text→input_text and image→input_image so the model sees it.
+                    parts = cls._responses_content_parts(content, "user")
+                    parts = [{"type": "input_text", "text": "[tool result]"}] + parts
+                    input_items.append({"role": "user", "content": parts})
+                else:
+                    input_items.append({
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": f"[tool result]\n{str(content)}"}],
+                    })
         instructions = "\n\n".join(system_parts).strip() or "You are MO."
         if not input_items:
             input_items = [{"role": "user", "content": [{"type": "input_text", "text": "Continue."}]}]

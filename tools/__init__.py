@@ -21,6 +21,23 @@ from core.shell_processes import (
     _unregister_shell_process,
     _kill_process_tree,
 )
+from .screen import execute_capture_screen
+from .desktop import (
+    execute_screen_size,
+    execute_point_on_screen,
+    execute_move_pointer,
+    execute_mouse_click,
+    execute_type_text,
+    execute_press_key,
+)
+from .browser import (
+    execute_browser_open,
+    execute_browser_snapshot,
+    execute_browser_click,
+    execute_browser_type,
+    execute_browser_eval,
+    execute_browser_close,
+)
 
 
 SKIP_PATH_PARTS = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "node_modules", ".venv", "venv", "logs", "memory"}
@@ -61,6 +78,161 @@ def _iter_unskipped_files(root_path: Path):
 # ── Tool Definitions ───────────────────────────────────────────────
 
 TOOL_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "capture_screen",
+            "description": "Capture a screenshot of the operator's primary display so MO can SEE what is currently on screen. Use when the operator asks about what's on their screen, to read an on-screen error/dialog/diagram/UI, or to check the result of a desktop action. Returns a confirmation; the image itself is attached for vision analysis. Requires a vision-capable provider.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "screen_size",
+            "description": "Get the operator's screen resolution (width x height) so you can compute coordinates for pointing/clicking.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "point_on_screen",
+            "description": "GUIDED mode (safe, actuates nothing): show MO's on-screen bubble + label at a coordinate to point the operator at something. Use to guide the operator ('click here') without taking control.",
+            "parameters": {
+                "type": "object",
+                "required": ["x", "y"],
+                "properties": {
+                    "x": {"type": "integer", "description": "X pixel coordinate"},
+                    "y": {"type": "integer", "description": "Y pixel coordinate"},
+                    "label": {"type": "string", "description": "Short text shown in the bubble"},
+                    "seconds": {"type": "number", "description": "How long to show (default 4)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "move_pointer",
+            "description": "ACTUATION: move the real mouse cursor to a screen coordinate. Slam the mouse into a screen corner to abort all actuation (failsafe).",
+            "parameters": {
+                "type": "object",
+                "required": ["x", "y"],
+                "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mouse_click",
+            "description": "ACTUATION: click the real mouse. Omit x/y to click at the current pointer, or pass x/y to click there. button: left/right/middle; clicks: 1 or 2.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer"}, "y": {"type": "integer"},
+                    "button": {"type": "string", "description": "left (default), right, middle"},
+                    "clicks": {"type": "integer", "description": "1 (default) or 2 for double-click"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "type_text",
+            "description": "ACTUATION: type text on the real keyboard into whatever window has focus.",
+            "parameters": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {"text": {"type": "string", "description": "Text to type"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "press_key",
+            "description": "ACTUATION: press a key or chord on the real keyboard. 'keys' is a single key ('enter', 'win', 'esc', 'tab'), a combo ('ctrl+c'), or a list for a sequence. Example to open an app: press 'win', then type_text the name, then press 'enter'.",
+            "parameters": {
+                "type": "object",
+                "required": ["keys"],
+                "properties": {"keys": {"description": "Key, 'mod+key' chord, or list of them"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_open",
+            "description": "Open a real browser (Chrome via DevTools Protocol) and navigate to a URL. Use to do things on the web for the operator. Returns the page title; then call browser_snapshot to see clickable elements.",
+            "parameters": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {"url": {"type": "string", "description": "URL to open (https:// added if missing)"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_snapshot",
+            "description": "List the interactive elements on the current browser page as numbered refs (e1, e2, ...) with role and label. Call this before browser_click/browser_type, and again after any navigation (refs reset).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_click",
+            "description": "Click an element on the current page by its ref from browser_snapshot (e.g. 'e3').",
+            "parameters": {
+                "type": "object",
+                "required": ["ref"],
+                "properties": {"ref": {"type": "string", "description": "Element ref from browser_snapshot"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_type",
+            "description": "Type text into an input/textarea on the current page by its ref. Set submit=true to submit the form after.",
+            "parameters": {
+                "type": "object",
+                "required": ["ref", "text"],
+                "properties": {
+                    "ref": {"type": "string", "description": "Element ref from browser_snapshot"},
+                    "text": {"type": "string", "description": "Text to type"},
+                    "submit": {"type": "boolean", "description": "Submit the form after typing (default false)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_eval",
+            "description": "Run JavaScript in the current page and return the result. Power tool for reading page state or doing what click/type can't.",
+            "parameters": {
+                "type": "object",
+                "required": ["expression"],
+                "properties": {"expression": {"type": "string", "description": "JavaScript expression to evaluate"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_close",
+            "description": "Close the browser MO opened and clean up its temporary profile.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -921,6 +1093,19 @@ def execute_complete_task(arguments: dict[str, Any]) -> str:
 
 
 TOOL_EXECUTORS = {
+    "capture_screen": execute_capture_screen,
+    "screen_size": execute_screen_size,
+    "point_on_screen": execute_point_on_screen,
+    "move_pointer": execute_move_pointer,
+    "mouse_click": execute_mouse_click,
+    "type_text": execute_type_text,
+    "press_key": execute_press_key,
+    "browser_open": execute_browser_open,
+    "browser_snapshot": execute_browser_snapshot,
+    "browser_click": execute_browser_click,
+    "browser_type": execute_browser_type,
+    "browser_eval": execute_browser_eval,
+    "browser_close": execute_browser_close,
     "read_file": execute_read_file,
     "write_file": execute_write_file,
     "edit_file": execute_edit_file,

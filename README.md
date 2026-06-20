@@ -196,6 +196,9 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
 | MCP tools | Connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments. Enabled by default but inert until you list a server (an empty `servers:` spawns nothing) |
+| Screen vision | `capture_screen` lets MO see the operator's display (on-demand screenshot) and reason over it with a vision-capable provider — read an error dialog, a diagram, or a running UI. Image rides MO's normal tool/provider flow; non-vision providers degrade to text |
+| Browser control | Native browser automation over the Chrome DevTools Protocol (no third-party framework): `browser_open` / `browser_snapshot` (numbered interactive elements) / `browser_click` / `browser_type` / `browser_eval` / `browser_close`. Drives a real Chrome in an isolated debug profile, sandbox-gated like any tool |
+| Desktop control | Drive the real machine to carry out a task end to end: `move_pointer` / `mouse_click` / `type_text` / `press_key` (actuation, `pyautogui`, corner-slam failsafe) and `point_on_screen` (safe Guided pointing — an on-screen MO bubble, no control). Actuation tools sit in a dedicated lane, blocked in read-only lanes |
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 

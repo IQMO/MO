@@ -72,8 +72,23 @@ class Session:
         self.messages.append(msg)
         self._trim()
 
-    def add_tool_result(self, tool_call_id: str, content: str):
+    def add_tool_result(self, tool_call_id: str, content: str, image_data_uri: str | None = None):
         safe_content = redact_sensitive_text(sanitize_unicode_text(content))
+        if image_data_uri:
+            # Computer-use vision: carry the screenshot as an image content part so
+            # a vision-capable provider can SEE it. Text part stays for non-vision
+            # providers / history readability.
+            parts: list[dict] = []
+            if safe_content:
+                parts.append({"type": "text", "text": safe_content})
+            parts.append({"type": "image", "image_url": image_data_uri})
+            self.messages.append({
+                "role": "tool",
+                "tool_call_id": sanitize_unicode_text(tool_call_id),
+                "content": parts,
+            })
+            self._trim()
+            return
         self.messages.append({
             "role": "tool",
             "tool_call_id": sanitize_unicode_text(tool_call_id),
