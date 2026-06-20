@@ -393,15 +393,21 @@ class CompanionSurface:
         self._cancel_event = threading.Event()
         self._stream_buf = ""
         try:
-            result = self._gateway.run_turn(
-                user_input,
-                route_source="desktop",
-                on_activity=self._on_activity,
-                on_assistant_text=self._on_assistant_text,
-                on_board_event=self._on_board_event,
-                cancel_event=self._cancel_event,
-            )
-            self._set_result(result)
+            # Guide mode = point/explain, don't take control: scope a per-turn
+            # lane so the sandbox blocks actuation (thread-local — never races the
+            # TUI). Do mode runs normally.
+            lane = "companion-guide" if self.mode == "guide" else None
+            with self._agent.lane_scope(lane):
+                result = self._gateway.run_turn(
+                    user_input,
+                    route_source="desktop",
+                    on_activity=self._on_activity,
+                    on_assistant_text=self._on_assistant_text,
+                    on_board_event=self._on_board_event,
+                    on_proposal=self._on_proposal,
+                    cancel_event=self._cancel_event,
+                )
+            self._set_result(self._append_task_board(result))
             self._log_action("turn_complete", result[:200])
             # Speak result if TTS enabled
             if self._voice and self._voice.tts_available:
@@ -423,6 +429,30 @@ class CompanionSurface:
         text = event.get("text", "")
         if kind in ("task_started", "task_completed", "task_blocked"):
             self._set_status(text, CYAN if kind == "task_completed" else "#5a8899")
+
+    def _on_proposal(self, plan_text: str) -> None:
+        # Show Ghost's plan before MO routes the work — same contract as the TUI /
+        # Telegram. MO's structured reasoning must not be invisible on this surface.
+        plan = " ".join(str(plan_text or "").split())
+        if plan:
+            self._set_response("Plan: " + plan[:500])
+            self._log_action("ghost_plan", plan[:200])
+
+    def _append_task_board(self, reply: str) -> str:
+        # Taskboard is MO's product contract — every surface shows the same
+        # evidence-gated board. Mirrors the Telegram surface (board.render()),
+        # best-effort so a render glitch never swallows the answer.
+        text = str(reply or "")
+        try:
+            board = getattr(self._gateway, "last_task_board", None)
+            if board is None or not getattr(board, "tasks", None):
+                return text
+            rendered = str(board.render() or "").strip()
+            if not rendered or rendered in text:
+                return text
+            return f"{text}\n\n{rendered}" if text else rendered
+        except Exception:
+            return text
 
     def _on_assistant_text(self, delta: str) -> None:
         # Called from the Gateway thread — tkinter is NOT thread-safe, so never
@@ -452,14 +482,14 @@ class CompanionSurface:
         if not self._root or not self._response:
             return
         try:
-            self._root.after(0, lambda: self._response.config(text=text[:600]))
+            self._root.after(0, lambda: self._response.config(text=text[:1500]))
         except Exception:
             pass
 
     def _set_result(self, text: str) -> None:
         summary = (text or "").strip()
-        if len(summary) > 400:
-            summary = summary[:397] + "..."
+        if len(summary) > 1200:
+            summary = summary[:1197] + "..."
         self._set_response(summary)
         self._set_status("Done — Esc to hide", "#44cc88")
 

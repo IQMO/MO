@@ -479,7 +479,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     effective_roots = self._effective_allowed_roots_for_tool(user_input, name, arguments)
                     block_reason = self._self_mutation_block_reason(user_input, name, arguments) or guard_tool_call(
                         name, arguments,
-                        lane=self._active_lane,
+                        lane=self._effective_lane(),
                         allowed_roots=effective_roots,
                         sandbox_config=self.sandbox_config,
                         operator_override=operator_ok,

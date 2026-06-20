@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from .tool_constants import ACTUATION_TOOLS, MUTATING_TOOLS, READ_ONLY_LANES
+from .tool_constants import ACTUATION_BLOCKED_LANES, ACTUATION_TOOLS, MUTATING_TOOLS, READ_ONLY_LANES
 from .text_safety import SECRET_NAME_PATTERN, PROVIDER_TOKEN_PATTERN, contains_hardcoded_secret_literal
 
 
@@ -926,9 +926,12 @@ def guard_tool_call(
 
     _emit_sandbox_event("sandbox_guard", {"tool": name, "lane": lane or "", "enabled": bool(cfg.get("enabled"))})
 
-    # Lane guard: block mutating + desktop-actuation tools in read-only lanes
+    # Lane guard: block mutating + actuation tools in read-only lanes
     if lane in READ_ONLY_LANES and (name in MUTATING_TOOLS or name in ACTUATION_TOOLS):
         return block(f"[LANE LOCKED] {name} blocked in {lane} lane.")
+    # Guide mode: block actuation (taking control) but allow reads/answers/edits.
+    if lane in ACTUATION_BLOCKED_LANES and name in ACTUATION_TOOLS:
+        return block(f"[GUIDE MODE] {name} blocked — Guide mode points and explains; switch to Do mode to act.")
 
     argument_error = _validate_tool_arguments(name, arguments)
     if argument_error:

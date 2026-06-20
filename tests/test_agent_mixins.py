@@ -171,6 +171,16 @@ def test_quarantine_parks_dropped_objective_as_anchor():
     assert agent._pending_interrupted_work.get("user") == "build the companion tray"
 
 
+def test_lane_scope_thread_local_override():
+    """Guide-mode lane override is thread-local and restored on exit."""
+    agent = _agent()
+    agent._active_lane = None
+    assert agent._effective_lane() is None
+    with agent.lane_scope("companion-guide"):
+        assert agent._effective_lane() == "companion-guide"
+    assert agent._effective_lane() is None  # restored, no leak
+
+
 def test_quarantine_without_objective_parks_nothing():
     agent = _agent()
     agent.last_quarantine_notice = ""

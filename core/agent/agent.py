@@ -555,6 +555,38 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
     def active_lane(self) -> str | None:
         return self._active_lane
 
+    def _effective_lane(self) -> str | None:
+        """Lane for this turn: a thread-local override (e.g. the companion's Guide
+        mode) wins, else the agent's active lane. Thread-local so one surface's
+        lane never leaks into a concurrent turn on another surface."""
+        state = getattr(self, "_thread_state", None)
+        override = getattr(state, "lane_override", None) if state is not None else None
+        return override if override is not None else self._active_lane
+
+    @contextmanager
+    def lane_scope(self, lane: str | None):
+        """Scope a per-turn lane on the calling thread (mirrors provider_scope).
+
+        The companion uses this for Guide mode ('companion-guide') so the sandbox
+        blocks actuation for that turn only, without racing the TUI's lane state.
+        """
+        state = getattr(self, "_thread_state", None)
+        if state is None:
+            self._thread_state = threading.local()
+            state = self._thread_state
+        previous = getattr(state, "lane_override", None)
+        state.lane_override = lane
+        try:
+            yield
+        finally:
+            if previous is None:
+                try:
+                    delattr(state, "lane_override")
+                except AttributeError:
+                    pass
+            else:
+                state.lane_override = previous
+
     def _context_budget_tokens_for(self, provider: str, model: str) -> int:
         return resolve_context_budget_tokens(
             getattr(self, "context_budget_config", "auto"),
