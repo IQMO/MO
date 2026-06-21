@@ -29,6 +29,42 @@ class _Monitor:
 
 # ── Warning-only tiers ──────────────────────────────────────────────
 
+def _tc(name, args):
+    import json
+    return SimpleNamespace(function=SimpleNamespace(name=name, arguments=json.dumps(args)))
+
+
+# ── Completed-board tool guard: closeout tools must be exempt ─────────
+
+def test_closeout_only_allows_economy_and_artifact_tools():
+    """After open=0 the model must still own economy.md and write the session
+    artifacts — those are closeout, not re-discovery, and must NOT be blocked
+    (else the closeout deadlocks to [DEVMODE05 BLOCKED], live mo-1782077188)."""
+    calls = [
+        _tc("read_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\economy.md"}),
+        _tc("write_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\summary.md", "content": "x"}),
+        _tc("shell", {"command": "python -m pytest -q"}),
+        _tc("complete_task", {"task_id": "6"}),
+    ]
+    assert Agent._devmode05_tool_calls_are_closeout_only(calls) is True
+
+
+def test_closeout_only_rejects_broad_discovery():
+    """A grep / find_files / source read after completion is post-completion probing
+    and stays blocked."""
+    assert Agent._devmode05_tool_calls_are_closeout_only([_tc("grep", {"pattern": "x"})]) is False
+    assert Agent._devmode05_tool_calls_are_closeout_only([_tc("find_files", {"q": "x"})]) is False
+    assert Agent._devmode05_tool_calls_are_closeout_only(
+        [_tc("read_file", {"path": r"E:\MO-clean\core\agent\agent_turn.py"})]
+    ) is False
+    # a mixed round (one closeout + one discovery) is treated as discovery
+    assert Agent._devmode05_tool_calls_are_closeout_only([
+        _tc("write_file", {"path": r"~/.mo/memory/devmode/x/summary.md", "content": "x"}),
+        _tc("grep", {"pattern": "x"}),
+    ]) is False
+    assert Agent._devmode05_tool_calls_are_closeout_only([]) is False
+
+
 def test_no_warning_at_low_usage():
     agent = _agent(max_tool_rounds=80)
     result = agent._check_turn_health(0, None, monitor=None)

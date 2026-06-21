@@ -408,6 +408,58 @@ class AgentTurnRecoveryMixin:
             "Existing evidence was preserved; restart only to investigate this provider noncompliance."
         )
 
+    @staticmethod
+    def _devmode05_tool_calls_are_closeout_only(tool_calls) -> bool:
+        """True when every requested tool call is closeout work — writing/reading the
+        DEVMODE05 session artifacts, owning the economy ledger, or running the final
+        pytest — rather than reopening broad discovery.
+
+        The completed-board tool guard must NOT block these. The error-ownership gate
+        REQUIRES reading economy.md and the terminal report REQUIRES writing the session
+        artifacts, but both happen AFTER the board reaches open=0 — so hard-blocking all
+        post-completion tools deadlocked the closeout to [DEVMODE05 BLOCKED] even though
+        the model was doing exactly what the truth gate demanded (observed live
+        mo-1782077188: owned 5 errors, wrote artifacts, still blocked → BLOCKED). Broad
+        re-discovery (grep/find_files/code_search/source reads/arbitrary shell) is still
+        treated as probing and nudged toward closeout."""
+        import json as _json
+        if not tool_calls:
+            return False
+        artifacts = (
+            "economy.md", "summary.md", "catalog.md", "capability-matrix.md",
+            "workflow.md", "longitudinal.md", "adversarial-rotation.json",
+        )
+        for tc in tool_calls:
+            if isinstance(tc, dict):
+                fn = tc.get("function") or {}
+                name = (fn.get("name", "") if isinstance(fn, dict) else "") or ""
+                raw = fn.get("arguments", "{}") if isinstance(fn, dict) else "{}"
+            else:
+                fn = getattr(tc, "function", tc)
+                name = (getattr(fn, "name", "") if hasattr(fn, "name") else fn.get("name", "")) or ""
+                raw = getattr(fn, "arguments", "{}") if hasattr(fn, "arguments") else fn.get("arguments", "{}")
+            try:
+                args = _json.loads(raw) if isinstance(raw, str) else (raw or {})
+            except Exception:
+                args = {}
+            if not isinstance(args, dict):
+                args = {}
+            if name == "complete_task":
+                continue
+            if name in ("read_file", "write_file"):
+                path = str(args.get("path") or args.get("file_path") or "").replace("\\", "/").lower()
+                if ("memory/devmode" in path or "operator/devmode" in path
+                        or any(path.endswith(a.lower()) for a in artifacts)):
+                    continue
+                return False
+            if name == "shell":
+                cmd = str(args.get("command") or args.get("cmd") or "").lower()
+                if "pytest" in cmd:
+                    continue
+                return False
+            return False
+        return True
+
     def _force_tool_budget_handoff(self, tool_rounds: int, max_tools: int, *, monitor: Any = None) -> None:
         """Force a context handoff with a strong conclusion mandate.
 

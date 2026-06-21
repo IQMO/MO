@@ -327,7 +327,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # === Phase 2c: dispatch tool calls or finalize text ===
             # Check for tool calls
             if response.tool_calls:
-                if self._devmode05_completed_taskboard_should_stop_tools(user_input, task_board):
+                # A completed DEVMODE05 board must not reopen broad discovery, but it
+                # STILL needs its closeout tools: owning economy.md, writing the session
+                # artifacts, running the final pytest. Exempt those — blocking them
+                # deadlocked legitimate closeouts to [DEVMODE05 BLOCKED] (mo-1782077188).
+                if (self._devmode05_completed_taskboard_should_stop_tools(user_input, task_board)
+                        and not self._devmode05_tool_calls_are_closeout_only(response.tool_calls)):
                     self._devmode05_completed_board_tool_blocked_count += 1
                     if monitor:
                         monitor.emit("turn_health", {
