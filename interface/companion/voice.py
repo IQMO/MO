@@ -193,6 +193,8 @@ class PushToTalkRecorder:
     def __init__(self, sample_rate: int = 16000, max_seconds: float = 30.0) -> None:
         self._sample_rate = sample_rate
         self._max_seconds = max_seconds
+        self._max_samples = int(sample_rate * max_seconds)
+        self._collected = 0
         self._recording = False
         self._buffer: list[Any] = []
         self._stream: Any = None
@@ -214,6 +216,7 @@ class PushToTalkRecorder:
         try:
             import sounddevice as sd
             self._buffer = []
+            self._collected = 0
             self._stream = sd.InputStream(
                 samplerate=self._sample_rate,
                 channels=1,
@@ -252,8 +255,16 @@ class PushToTalkRecorder:
         return None
 
     def _audio_callback(self, indata: Any, _frames: int, _time: Any, _status: Any) -> None:
-        if self._recording:
-            self._buffer.append(indata.copy())
+        if not self._recording:
+            return
+        # Bound the buffer + auto-stop collecting at max_seconds so a forgotten
+        # recording can't grow memory unbounded or capture indefinitely.
+        if self._collected >= self._max_samples:
+            self._recording = False
+            return
+        chunk = indata.copy()
+        self._buffer.append(chunk)
+        self._collected += len(chunk)
 
 
 # ------------------------------------------------------------------

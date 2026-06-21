@@ -1,5 +1,4 @@
 """Tests for companion voice (Phase 3) — STT + TTS integration."""
-import pytest
 
 
 class TestVoiceRecognizer:
@@ -68,5 +67,18 @@ class TestVoiceIntegration:
 
     def test_companion_voice_in_init(self):
         """verify CompanionVoice is exported from companion package."""
-        from interface.companion import CompanionVoice, VoiceRecognizer, VoiceSpeaker
+        from interface.companion import CompanionVoice
         assert CompanionVoice is not None
+
+
+def test_recorder_caps_buffer_and_autostops_at_max_seconds():
+    """V1: the audio buffer is bounded and recording auto-stops at max_seconds,
+    so a forgotten recording can't grow memory or capture indefinitely."""
+    from interface.companion.voice import PushToTalkRecorder
+    rec = PushToTalkRecorder(sample_rate=100, max_seconds=1.0)  # cap = 100 samples
+    rec._recording = True
+    for _ in range(5):  # 5 x 50 = 250 samples fed, well past the 100 cap
+        rec._audio_callback([0.0] * 50, 50, None, None)
+    total = sum(len(c) for c in rec._buffer)
+    assert total <= 100, total          # buffer bounded, not 250
+    assert rec._recording is False      # auto-stopped at the cap

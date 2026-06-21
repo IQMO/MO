@@ -379,7 +379,7 @@ class CompanionSurface:
             try:
                 root.update()
                 root.update_idletasks()
-                root.after(50)
+                time.sleep(0.05)  # ~20fps; blocking yield so the loop never busy-spins
             except Exception:
                 if not self._running:
                     break
