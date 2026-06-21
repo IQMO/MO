@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 import traceback
-from typing import Any
+from typing import Any, Callable
 
 from core.sandbox import redact_sensitive_text
 from interface.companion.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
@@ -26,6 +26,31 @@ CARD = "#04141a"
 TEXT = "#dff6f6"
 GLYPH = "◐"  # ◐ half-moon = MO mark
 _ENTRY_BG = "#0a2028"
+WINDOW_WIDTH = 440
+WINDOW_HEIGHT = 200
+WINDOW_OFFSET = 24
+
+
+def companion_geometry_near_pointer(
+    pointer_x: int,
+    pointer_y: int,
+    screen_width: int,
+    screen_height: int,
+    *,
+    width: int = WINDOW_WIDTH,
+    height: int = WINDOW_HEIGHT,
+    offset: int = WINDOW_OFFSET,
+) -> str:
+    """Return a Tk geometry string that places the Companion near the pointer."""
+    x = int(pointer_x) + offset
+    y = int(pointer_y) + offset
+    if x + width > screen_width:
+        x = int(pointer_x) - width - offset
+    if y + height > screen_height:
+        y = int(pointer_y) - height - offset
+    x = max(0, min(x, max(0, int(screen_width) - width)))
+    y = max(0, min(y, max(0, int(screen_height) - height)))
+    return f"{width}x{height}+{x}+{y}"
 
 
 class CompanionSurface:
@@ -57,8 +82,9 @@ class CompanionSurface:
         self._running = False
         self._turn_thread: threading.Thread | None = None
         self._hotkey_listener: Any = None
+        self._voice_btn: Any = None
         self._visible = False
-        self._gui_events: queue.Queue[str] = queue.Queue()
+        self._gui_events: queue.Queue[str | Callable[[], None]] = queue.Queue()
         self._gui_ready = threading.Event()
 
     # ------------------------------------------------------------------
@@ -149,15 +175,16 @@ class CompanionSurface:
         popup.title("MO Companion — Action Log")
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
+        popup.configure(bg=CYAN)
         try:
             popup.attributes("-alpha", 0.95)
         except Exception:
             pass
 
         border = tk.Frame(popup, bg=CYAN)
-        border.pack()
+        border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=CARD)
-        card.pack(padx=2, pady=2)
+        card.pack(fill="both", expand=True, padx=2, pady=2)
 
         # Header
         header = tk.Frame(card, bg=CARD)
@@ -246,8 +273,11 @@ class CompanionSurface:
         """Push-to-talk TOGGLE (GUI-driven): click to record, click again to stop.
         No blocking input(); the mic is closed on the second click — never left open."""
         voice = self._voice
+        if not self._voice_input_configured():
+            self._set_status("Voice input is off in desktop_companion.voice.stt_enabled", "#ffcc44")
+            return
         if voice is None or not voice.stt_available:
-            self._set_status("Voice input not available (install faster-whisper + sounddevice)", "#ffcc44")
+            self._set_status("Voice input optional deps missing: faster-whisper + sounddevice", "#ffcc44")
             return
         if self._recording_voice:
             # second click → stop, transcribe, submit
@@ -307,10 +337,11 @@ class CompanionSurface:
             pass
 
         # cyan border = outer frame; dark card = inner
+        win.configure(bg=CYAN)
         border = tk.Frame(win, bg=CYAN)
-        border.pack()
+        border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=CARD)
-        card.pack(padx=2, pady=2)
+        card.pack(fill="both", expand=True, padx=2, pady=2)
 
         # header: glyph + title
         header = tk.Frame(card, bg=CARD)
@@ -330,11 +361,11 @@ class CompanionSurface:
         entry_frame = tk.Frame(card, bg=CARD)
         entry_frame.pack(fill="x", padx=10, pady=(0, 6))
 
-        # voice mic button (🎤)
-        self._voice_btn = tk.Label(entry_frame, text="🎤", fg=CYAN, bg=CARD,
-                                   font=("Segoe UI", 14), cursor="hand2")
-        self._voice_btn.pack(side="right", padx=(6, 0))
-        self._voice_btn.bind("<Button-1>", lambda _e: self._on_voice_input())
+        if self._voice_input_configured():
+            self._voice_btn = tk.Label(entry_frame, text="🎤", fg=CYAN, bg=CARD,
+                                       font=("Segoe UI", 14), cursor="hand2")
+            self._voice_btn.pack(side="right", padx=(6, 0))
+            self._voice_btn.bind("<Button-1>", lambda _e: self._on_voice_input())
 
         self._entry = tk.Entry(entry_frame, font=("Segoe UI", 11),
                                fg=TEXT, bg=_ENTRY_BG,
@@ -351,22 +382,30 @@ class CompanionSurface:
         self._response.pack(fill="both", padx=10, pady=(0, 8))
 
         # bottom hint
-        tk.Label(card, text="Esc to hide  ·  Win+Alt+M to summon  ·  🎤 for voice",
+        hint = "Esc to hide  ·  Win+Alt+M to summon"
+        if self._voice_input_configured():
+            hint += "  ·  🎤 for voice"
+        tk.Label(card, text=hint,
                  fg="#3a6677", bg=CARD, font=("Segoe UI", 8)).pack(
                      fill="x", padx=10, pady=(0, 6))
 
-        # --- geometry (centre of screen) ---
+        # --- geometry (near pointer; recomputed on every summon) ---
         win.update_idletasks()
-        sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
-        ww, wh = 440, 200
-        wx = max(0, (sw - ww) // 2)
-        wy = max(0, (sh - wh) // 3)
-        win.geometry(f"{ww}x{wh}+{wx}+{wy}")
+        win.geometry(companion_geometry_near_pointer(
+            *win.winfo_pointerxy(),
+            win.winfo_screenwidth(),
+            win.winfo_screenheight(),
+        ))
         win.minsize(360, 140)
 
         def _do_show(*_args: Any) -> None:
             if not self._running:
                 return
+            win.geometry(companion_geometry_near_pointer(
+                *win.winfo_pointerxy(),
+                win.winfo_screenwidth(),
+                win.winfo_screenheight(),
+            ))
             win.deiconify()
             self._entry.focus_set()
             self._visible = True
@@ -516,15 +555,12 @@ class CompanionSurface:
 
     def _on_assistant_text(self, delta: str) -> None:
         # Called from the Gateway thread — tkinter is NOT thread-safe, so never
-        # touch widgets here. Accumulate and schedule the update on the GUI thread.
+        # touch widgets here. Accumulate and queue the update on the GUI thread.
         if not self._root:
             return
         self._stream_buf += str(delta or "")
         buf = self._stream_buf[:600]
-        try:
-            self._root.after(0, lambda: self._response.config(text=buf) if self._response else None)
-        except Exception:
-            pass
+        self._post_gui_call(lambda: self._response.config(text=buf) if self._response else None)
 
     # ------------------------------------------------------------------
     # UI helpers (thread-safe via tkinter event queue)
@@ -533,18 +569,12 @@ class CompanionSurface:
     def _set_status(self, text: str, color: str) -> None:
         if not self._root or not self._status_label:
             return
-        try:
-            self._root.after(0, lambda: self._status_label.config(text=text[:120], fg=color))
-        except Exception:
-            pass
+        self._post_gui_call(lambda: self._status_label.config(text=text[:120], fg=color))
 
     def _set_response(self, text: str) -> None:
         if not self._root or not self._response:
             return
-        try:
-            self._root.after(0, lambda: self._response.config(text=text[:1500]))
-        except Exception:
-            pass
+        self._post_gui_call(lambda: self._response.config(text=text[:1500]))
 
     def _set_result(self, text: str) -> None:
         summary = (text or "").strip()
@@ -553,11 +583,17 @@ class CompanionSurface:
         self._set_response(summary)
         self._set_status("Done — Esc to hide", "#44cc88")
 
+    def _voice_input_configured(self) -> bool:
+        return bool(self._voice_cfg.get("stt_enabled", False))
+
     def _post_gui_event(self, event_name: str) -> bool:
+        return self._post_gui_call(event_name)
+
+    def _post_gui_call(self, callback: str | Callable[[], None]) -> bool:
         if self._root is None:
             return False
         try:
-            self._gui_events.put_nowait(event_name)
+            self._gui_events.put_nowait(callback)
             return True
         except Exception:
             return False
@@ -565,10 +601,17 @@ class CompanionSurface:
     def _drain_gui_events(self, handlers: dict[str, Any]) -> None:
         while True:
             try:
-                event_name = self._gui_events.get_nowait()
+                item = self._gui_events.get_nowait()
             except queue.Empty:
                 return
-            handler = handlers.get(event_name)
+            if callable(item):
+                try:
+                    item()
+                except Exception:
+                    if self._running:
+                        traceback.print_exc()
+                continue
+            handler = handlers.get(item)
             if handler is None:
                 continue
             try:

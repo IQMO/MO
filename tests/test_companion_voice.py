@@ -87,7 +87,11 @@ def test_recorder_caps_buffer_and_autostops_at_max_seconds():
 def test_voice_submit_rechecks_active_turn_after_transcription(monkeypatch):
     import interface.companion.companion as companion_module
 
-    cs = companion_module.CompanionSurface(agent=None, gateway=None)
+    cs = companion_module.CompanionSurface(
+        agent=None,
+        gateway=None,
+        voice_config={"stt_enabled": True},
+    )
     statuses = []
     turn_threads = []
 

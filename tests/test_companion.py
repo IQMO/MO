@@ -203,3 +203,45 @@ def test_post_gui_event_uses_thread_safe_queue():
     assert cs._post_gui_event("<<CompanionShow>>") is True
     assert cs._gui_events.get_nowait() == "<<CompanionShow>>"
 
+
+def test_gui_status_updates_drain_on_gui_thread():
+    from interface.companion.companion import CompanionSurface
+
+    updates = []
+
+    class FakeLabel:
+        def config(self, **kwargs):
+            updates.append(kwargs)
+
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._status_label = FakeLabel()
+
+    cs._set_status("Done", "#44cc88")
+    assert updates == []
+
+    cs._drain_gui_events({})
+    assert updates == [{"text": "Done", "fg": "#44cc88"}]
+
+
+def test_companion_geometry_opens_near_pointer_and_flips_at_edges():
+    from interface.companion.companion import companion_geometry_near_pointer
+
+    assert companion_geometry_near_pointer(100, 100, 1920, 1080) == "440x200+124+124"
+    assert companion_geometry_near_pointer(1900, 1060, 1920, 1080) == "440x200+1436+836"
+
+
+def test_voice_input_is_hidden_when_not_configured():
+    from interface.companion.companion import CompanionSurface
+
+    assert CompanionSurface(agent=None, gateway=None)._voice_input_configured() is False
+    assert CompanionSurface(
+        agent=None,
+        gateway=None,
+        voice_config={"stt_enabled": False},
+    )._voice_input_configured() is False
+    assert CompanionSurface(
+        agent=None,
+        gateway=None,
+        voice_config={"stt_enabled": True},
+    )._voice_input_configured() is True
