@@ -300,3 +300,74 @@ class BackendMonitor:
         except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait(timeout=2)
+
+
+def latest_monitor_path() -> Path | None:
+    """Newest backend-monitor jsonl (the current/most recent session), or None."""
+    parent = BackendMonitor._monitor_dir()
+    if not parent.exists():
+        return None
+    files = sorted(parent.glob("backend_monitor-*.jsonl"), key=lambda p: p.stat().st_mtime)
+    return files[-1] if files else None
+
+
+def economy_summary(monitor_path: str | Path | None = None) -> dict[str, Any]:
+    """Deterministic provider/tool/error/compression counts from a backend monitor.
+
+    The authoritative source of session economy — used by the DEVMODE05 closeout
+    and the operator economy helper so the record can never be estimated or stale.
+    Tool errors are counted from ``tool_result.error``/``is_error`` and blocks from
+    ``tool_result.blocked`` (NOT only the rarer ``tool_error``/``sandbox_blocked``
+    event types — those miss a failed ``tool_result`` that later recovered).
+    """
+    path = Path(monitor_path) if monitor_path else latest_monitor_path()
+    out = {
+        "source": path.name if path else None,
+        "provider_requests": 0, "provider_responses": 0,
+        "tool_calls": 0, "tool_errors": 0, "sandbox_blocked": 0,
+        "compression_events": 0,
+    }
+    if not path or not Path(path).exists():
+        return out
+    for line in Path(path).open(encoding="utf-8", errors="replace"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            d = json.loads(line)
+        except Exception:
+            continue
+        t = d.get("type")
+        p = d.get("payload", {}) or {}
+        if t == "provider_request":
+            out["provider_requests"] += 1
+        elif t == "provider_response":
+            out["provider_responses"] += 1
+        elif t == "tool_call":
+            out["tool_calls"] += 1
+        elif t == "tool_result":
+            if p.get("error") or p.get("is_error"):
+                out["tool_errors"] += 1
+            if p.get("blocked"):
+                out["sandbox_blocked"] += 1
+        elif t == "tool_error":
+            out["tool_errors"] += 1
+        elif t == "sandbox_blocked":
+            out["sandbox_blocked"] += 1
+        elif t == "tool_compress":
+            out["compression_events"] += 1
+    return out
+
+
+def format_economy_record(summary: dict[str, Any] | None = None) -> str:
+    """Markdown economy block from `economy_summary()` — the canonical Gate 2f record."""
+    s = summary or economy_summary()
+    return (
+        "### Economy Record (Gate 2f — runtime/monitor, authoritative)\n"
+        f"- Source: {s.get('source')}\n"
+        f"- Provider requests: {s.get('provider_requests', 0)} "
+        f"(responses: {s.get('provider_responses', 0)})\n"
+        f"- Tool calls: {s.get('tool_calls', 0)} "
+        f"(errors: {s.get('tool_errors', 0)}, sandbox-blocked: {s.get('sandbox_blocked', 0)})\n"
+        f"- Compression events: {s.get('compression_events', 0)}\n"
+    )

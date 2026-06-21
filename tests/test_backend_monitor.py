@@ -315,3 +315,51 @@ def _legacy_state_lane(monkeypatch, tmp_path):
     from core.path_defaults import repo_root as _rr
     monkeypatch.setenv("MO_PROJECT_CWD", str(_rr()))
     monkeypatch.chdir(tmp_path)  # project-local state -> tmp, never the repo root
+
+
+def test_economy_summary_counts_tool_result_errors(tmp_path):
+    """A failed-then-recovered tool shows up as tool_result.error, NOT a tool_error
+    event — the economy count must catch it (else a swallowed error reads as 0)."""
+    from core.backend_monitor import economy_summary
+    mon = tmp_path / "backend_monitor-x.jsonl"
+    rows = [
+        {"type": "provider_request", "payload": {}},
+        {"type": "provider_response", "payload": {}},
+        {"type": "tool_call", "payload": {}},
+        {"type": "tool_result", "payload": {"error": True}},   # failed edit_file, later recovered
+        {"type": "tool_result", "payload": {"blocked": True}},
+        {"type": "tool_compress", "payload": {}},
+    ]
+    mon.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    s = economy_summary(mon)
+    assert s["provider_requests"] == 1
+    assert s["tool_calls"] == 1
+    assert s["tool_errors"] == 1
+    assert s["sandbox_blocked"] == 1
+    assert s["compression_events"] == 1
+
+
+def test_devmode_closeout_writes_authoritative_economy(tmp_path, monkeypatch):
+    """The runtime writes economy.md to the active session dir at closeout — the
+    model never authors economy numbers (it faked them at T1734)."""
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    (mondir / "backend_monitor-1.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in [
+            {"type": "provider_request", "payload": {}},
+            {"type": "tool_call", "payload": {}},
+            {"type": "tool_result", "payload": {"error": True}},
+        ]),
+        encoding="utf-8",
+    )
+    sess = tmp_path / "memory" / "devmode" / "2026-01-01T0000"
+    sess.mkdir(parents=True)
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    AgentTaskBoard._write_devmode_economy_record()
+    eco = sess / "economy.md"
+    assert eco.is_file()
+    text = eco.read_text(encoding="utf-8")
+    assert "Provider requests: 1" in text
+    assert "errors: 1" in text

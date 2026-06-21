@@ -86,9 +86,6 @@ class AgentTaskBoard:
         terminal report can close the remaining phase rows before the final
         consistency boundary reads task truth.
         """
-        if not task_board or task_board.open_count() == 0:
-            return False
-
         from ..self_capability_preflight import (
             devmode05_final_allows_stop,
             ifdev05_final_allows_stop,
@@ -113,6 +110,14 @@ class AgentTaskBoard:
         else:
             return False
 
+        # Authoritative economy record at this self-protocol closeout — written by
+        # the runtime from the live monitor, so it can never be estimated, stale, or
+        # hand-faked (observed: model wrote helper-format numbers without running it).
+        self._write_devmode_economy_record()
+
+        if not task_board or task_board.open_count() == 0:
+            return False
+
         # C1: the terminal report (gated above) closes the remaining phase rows.
         # Carry the turn's real gathered evidence onto each closed row so the board
         # reflects what actually happened instead of a hollow identical `final:`
@@ -133,6 +138,28 @@ class AgentTaskBoard:
                 task_board.complete(task.id, evidence=row_evidence)
                 changed = changed or task.status == "completed"
         return changed
+
+    @staticmethod
+    def _write_devmode_economy_record() -> None:
+        """Write the authoritative economy record (provider/tool/error/compression
+        counts from the live monitor) into the active self-protocol session dir at
+        closeout. Deterministic and runtime-owned — the model never authors these
+        numbers. Best-effort: a failure here must never break closeout."""
+        try:
+            from ..backend_monitor import economy_summary, format_economy_record
+            from ..path_defaults import mo_home
+            root = mo_home() / "memory" / "devmode"
+            if not root.is_dir():
+                return
+            dirs = [d for d in root.iterdir() if d.is_dir() and d.name[:1].isdigit()]
+            if not dirs:
+                return
+            latest = max(dirs, key=lambda d: d.name)
+            (latest / "economy.md").write_text(
+                format_economy_record(economy_summary()), encoding="utf-8"
+            )
+        except Exception:
+            pass
 
     @staticmethod
     def _final_should_complete_task(task: object) -> bool:
