@@ -274,10 +274,11 @@ class BackendMonitor:
         if self.process and self.process.poll() is None:
             return
         root = Path(__file__).resolve().parents[1]
-        # The monitor window is an owner-only diagnostic launcher; it lives in the
-        # private operator/ lane and is absent on user clones, where open_window
-        # simply no-ops (the monitor is default-off anyway).
-        monitor = root / "operator" / "mo_monitor.py"
+        # The monitor window is an owner-only diagnostic launcher in the operator
+        # pack, now resolved from ~/.mo/operator (or MO_OPERATOR_PACK), not the
+        # checkout. Absent on user clones, where open_window simply no-ops.
+        from .path_defaults import operator_pack_root
+        monitor = operator_pack_root() / "mo_monitor.py"
         if not monitor.exists():
             return
         log_path = str(self.path.resolve())

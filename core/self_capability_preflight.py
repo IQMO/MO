@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 import re
 
-from .path_defaults import mo_home
+from .path_defaults import mo_home, operator_pack_root
 
 
 _SELF_ACTION_WORDS = {
@@ -117,8 +117,7 @@ _CAPABILITY_FILES = (
 def _pack_present() -> bool:
     """True when the untracked operator protocol pack is on disk."""
     try:
-        root = Path(__file__).resolve().parents[1]
-        devmode = root / "operator" / "devmode"
+        devmode = operator_pack_root() / "devmode"
         return (devmode / "DEVMODE05.md").exists() or (devmode / "VS05.md").exists() or (
             devmode / "IFDEV05.md"
         ).exists()
@@ -637,8 +636,7 @@ def _load_owner_preflight_rules() -> list[str]:
     self-review reminder is emitted there.
     """
     try:
-        root = Path(__file__).resolve().parents[1]
-        path = root / "operator" / "devmode" / "preflight-rules.json"
+        path = operator_pack_root() / "devmode" / "preflight-rules.json"
         if not path.is_file():
             return []
         import json
