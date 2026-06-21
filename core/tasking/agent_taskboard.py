@@ -155,7 +155,7 @@ class AgentTaskBoard:
             dirs = [d for d in root.iterdir() if d.is_dir() and d.name[:1].isdigit()]
             if not dirs:
                 return
-            latest = max(dirs, key=lambda d: d.name)
+            latest = max(dirs, key=lambda d: d.stat().st_mtime)  # the actively-written session, not name-sorted
             (latest / "economy.md").write_text(
                 format_economy_record(economy_summary()), encoding="utf-8"
             )

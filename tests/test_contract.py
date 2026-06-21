@@ -240,3 +240,21 @@ class TestLoadPersistedTasks:
         ok, reasons, _ = enforce_contract_gate(live, persisted_tasks=rows, board_closing=True)
         assert ok is False
         assert any(r.startswith("task_sync:") for r in reasons)
+
+
+def test_whole_board_evidence_enforced_at_closeout_not_just_this_turn():
+    """A phase row completed with no evidence (in an earlier turn) must block the
+    closeout — the regression where multi-turn self-protocol runs marked rows done
+    empty because enforcement was scoped to the final turn only."""
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool", evidence=["read_file:x"]),
+        TaskItem("2", "Matrix", "completed", kind="verify", completion_gate="tool", depends_on=["1"]),  # EMPTY
+        TaskItem("3", "Report", "completed", kind="report", completion_gate="final", depends_on=["2"]),
+    ])
+    ok, reasons, _ = enforce_contract_gate(board, board_closing=True)  # whole board (no task_ids scoping)
+    assert ok is False
+    assert any(r == "missing_evidence:2" for r in reasons)
+    # the same board with evidence on row 2 passes
+    board.task("2").evidence = ["shell:pytest"]
+    ok2, _, _ = enforce_contract_gate(board, board_closing=True)
+    assert ok2 is True

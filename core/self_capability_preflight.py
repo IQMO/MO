@@ -276,7 +276,7 @@ def _devmode05_future_stamp_violation() -> str | None:
         dirs = [d for d in root.iterdir() if d.is_dir() and d.name[:1].isdigit()]
         if not dirs:
             return None
-        latest = max(dirs, key=lambda d: d.name)
+        latest = max(dirs, key=lambda d: d.stat().st_mtime)  # the actively-written session, not name-sorted
         try:
             stamp_dt = datetime.strptime(latest.name, "%Y-%m-%dT%H%M")
         except ValueError:

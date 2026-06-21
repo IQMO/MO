@@ -712,14 +712,19 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     _emit_task_board_update(task_board, update="completed" if task_board.open_count() == 0 else "updated", on_board_update=on_board_update, on_board_event=on_board_event)
             # ── VS05 GAP-01/05/06: contract gate on closing boards ──
             if task_board and task_board.tasks and task_board.open_count() == 0:
-                # Enforce evidence on every task completed during THIS turn (the
-                # turn-start snapshot covers all rounds; prior-turn rows excluded).
-                post_completed_ids = {t.id for t in task_board.tasks if t.status == "completed"}
-                just_completed_ids = post_completed_ids - turn_initial_completed_ids
+                # Self-protocol boards (DEVMODE05/IFDEV05) must have the WHOLE board
+                # evidenced at closeout, not only this turn's rows: continuation gates
+                # split these runs across turns, so turn-scoping let earlier-turn rows
+                # close EMPTY (observed live — a multi-turn DEVMODE05 marked done with
+                # no evidence). Normal boards keep turn-scoped enforcement, unchanged.
                 persisted = load_persisted_tasks_for_contract(task_board)
+                if is_devmode05_activation(user_input) or is_ifdev05_activation(user_input):
+                    contract_task_ids = None  # enforce the whole board
+                else:
+                    _completed_now = {t.id for t in task_board.tasks if t.status == "completed"} - turn_initial_completed_ids
+                    contract_task_ids = _completed_now or None
                 contract_ok, contract_reasons, contract_instruction = enforce_contract_gate(
-                    task_board, persisted_tasks=persisted, board_closing=True,
-                    task_ids=just_completed_ids if just_completed_ids else None,
+                    task_board, persisted_tasks=persisted, board_closing=True, task_ids=contract_task_ids,
                 )
                 if not contract_ok:
                     if on_activity:
