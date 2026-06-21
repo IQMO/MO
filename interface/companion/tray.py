@@ -189,7 +189,7 @@ class CompanionTray:
                     shortcut.Arguments = "-m interface.companion"
                     shortcut.WorkingDirectory = str(Path(__file__).resolve().parent.parent.parent)
                     shortcut.Description = "MO Companion — on-screen AI assistant"
-                    shortcut.IconLocation = str(shortcut_path)
+                    shortcut.IconLocation = sys.executable
                     shortcut.Save()
                 finally:
                     pythoncom.CoUninitialize()
@@ -202,10 +202,15 @@ class CompanionTray:
             traceback.print_exc()
 
 
-def start_tray_if_enabled(companion: Any, voice_config: dict | None = None) -> CompanionTray | None:
+def start_tray_if_enabled(
+    companion: Any,
+    companion_config: dict | None = None,
+    voice_config: dict | None = None,
+) -> CompanionTray | None:
     """Start the system tray if configured."""
-    cfg = voice_config or {}
-    if not cfg.get("tray_enabled", False):
+    cfg = companion_config or {}
+    legacy_voice_cfg = voice_config or {}
+    if not cfg.get("tray_enabled", legacy_voice_cfg.get("tray_enabled", False)):
         return None
     tray = CompanionTray(companion)
     if tray.start():

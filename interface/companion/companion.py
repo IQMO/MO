@@ -7,11 +7,6 @@ shown in a MO-branded overlay bubble. Runs as a daemon thread alongside the TUI.
 Architecture
     [Companion tkinter window] → Gateway.run_turn(route_source="desktop")
                                  → Ghost shapes → MO executes → overlay bubble
-
-No voice/tray yet — those are Phase 3 and 4.
-Phase 3 (voice): push-to-talk STT/TTS via faster-whisper + piper-tts.
-Phase 4 (tray, modes, log, panic): system-tray icon, Guide/Do modes,
-    visible action log, run-at-startup, panic-stop.
 """
 from __future__ import annotations
 
@@ -35,9 +30,16 @@ _ENTRY_BG = "#0a2028"
 class CompanionSurface:
     """On-screen MO companion with text input and result display."""
 
-    def __init__(self, agent: Any, gateway: Any, voice_config: dict | None = None) -> None:
+    def __init__(
+        self,
+        agent: Any,
+        gateway: Any,
+        voice_config: dict | None = None,
+        companion_config: dict | None = None,
+    ) -> None:
         self._agent = agent
         self._gateway = gateway
+        self._companion_cfg = companion_config or {}
         self._voice_cfg = voice_config or {}
         self._voice: CompanionVoice | None = None
         self._tray: CompanionTray | None = None
@@ -55,6 +57,7 @@ class CompanionSurface:
         self._turn_thread: threading.Thread | None = None
         self._hotkey_listener: Any = None
         self._visible = False
+        self._gui_ready = threading.Event()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -69,22 +72,27 @@ class CompanionSurface:
             return False  # tkinter missing (unusual but possible on headless)
 
         self._running = True
+        self._gui_ready.clear()
         self._init_voice()
         self._init_tray()
         thread = threading.Thread(target=self._gui_loop, name="mo-companion", daemon=True)
         thread.start()
-        self._try_register_hotkey()
-        return True
+        if self._gui_ready.wait(timeout=5.0) and self._root is not None:
+            self._try_register_hotkey()
+            return True
+        self._running = False
+        if self._tray:
+            self._tray.stop()
+        sys.stderr.write("[companion] GUI did not become ready; companion was not started.\n")
+        return False
 
     def stop(self) -> None:
         """Shut down the companion GUI and unregister the hotkey."""
-        self._running = False
         self._unregister_hotkey()
-        if self._root:
-            try:
-                self._root.event_generate("<<CompanionStop>>")
-            except Exception:
-                pass
+        if self._tray:
+            self._tray.stop()
+        if not self._post_gui_event("<<CompanionStop>>"):
+            self._running = False
 
     # ------------------------------------------------------------------
     # Public control
@@ -92,21 +100,11 @@ class CompanionSurface:
 
     def show(self) -> None:
         """Show the companion text-input window (summon)."""
-        if not self._root:
-            return
-        try:
-            self._root.event_generate("<<CompanionShow>>")
-        except Exception:
-            pass
+        self._post_gui_event("<<CompanionShow>>")
 
     def hide(self) -> None:
         """Hide the companion window."""
-        if not self._root:
-            return
-        try:
-            self._root.event_generate("<<CompanionHide>>")
-        except Exception:
-            pass
+        self._post_gui_event("<<CompanionHide>>")
 
     def toggle(self) -> None:
         """Toggle the companion window visibility."""
@@ -118,7 +116,11 @@ class CompanionSurface:
 
     def _init_tray(self) -> None:
         """Start system tray if configured."""
-        self._tray = start_tray_if_enabled(self, self._voice_cfg)
+        self._tray = start_tray_if_enabled(
+            self,
+            companion_config=self._companion_cfg,
+            voice_config=self._voice_cfg,
+        )
 
     @property
     def mode(self) -> str:
@@ -135,12 +137,7 @@ class CompanionSurface:
 
     def show_action_log(self) -> None:
         """Show the action log in a popup."""
-        if not self._root:
-            return
-        try:
-            self._root.event_generate("<<CompanionShowLog>>")
-        except Exception:
-            pass
+        self._post_gui_event("<<CompanionShowLog>>")
 
     def _show_log_popup(self, root: Any) -> None:
         """Create and display the action log popup window."""
@@ -258,6 +255,9 @@ class CompanionSurface:
             def _finish() -> None:
                 text = voice.stop_and_transcribe()
                 if text and not text.startswith("[STT") and not text.startswith("[Voice"):
+                    if self._turn_thread is not None and self._turn_thread.is_alive():
+                        self._set_status("Still working on the previous request…", "#ffcc44")
+                        return
                     self._panic_stop_requested = False  # explicit action resumes after panic
                     self._turn_thread = threading.Thread(
                         target=self._run_turn, args=(text,), name="mo-companion-turn", daemon=True)
@@ -284,7 +284,13 @@ class CompanionSurface:
     def _gui_loop(self) -> None:
         import tkinter as tk
 
-        root = tk.Tk()
+        try:
+            root = tk.Tk()
+        except Exception:
+            self._running = False
+            self._gui_ready.set()
+            traceback.print_exc()
+            return
         root.withdraw()  # hidden until summoned
         self._root = root
 
@@ -368,6 +374,7 @@ class CompanionSurface:
             self._visible = False
 
         def _do_stop(*_args: Any) -> None:
+            self._running = False
             win.destroy()
             root.destroy()
 
@@ -376,15 +383,27 @@ class CompanionSurface:
         root.bind("<<CompanionStop>>", _do_stop)
         root.bind("<<CompanionShowLog>>", lambda _e: self._show_log_popup(root))
 
-        while self._running:
-            try:
+        self._gui_ready.set()
+        try:
+            while self._running:
                 root.update()
                 root.update_idletasks()
                 time.sleep(0.05)  # ~20fps; blocking yield so the loop never busy-spins
-            except Exception:
-                if not self._running:
-                    break
+        except Exception:
+            if self._running:
                 traceback.print_exc()
+        finally:
+            self._running = False
+            try:
+                if win.winfo_exists():
+                    win.destroy()
+            except Exception:
+                pass
+            try:
+                if root.winfo_exists():
+                    root.destroy()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Turn submission
@@ -519,6 +538,16 @@ class CompanionSurface:
         self._set_response(summary)
         self._set_status("Done — Esc to hide", "#44cc88")
 
+    def _post_gui_event(self, event_name: str) -> bool:
+        root = self._root
+        if root is None:
+            return False
+        try:
+            root.after(0, lambda: root.event_generate(event_name))
+            return True
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------
     # Global hotkey (optional)
     # ------------------------------------------------------------------
@@ -534,7 +563,7 @@ class CompanionSurface:
                 "Summon the companion with the /companion command in the meantime.\n")
             return
         try:
-            keyboard.add_hotkey("win+alt+m", self.toggle)
+            keyboard.add_hotkey("win+alt+m", lambda: self.toggle())
             self._hotkey_listener = True
         except Exception:
             sys.stderr.write(
@@ -568,12 +597,16 @@ def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | N
     except Exception:
         companion_cfg = {}
 
-    if not companion_cfg.get("enabled", False) if isinstance(companion_cfg, dict) else False:
+    if not isinstance(companion_cfg, dict) or not companion_cfg.get("enabled", False):
         return None
 
     try:
-        companion = CompanionSurface(agent, gateway,
-                                     voice_config=companion_cfg.get("voice", {}))
+        companion = CompanionSurface(
+            agent,
+            gateway,
+            voice_config=companion_cfg.get("voice", {}),
+            companion_config=companion_cfg,
+        )
         if companion.start():
             return companion
     except Exception:

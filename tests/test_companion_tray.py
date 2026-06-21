@@ -82,6 +82,7 @@ class TestCompanionTrayStartup:
 
         # Mock win32com + pythoncom
         mock_dispatch_calls = []
+        created_shortcuts = []
 
         class MockShortcut:
             def __init__(self):
@@ -97,7 +98,9 @@ class TestCompanionTrayStartup:
         class MockShell:
             def CreateShortcut(self, path):
                 mock_dispatch_calls.append(("create_shortcut", path))
-                return MockShortcut()
+                shortcut = MockShortcut()
+                created_shortcuts.append(shortcut)
+                return shortcut
 
         # Patch sys.modules for import
         import types
@@ -117,6 +120,10 @@ class TestCompanionTrayStartup:
 
         shortcut_path = startup_dir / "MO Companion.lnk"
         assert shortcut_path.exists() or any("create_shortcut" in str(c) for c in mock_dispatch_calls)
+        assert created_shortcuts
+        assert created_shortcuts[0].TargetPath == sys.executable
+        assert created_shortcuts[0].Arguments == "-m interface.companion"
+        assert created_shortcuts[0].WorkingDirectory
 
         # Cleanup
         CompanionTray._set_startup(False)
@@ -138,3 +145,23 @@ class TestStartTrayIfEnabled:
             voice_config={"tray_enabled": False},
         )
         assert result is None
+
+    def test_returns_tray_when_top_level_enabled(self, monkeypatch):
+        import interface.companion.tray as tray_module
+
+        monkeypatch.setattr(tray_module.CompanionTray, "start", lambda self: True)
+        result = tray_module.start_tray_if_enabled(
+            companion=object(),
+            companion_config={"tray_enabled": True},
+        )
+        assert isinstance(result, tray_module.CompanionTray)
+
+    def test_legacy_voice_config_tray_flag_still_works(self, monkeypatch):
+        import interface.companion.tray as tray_module
+
+        monkeypatch.setattr(tray_module.CompanionTray, "start", lambda self: True)
+        result = tray_module.start_tray_if_enabled(
+            companion=object(),
+            voice_config={"tray_enabled": True},
+        )
+        assert isinstance(result, tray_module.CompanionTray)

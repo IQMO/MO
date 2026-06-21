@@ -1,4 +1,8 @@
 """Tests for the desktop companion surface (Phase 2 + Phase 4)."""
+import subprocess
+import sys
+from pathlib import Path
+
 from core.heartbeat import SURFACE_ALIASES, normalize_surface
 from interface.command_registry import COMMAND_BY_NAME
 
@@ -48,6 +52,11 @@ class TestCompanionPhase4Init:
         assert cs._action_log == []
         assert cs._panic_stop_requested is False
 
+    def test_companion_accepts_top_level_config(self):
+        from interface.companion.companion import CompanionSurface
+        cs = CompanionSurface(agent=None, gateway=None, companion_config={"tray_enabled": True})
+        assert cs._companion_cfg["tray_enabled"] is True
+
     def test_companion_default_mode_is_guide(self):
         from interface.companion.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None)
@@ -94,4 +103,72 @@ class TestCompanionPanicStop:
         assert cs._panic_stop_requested is True
         # Should have logged the panic action
         assert any(e["kind"] == "panic_stop" for e in cs._action_log)
+
+
+def test_companion_stop_stops_tray(monkeypatch):
+    from interface.companion.companion import CompanionSurface
+
+    stopped = []
+
+    class FakeTray:
+        def stop(self):
+            stopped.append(True)
+
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._tray = FakeTray()
+    monkeypatch.setattr(cs, "_post_gui_event", lambda _event: False)
+
+    cs.stop()
+
+    assert stopped == [True]
+    assert cs._running is False
+
+
+def test_companion_module_entrypoint_help():
+    """Regression: tray startup targets `python -m interface.companion`."""
+    repo = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-m", "interface.companion", "--help"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0
+    assert "Run MO Companion" in result.stdout
+
+
+def test_start_companion_passes_companion_config(monkeypatch):
+    import interface.companion.companion as companion_module
+
+    captured = {}
+
+    class DummyCompanion:
+        def __init__(self, agent, gateway, voice_config=None, companion_config=None):
+            captured["agent"] = agent
+            captured["gateway"] = gateway
+            captured["voice_config"] = voice_config
+            captured["companion_config"] = companion_config
+
+        def start(self):
+            return True
+
+    monkeypatch.setattr(companion_module, "CompanionSurface", DummyCompanion)
+    agent = type("Agent", (), {
+        "config": {
+            "desktop_companion": {
+                "enabled": True,
+                "tray_enabled": True,
+                "voice": {"stt_enabled": True},
+            }
+        }
+    })()
+    gateway = object()
+
+    result = companion_module.start_companion_if_enabled(agent, gateway)
+
+    assert result is not None
+    assert captured["gateway"] is gateway
+    assert captured["voice_config"] == {"stt_enabled": True}
+    assert captured["companion_config"]["tray_enabled"] is True
 

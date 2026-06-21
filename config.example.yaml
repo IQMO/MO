@@ -213,8 +213,10 @@ paths:
 # true to run it alongside the TUI.
 desktop_companion:
   enabled: false
+  tray_enabled: false              # resident tray icon with Guide/Do, action log, startup, panic-stop
   voice:
     stt_enabled: false              # push-to-talk speech-to-text (needs faster-whisper + sounddevice)
     tts_enabled: false              # spoken replies (needs piper-tts)
     stt_model: base                 # faster-whisper model size
+    tts_model: ""                   # path to a local piper voice model file
     tts_voice: en_US-lessac-medium  # piper voice

@@ -82,3 +82,45 @@ def test_recorder_caps_buffer_and_autostops_at_max_seconds():
     total = sum(len(c) for c in rec._buffer)
     assert total <= 100, total          # buffer bounded, not 250
     assert rec._recording is False      # auto-stopped at the cap
+
+
+def test_voice_submit_rechecks_active_turn_after_transcription(monkeypatch):
+    import interface.companion.companion as companion_module
+
+    cs = companion_module.CompanionSurface(agent=None, gateway=None)
+    statuses = []
+    turn_threads = []
+
+    class ExistingTurn:
+        def is_alive(self):
+            return True
+
+    class FakeVoice:
+        stt_available = True
+
+        def stop_and_transcribe(self):
+            return "use the screen"
+
+    class ImmediateThread:
+        def __init__(self, target, args=(), name="", daemon=False):
+            self.target = target
+            self.args = args
+            self.name = name
+            self.daemon = daemon
+
+        def start(self):
+            if self.name == "mo-companion-turn":
+                turn_threads.append(self)
+                return
+            self.target(*self.args)
+
+    cs._voice = FakeVoice()
+    cs._recording_voice = True
+    cs._turn_thread = ExistingTurn()
+    monkeypatch.setattr(cs, "_set_status", lambda text, color: statuses.append(text))
+    monkeypatch.setattr(companion_module.threading, "Thread", ImmediateThread)
+
+    cs._on_voice_input()
+
+    assert any("Still working" in status for status in statuses)
+    assert turn_threads == []

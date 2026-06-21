@@ -206,6 +206,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Learning loop | Recurring-pattern & workflow suggestions stay pending until you confirm; direct corrections/term definitions apply to your local profile |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
+| Desktop Companion | Optional local desktop surface: summon with `Win+Alt+M`, use a small MO window, Guide/Do mode, tray, action log, panic-stop, and optional local STT/TTS. Off by default; requires the computer-use optional deps and `desktop_companion.enabled: true` |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
 | MCP tools | Connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments. Enabled by default but inert until you list a server (an empty `servers:` spawns nothing) |
 | Open in your browser | `open_url` opens a page in the operator's **default** browser, visibly (their own profile and logins) — the right tool for "open / show me / pull up X". Uses the OS default-browser handler (no hardcoded browser, no shell). Distinct from the autonomous browser-automation tools below |
@@ -266,7 +267,7 @@ adapts through their own approved profile and learning surfaces.
 
 ## Current Rough Edges
 
-- Terminal-first experience; no packaged desktop app yet.
+- Terminal-first experience; Companion is optional and local, not a packaged desktop app yet.
 - Provider setup is manual and expects you to understand your endpoint.
 - Internals are moving quickly; docs and command surfaces may change.
 - Some advanced paths, such as service mode, tracing, hooks, and PRT fix loops,
