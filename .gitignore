@@ -22,8 +22,8 @@ nul
 with open*
 personal/
 .claude/
-# Local-only operator tooling, kept in its own nested git repo. Not part of the
-# shipped project; ignored here and never recursed into.
+# Legacy in-checkout operator path. The live owner pack resolves from
+# ~/.mo/operator or MO_OPERATOR_PACK; keep accidental local copies unshipped.
 operator/
 # Dev/maintainer design docs, proposals, audits — internal, not shipped.
 docs/
