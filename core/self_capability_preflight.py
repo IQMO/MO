@@ -83,9 +83,9 @@ REQUIRED_DISCOVERY_AREAS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("turn/runtime hooks", ("core/agent/agent_turn.py", "core/agent/agent.py", "_record_turn_memory_and_learning", "_maybe_handle_workflow_control_turn")),
     ("graph/code map", ("core/graph/code_graph.py", "core/graph/structural_graph.py", "core/graph/search.py", "core/graph/callgraph.py", "memory/structural_graph")),
     ("learning/profile/workflow", ("core/learning/proactive_learning.py", "core/learning/workflow_learning.py", "learning_suggestions.jsonl", "workflow_candidates.jsonl")),
-    ("trace/session logs", ("memory/sessions", "session_closeouts", "heartbeats.jsonl", "tool_audit.jsonl", "provider_audit.jsonl", "logs/monitor/backend_monitor-*.jsonl", "operator/mo_trace.py")),
+    ("trace/session logs", ("memory/sessions", "session_closeouts", "heartbeats.jsonl", "tool_audit.jsonl", "provider_audit.jsonl", "logs/monitor/backend_monitor-*.jsonl", "~/.mo/operator/mo_trace.py")),
     ("taskboard/evidence", ("core/tasking/agent_taskboard.py", "complete_task", "core/tasking/task_evidence.py")),
-    ("tests/docs", ("tests/", "docs/devmode", "operator/devmode/DEVMODE05.md", "operator/devmode/DEVMODE05/")),
+    ("tests/docs", ("tests/", "~/.mo/memory/devmode", "~/.mo/operator/devmode/DEVMODE05.md", "~/.mo/operator/devmode/DEVMODE05/")),
     ("duplication/stale/legacy", ("git grep", "rg", "dead code", "duplicate paths", "retention proof")),
 )
 
@@ -104,7 +104,7 @@ _CAPABILITY_FILES = (
     ("session closeout", "core/session/session_closeout.py", "captures dirty workspace, taskboard state, logs, and unresolved work"),
     ("heartbeat", "core/heartbeat.py", "records live taskboard/git/session continuity"),
     ("taskboard truth", "core/tasking/agent_taskboard.py", "task rows advance only via explicit complete_task evidence"),
-    ("live trace", "operator/mo_trace.py", "session recorder and behavior validator; replay recent actions to see what MO actually did"),
+    ("live trace", "operator/mo_trace.py", "session recorder and behavior validator; run from `~/.mo/operator/mo_trace.py` to replay recent actions"),
     ("input behavior gates", "core/behavior_gates.py", "run_input_gates() — declarative pre-provider registry (threat scan + malicious-code refusal)"),
     ("content safety", "core/content_safety.py", "classify_harmful_coding_request() refuses malware/attack-tooling builds; dual-use-aware, operator-disableable"),
     ("write-time secret gate", "core/sandbox.py", "guard_tool_call blocks writing hardcoded secret literals into files (contains_hardcoded_secret_literal)"),
@@ -145,7 +145,7 @@ def operator_protocols_installed() -> bool:
     """True only for the real operator: the private pack AND the owner token.
 
     DEVMODE05/VS05 are personal operator protocols, not product features. They
-    require BOTH the untracked ``operator/devmode/`` pack AND a private owner
+    require BOTH the untracked ``~/.mo/operator/devmode/`` pack AND a private owner
     token in ``~/.mo`` (``operator.token``) that a user clone never has — so the
     copyable pack files alone cannot fake operator mode. On a user clone both are
     absent, so the activation terms are inert by absence — no config, nothing to
@@ -631,7 +631,7 @@ def _load_owner_preflight_rules() -> list[str]:
     """Load the owner-only protocol preflight rules from the operator pack.
 
     The detailed DEVMODE05/VS05 protocol prose lives untracked in
-    ``operator/devmode/preflight-rules.json`` (never shipped). A user clone has no
+    ``~/.mo/operator/devmode/preflight-rules.json`` (never shipped). A user clone has no
     such file, so the public code carries no protocol description — only a generic
     self-review reminder is emitted there.
     """
@@ -685,12 +685,14 @@ def _runtime_evidence_lines(root: Path) -> list[str]:
     """Return sandbox-friendly runtime evidence locations to inspect."""
     home = mo_home()
     repo_memory = root / "memory"
+    trace_dir = home / "memory" / "traces"
+    trace_tool = "~/.mo/operator/mo_trace.py"
     lines = [
         "Runtime evidence paths to inspect when relevant:",
         f"- private runtime home: {home} (sessions, session_closeouts, heartbeat, tool/provider audit logs)",
-        "- live trace: memory/traces/trace_* (directory-based from operator/mo_trace.py serve or .trace files; replay with `python operator/mo_trace.py replay <path>`; list with `python operator/mo_trace.py list`)",
+        f"- live trace: {trace_dir}/trace_* (directory-based from {trace_tool} serve or .trace files; replay with `python {trace_tool} replay <path>`; list with `python {trace_tool} list`)",
         f"- backend monitor fallback: {home}/logs/monitor/backend_monitor-*.jsonl (when running mo.py directly)",
-        "- mo_trace.py: operator/mo_trace.py serve <args> (launches mo.py wrapped with auto-tracing; traces saved to memory/traces/)",
+        f"- mo_trace.py: `python {trace_tool} serve <args>` (launches mo.py wrapped with auto-tracing; traces saved to {trace_dir}/)",
         f"- repo-local fallback: {repo_memory} (legacy/dev checkout memory when private home is unavailable)",
         "- if private paths are sandbox-blocked, state that explicitly and inspect repo-local memory plus source hooks instead of claiming trace coverage.",
     ]
@@ -715,7 +717,13 @@ def _relevant_command_lines() -> list[str]:
 def _capability_file_lines(root: Path) -> list[str]:
     lines: list[str] = []
     for name, rel, note in _CAPABILITY_FILES:
-        exists = (root / rel).exists()
+        if rel.startswith("operator/"):
+            path = operator_pack_root() / rel.removeprefix("operator/")
+            display = "~/.mo/operator/" + rel.removeprefix("operator/")
+        else:
+            path = root / rel
+            display = rel
+        exists = path.exists()
         status = "exists" if exists else "missing"
-        lines.append(f"- {name}: {rel} ({status}) — {note}")
+        lines.append(f"- {name}: {display} ({status}) — {note}")
     return lines

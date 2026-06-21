@@ -456,9 +456,18 @@ def shell_paths_allowed(command: str, allowed_roots: list[str] | None) -> bool:
     if not allowed_roots:
         return True
     raw_command = _path_scan_command_text(command or "")
-    # Variable/tilde expansion into a path escapes the static scope check; block
-    # it when roots are restricted unless it is a current-dir variable.
+    # Variable expansion into a path escapes the static scope check; block it
+    # when roots are restricted unless it is a current-dir variable. Tilde paths
+    # are deterministic enough to expand and scope-check, which lets the migrated
+    # private operator pack run from ~/.mo/operator without widening access.
     for m in _SHELL_VAR_PATH_PATTERN.finditer(raw_command):
+        if m.group(0).startswith("~"):
+            end = m.start()
+            while end < len(raw_command) and raw_command[end] not in " \t\r\n\"'`;|&<>":
+                end += 1
+            if path_allowed(raw_command[m.start():end], allowed_roots):
+                continue
+            return False
         var = (m.group("pv") or m.group("bv") or m.group("ev") or m.group("sv") or "").lower()
         if var in _SHELL_CWD_VARS:
             continue

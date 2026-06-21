@@ -28,10 +28,11 @@ from .agent_utils import (
 )
 from ..self_capability_preflight import (
     is_devmode05_activation,
+    is_ifdev05_activation,
     is_vs05_activation,
     vs05_readonly_source_roots,
 )
-from ..path_defaults import repo_root
+from ..path_defaults import mo_home, operator_pack_root, repo_root
 
 
 # Read-family tools return data the model EXPLICITLY requested and are already
@@ -464,18 +465,35 @@ class AgentTurnDispatchMixin:
         roots = list(getattr(self, "allowed_roots", None) or [])
         if not roots:
             return roots
-        if not self._vs05_source_read_tool(name, arguments):
+        read_like = self._vs05_source_read_tool(name, arguments)
+        root_keys = {str(root).casefold() for root in roots}
+
+        def append_root(path: Path) -> None:
+            value = str(path.expanduser().resolve(strict=False))
+            key = value.casefold()
+            if key not in root_keys:
+                roots.append(value)
+                root_keys.add(key)
+
+        # Owner protocols live outside the public checkout after the layout
+        # migration. Add those private roots only when the owner-only activation
+        # gates are already true; user clones have neither pack nor owner token.
+        write_protocol = is_devmode05_activation(user_input) or is_ifdev05_activation(user_input)
+        if write_protocol or (is_vs05_activation(user_input) and read_like):
+            append_root(operator_pack_root())
+            append_root(mo_home() / "memory" / "devmode")
+
+        if not read_like:
             return roots
         # The control workspace is operator-configured policy context; the
         # context block advertises it, so read tools must be able to follow it.
         control_root = self._mo_control_read_root()
-        if control_root and control_root.casefold() not in {str(root).casefold() for root in roots}:
-            roots.append(control_root)
+        if control_root:
+            append_root(Path(control_root))
         if not is_vs05_activation(user_input):
             return roots
         for source_root in vs05_readonly_source_roots(user_input):
-            if source_root.casefold() not in {str(root).casefold() for root in roots}:
-                roots.append(source_root)
+            append_root(Path(source_root))
         return roots
 
     def _mo_control_read_root(self) -> str:

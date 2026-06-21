@@ -115,3 +115,36 @@ def test_control_workspace_is_readable_but_not_writable_by_tools(tmp_path, monke
 
     mutating_shell_roots = agent._effective_allowed_roots_for_tool("check", "shell", {"command": f"del {truth}"})
     assert str(workspace) not in mutating_shell_roots
+
+
+def test_devmode_effective_roots_include_operator_pack_and_records(tmp_path, monkeypatch):
+    """DEVMODE05 tools must reach the migrated private pack and session records."""
+    from core.agent.agent import Agent
+    import core.agent.agent_turn_dispatch as dispatch
+    from core.sandbox import guard_tool_call
+
+    project = tmp_path / "product"
+    project.mkdir()
+    pack = tmp_path / "operator"
+    pack.mkdir()
+    (pack / "mo_trace.py").write_text("print('trace')\n", encoding="utf-8")
+    home = tmp_path / "home"
+    records = home / "memory" / "devmode"
+    records.mkdir(parents=True)
+
+    monkeypatch.setattr(dispatch, "is_devmode05_activation", lambda _text: True)
+    monkeypatch.setattr(dispatch, "is_ifdev05_activation", lambda _text: False)
+    monkeypatch.setattr(dispatch, "is_vs05_activation", lambda _text: False)
+    monkeypatch.setattr(dispatch, "operator_pack_root", lambda: pack)
+    monkeypatch.setattr(dispatch, "mo_home", lambda: home)
+
+    agent = object.__new__(Agent)
+    agent.allowed_roots = [str(project)]
+    agent.config = {}
+
+    command = f"python {pack / 'mo_trace.py'} list"
+    roots = agent._effective_allowed_roots_for_tool("start DEVMODE05", "shell", {"command": command})
+
+    assert str(pack.resolve()) in roots
+    assert str(records.resolve()) in roots
+    assert guard_tool_call("shell", {"command": command}, allowed_roots=roots) is None

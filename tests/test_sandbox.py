@@ -1,6 +1,7 @@
 """Unit tests for sandbox.py — the single gate at tool dispatch."""
 
 import os
+from pathlib import Path
 
 from core.sandbox import (
     guard_tool_call,
@@ -401,11 +402,20 @@ class TestGuardToolCall:
         assert guard_tool_call("shell", {"command": command}, allowed_roots=self.ALLOWED_ROOTS) is None
 
     def test_windows_slash_flag_after_pipeline_allowed(self):
-        command = 'python operator/mo_trace.py replay trace_20260607_033418 --tail 30 2>&1 | findstr /V "PASS\\|INFO"'
+        command = 'python ~/.mo/operator/mo_trace.py replay trace_20260607_033418 --tail 30 2>&1 | findstr /V "PASS\\|INFO"'
+
+        roots = [*self.ALLOWED_ROOTS, str(Path("~/.mo/operator").expanduser())]
+        reason = guard_tool_call("shell", {"command": command}, allowed_roots=roots)
+
+        assert reason is None
+
+    def test_tilde_path_outside_allowed_roots_still_blocked(self):
+        command = "python ~/.ssh/id_rsa"
 
         reason = guard_tool_call("shell", {"command": command}, allowed_roots=self.ALLOWED_ROOTS)
 
-        assert reason is None
+        assert reason is not None
+        assert "PATH BLOCKED" in reason
 
     def test_windows_find_count_flag_after_pipeline_allowed(self):
         command = 'python -m pytest --collect-only -q 2>&1 | find "test" | find /c "test"'
