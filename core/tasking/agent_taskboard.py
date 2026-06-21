@@ -115,7 +115,7 @@ class AgentTaskBoard:
         # hand-faked (observed: model wrote helper-format numbers without running it).
         self._write_devmode_economy_record()
 
-        if not task_board or task_board.open_count() == 0:
+        if not task_board:
             return False
 
         # C1: the terminal report (gated above) closes the remaining phase rows.
@@ -138,6 +138,20 @@ class AgentTaskBoard:
                 row_evidence = [evidence, *carried] if carried else evidence
                 task_board.complete(task.id, evidence=row_evidence)
                 changed = changed or task.status == "completed"
+            else:
+                # Backfill a row the model self-completed via complete_task that carries
+                # no real evidence (only a `final:` token, or empty) — typically a
+                # diagnostic/reasoning phase row with no tool of its own. Attach the
+                # session's gathered evidence so the closeout contract gate sees real
+                # per-row truth. Without this the row stays empty and the whole-board
+                # contract gate rejects every turn (it has no circuit breaker) — an
+                # unbounded CONTRACT GATE loop (observed live mo-1782079519). Backfills
+                # only when the session actually gathered evidence, so a zero-work
+                # closeout that marked rows done with nothing behind them is still caught.
+                real = [str(e) for e in (task.evidence or []) if not str(e).startswith("final:")]
+                if not real and carried:
+                    task.evidence = [*(task.evidence or []), *carried]
+                    changed = True
         return changed
 
     @staticmethod

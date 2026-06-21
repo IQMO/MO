@@ -438,3 +438,33 @@ def test_terminal_closeout_carries_real_evidence_not_hollow_token(monkeypatch):
         nonfinal = [e for e in row.evidence if not str(e).startswith("final:")]
         assert nonfinal, f"task {tid} bulk-closed on a final: token only (C1 regression)"
         assert any("read_file" in e or "git" in e for e in nonfinal)
+
+
+def test_self_completed_empty_phase_row_is_backfilled_at_closeout(monkeypatch):
+    """A diagnostic/reasoning row the model closed itself via complete_task with NO
+    real evidence must be backfilled with the session's gathered evidence at closeout —
+    otherwise the whole-board contract gate (no circuit breaker) rejects it every turn
+    and loops unbounded (observed live mo-1782079519: CONTRACT GATE loop, 69+ requests)."""
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool",
+                 evidence=["read_file:DEVMODE05.md", "shell:git rev-parse HEAD"]),
+        # rows the model self-completed via complete_task with only a final: token / empty
+        TaskItem("2", "Catalog findings and choose lane", "completed", kind="verify",
+                 completion_gate="verification", evidence=["final:assistant_response"]),
+        TaskItem("3", "Verify behavior/cost/handoff", "completed", kind="verify",
+                 completion_gate="verification", evidence=[]),
+        TaskItem("4", "Report", "completed", kind="report", completion_gate="final",
+                 evidence=["final:devmode05_protocol_closeout"]),
+    ])
+    agent = object.__new__(Agent)
+    agent._finalize_self_protocol_task_board_for_answer(
+        "start DEVMODE05", "[DEVMODE05 COMPLETE] HEALTHY; diagnostic-only; 0 tool errors", board)
+    for tid in ("2", "3"):
+        row = next(t for t in board.tasks if t.id == tid)
+        nonfinal = [e for e in row.evidence if not str(e).startswith("final:")]
+        assert nonfinal, f"task {tid} left empty — contract gate would loop unbounded"
+    # whole-board contract gate now passes instead of looping
+    from core.tasking.contract import enforce_contract_gate
+    ok, reasons, _ = enforce_contract_gate(board, board_closing=True)
+    assert ok, f"closeout still blocked after backfill: {reasons}"

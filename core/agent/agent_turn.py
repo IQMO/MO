@@ -134,6 +134,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         done_claim_continued = False  # once-per-turn guard for the done-claim/open-board gate
         verify_edits_continued = False  # A2: once-per-turn guard for the changed-file verify-and-self-heal gate
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
+        contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
         # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
         # few times to push for a clean closeout, but must not loop to
         # max_provider_requests when a near-terminal completion keeps tripping the
@@ -743,11 +744,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 contract_ok, contract_reasons, contract_instruction = enforce_contract_gate(
                     task_board, persisted_tasks=persisted, board_closing=True, task_ids=contract_task_ids,
                 )
-                if not contract_ok:
+                if not contract_ok and contract_gate_continuations < PROTOCOL_STOP_GATE_MAX:
+                    contract_gate_continuations += 1
                     if on_activity:
                         on_activity(f"contract gate blocked: {'; '.join(contract_reasons[:3])}")
                     self.session.add_assistant(contract_instruction)
                     continue
+                if not contract_ok and on_activity:
+                    on_activity("contract gate disagreement — allowing close after cap")
             boundary_report = self._run_consistency_boundary("turn_final", user_text=user_input, final_text=final_text, learning_notes=notes, task_board=task_board)
             if (
                 self_protocol_truth_continuations < PROTOCOL_STOP_GATE_MAX
