@@ -2,8 +2,9 @@
 
 The companion is MO's on-screen surface: summon with Win+Alt+M, type, and get
 results back via Ghost → Gateway → overlay bubble. Phase 3 adds push-to-talk
-voice (STT via faster-whisper, TTS via piper-tts). Phase 4 adds system-tray
-icon with Guide/Do modes, action log, run-at-startup, and panic-stop.
+voice: sounddevice captures the mic, faster-whisper transcribes it, and
+piper-tts can speak replies when a local voice model is configured. Phase 4 adds
+system-tray icon with Guide/Do modes, action log, run-at-startup, and panic-stop.
 """
 from __future__ import annotations
 

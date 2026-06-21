@@ -43,4 +43,4 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Prefer existing MO systems over new parallel mechanisms.
 - Keep protocols split into modules, not oversized root prompts.
 - Never print secrets or credential values.
-- Boundary: operator-private material lives in gitignored `operator/` + `docs/` + `~/.mo` and never ships; a pre-push guard blocks leaks. Operator-only commands use `operator_only=True`. See AGENTS.md "Boundary".
+- Boundary: operator-private material lives under private state (`~/.mo`, including `~/.mo/operator` or `MO_OPERATOR_PACK`) or ignored local-only paths and never ships; a pre-push guard blocks leaks. Operator-only commands use `operator_only=True`. See AGENTS.md "Boundary".

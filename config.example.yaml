@@ -208,15 +208,15 @@ paths:
   critique_file: critique/ANSWER.md
 
 # Optional on-screen Companion — a small MO-branded desktop window summoned with
-# Win+Alt+M (+ system tray). OFF by default: it needs a desktop session and the
-# computer-use deps (pip install -r requirements-computer-use.txt). Set enabled:
-# true to run it alongside the TUI.
+# Win+Alt+M (+ system tray). OFF by default: it needs a desktop session plus the
+# Companion deps from requirements-computer-use.txt. Voice stays off unless
+# enabled below; mic capture and speech transcription are separate checks.
 desktop_companion:
   enabled: false
   tray_enabled: true               # when enabled, show the resident tray icon; set false to hide it
   voice:
-    stt_enabled: false              # push-to-talk speech-to-text (needs faster-whisper + sounddevice)
-    tts_enabled: false              # spoken replies (needs piper-tts)
+    stt_enabled: false              # push-to-talk speech-to-text; mic capture uses sounddevice, transcription requires faster-whisper
+    tts_enabled: false              # spoken replies; current built-in backend requires piper-tts plus a local voice model
     stt_model: base                 # faster-whisper model size
     tts_model: ""                   # path to a local piper voice model file
     tts_voice: en_US-lessac-medium  # piper voice

@@ -216,6 +216,12 @@ export PATH="$HOME/.mo/bin:$PATH"
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 
+Companion voice is opt-in and push-to-talk only. The mic button is hidden until
+`desktop_companion.voice.stt_enabled: true`; microphone capture uses
+`sounddevice`, while transcription requires `faster-whisper`. Spoken replies are
+also separate: the current built-in TTS path uses `piper-tts` and a configured
+local Piper voice model.
+
 ## MCP (Model Context Protocol)
 
 MO can use tools from operator-configured MCP servers — local-first and **enabled by default, but inert until you list a server** (an empty `servers:` spawns nothing, so MO gains no MCP tools until you add one). Add servers to `~/.mo/config.yaml`:

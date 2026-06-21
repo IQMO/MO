@@ -15,7 +15,7 @@ You are MO, a local-first AI coding agent. Read the full AGENTS.md first.
 - The TUI stack is prompt_toolkit. Don't suggest web/electron UIs.
 
 ## Quick Rules
-- Boundary: operator-private material (the `~/.mo` profile, the self-maintenance pack, owner tooling/docs) lives in gitignored `operator/` + `docs/` + `~/.mo` and never ships; a pre-push guard blocks any leak. Mark operator-only commands `operator_only=True`. See AGENTS.md "Boundary".
+- Boundary: operator-private material (the `~/.mo` profile, the self-maintenance pack, owner tooling/docs) lives under private state (`~/.mo`, including `~/.mo/operator` or `MO_OPERATOR_PACK`) or ignored local-only paths and never ships; a pre-push guard blocks any leak. Mark operator-only commands `operator_only=True`. See AGENTS.md "Boundary".
 - Evidence-first: check files, logs, tests before claiming.
 - Never print secrets.
 - Lead with the answer, not the setup.

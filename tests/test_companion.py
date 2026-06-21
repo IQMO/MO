@@ -245,3 +245,27 @@ def test_voice_input_is_hidden_when_not_configured():
         gateway=None,
         voice_config={"stt_enabled": True},
     )._voice_input_configured() is True
+
+
+def test_voice_unavailable_message_separates_transcription_from_capture():
+    from interface.companion.companion import CompanionSurface
+
+    class FakeRecognizer:
+        available = False
+        _load_error = "faster-whisper not installed"
+
+    class FakeRecorder:
+        available = True
+
+    class FakeVoice:
+        stt_available = False
+        recognizer = FakeRecognizer()
+        recorder = FakeRecorder()
+
+    cs = CompanionSurface(agent=None, gateway=None, voice_config={"stt_enabled": True})
+    cs._voice = FakeVoice()
+
+    message = cs._voice_input_unavailable_message()
+
+    assert "faster-whisper" in message
+    assert "sounddevice" not in message

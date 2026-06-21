@@ -1,10 +1,11 @@
 """MO Companion Voice — local STT + TTS for push-to-talk.
 
-Phase 3 of the desktop companion: speech-to-text via faster-whisper and
-text-to-speech via piper-tts. All local, push-to-talk only (no always-on mic).
+Phase 3 of the desktop companion: push-to-talk mic capture via sounddevice,
+speech-to-text via faster-whisper, and text-to-speech via piper-tts. All local,
+push-to-talk only (no always-on mic).
 
 Dependencies (all optional, graceful degraded):
-    faster-whisper   — local STT (CTranslate2-backed Whisper)
+    faster-whisper   — local transcription (CTranslate2-backed Whisper)
     piper-tts        — local TTS (neural, espeak-ng phonemization)
     sounddevice      — audio capture / playback (cross-platform)
     numpy            — audio buffer processing

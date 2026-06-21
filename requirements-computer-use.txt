@@ -23,10 +23,10 @@ pystray>=0.19
 pywin32>=306; sys_platform == "win32"
 #
 # Companion voice (optional; companion works text-only without these):
-#   speech-to-text             -> faster-whisper
-#   text-to-speech             -> piper-tts
-#   audio capture/playback     -> sounddevice
-#   audio arrays               -> numpy
+#   microphone capture/playback -> sounddevice
+#   speech transcription        -> faster-whisper
+#   spoken replies              -> piper-tts + a configured local voice model
+#   audio arrays                -> numpy
 faster-whisper>=1.0.0
 piper-tts>=1.2.0
 sounddevice>=0.4.6

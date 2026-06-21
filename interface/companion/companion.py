@@ -277,7 +277,7 @@ class CompanionSurface:
             self._set_status("Voice input is off in desktop_companion.voice.stt_enabled", "#ffcc44")
             return
         if voice is None or not voice.stt_available:
-            self._set_status("Voice input optional deps missing: faster-whisper + sounddevice", "#ffcc44")
+            self._set_status(self._voice_input_unavailable_message(), "#ffcc44")
             return
         if self._recording_voice:
             # second click → stop, transcribe, submit
@@ -585,6 +585,23 @@ class CompanionSurface:
 
     def _voice_input_configured(self) -> bool:
         return bool(self._voice_cfg.get("stt_enabled", False))
+
+    def _voice_input_unavailable_message(self) -> str:
+        voice = self._voice
+        if voice is None:
+            return "Voice input unavailable: STT is enabled but voice did not initialize"
+
+        missing: list[str] = []
+        recognizer = getattr(voice, "recognizer", None)
+        recorder = getattr(voice, "recorder", None)
+        if recognizer is not None and not getattr(recognizer, "available", False):
+            reason = getattr(recognizer, "_load_error", None) or "faster-whisper not installed"
+            missing.append(f"transcription ({reason})")
+        if recorder is not None and not getattr(recorder, "available", False):
+            missing.append("microphone capture (sounddevice not installed)")
+        if missing:
+            return "Voice input unavailable: " + "; ".join(missing)
+        return "Voice input unavailable: STT backend is not ready"
 
     def _post_gui_event(self, event_name: str) -> bool:
         return self._post_gui_call(event_name)
