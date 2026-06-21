@@ -512,3 +512,26 @@ def test_protocol_activation_requires_operator_pack(monkeypatch):
     assert scp.operator_protocols_installed() is False
     assert scp.is_devmode05_activation("start DEVMODE05") is False
     assert scp.is_vs05_activation("VS05 https://github.com/some/repo") is False
+
+
+def test_devmode05_closeout_gate_blocks_unowned_tool_errors(tmp_path, monkeypatch):
+    """Runtime refuses a clean DEVMODE05 closeout that denies/omits real tool errors
+    (the internalized watcher) — but never false-blocks a no-error session, and a
+    closeout that owns the error finishes."""
+    import json
+    import core.self_capability_preflight as scp
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path))
+    (tmp_path / "backend_monitor-1.jsonl").write_text(
+        json.dumps({"type": "tool_result", "payload": {"error": True}}) + "\n", encoding="utf-8"
+    )
+    ui = "start DEVMODE05"
+    # faked clean closeout while a tool error happened -> blocked
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY, zero findings. No tool errors.") is False
+    assert "tool error" in scp.devmode05_continuation_instruction(ui, "[DEVMODE05 COMPLETE] HEALTHY.").lower()
+    # closeout that owns the error -> allowed
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] 1 tool error (recovered); see economy.md.") is True
+    # a session with no tool errors is never blocked
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "empty"))
+    (tmp_path / "empty").mkdir()
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY.") is True

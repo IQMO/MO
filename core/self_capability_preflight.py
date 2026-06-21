@@ -262,6 +262,33 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     return False
 
 
+def _devmode05_closeout_evidence_violation(final_text: str) -> str | None:
+    """Deterministic contradiction between a clean DEVMODE05 closeout and the live
+    monitor — the internalized watcher. Returns a one-line block reason, or None.
+    Fail-open: any error returns None so it can never wedge a legitimate closeout."""
+    try:
+        text = _devmode05_terminal_prefix_text(final_text) or ""
+        if not text.startswith("[DEVMODE05 COMPLETE]"):
+            return None
+        from .backend_monitor import economy_summary
+        errs = int(economy_summary().get("tool_errors", 0) or 0)
+        if errs <= 0:
+            return None
+        low = final_text.lower()
+        owns = ("economy.md" in low) or ("tool-error ledger" in low) or (
+            str(errs) in final_text and "error" in low
+        )
+        if not owns:
+            return (
+                f"economy.md records {errs} tool error(s) this session — classify each "
+                "(recovered/benign/unresolved) and report from economy.md; a recovered "
+                "error is still an error, do not omit or deny it."
+            )
+        return None
+    except Exception:
+        return None
+
+
 def devmode05_final_allows_stop(user_input: str, final_text: str) -> bool:
     """Return True only when a DEVMODE05 final answer is a real stop boundary."""
     if not is_devmode05_activation(user_input):
@@ -276,6 +303,8 @@ def devmode05_final_allows_stop(user_input: str, final_text: str) -> bool:
         return _devmode05_blocked_has_hard_boundary(text)
     if text.startswith("[DEVMODE05 COMPLETE]"):
         if _devmode05_completion_reports_open_work(text):
+            return False
+        if _devmode05_closeout_evidence_violation(final_text):
             return False
         return True
     allowed_prefixes = (
@@ -339,6 +368,13 @@ def devmode05_continuation_instruction(user_input: str, final_text: str) -> str:
             "open items now: resolve them, verify and close them as explicitly no-action, or update "
             "the artifacts so active deferred work is zero. Finalize only when the report truth says "
             "Remaining: none, Deferred active work: none, Next: none, and there are no failed checks."
+        )
+    _violation = _devmode05_closeout_evidence_violation(final_text)
+    if text.startswith("[DEVMODE05 COMPLETE]") and _violation:
+        return (
+            "[DEVMODE05 AUTONOMY] Your [DEVMODE05 COMPLETE] contradicts runtime evidence: "
+            f"{_violation} Do not repeat the same completion — read economy.md, correct the "
+            "tool-error ledger and report from it, then finalize."
         )
     if text.startswith("[DEVMODE05 BLOCKED]") and not _devmode05_blocked_has_hard_boundary(text):
         return (
