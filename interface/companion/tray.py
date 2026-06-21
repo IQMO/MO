@@ -210,7 +210,13 @@ def start_tray_if_enabled(
     """Start the system tray if configured."""
     cfg = companion_config or {}
     legacy_voice_cfg = voice_config or {}
-    if not cfg.get("tray_enabled", legacy_voice_cfg.get("tray_enabled", False)):
+    if "tray_enabled" in cfg:
+        tray_enabled = bool(cfg.get("tray_enabled"))
+    elif "tray_enabled" in legacy_voice_cfg:
+        tray_enabled = bool(legacy_voice_cfg.get("tray_enabled"))
+    else:
+        tray_enabled = bool(cfg.get("enabled", False))
+    if not tray_enabled:
         return None
     tray = CompanionTray(companion)
     if tray.start():

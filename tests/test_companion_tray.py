@@ -142,9 +142,19 @@ class TestStartTrayIfEnabled:
         from interface.companion.tray import start_tray_if_enabled
         result = start_tray_if_enabled(
             companion=None,
-            voice_config={"tray_enabled": False},
+            companion_config={"enabled": True, "tray_enabled": False},
         )
         assert result is None
+
+    def test_defaults_to_tray_when_companion_enabled(self, monkeypatch):
+        import interface.companion.tray as tray_module
+
+        monkeypatch.setattr(tray_module.CompanionTray, "start", lambda self: True)
+        result = tray_module.start_tray_if_enabled(
+            companion=object(),
+            companion_config={"enabled": True},
+        )
+        assert isinstance(result, tray_module.CompanionTray)
 
     def test_returns_tray_when_top_level_enabled(self, monkeypatch):
         import interface.companion.tray as tray_module

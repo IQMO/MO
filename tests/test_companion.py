@@ -172,3 +172,34 @@ def test_start_companion_passes_companion_config(monkeypatch):
     assert captured["voice_config"] == {"stt_enabled": True}
     assert captured["companion_config"]["tray_enabled"] is True
 
+
+def test_hotkey_registration_stores_and_removes_handle(monkeypatch):
+    import sys
+    import types
+    from interface.companion.companion import CompanionSurface
+
+    removed = []
+    keyboard = types.SimpleNamespace(
+        add_hotkey=lambda _hotkey, _callback: "hotkey-handle",
+        remove_hotkey=lambda handle: removed.append(handle),
+    )
+    monkeypatch.setitem(sys.modules, "keyboard", keyboard)
+
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._try_register_hotkey()
+    assert cs._hotkey_listener == "hotkey-handle"
+
+    cs._unregister_hotkey()
+    assert removed == ["hotkey-handle"]
+    assert cs._hotkey_listener is None
+
+
+def test_post_gui_event_uses_thread_safe_queue():
+    from interface.companion.companion import CompanionSurface
+
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+
+    assert cs._post_gui_event("<<CompanionShow>>") is True
+    assert cs._gui_events.get_nowait() == "<<CompanionShow>>"
+

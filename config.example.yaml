@@ -213,7 +213,7 @@ paths:
 # true to run it alongside the TUI.
 desktop_companion:
   enabled: false
-  tray_enabled: false              # resident tray icon with Guide/Do, action log, startup, panic-stop
+  tray_enabled: true               # when enabled, show the resident tray icon; set false to hide it
   voice:
     stt_enabled: false              # push-to-talk speech-to-text (needs faster-whisper + sounddevice)
     tts_enabled: false              # spoken replies (needs piper-tts)

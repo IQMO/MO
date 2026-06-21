@@ -10,6 +10,7 @@ Architecture
 """
 from __future__ import annotations
 
+import queue
 import sys
 import threading
 import time
@@ -57,6 +58,7 @@ class CompanionSurface:
         self._turn_thread: threading.Thread | None = None
         self._hotkey_listener: Any = None
         self._visible = False
+        self._gui_events: queue.Queue[str] = queue.Queue()
         self._gui_ready = threading.Event()
 
     # ------------------------------------------------------------------
@@ -378,14 +380,27 @@ class CompanionSurface:
             win.destroy()
             root.destroy()
 
+        def _do_show_log(*_args: Any) -> None:
+            self._show_log_popup(root)
+
+        handlers = {
+            "<<CompanionShow>>": _do_show,
+            "<<CompanionHide>>": _do_hide,
+            "<<CompanionStop>>": _do_stop,
+            "<<CompanionShowLog>>": _do_show_log,
+        }
+
         root.bind("<<CompanionShow>>", _do_show)
         root.bind("<<CompanionHide>>", _do_hide)
         root.bind("<<CompanionStop>>", _do_stop)
-        root.bind("<<CompanionShowLog>>", lambda _e: self._show_log_popup(root))
+        root.bind("<<CompanionShowLog>>", _do_show_log)
 
         self._gui_ready.set()
         try:
             while self._running:
+                self._drain_gui_events(handlers)
+                if not self._running:
+                    break
                 root.update()
                 root.update_idletasks()
                 time.sleep(0.05)  # ~20fps; blocking yield so the loop never busy-spins
@@ -539,14 +554,28 @@ class CompanionSurface:
         self._set_status("Done — Esc to hide", "#44cc88")
 
     def _post_gui_event(self, event_name: str) -> bool:
-        root = self._root
-        if root is None:
+        if self._root is None:
             return False
         try:
-            root.after(0, lambda: root.event_generate(event_name))
+            self._gui_events.put_nowait(event_name)
             return True
         except Exception:
             return False
+
+    def _drain_gui_events(self, handlers: dict[str, Any]) -> None:
+        while True:
+            try:
+                event_name = self._gui_events.get_nowait()
+            except queue.Empty:
+                return
+            handler = handlers.get(event_name)
+            if handler is None:
+                continue
+            try:
+                handler()
+            except Exception:
+                if self._running:
+                    traceback.print_exc()
 
     # ------------------------------------------------------------------
     # Global hotkey (optional)
@@ -563,8 +592,8 @@ class CompanionSurface:
                 "Summon the companion with the /companion command in the meantime.\n")
             return
         try:
-            keyboard.add_hotkey("win+alt+m", lambda: self.toggle())
-            self._hotkey_listener = True
+            self._hotkey_listener = keyboard.add_hotkey("win+alt+m", lambda: self.toggle())
+            sys.stderr.write("[companion] ready: Win+Alt+M registered.\n")
         except Exception:
             sys.stderr.write(
                 "[companion] could not register Win+Alt+M (global hotkeys may need "
@@ -575,7 +604,7 @@ class CompanionSurface:
         if self._hotkey_listener:
             try:
                 import keyboard
-                keyboard.remove_hotkey("win+alt+m")
+                keyboard.remove_hotkey(self._hotkey_listener)
             except Exception:
                 pass
             self._hotkey_listener = None
