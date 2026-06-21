@@ -9,7 +9,7 @@ READ_ONLY_LANES = frozenset({"report", "review-only", "investigate", "prt-review
 # Desktop: pyautogui with FAILSAFE=True; Browser: CDP in isolated Chrome profile.
 ACTUATION_TOOLS = frozenset({
     "move_pointer", "mouse_click", "type_text", "press_key",
-    "browser_open", "browser_click", "browser_type", "browser_eval",
+    "browser_open", "browser_click", "browser_type", "browser_eval", "browser_close",
 })
 
 # Lanes that block actuation (taking control) but NOT file edits — the companion's
