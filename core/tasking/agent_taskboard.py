@@ -113,10 +113,24 @@ class AgentTaskBoard:
         else:
             return False
 
+        # C1: the terminal report (gated above) closes the remaining phase rows.
+        # Carry the turn's real gathered evidence onto each closed row so the board
+        # reflects what actually happened instead of a hollow identical `final:`
+        # token (phase rows were otherwise closed on the token alone, with no
+        # per-phase evidence). Full per-phase attribution needs phase auto-advance.
+        carried: list[str] = []
+        for t in task_board.tasks:
+            for e in (t.evidence or []):
+                es = str(e)
+                if not es.startswith("final:") and es not in carried:
+                    carried.append(es)
+        carried = carried[:8]
+
         changed = False
         for task in list(task_board.tasks):
             if task.status != "completed":
-                task_board.complete(task.id, evidence=evidence)
+                row_evidence = [evidence, *carried] if carried else evidence
+                task_board.complete(task.id, evidence=row_evidence)
                 changed = changed or task.status == "completed"
         return changed
 

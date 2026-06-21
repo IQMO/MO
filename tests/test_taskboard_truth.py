@@ -415,3 +415,26 @@ def test_taskboard_does_not_complete_final_report_row_before_final_answer():
     # The previous logic relied on `_tool_should_advance_task` returning False for report rows.
     # Let's adjust this test to just verify manual completion works up to the final row.
     pass
+
+
+def test_terminal_closeout_carries_real_evidence_not_hollow_token(monkeypatch):
+    """C1: the terminal marker may close phase rows, but each closed row must carry
+    the turn's real gathered evidence — not only a hollow `final:` token."""
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool",
+                 evidence=["read_file:DEVMODE05.md", "shell:git rev-parse HEAD"]),
+        TaskItem("2", "Matrix", "active", kind="verify", completion_gate="verification", depends_on=["1"]),
+        TaskItem("3", "Catalog", "pending", kind="verify", completion_gate="verification", depends_on=["2"]),
+        TaskItem("4", "Report", "pending", kind="report", completion_gate="final", depends_on=["3"]),
+    ])
+    agent = object.__new__(Agent)
+    changed = agent._finalize_self_protocol_task_board_for_answer(
+        "start DEVMODE05", "[DEVMODE05 COMPLETE] catalog written; diagnostic-only", board)
+    assert changed
+    assert board.open_count() == 0
+    for tid in ("2", "3"):
+        row = next(t for t in board.tasks if t.id == tid)
+        nonfinal = [e for e in row.evidence if not str(e).startswith("final:")]
+        assert nonfinal, f"task {tid} bulk-closed on a final: token only (C1 regression)"
+        assert any("read_file" in e or "git" in e for e in nonfinal)
