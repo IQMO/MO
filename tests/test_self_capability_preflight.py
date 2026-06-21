@@ -531,7 +531,31 @@ def test_devmode05_closeout_gate_blocks_unowned_tool_errors(tmp_path, monkeypatc
     assert "tool error" in scp.devmode05_continuation_instruction(ui, "[DEVMODE05 COMPLETE] HEALTHY.").lower()
     # closeout that owns the error -> allowed
     assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] 1 tool error (recovered); see economy.md.") is True
+    # the exact T1930 escape: a stray "1" ("12 areas") + "error handling" must NOT count
+    # as owning the error, and a bare "economy.md" mention is not ownership either.
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY across 12 areas, proper error handling. Zero findings. See economy.md.") is False
     # a session with no tool errors is never blocked
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "empty"))
     (tmp_path / "empty").mkdir()
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY.") is True
+
+
+def test_devmode05_closeout_gate_blocks_future_session_stamp(tmp_path, monkeypatch):
+    """A session dir stamped in the FUTURE (hand-typed, session_stamp.py skipped — the
+    T1930 bug) blocks the closeout; a normal past-dated stamp does not."""
+    import shutil
+    from datetime import datetime, timedelta
+    import core.self_capability_preflight as scp
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "nomon"))  # no tool errors
+    devmode = tmp_path / "memory" / "devmode"
+    future = (datetime.now() + timedelta(minutes=40)).strftime("%Y-%m-%dT%H%M")
+    (devmode / future).mkdir(parents=True)
+    ui = "start DEVMODE05"
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY.") is False
+    assert "future" in scp.devmode05_continuation_instruction(ui, "[DEVMODE05 COMPLETE] HEALTHY.").lower()
+    shutil.rmtree(devmode / future)
+    past = (datetime.now() - timedelta(minutes=40)).strftime("%Y-%m-%dT%H%M")
+    (devmode / past).mkdir(parents=True)
     assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY.") is True

@@ -262,29 +262,65 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     return False
 
 
+def _devmode05_future_stamp_violation() -> str | None:
+    """Block when the active session dir is stamped in the FUTURE — a correct local
+    stamp is always at/before now, so a future stamp (e.g. a T1930 dir created at
+    18:56) is a hand-typed/skewed stamp from skipping session_stamp.py. Past-dated
+    stamps are not flagged here (a long run legitimately stamps in the past)."""
+    try:
+        from datetime import datetime, timedelta
+        from .path_defaults import mo_home
+        root = mo_home() / "memory" / "devmode"
+        if not root.is_dir():
+            return None
+        dirs = [d for d in root.iterdir() if d.is_dir() and d.name[:1].isdigit()]
+        if not dirs:
+            return None
+        latest = max(dirs, key=lambda d: d.name)
+        try:
+            stamp_dt = datetime.strptime(latest.name, "%Y-%m-%dT%H%M")
+        except ValueError:
+            return None
+        if stamp_dt > datetime.now() + timedelta(minutes=5):
+            drift = (stamp_dt - datetime.now()).total_seconds() / 60.0
+            return (
+                f"the session dir '{latest.name}' is stamped ~{drift:.0f} min in the FUTURE "
+                f"(local now {datetime.now():%Y-%m-%dT%H%M}) — a hand-typed/skewed stamp from "
+                "skipping session_stamp.py. Rename the dir to the local-time stamp before finishing."
+            )
+        return None
+    except Exception:
+        return None
+
+
 def _devmode05_closeout_evidence_violation(final_text: str) -> str | None:
-    """Deterministic contradiction between a clean DEVMODE05 closeout and the live
-    monitor — the internalized watcher. Returns a one-line block reason, or None.
+    """Deterministic contradiction between a clean DEVMODE05 closeout and runtime
+    truth — the internalized watcher. Returns a one-line block reason, or None.
     Fail-open: any error returns None so it can never wedge a legitimate closeout."""
     try:
         text = _devmode05_terminal_prefix_text(final_text) or ""
         if not text.startswith("[DEVMODE05 COMPLETE]"):
             return None
+        # 1. real tool errors must be explicitly owned — not denied, not merely
+        #    adjacent to a stray "economy.md" mention or a loose digit.
         from .backend_monitor import economy_summary
         errs = int(economy_summary().get("tool_errors", 0) or 0)
-        if errs <= 0:
-            return None
-        low = final_text.lower()
-        owns = ("economy.md" in low) or ("tool-error ledger" in low) or (
-            str(errs) in final_text and "error" in low
-        )
-        if not owns:
-            return (
-                f"economy.md records {errs} tool error(s) this session — classify each "
-                "(recovered/benign/unresolved) and report from economy.md; a recovered "
-                "error is still an error, do not omit or deny it."
-            )
-        return None
+        if errs > 0:
+            low = final_text.lower()
+            denies = any(p in low for p in (
+                "no tool error", "0 tool error", "zero tool error", "no errors",
+                "all tool calls succeeded", "no tool calls failed",
+            ))
+            owns = bool(re.search(rf"\b{errs}\b[^.\n]{{0,30}}tool[ _-]?error", final_text, re.I)) or \
+                bool(re.search(rf"tool[ _-]?error[^.\n]{{0,30}}\b{errs}\b", final_text, re.I))
+            if denies or not owns:
+                return (
+                    f"economy.md records {errs} tool error(s) this session — state the count "
+                    "explicitly and classify each (recovered/benign/unresolved); a clean "
+                    "closeout that omits or denies them is blocked."
+                )
+        # 2. the session dir must carry a local-time stamp, not a future/skewed one.
+        return _devmode05_future_stamp_violation()
     except Exception:
         return None
 
