@@ -667,6 +667,18 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 if on_activity:
                     on_activity("VS05 stop-gate disagreement — allowing stop after cap")
 
+            # Write the authoritative economy ledger to the active session dir BEFORE
+            # the DEVMODE05 closeout gate evaluates. The gate's continuation tells the
+            # model to "read economy.md and own the tool-error ledger"; the record used
+            # to be written only on a *passing* closeout (agent_taskboard), so a blocked
+            # closeout could never produce the file the model needs to satisfy the gate —
+            # a deadlock that loops every DEVMODE05 with tool errors to [DEVMODE05 BLOCKED]
+            # (observed live mo-1782065291: 5 recovered errors, economy.md never written,
+            # model could not own a ledger it had no file for). Writing it here breaks the
+            # cycle: the next continuation turn reads the real counts and can finalize.
+            if devmode05_active:
+                self._write_devmode_economy_record()
+
             if not devmode05_final_allows_stop(user_input, content):
                 if protocol_stop_gate_continuations.get("devmode05", 0) < PROTOCOL_STOP_GATE_MAX:
                     protocol_stop_gate_continuations["devmode05"] = protocol_stop_gate_continuations.get("devmode05", 0) + 1

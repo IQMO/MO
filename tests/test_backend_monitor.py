@@ -363,3 +363,38 @@ def test_devmode_closeout_writes_authoritative_economy(tmp_path, monkeypatch):
     text = eco.read_text(encoding="utf-8")
     assert "Provider requests: 1" in text
     assert "errors: 1" in text
+
+
+def test_devmode_economy_targets_active_dir_not_prior_run(tmp_path, monkeypatch):
+    """The closeout boundary writes economy.md every attempt (not only on a passing
+    close) so the model can read the tool-error ledger the gate tells it to read —
+    this broke a deadlock that looped DEVMODE05 to [DEVMODE05 BLOCKED]. With a prior
+    run's dir present, the record must land in the ACTIVE (mtime-latest) dir, never
+    pollute the older run (the live case: prior T1924 + active T2009)."""
+    import os, time
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    (mondir / "backend_monitor-1.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in [
+            {"type": "tool_result", "payload": {"error": True}},
+            {"type": "tool_result", "payload": {"error": True}},
+        ]),
+        encoding="utf-8",
+    )
+    dm = tmp_path / "memory" / "devmode"
+    prior = dm / "2026-01-01T0000"
+    active = dm / "2026-01-02T0000"
+    prior.mkdir(parents=True)
+    active.mkdir(parents=True)
+    # Make `active` the most-recently-modified dir regardless of name ordering.
+    past = time.time() - 600
+    os.utime(prior, (past, past))
+    active_marker = active / "summary.md"
+    active_marker.write_text("active run artifact", encoding="utf-8")
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    AgentTaskBoard._write_devmode_economy_record()
+    assert (active / "economy.md").is_file()
+    assert not (prior / "economy.md").exists()
+    assert "errors: 2" in (active / "economy.md").read_text(encoding="utf-8")
