@@ -39,8 +39,8 @@ You are MO, a local-first AI coding agent. Read this before acting.
 - **State is private-by-default and lives under `~/.mo` (or `MO_STATE_HOME`), from any cwd — never the project checkout.** Every runtime-state path (`memory/...`, `logs/...`) MUST resolve through `core.path_defaults.resolve_state_path()`; never default a writer to a bare cwd-relative `"memory/..."` literal. A pytest session guard (`tests/conftest.py`) fails the run and the routing test (`tests/test_state_routing.py`) enforce this, so a stray `memory/` can never reappear in the checkout.
 
 ## Boundary (what never ships)
-- Operator-private material — the owner's `~/.mo` profile, the self-maintenance protocol pack, and owner-only tooling/docs — lives in gitignored `operator/` (its own nested repo), `docs/`, and `~/.mo`. It is never tracked, so a plain `git push` cannot carry it.
-- A `pre-push` guard (`operator/privacy_guard.py`, installed at `.git/hooks/pre-push`) scans every tracked file and **blocks the push** on any operator identity, secret, or private path. The repo *is* the public product — push == publish.
+- Operator-private material — the owner's `~/.mo` profile, the self-maintenance protocol pack (`~/.mo/operator`, resolved via `MO_OPERATOR_PACK`), and owner-only tooling/docs — lives in the owner's private home **outside** the product checkout, plus gitignored `docs/`. It is never tracked, so a plain `git push` cannot carry it.
+- A `pre-push` guard (`~/.mo/operator/privacy_guard.py`, installed at `.git/hooks/pre-push`) scans every tracked file and **blocks the push** on any operator identity, secret, or private path. The repo *is* the public product — push == publish.
 - **Hide-from-users, don't block.** Operator-only commands stay fully dispatchable but are hidden from user-facing help/palette/completion when the pack is absent — mark them `operator_only=True` in `interface/command_registry.py`. Never advertise operator-only machinery to users.
 
 ## Ghost
