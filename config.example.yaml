@@ -206,3 +206,15 @@ access:
 paths:
   memory_file: memory/mo.db
   critique_file: critique/ANSWER.md
+
+# Optional on-screen Companion — a small MO-branded desktop window summoned with
+# Win+Alt+M (+ system tray). OFF by default: it needs a desktop session and the
+# computer-use deps (pip install -r requirements-computer-use.txt). Set enabled:
+# true to run it alongside the TUI.
+desktop_companion:
+  enabled: false
+  voice:
+    stt_enabled: false              # push-to-talk speech-to-text (needs faster-whisper + sounddevice)
+    tts_enabled: false              # spoken replies (needs piper-tts)
+    stt_model: base                 # faster-whisper model size
+    tts_voice: en_US-lessac-medium  # piper voice

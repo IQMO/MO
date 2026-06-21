@@ -1,12 +1,33 @@
-# Optional: computer-use (see the screen, drive a browser, control the desktop).
-# Only needed when you actually use the computer-use tools. All of them degrade
-# gracefully to a clear error if the matching package is absent, so the core
-# agent runs fine without these — and a headless server (no display) should NOT
-# install pyautogui.
+# Optional: computer-use — MO sees the screen, drives a browser, controls the
+# desktop, and (optionally) runs the on-screen Companion surface + voice.
+# None are needed for the core agent: every tool degrades to a clear error when
+# its package is absent, and a headless server (no display) should not install these.
 #
-#   capture_screen           -> Pillow (screenshot)
-#   browser_* (CDP)          -> websocket-client
-#   move_pointer/click/type  -> pyautogui (local desktop only; needs a display)
+# Install all:  pip install -r requirements-computer-use.txt
+#
+# Tools:
+#   capture_screen             -> Pillow (screenshot)
+#   browser_* (Chrome DevTools)-> websocket-client
+#   move_pointer/click/type    -> pyautogui (local desktop only; needs a display)
 Pillow>=10.0
 websocket-client>=1.6
 pyautogui>=0.9.54
+#
+# Companion surface (set desktop_companion.enabled: true in ~/.mo/config.yaml):
+#   window                     -> tkinter (built into Python — no pip)
+#   global hotkey (Win+Alt+M)  -> keyboard
+#   system tray icon + menu    -> pystray (icon uses Pillow, above)
+#   Windows tray/overlay glue  -> pywin32 (Windows only)
+keyboard>=0.13.5
+pystray>=0.19
+pywin32>=306; sys_platform == "win32"
+#
+# Companion voice (optional; companion works text-only without these):
+#   speech-to-text             -> faster-whisper
+#   text-to-speech             -> piper-tts
+#   audio capture/playback     -> sounddevice
+#   audio arrays               -> numpy
+faster-whisper>=1.0.0
+piper-tts>=1.2.0
+sounddevice>=0.4.6
+numpy>=1.24

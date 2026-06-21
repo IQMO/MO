@@ -15,6 +15,7 @@ Phase 4 (tray, modes, log, panic): system-tray icon, Guide/Do modes,
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 import traceback
@@ -526,11 +527,19 @@ class CompanionSurface:
         try:
             import keyboard
         except ImportError:
+            # Don't fail silently — tell the operator why Win+Alt+M is dead and
+            # how to reach the companion meanwhile.
+            sys.stderr.write(
+                "[companion] Win+Alt+M hotkey unavailable: `pip install keyboard`. "
+                "Summon the companion with the /companion command in the meantime.\n")
             return
         try:
             keyboard.add_hotkey("win+alt+m", self.toggle)
             self._hotkey_listener = True
         except Exception:
+            sys.stderr.write(
+                "[companion] could not register Win+Alt+M (global hotkeys may need "
+                "elevation). Use the /companion command to summon it.\n")
             traceback.print_exc()
 
     def _unregister_hotkey(self) -> None:
