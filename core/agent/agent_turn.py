@@ -510,6 +510,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                                 text_part, _, path = result.partition(f"{SCREEN_IMAGE_MARKER}:")
                                 screen_image_uri = load_image_data_uri(path.strip())
                                 result = text_part.strip() or "[screen captured]"
+                                # A screenshot is useless to a text-only provider.
+                                # Route the continuation to a vision-capable one
+                                # (e.g. openai-codex) so MO can actually see it.
+                                if screen_image_uri and not getattr(self.active_provider, "supports_vision", False):
+                                    self.switch_to_vision_provider()
                         # Auto-advance only when the tool plausibly satisfies the active row.
                         # Final/report rows wait for the actual final answer.
                         if task_board and task_board.tasks and not self._tool_result_is_error(result):

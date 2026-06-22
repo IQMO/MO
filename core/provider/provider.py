@@ -68,6 +68,10 @@ def make_tool_call(*, call_id: str, name: str, arguments: str):
 class BaseProvider:
     name = "base"
     api_mode = "unknown"
+    # Vision: can this provider actually SEE images sent in the message stream
+    # (computer-use capture_screen)? False by default — a provider opts in only
+    # when its API path delivers image parts to a vision-capable model.
+    supports_vision = False
 
     def __init__(self, model: str):
         self.model = model
@@ -85,9 +89,12 @@ class ChatCompletionsProvider(BaseProvider):
 
     api_mode = "chat_completions"
 
-    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None, reasoning_effort: str | None = None):
+    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None, reasoning_effort: str | None = None, supports_vision: bool = False):
         super().__init__(model=model)
         self.name = name
+        # Opt-in per provider config (`vision: true`). Off by default because most
+        # OpenAI-compatible chat endpoints are text-only; the operator declares it.
+        self.supports_vision = bool(supports_vision)
         self.base_url = base_url
         self.timeout = float(timeout or 60.0)
         # Optional per-provider OpenAI-style reasoning_effort. Default None → NOT sent,
@@ -97,26 +104,56 @@ class ChatCompletionsProvider(BaseProvider):
         self.client = OpenAI(api_key=api_key, base_url=base_url, default_headers=headers or None, timeout=self.timeout, max_retries=0)
 
     @staticmethod
-    def _normalize_messages(messages: list[dict]) -> list[dict]:
-        """Flatten list-content (image-bearing computer-use tool results) to plain
-        text for chat-completions providers. The chat-completions ``tool`` role
-        only accepts string content and these providers may not be vision-capable,
-        so keep the text parts and drop the image rather than send a bad payload."""
+    def _image_urls(content: list) -> list[str]:
+        """Pull image data-URIs out of a list-content message."""
+        urls: list[str] = []
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") not in ("image", "image_url", "input_image"):
+                continue
+            url = part.get("image_url") or part.get("url") or part.get("data")
+            if isinstance(url, dict):
+                url = url.get("url")
+            if url:
+                urls.append(str(url))
+        return urls
+
+    @staticmethod
+    def _normalize_messages(messages: list[dict], supports_vision: bool = False) -> list[dict]:
+        """Normalize list-content (image-bearing computer-use tool results) for the
+        chat-completions API.
+
+        The chat-completions ``tool`` role only accepts string content, so when the
+        provider is vision-capable we keep the tool text in the tool message and
+        re-deliver the screenshot in a following ``user`` message using the proper
+        ``image_url`` part shape — the only place chat-completions accepts images.
+        When the provider can't see images, we flatten to text with an actionable
+        note instead of sending a payload the model will never receive."""
         out: list[dict] = []
         for msg in messages:
             content = msg.get("content")
-            if isinstance(content, list):
-                texts = [str(p.get("text", "")) for p in content if isinstance(p, dict) and p.get("type") in ("text", "input_text", "output_text")]
-                has_image = any(isinstance(p, dict) and p.get("type") in ("image", "image_url", "input_image") for p in content)
-                flat = "\n".join(t for t in texts if t)
-                if has_image:
-                    flat = (flat + "\n[image omitted: active provider is not vision-capable]").strip()
-                msg = {**msg, "content": flat}
-            out.append(msg)
+            if not isinstance(content, list):
+                out.append(msg)
+                continue
+            texts = [str(p.get("text", "")) for p in content if isinstance(p, dict) and p.get("type") in ("text", "input_text", "output_text")]
+            image_urls = ChatCompletionsProvider._image_urls(content)
+            flat = "\n".join(t for t in texts if t)
+            if image_urls and supports_vision:
+                # tool message: text only (valid); image rides in a trailing user turn.
+                out.append({**msg, "content": flat or "[image]"})
+                out.append({
+                    "role": "user",
+                    "content": [{"type": "text", "text": "[screen capture]"}]
+                    + [{"type": "image_url", "image_url": {"url": u}} for u in image_urls],
+                })
+                continue
+            if image_urls:
+                flat = (flat + "\n[image omitted: provider is not vision-capable — set `vision: true` "
+                        "on a vision-capable provider, or use openai-codex, to let MO see the screen]").strip()
+            out.append({**msg, "content": flat})
         return out
 
     def stream(self, *, messages: list[dict], tools: list[dict], temperature: float, max_tokens: int):
-        messages = self._normalize_messages(messages)
+        messages = self._normalize_messages(messages, self.supports_vision)
         request = {
             "model": self.model,
             "messages": messages,
@@ -148,7 +185,7 @@ class ChatCompletionsProvider(BaseProvider):
         if on_token is None:
             request = {
                 "model": self.model,
-                "messages": self._normalize_messages(messages),
+                "messages": self._normalize_messages(messages, self.supports_vision),
                 "max_tokens": max_tokens,
                 "timeout": self.timeout,
             }
@@ -315,6 +352,9 @@ class CodexOAuthProvider(BaseProvider):
 
     name = "openai-codex"
     api_mode = "codex_responses"
+    # Responses API maps tool-result image parts to input_image, so a vision model
+    # behind Codex genuinely sees the screen (computer-use capture_screen).
+    supports_vision = True
     base_url = "https://chatgpt.com/backend-api/codex"
     oauth_token_url = "https://auth.openai.com/oauth/token"
     oauth_client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -743,7 +783,23 @@ def _provider_from_config(provider_cfg: dict, model: str) -> BaseProvider:
         timeout=float(provider_cfg.get("timeout", 60.0) or 60.0),
         headers=provider_cfg.get("_headers") or provider_cfg.get("headers"),
         reasoning_effort=provider_cfg.get("reasoning_effort"),
+        supports_vision=bool(provider_cfg.get("vision", False)),
     )
+
+
+def first_vision_provider_index(providers, *, can_accept=None) -> int | None:
+    """Index of the first vision-capable provider that has capacity, or None.
+
+    Used to route a screenshot (capture_screen) to a provider that can actually
+    SEE it (e.g. openai-codex) when the active provider is text-only.
+    """
+    for index, provider in enumerate(providers or []):
+        if not getattr(provider, "supports_vision", False):
+            continue
+        if can_accept is not None and not can_accept(getattr(provider, "name", "")):
+            continue
+        return index
+    return None
 
 
 def _provider_matches_selector(provider: BaseProvider, selector: str) -> bool:

@@ -105,8 +105,9 @@ class VoiceSpeaker:
         """True if piper-tts imported successfully."""
         if self._load_error:
             return False
+        # The piper-tts package imports as `piper` (not `piper_tts`).
         try:
-            import piper_tts  # noqa: F401
+            import piper  # noqa: F401
             return True
         except ImportError:
             self._load_error = "piper-tts not installed"
@@ -121,7 +122,10 @@ class VoiceSpeaker:
             self._load_error = "no voice model path configured (set desktop_companion.voice.tts_model)"
             return False
         try:
-            from piper_tts import PiperVoice
+            try:
+                from piper.voice import PiperVoice
+            except ImportError:
+                from piper import PiperVoice  # older/newer layout
             import os
             model_path = os.path.expanduser(self._voice_model_path)
             if not os.path.exists(model_path):

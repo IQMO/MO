@@ -23,6 +23,7 @@ from ..provider.provider import (
     is_context_overflow_error,
     is_rate_limit_error,
     prt_review_provider_chain,
+    first_vision_provider_index,
 )
 from ..provider.provider_capacity import get_capacity
 from ..session.session import Session, _session_ended_clean
@@ -913,6 +914,45 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             if cap.can_accept(providers[index].name):
                 return index
         return None
+
+    def switch_to_vision_provider(self, reason: str = "capture_screen") -> bool:
+        """Route to a vision-capable provider so a screenshot is actually seen.
+
+        capture_screen only helps a provider that can SEE images. When the active
+        provider is text-only, switch to a vision-capable one (e.g. openai-codex)
+        for the continuation. Returns True if the active provider can now see —
+        either it already could, or a switch happened. False means no vision
+        provider is available (caller leaves an honest 'image omitted' trail)."""
+        if getattr(self.active_provider, "supports_vision", False):
+            return True
+        cap = get_capacity()
+        target = first_vision_provider_index(
+            self.providers, can_accept=lambda name: cap.can_accept(name)
+        )
+        if target is None or target == self.provider_index:
+            return getattr(self.active_provider, "supports_vision", False)
+        old_provider, old_model = self.provider_name, self.model
+        self.provider_index = target
+        p = self.active_provider
+        self.model = p.model
+        self.provider_name = p.name
+        self.api_mode = p.api_mode
+        self.last_fallback_notice = f"Switched to {p.name}/{p.model} to see the screen"
+        self._refresh_context_budget()
+        append_provider_audit(
+            "vision_switch",
+            surface=self._provider_surface(),
+            session_id=getattr(self.session, "session_id", ""),
+            worker_id=self._provider_worker_id(),
+            reason=reason,
+            from_provider=old_provider,
+            from_model=old_model,
+            to_provider=self.provider_name,
+            to_model=self.model,
+            provider=self.provider_name,
+            model=self.model,
+        )
+        return True
 
     def _next_provider(self, reason: str = "") -> bool:
         """Switch to the next allowed fallback provider for the active surface."""

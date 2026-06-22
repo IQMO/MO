@@ -7,6 +7,10 @@ providers:
   # Optional keys: model, headers, timeout, auth_path (codex only)
   #   reasoning_effort (low|medium|high) — sent to the provider ONLY if set. Leave
   #   unset for providers whose API may reject it; enable for o-series/codex etc.
+  #   vision: true — declare this chat_completions provider/model can SEE images
+  #     (computer-use capture_screen). Off by default. codex_responses is always
+  #     vision-capable. When MO captures the screen on a text-only provider it
+  #     auto-routes the turn to a vision-capable one (e.g. openai-codex).
   #
   # You can specify API keys two ways:
   #   1. api_key_env: OPENCODE_API_KEY  (recommended - reads from environment)

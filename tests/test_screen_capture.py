@@ -1,8 +1,18 @@
 """Computer-use Step 1: capture_screen perception wiring (headless, no real grab)."""
-from core.provider.provider import ChatCompletionsProvider, CodexOAuthProvider
+from core.provider.provider import (
+    ChatCompletionsProvider,
+    CodexOAuthProvider,
+    first_vision_provider_index,
+)
 from core.session.session import Session
 
 import tools
+
+
+class _StubProvider:
+    def __init__(self, name, supports_vision):
+        self.name = name
+        self.supports_vision = supports_vision
 
 
 def test_capture_screen_registered():
@@ -27,12 +37,43 @@ def test_codex_builder_maps_image_to_input_image():
     assert any(p.get("type") == "input_image" for p in parts)
 
 
-def test_chat_completions_flattens_image_to_text():
+def test_chat_completions_flattens_image_to_text_when_text_only():
     sess = Session("sys")
     sess.add_tool_result("c1", "[screen captured]", image_data_uri="data:image/png;base64,AAAA")
-    norm = ChatCompletionsProvider._normalize_messages(sess.messages)
+    norm = ChatCompletionsProvider._normalize_messages(sess.messages, supports_vision=False)
     assert isinstance(norm[-1]["content"], str)
     assert "image omitted" in norm[-1]["content"]
+
+
+def test_chat_completions_delivers_image_when_vision_capable():
+    sess = Session("sys")
+    sess.add_tool_result("c1", "[screen captured]", image_data_uri="data:image/png;base64,AAAA")
+    norm = ChatCompletionsProvider._normalize_messages(sess.messages, supports_vision=True)
+    # tool message keeps text only; image rides in a trailing user message.
+    assert isinstance(norm[-2]["content"], str)
+    assert norm[-1]["role"] == "user"
+    img_parts = [p for p in norm[-1]["content"] if p.get("type") == "image_url"]
+    assert img_parts and img_parts[0]["image_url"]["url"].startswith("data:image/png")
+
+
+def test_provider_vision_capability_flags():
+    codex = CodexOAuthProvider.__new__(CodexOAuthProvider)
+    assert codex.supports_vision is True
+    text_only = ChatCompletionsProvider(
+        name="p", base_url="http://x", api_key="k", model="m")
+    assert text_only.supports_vision is False
+    vision = ChatCompletionsProvider(
+        name="p", base_url="http://x", api_key="k", model="m", supports_vision=True)
+    assert vision.supports_vision is True
+
+
+def test_first_vision_provider_index_picks_capable():
+    providers = [_StubProvider("text", False), _StubProvider("vision", True)]
+    assert first_vision_provider_index(providers) == 1
+    assert first_vision_provider_index([_StubProvider("text", False)]) is None
+    # capacity gate excludes a vision provider that can't accept.
+    assert first_vision_provider_index(
+        providers, can_accept=lambda n: n != "vision") is None
 
 
 def test_string_tool_result_unchanged_backward_compat():
