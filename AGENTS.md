@@ -44,7 +44,7 @@ You are MO, a local-first AI coding agent. Read this before acting.
 - **Hide-from-users, don't block.** Operator-only commands stay fully dispatchable but are hidden from user-facing help/palette/completion when the pack is absent — mark them `operator_only=True` in `interface/command_registry.py`. Never advertise operator-only machinery to users.
 
 ## Ghost
-- Ghost is a side-check/planning model.
-- Alt+G toggles Ghost mode. `/ghost on` / `/ghost off` also toggle.
-- When Ghost mode is ON, all messages route to Ghost instead of main MO.
-- Ghost is NOT a public slash-command workflow or taskboard authority.
+There are two distinct Ghost-related surfaces today; keep them straight:
+- **TUI Ghost (side-check/planning)** — the in-terminal side panel. A side-check/planning model only: Alt+G toggles it; `/ghost on` / `/ghost off` also toggle; when ON, messages route to Ghost instead of main MO. It is NOT a public slash-command workflow or taskboard authority.
+- **Desktop Ghost / Companion (acting surface)** — the resident desktop window that can act (screen vision, mouse/keys), gated by its Guide/Do lane. It runs in its **own isolated session** and is admitted by the gateway turn-mutex so it never interleaves into a main-MO run. Currently summoned via `/companion` / Win+Alt+M.
+- **Transitional naming:** "MO Companion" and `/companion` are *transitional* names. The planned redesign unifies everything under **Ghost** (the desktop acting surface becomes the Ghost surface; `/ghost` becomes the single command). Until that rename phase lands, treat "MO Companion" / `/companion` as the current name for the desktop Ghost surface. See `docs/proposals/multi-instance-and-companion-ghost-separation.md`.
