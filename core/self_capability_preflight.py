@@ -400,12 +400,15 @@ def devmode05_continuation_instruction(user_input: str, final_text: str) -> str:
     text = _devmode05_terminal_prefix_text(final_text)
     if text.startswith("[DEVMODE05 COMPLETE]") and _devmode05_completion_reports_open_work(text):
         return (
-            "[DEVMODE05 AUTONOMY] Your last answer claimed [DEVMODE05 COMPLETE] while also "
-            "reporting deferred, remaining, open, carried-forward, or failed work. That is not a "
-            "terminal state. Do not repeat the same completion report. Continue from the named "
-            "open items now: resolve them, verify and close them as explicitly no-action, or update "
-            "the artifacts so active deferred work is zero. Finalize only when the report truth says "
-            "Remaining: none, Deferred active work: none, Next: none, and there are no failed checks."
+            "[DEVMODE05 AUTONOMY] Your last answer claimed [DEVMODE05 COMPLETE] while still "
+            "reporting actionable open work (unresolved/open/carried-forward findings, failed "
+            "checks, or a next target). That is not a terminal state. Do not repeat the same "
+            "completion report. Continue from the named items now: RESOLVE the actionable ones "
+            "with verification. Items that are genuinely the operator's call are allowed to remain "
+            "— but you must classify each EXPLICITLY as operator-decision pending / supervised "
+            "fix-lane / recorded observation / accepted deferred (do NOT rewrite a real deferred "
+            "item as RESOLVED, and do NOT claim 'Remaining: none' when such items exist). Finalize "
+            "with: 'No actionable product work remains; operator-decision items remain: <list, or none>.'"
         )
     _violation = _devmode05_closeout_evidence_violation(final_text)
     if text.startswith("[DEVMODE05 COMPLETE]") and _violation:
@@ -542,10 +545,13 @@ def ifdev05_continuation_instruction(user_input: str, final_text: str) -> str:
     if text.startswith("[IFDEV05 COMPLETE]") and _devmode05_completion_reports_open_work(text):
         return (
             "[IFDEV05 CONTINUATION] Your last answer claimed [IFDEV05 COMPLETE] while also "
-            "reporting deferred, remaining, open, or failed UX work. That is not a terminal state. "
-            "Continue from the named open findings now: fix them with verification, adopt/reject "
-            "the comparison candidates, or close them as explicit no-action. Finalize only when "
-            "Remaining: none, Deferred active work: none, Next: none, and no checks failed."
+            "reporting actionable open/failed UX work. That is not a terminal state. "
+            "Continue from the named open findings now: fix the actionable ones with verification, "
+            "adopt/reject the comparison candidates. Items that are genuinely the operator's call "
+            "may remain if classified EXPLICITLY as operator-decision pending / supervised fix-lane "
+            "/ recorded observation / accepted deferred (do NOT rewrite a real deferred item as "
+            "RESOLVED). Finalize with: 'No actionable UX work remains; operator-decision items "
+            "remain: <list, or none>.'"
         )
     if text.startswith("[IFDEV05 BLOCKED]") and not _devmode05_blocked_has_hard_boundary(text):
         return (
@@ -625,29 +631,64 @@ def _vs05_user_named_non_current_target(user_input: str) -> bool:
     )
 
 
+# Operator-owned remainder classes — items whose disposition is the operator's call,
+# NOT actionable autonomous work. An honest closeout may carry these without being forced
+# to a false "Remaining: none" (external-watcher governance fix 2026-06-23). Examples:
+# B2 (supervised fix-lane) and OBS-PERF-1 (recorded observation) from the T0000 run.
+_OPERATOR_OWNED_REMAINDER = re.compile(
+    r"(?i)\b(?:operator[-\s]?decision|operator[-\s]?owned|awaiting\s+operator|"
+    r"operator\s+decision\s+pending|supervised\s+fix[-\s]?lane|recorded\s+observation|"
+    r"accepted\s+deferred)\b"
+)
+
+
 def _devmode05_completion_reports_open_work(text: str) -> bool:
-    """Detect self-reported DEVMODE05 leftovers that must continue, not close."""
+    """Detect ACTIONABLE DEVMODE05 leftovers that must continue, not close.
+
+    A terminal report may legitimately carry **operator-owned** remainders — items
+    explicitly classified as operator-decision pending, supervised fix-lane, recorded
+    observation, or accepted deferred. Those are NOT autonomous work, so reporting them
+    is a valid terminal state and must NOT be forced to a false "Remaining: none" (which
+    pressured the model to rewrite genuinely-deferred items as RESOLVED — external-watcher
+    governance fix 2026-06-23). Only work the model could itself resolve blocks completion:
+    failures, unresolved/open/carried-forward findings, and actionable next targets.
+    """
     body = str(text or "")
     lowered = body.lower()
+    # Hard, non-deferrable: failures + unresolved/open/carried-forward findings. These are
+    # actionable and can NEVER be reclassified as operator-owned, so they are checked
+    # body-wide first — operator-owned wording elsewhere must not mask a real failure.
     if re.search(r"(?im)^\s*\[fail\]", body):
         return True
     if re.search(r"(?i)\[issues\]\s*[1-9]\d*\s+check\(s\)\s+failed", body):
         return True
-    if re.search(r"(?i)\b[1-9]\d*\s+(?:fail|fails|failed)\b", body):
+    if re.search(r"(?i)\b[1-9]\d*\s+(?:fail|fails|failed|unresolved|open|carried forward)\b", body):
         return True
-    if re.search(r"(?i)\b[1-9]\d*\s+(?:unresolved|deferred|open|carried forward)\b", body):
+    if re.search(r"(?i)\b(?:unresolved|not addressed|carried forward)\b[^.\n]*\b[1-9]\d*\b", body):
         return True
-    if re.search(r"(?i)\b(?:unresolved|deferred|remaining|not addressed|carried forward)\b[^.\n]*\b[1-9]\d*\b", body):
-        return True
-    for match in re.finditer(r"(?im)^\s*(?:[-*]\s*)?(?:next|next targets?|remaining|deferred|unresolved)\s*:\s*(.+)$", body):
-        value = match.group(1).strip().strip("`*_ ")
-        if value and not re.fullmatch(r"(?i)(?:none|no(?:ne)?|n/a|0|zero|nothing|closed|complete|completed|clean)\.?", value):
-            return True
-    return any(marker in lowered for marker in (
+    if any(marker in lowered for marker in (
         "highest-priority unresolved",
         "highest-value next target",
         "remaining (not addressed)",
-    ))
+    )):
+        return True
+    # "deferred / remaining / next" reporting is accepted ONLY when the line classifies its
+    # items as operator-owned (operator-decision pending / supervised fix-lane / recorded
+    # observation / accepted deferred). Evaluated PER LINE so an operator-owned exemption
+    # on one line can't excuse an un-owned actionable deferral on another.
+    for line in body.splitlines():
+        if _OPERATOR_OWNED_REMAINDER.search(line):
+            continue
+        if re.search(r"(?i)\b(?:remaining|deferred)\b[^.\n]*\b[1-9]\d*\b", line):
+            return True
+        m = re.match(r"(?i)^\s*(?:[-*]\s*)?(?:next|next targets?|remaining|deferred|unresolved)\s*:\s*(.+)$", line)
+        if m:
+            value = m.group(1).strip().strip("`*_ ")
+            if value and not re.fullmatch(
+                r"(?i)(?:none|no(?:ne)?|n/a|0|zero|nothing|closed|complete|completed|clean)\.?", value
+            ):
+                return True
+    return False
 
 
 def _devmode05_blocked_has_hard_boundary(text: str) -> bool:

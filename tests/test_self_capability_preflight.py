@@ -299,6 +299,7 @@ Session report:
 
 
 def test_devmode_rejected_complete_gets_open_work_continuation_instruction():
+    # These are UN-owned (no operator-owned classification) → actionable → must continue.
     text = """[DEVMODE05 COMPLETE]
 Session report:
 - Deferred: 7 items stable from prior sessions.
@@ -309,7 +310,42 @@ Session report:
 
     assert "claimed [DEVMODE05 COMPLETE]" in instruction
     assert "Do not repeat the same completion report" in instruction
-    assert "Deferred active work: none" in instruction
+    # New contract: resolve actionable work OR classify operator-owned items explicitly —
+    # no longer a blanket "Deferred active work: none" demand.
+    assert "operator-decision items remain" in instruction
+    assert "do NOT rewrite a real deferred item as RESOLVED" in instruction
+
+
+def test_devmode05_operator_owned_deferred_is_valid_terminal(tmp_path, monkeypatch):
+    """External-watcher governance fix (2026-06-23): a DEVMODE05 closeout may report
+    OPERATOR-OWNED remainders (operator-decision pending / supervised fix-lane / recorded
+    observation / accepted deferred) without being forced to a false "Remaining: none".
+    The model must NOT have to rewrite them to RESOLVED to pass the gate — the exact T0000
+    case (B2 supervised fix-lane + OBS-PERF-1 recorded observation)."""
+    import core.self_capability_preflight as scp
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "nomon"))  # no tool errors
+    ui = "start DEVMODE05"
+
+    # The honest T0000 closeout wording — a valid terminal state.
+    valid = (
+        "[DEVMODE05 COMPLETE] HEALTHY. No actionable product work remains; operator-decision "
+        "items remain: B2 (supervised fix-lane), OBS-PERF-1 (recorded observation).\n"
+        "- Remaining: 2 inherited P3 items — B2 (supervised fix-lane, awaiting operator "
+        "design decision), OBS-PERF-1 (recorded observation)."
+    )
+    assert scp._devmode05_completion_reports_open_work(valid) is False
+    assert scp.devmode05_final_allows_stop(ui, valid) is True
+
+    # Un-owned deferral is still actionable → must continue (NOT auto-accepted).
+    unowned = "[DEVMODE05 COMPLETE] done.\n- Remaining: 2 findings deferred to next session."
+    assert scp._devmode05_completion_reports_open_work(unowned) is True
+    assert scp.devmode05_final_allows_stop(ui, unowned) is False
+
+    # Operator-owned wording can NEVER mask a real actionable failure.
+    failing = "[DEVMODE05 COMPLETE] 3 unresolved findings. operator-decision items remain: none."
+    assert scp._devmode05_completion_reports_open_work(failing) is True
 
 
 def test_devmode_task_truth_continuation_instruction_names_complete_task():
