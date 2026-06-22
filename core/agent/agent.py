@@ -832,6 +832,22 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             new_sid = str(getattr(self.session, "session_id", "") or "")
             if new_sid:
                 run_ids.add(new_sid)
+        # Preserve taskboard truth across the handoff. The session id just changed to a
+        # mo-handoff-* id, but the active board's snapshots are keyed under the OLD id;
+        # when last_task_board is momentarily None (e.g. the next turn's start, before the
+        # lazy rebuild) the heartbeat falls back to read_recent_snapshots(session_id=new)
+        # and would find nothing → "no board" (open=0) telemetry WHILE the board is still
+        # active. Re-tag the live board to the new id and snapshot it under that id so the
+        # board is never dropped and never reads as absent across the handoff.
+        try:
+            board = getattr(getattr(self, "gateway", None), "last_task_board", None)
+            new_sid = str(getattr(self.session, "session_id", "") or "")
+            if board is not None and new_sid and getattr(board, "open_count", None) and board.open_count() > 0:
+                board.session_id = new_sid
+                from ..tasking.task_board import record_snapshot
+                record_snapshot(board, "handoff")
+        except Exception:
+            pass
         self._handoff_count = int(getattr(self, "_handoff_count", 0) or 0) + 1
         # Preserve context-saving momentum for adaptive handoff decisions while
         # starting fresh per-session counters for the new foreground session.

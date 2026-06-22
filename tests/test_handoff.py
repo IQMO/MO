@@ -273,6 +273,42 @@ def test_auto_handoff_opens_clean_session_and_saves_snapshot():
     assert agent.last_handoff_notice == ""
 
 
+def test_handoff_preserves_active_taskboard_truth():
+    """Amendment #4: a context handoff must NOT drop an active taskboard or let it read
+    as 'no board' afterwards. The session id changes to mo-handoff-*, but the live board's
+    snapshots are keyed under the OLD id; without re-association, telemetry that falls back
+    to read_recent_snapshots(session_id=new) reports open=0 WHILE the run is still active.
+    The fix re-tags the live board to the new id (and snapshots it) so it survives intact."""
+    agent = _agent_with_session(budget_tokens=250)
+    old_sid = agent.session.session_id
+    board = TaskBoard(
+        "turn-1", old_sid,
+        [
+            TaskItem("1", "Boot protocol", "completed", ["read_file:x"]),
+            TaskItem("2", "Run audits", "active"),
+        ],
+        objective="devmode run",
+    )
+    agent.gateway = SimpleNamespace(last_task_board=board)
+    agent._devmode_run_session_ids = {old_sid}  # an active DEVMODE logical run
+    assert board.open_count() > 0
+    for idx in range(10):
+        agent.session.add_user("context " + ("x" * 220) + str(idx))
+
+    started = Agent._maybe_context_handoff(agent, "continue the audit", extra_context="")
+
+    assert started is True
+    new_sid = agent.session.session_id
+    assert new_sid.startswith("mo-handoff-") and new_sid != old_sid
+    # Board not dropped, the active row is preserved, and it is re-tagged to the new
+    # session id so post-handoff telemetry finds it (never "no board").
+    assert agent.gateway.last_task_board is board
+    assert board.open_count() > 0
+    assert board.session_id == new_sid
+    # Both segments are grouped under the logical run (economy stays correct).
+    assert old_sid in agent._devmode_run_session_ids and new_sid in agent._devmode_run_session_ids
+
+
 def test_auto_handoff_preserves_latest_visible_report_without_tool_bloat():
     agent = _agent_with_session(budget_tokens=250)
     for idx in range(8):
