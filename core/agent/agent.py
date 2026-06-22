@@ -822,6 +822,16 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         compact_document = build_compact_summary(self, focus=focus, reason=reason, latest_user=latest_user)
         path = write_handoff_document(document)
         seed_session_from_handoff(self.session, compact_document, latest_user=latest_user, visible_messages=visible_messages, compact=True)
+        # Keep the DEVMODE logical-run economy scoping intact across this handoff: record
+        # BOTH the pre-handoff id and the new mo-handoff-* id so the run's economy still
+        # groups every segment together (a handoff mints a new session_id on the same run).
+        run_ids = getattr(self, "_devmode_run_session_ids", None)
+        if isinstance(run_ids, set):
+            if old_session_id:
+                run_ids.add(old_session_id)
+            new_sid = str(getattr(self.session, "session_id", "") or "")
+            if new_sid:
+                run_ids.add(new_sid)
         self._handoff_count = int(getattr(self, "_handoff_count", 0) or 0) + 1
         # Preserve context-saving momentum for adaptive handoff decisions while
         # starting fresh per-session counters for the new foreground session.

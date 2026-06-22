@@ -434,6 +434,40 @@ def test_devmode_economy_writes_only_to_bound_dir_not_mtime_latest(tmp_path, mon
     assert "errors: 2" in (active / "economy.md").read_text(encoding="utf-8")
 
 
+def test_devmode_economy_isolates_one_main_run_from_another_in_same_file(tmp_path, monkeypatch):
+    """Logical-run scoping must isolate one Main/user DEVMODE run from ANOTHER Main/user
+    run that shares the same per-process monitor file — not just exclude Ghost/desktop.
+    Run B's events (incl. its error) must never leak into run A's economy record, while
+    run A's handoff segment IS counted with the original (grouped run)."""
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    rows = [
+        # Run A (this run) — original segment + a handoff segment, all route=user
+        {"type": "provider_request", "payload": {"session_id": "mo-A", "route_source": "user"}},
+        {"type": "tool_call", "payload": {"session_id": "mo-A", "route_source": "user"}},
+        {"type": "provider_request", "payload": {"session_id": "mo-handoff-A", "route_source": "user"}},
+        # Run B — a DIFFERENT Main/user run in the same file; must be excluded
+        {"type": "provider_request", "payload": {"session_id": "mo-B", "route_source": "user"}},
+        {"type": "tool_call", "payload": {"session_id": "mo-B", "route_source": "user"}},
+        {"type": "tool_result", "payload": {"session_id": "mo-B", "route_source": "user", "error": True}},
+        # A Ghost/desktop turn tagged with run A's id — excluded by surface
+        {"type": "tool_call", "payload": {"session_id": "mo-A", "route_source": "desktop"}},
+    ]
+    (mondir / "backend_monitor-1.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    active = tmp_path / "memory" / "devmode" / "2026-01-03T0000"
+    active.mkdir(parents=True)
+    agent = _devmode_board_agent()
+    agent._active_devmode_session_dir = active
+    agent._devmode_run_session_ids = {"mo-A", "mo-handoff-A"}  # run A's logical segments
+    agent._write_devmode_economy_record()
+    eco = (active / "economy.md").read_text(encoding="utf-8")
+    assert "Provider requests: 2" in eco   # mo-A + mo-handoff-A, NOT mo-B
+    assert "Tool calls: 1" in eco           # mo-A user tool only; mo-B + desktop excluded
+    assert "errors: 0" in eco               # run B's error must NOT be counted
+
+
 def test_devmode_economy_refuses_without_active_dir_binding(tmp_path, monkeypatch):
     """The exact T2121 corruption: an aborted run that created no dir of its own must
     NOT fall back to the newest existing dir. With no binding, the writer refuses and

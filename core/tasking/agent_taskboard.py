@@ -181,10 +181,32 @@ class AgentTaskBoard:
             if not stamp or not stamp[:1].isdigit():
                 return
             candidate = mo_home() / "memory" / "devmode" / stamp
-            if candidate.is_dir():
-                self._active_devmode_session_dir = candidate
+            if not candidate.is_dir():
+                return
+            prev = getattr(self, "_active_devmode_session_dir", None)
+            if prev is None or Path(prev) != candidate:
+                # A different session dir = a new logical run → start a fresh id set so
+                # this run's economy can never count a PRIOR Main/user run's events that
+                # share the same per-process monitor file.
+                self._devmode_run_session_ids = set()
+            self._active_devmode_session_dir = candidate
+            self._track_devmode_run_session_id()
         except Exception:
             pass
+
+    def _track_devmode_run_session_id(self) -> None:
+        """Accumulate the current session_id into the active logical-run id set, so the
+        economy record groups a DEVMODE run across compaction/handoff (each handoff mints
+        a new `mo-handoff-*` id on the same run) while excluding other runs' ids. Called
+        from the dir binder (run start), the handoff (old+new ids), and the economy writer
+        (current id at closeout)."""
+        ids = getattr(self, "_devmode_run_session_ids", None)
+        if not isinstance(ids, set):
+            ids = set()
+            self._devmode_run_session_ids = ids
+        sid = str(getattr(getattr(self, "session", None), "session_id", "") or "")
+        if sid:
+            ids.add(sid)
 
     def _write_devmode_economy_record(self) -> None:
         """Write the authoritative economy record (provider/tool/error/compression
@@ -205,10 +227,18 @@ class AgentTaskBoard:
             target = getattr(self, "_active_devmode_session_dir", None)
             if target is None or not Path(target).is_dir():
                 return  # no explicit binding this run → refuse; never fall back to mtime
-            # Logical-run scoping: exclude interleaved Ghost/desktop turns that share this
-            # process's monitor file so the run's economy isn't inflated by them. Handoff
-            # segments keep route_source=user, so they remain counted (grouped together).
-            summary = economy_summary(exclude_surfaces=GHOST_SURFACES)
+            # Logical-run scoping: count ONLY this run's own session segments (the
+            # original id + every handoff `mo-handoff-*` id accumulated this run) and
+            # exclude interleaved Ghost/desktop turns. This isolates the run both from
+            # other Main/user runs sharing the per-process monitor file (via session_ids)
+            # and from Ghost/desktop activity (via exclude_surfaces). Falls back to
+            # surface-only exclusion if no ids were captured (best-effort, never blocks).
+            self._track_devmode_run_session_id()
+            run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            summary = economy_summary(
+                session_ids=run_ids or None,
+                exclude_surfaces=GHOST_SURFACES,
+            )
             (Path(target) / "economy.md").write_text(
                 format_economy_record(summary), encoding="utf-8"
             )
