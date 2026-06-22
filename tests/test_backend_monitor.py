@@ -398,3 +398,41 @@ def test_devmode_economy_targets_active_dir_not_prior_run(tmp_path, monkeypatch)
     assert (active / "economy.md").is_file()
     assert not (prior / "economy.md").exists()
     assert "errors: 2" in (active / "economy.md").read_text(encoding="utf-8")
+
+
+def test_devmode_economy_reconciles_stale_summary_counts(tmp_path, monkeypatch):
+    """The model writes summary.md BEFORE the closeout finishes, so its hand-counted
+    economy numbers go stale by the closeout delta (observed live mo-1782155959:
+    summary said 26 provider / 63 tools, authoritative economy.md said 29 / 66).
+    When the runtime writes the authoritative economy.md it must also overwrite the
+    stale counts on the summary's economy line — preserving any narration — so the
+    two files can never disagree (single source of truth, runtime-owned)."""
+    import os, time
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    rows = [{"type": "provider_request", "payload": {}} for _ in range(29)]
+    rows += [{"type": "tool_call", "payload": {}} for _ in range(66)]
+    rows += [{"type": "tool_result", "payload": {"error": True}}]
+    rows += [{"type": "tool_compress", "payload": {}} for _ in range(5)]
+    (mondir / "backend_monitor-1.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in rows), encoding="utf-8"
+    )
+    active = tmp_path / "memory" / "devmode" / "2026-01-02T0000"
+    active.mkdir(parents=True)
+    (active / "summary.md").write_text(
+        "# Summary\n"
+        "- **Economy:** 26 provider requests, 63 tool calls, 1 tool error "
+        "(BENIGN — exploratory probe), 5 compressions\n"
+        "- **Tests:** 1 targeted test passes\n",
+        encoding="utf-8",
+    )
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    AgentTaskBoard._write_devmode_economy_record()
+    out = (active / "summary.md").read_text(encoding="utf-8")
+    assert "29 provider requests" in out
+    assert "66 tool calls" in out
+    assert "26 provider requests" not in out and "63 tool calls" not in out
+    assert "(BENIGN — exploratory probe)" in out  # narration preserved
+    assert "1 targeted test passes" in out  # unrelated lines untouched

@@ -170,9 +170,48 @@ class AgentTaskBoard:
             if not dirs:
                 return
             latest = max(dirs, key=lambda d: d.stat().st_mtime)  # the actively-written session, not name-sorted
+            summary = economy_summary()
             (latest / "economy.md").write_text(
-                format_economy_record(economy_summary()), encoding="utf-8"
+                format_economy_record(summary), encoding="utf-8"
             )
+            # Reconcile the model-authored economy line in summary.md. The model
+            # writes summary.md BEFORE the closeout completes, so its hand-counted
+            # numbers go stale by the closeout delta (observed: summary 26/63 vs
+            # authoritative economy.md 29/66). The economy fix made economy.md
+            # runtime-owned; this extends the same single-source-of-truth to the
+            # one place the model still restates counts, so the two files can never
+            # disagree. Surgical: only the numeric counts on the economy line are
+            # rewritten — any model narration on that line is preserved.
+            AgentTaskBoard._reconcile_summary_economy_counts(latest / "summary.md", summary)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _reconcile_summary_economy_counts(summary_path, summary: dict) -> None:
+        """Overwrite stale provider/tool/error/compression counts on the economy
+        line of a DEVMODE05 summary.md with the authoritative monitor figures."""
+        try:
+            import re
+            if not summary_path.exists():
+                return
+            text = summary_path.read_text(encoding="utf-8", errors="replace")
+            subs = (
+                (r"\d+(?=\s+provider request)", summary.get("provider_requests", 0)),
+                (r"\d+(?=\s+tool calls)", summary.get("tool_calls", 0)),
+                (r"\d+(?=\s+tool error)", summary.get("tool_errors", 0)),
+                (r"\d+(?=\s+compression)", summary.get("compression_events", 0)),
+            )
+
+            def fix_line(line: str) -> str:
+                if "provider request" not in line:  # the economy line is the only one with this phrase
+                    return line
+                for pat, val in subs:
+                    line = re.sub(pat, str(val), line)
+                return line
+
+            new_text = "\n".join(fix_line(ln) for ln in text.split("\n"))
+            if new_text != text:
+                summary_path.write_text(new_text, encoding="utf-8")
         except Exception:
             pass
 
