@@ -135,11 +135,47 @@ class TestCompanionActionCoverage:
                 from contextlib import nullcontext
                 return nullcontext()
 
+            def isolated_session(self, _session):
+                from contextlib import nullcontext
+                return nullcontext()
+
         cs._agent = FakeAgent()
         cs._gateway = FakeGateway()
         cs._run_turn("hi")
         assert callable(captured.get("on_action"))
         assert captured["on_action"] == cs._on_action
+
+    def test_run_turn_uses_isolated_ghost_session(self):
+        """A desktop turn must run inside Ghost's OWN session, not Main MO's, so the
+        desktop conversation can never bleed into a running Main/DEVMODE session."""
+        cs = self._cs()
+        entered = {}
+
+        class FakeGateway:
+            last_task_board = None
+
+            def run_turn(self, user_input, **kwargs):
+                return "done"
+
+        class FakeAgent:
+            def lane_scope(self, _lane):
+                from contextlib import nullcontext
+                return nullcontext()
+
+            def isolated_session(self, session):
+                from contextlib import contextmanager
+
+                @contextmanager
+                def _cm():
+                    entered["session"] = session
+                    yield
+                return _cm()
+
+        cs._agent = FakeAgent()
+        cs._gateway = FakeGateway()
+        cs._run_turn("what do you see")
+        assert cs._ghost_session is not None
+        assert entered.get("session") is cs._ghost_session  # ran on the Ghost session
 
 
 class TestCompanionPanicStop:

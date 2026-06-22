@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 
 from core.backend_monitor import BackendMonitor
-from core.gateway import Gateway, _runtime_should_create_board
+from core.gateway import Gateway, _runtime_should_create_board, _SECONDARY_BUSY_MESSAGE
 
 
 class FakeAgent:
@@ -123,6 +123,39 @@ class TestGatewayRunTurn:
         sentinel = lambda _a: None
         gw.run_turn("do a thing", on_action=sentinel)
         assert captured["on_action"] is sentinel
+
+
+class TestGatewayTurnMutex:
+    """One turn at a time on the shared agent: a Ghost/desktop turn must be rejected
+    while a Main turn is in flight (e.g. a whole DEVMODE run) so it can never interleave
+    into Main MO or clear the Main board (amendment #3)."""
+
+    def test_secondary_turn_rejected_while_a_turn_is_in_flight(self):
+        gw, agent, _ = make_gateway()
+        sentinel = object()
+        gw.last_task_board = sentinel  # an active Main board
+        gw._turn_lock.acquire()  # simulate a Main turn holding the lock
+        try:
+            result = gw.run_turn("what do you see on my screen", route_source="desktop")
+        finally:
+            gw._turn_lock.release()
+        assert result == _SECONDARY_BUSY_MESSAGE
+        assert agent.calls == []                 # the desktop turn never ran
+        assert gw.last_task_board is sentinel     # Main board NOT cleared by the rejected turn
+
+    def test_secondary_turn_runs_when_idle_and_releases_lock(self):
+        gw, agent, _ = make_gateway()
+        result = gw.run_turn("hi ghost", route_source="desktop")
+        assert result == "turn complete"
+        assert agent.calls == ["hi ghost"]
+        assert gw._turn_lock.acquire(blocking=False)  # lock released after the turn
+        gw._turn_lock.release()
+
+    def test_primary_turn_runs_and_releases_lock(self):
+        gw, agent, _ = make_gateway()
+        assert gw.run_turn("do work", route_source="user") == "turn complete"
+        assert gw._turn_lock.acquire(blocking=False)
+        gw._turn_lock.release()
 
 
 class TestRuntimeShouldCreateBoard:

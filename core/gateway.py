@@ -9,9 +9,19 @@ progression after creation.
 from __future__ import annotations
 
 import re
+import threading
 import time
 from typing import TYPE_CHECKING
 import traceback
+
+# Surfaces that must NEVER interleave into a Main-MO run: a Ghost/desktop turn is
+# rejected while any turn is in flight (e.g. an active DEVMODE board), rather than
+# sharing the single agent/session/board. See run_turn().
+_SECONDARY_SURFACES = frozenset({"desktop", "ghost", "companion"})
+_SECONDARY_BUSY_MESSAGE = (
+    "MO is busy with a foreground task right now (it can only run one turn at a time "
+    "yet) — try again in a moment."
+)
 
 from .backend_monitor import BackendMonitor, monitor_context
 from .gateway_helpers import select_template
@@ -45,6 +55,10 @@ class Gateway:
             traceback.print_exc()
         self.last_task_board: TaskBoard | None = None
         self.task_board_registry = TaskBoardRegistry()
+        # One turn at a time on the shared agent/session/board. A secondary surface
+        # (Ghost/desktop) turn is rejected if it can't take this immediately, so it can
+        # never interleave into a Main-MO run; Main/primary turns wait for the lock.
+        self._turn_lock = threading.Lock()
         # D5 fix: attempt to resume the last incomplete board from the ledger.
         self.last_resumable_board: TaskBoard | None = resume_last_board()
         session = getattr(self.agent, "session", None)
@@ -75,6 +89,55 @@ class Gateway:
         return self.last_resumable_board
 
     def run_turn(
+        self,
+        user_input: str,
+        on_board_update: object = None,
+        on_token: object = None,
+        on_activity: object = None,
+        on_proposal: object = None,
+        cancel_event: object = None,
+        route_source: str = "user",
+        on_assistant_text: object = None,
+        on_board_event: object = None,
+        on_action: object = None,
+    ) -> str:
+        """Admit one turn at a time on the shared agent, then run it.
+
+        A secondary surface (Ghost/desktop) turn is REJECTED outright while any turn is
+        already in flight, so it can never clear the Main board or append into the Main
+        conversation mid-run (e.g. during a DEVMODE05 run). Primary turns block until the
+        in-flight turn releases. The lock is always released, even on error.
+        """
+        secondary = route_source in _SECONDARY_SURFACES
+        if secondary:
+            if not self._turn_lock.acquire(blocking=False):
+                try:
+                    self.monitor.emit("session_event", {
+                        "kind": "secondary_turn_rejected_busy",
+                        "route_source": route_source,
+                    })
+                except Exception:
+                    traceback.print_exc()
+                return _SECONDARY_BUSY_MESSAGE
+        else:
+            self._turn_lock.acquire()
+        try:
+            return self._run_turn_impl(
+                user_input,
+                on_board_update=on_board_update,
+                on_token=on_token,
+                on_activity=on_activity,
+                on_proposal=on_proposal,
+                cancel_event=cancel_event,
+                route_source=route_source,
+                on_assistant_text=on_assistant_text,
+                on_board_event=on_board_event,
+                on_action=on_action,
+            )
+        finally:
+            self._turn_lock.release()
+
+    def _run_turn_impl(
         self,
         user_input: str,
         on_board_update: object = None,

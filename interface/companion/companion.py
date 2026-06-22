@@ -86,6 +86,10 @@ class CompanionSurface:
         self._visible = False
         self._gui_events: queue.Queue[str | Callable[[], None]] = queue.Queue()
         self._gui_ready = threading.Event()
+        # Ghost runs in its OWN session so a desktop turn never appends into Main MO's
+        # conversation (the live bug: desktop messages merged into a running DEVMODE
+        # session). Created lazily; thread-local via agent.isolated_session at turn time.
+        self._ghost_session: Any = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -485,6 +489,19 @@ class CompanionSurface:
         )
         self._turn_thread.start()
 
+    def _ensure_ghost_session(self) -> Any:
+        """Ghost's own conversation session, created lazily. Isolates the desktop
+        transcript from Main MO's `_session` so the two never cross-contaminate."""
+        if self._ghost_session is None:
+            from core.session.session import Session
+            sys_msg = (
+                getattr(self._agent, "system_message", None)
+                or getattr(getattr(self._agent, "_session", None), "system_message", "")
+                or "system"
+            )
+            self._ghost_session = Session(sys_msg)
+        return self._ghost_session
+
     def _run_turn(self, user_input: str) -> None:
         if self._panic_stop_requested:
             self._set_status("Stopped (panic). Type a new request to resume.", "#ff4444")
@@ -497,7 +514,12 @@ class CompanionSurface:
             # lane so the sandbox blocks actuation (thread-local — never races the
             # TUI). Do mode runs normally.
             lane = "companion-guide" if self.mode == "guide" else None
-            with self._agent.lane_scope(lane):
+            # Run on Ghost's OWN session (thread-local) so the desktop conversation can
+            # never bleed into Main MO's session/transcript. The gateway turn-mutex
+            # separately guarantees a desktop turn is rejected while a Main turn (e.g. a
+            # whole DEVMODE run) is in flight, so the two never interleave.
+            ghost_session = self._ensure_ghost_session()
+            with self._agent.lane_scope(lane), self._agent.isolated_session(ghost_session):
                 result = self._gateway.run_turn(
                     user_input,
                     route_source="desktop",
