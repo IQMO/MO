@@ -302,9 +302,11 @@ def _devmode05_closeout_evidence_violation(final_text: str) -> str | None:
         if not text.startswith("[DEVMODE05 COMPLETE]"):
             return None
         # 1. real tool errors must be explicitly owned — not denied, not merely
-        #    adjacent to a stray "economy.md" mention or a loose digit.
-        from .backend_monitor import economy_summary
-        errs = int(economy_summary().get("tool_errors", 0) or 0)
+        #    adjacent to a stray "economy.md" mention or a loose digit. Scope to the
+        #    Main-MO run (exclude Ghost/desktop turns that share the monitor file) so a
+        #    Ghost error never forces the DEVMODE closeout to own it.
+        from .backend_monitor import GHOST_SURFACES, economy_summary
+        errs = int(economy_summary(exclude_surfaces=GHOST_SURFACES).get("tool_errors", 0) or 0)
         if errs > 0:
             low = final_text.lower()
             denies = any(p in low for p in (

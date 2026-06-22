@@ -311,7 +311,18 @@ def latest_monitor_path() -> Path | None:
     return files[-1] if files else None
 
 
-def economy_summary(monitor_path: str | Path | None = None) -> dict[str, Any]:
+# Surfaces whose turns are NOT part of a Main-MO logical run (DEVMODE/VS05/etc.) and
+# must be excluded from its economy record — Ghost/desktop activity shares the same
+# per-process monitor file but is a separate entity (see the multi-instance proposal).
+GHOST_SURFACES = frozenset({"desktop", "ghost", "companion"})
+
+
+def economy_summary(
+    monitor_path: str | Path | None = None,
+    *,
+    session_ids: "set[str] | frozenset[str] | None" = None,
+    exclude_surfaces: "set[str] | frozenset[str] | None" = None,
+) -> dict[str, Any]:
     """Deterministic provider/tool/error/compression counts from a backend monitor.
 
     The authoritative source of session economy — used by the DEVMODE05 closeout
@@ -319,6 +330,14 @@ def economy_summary(monitor_path: str | Path | None = None) -> dict[str, Any]:
     Tool errors are counted from ``tool_result.error``/``is_error`` and blocks from
     ``tool_result.blocked`` (NOT only the rarer ``tool_error``/``sandbox_blocked``
     event types — those miss a failed ``tool_result`` that later recovered).
+
+    Logical-run scoping (multi-instance proposal, amendment #5): one per-process monitor
+    file can hold a Main-MO run PLUS its handoff segments PLUS interleaved Ghost/desktop
+    turns. ``session_ids`` restricts counting to a run's own segment ids (events whose
+    ``payload.session_id`` is in the set; events with no session_id are skipped when this
+    filter is active). ``exclude_surfaces`` drops events whose ``payload.route_source`` is
+    in the set (e.g. ``GHOST_SURFACES``) — events with no route_source are kept. Defaults
+    (both ``None``) preserve the original whole-file behavior for existing callers.
     """
     path = Path(monitor_path) if monitor_path else latest_monitor_path()
     out = {
@@ -339,6 +358,14 @@ def economy_summary(monitor_path: str | Path | None = None) -> dict[str, Any]:
             continue
         t = d.get("type")
         p = d.get("payload", {}) or {}
+        if session_ids is not None:
+            sid = p.get("session_id") or d.get("session_id")
+            if sid not in session_ids:
+                continue  # not part of this logical run's segments
+        if exclude_surfaces:
+            rs = p.get("route_source") or d.get("route_source")
+            if rs in exclude_surfaces:
+                continue  # Ghost/desktop turn — not part of the Main-MO run
         if t == "provider_request":
             out["provider_requests"] += 1
         elif t == "provider_response":

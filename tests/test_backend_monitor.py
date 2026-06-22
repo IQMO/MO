@@ -339,6 +339,36 @@ def test_economy_summary_counts_tool_result_errors(tmp_path):
     assert s["compression_events"] == 1
 
 
+def test_economy_summary_excludes_ghost_and_groups_handoff_segments(tmp_path):
+    """Logical-run scoping (amendment #5): one per-process monitor file holds the Main-MO
+    run + its handoff segment + interleaved Ghost/desktop turns. Excluding Ghost surfaces
+    must drop the desktop turns while KEEPING both user-route segments (run + handoff)."""
+    from core.backend_monitor import GHOST_SURFACES, economy_summary
+    mon = tmp_path / "backend_monitor-run.jsonl"
+    rows = [
+        # Main-MO devmode run, first session segment
+        {"type": "provider_request", "payload": {"session_id": "mo-1", "route_source": "user"}},
+        {"type": "tool_call", "payload": {"session_id": "mo-1", "route_source": "user"}},
+        # a Ghost/desktop turn interleaved (must be excluded)
+        {"type": "provider_request", "payload": {"session_id": "mo-1", "route_source": "desktop"}},
+        {"type": "tool_call", "payload": {"session_id": "mo-1", "route_source": "desktop"}},
+        {"type": "tool_result", "payload": {"session_id": "mo-1", "route_source": "desktop", "error": True}},
+        # same run continues after a context handoff (new session id, still route=user)
+        {"type": "provider_request", "payload": {"session_id": "mo-handoff-2", "route_source": "user"}},
+        {"type": "tool_call", "payload": {"session_id": "mo-handoff-2", "route_source": "user"}},
+    ]
+    mon.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    # Whole file (back-compat default) counts everything including the Ghost turn.
+    whole = economy_summary(mon)
+    assert whole["provider_requests"] == 3 and whole["tool_calls"] == 3 and whole["tool_errors"] == 1
+    # Excluding Ghost surfaces keeps both user-route segments, drops the desktop turn + its error.
+    scoped = economy_summary(mon, exclude_surfaces=GHOST_SURFACES)
+    assert scoped["provider_requests"] == 2 and scoped["tool_calls"] == 2 and scoped["tool_errors"] == 0
+    # Restricting to one segment's session_id counts only that segment.
+    seg = economy_summary(mon, session_ids={"mo-1"}, exclude_surfaces=GHOST_SURFACES)
+    assert seg["provider_requests"] == 1 and seg["tool_calls"] == 1
+
+
 def test_devmode_closeout_writes_authoritative_economy(tmp_path, monkeypatch):
     """The runtime writes economy.md to the active session dir at closeout — the
     model never authors economy numbers (it faked them at T1734)."""
@@ -356,8 +386,9 @@ def test_devmode_closeout_writes_authoritative_economy(tmp_path, monkeypatch):
     )
     sess = tmp_path / "memory" / "devmode" / "2026-01-01T0000"
     sess.mkdir(parents=True)
-    from core.tasking.agent_taskboard import AgentTaskBoard
-    AgentTaskBoard._write_devmode_economy_record()
+    agent = _devmode_board_agent()
+    agent._bind_active_devmode_dir_from_write({"path": str(sess / "summary.md")})
+    agent._write_devmode_economy_record()
     eco = sess / "economy.md"
     assert eco.is_file()
     text = eco.read_text(encoding="utf-8")
@@ -365,12 +396,18 @@ def test_devmode_closeout_writes_authoritative_economy(tmp_path, monkeypatch):
     assert "errors: 1" in text
 
 
-def test_devmode_economy_targets_active_dir_not_prior_run(tmp_path, monkeypatch):
-    """The closeout boundary writes economy.md every attempt (not only on a passing
-    close) so the model can read the tool-error ledger the gate tells it to read —
-    this broke a deadlock that looped DEVMODE05 to [DEVMODE05 BLOCKED]. With a prior
-    run's dir present, the record must land in the ACTIVE (mtime-latest) dir, never
-    pollute the older run (the live case: prior T1924 + active T2009)."""
+def _devmode_board_agent():
+    """Minimal AgentTaskBoard instance for exercising the economy writer/binder."""
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    return AgentTaskBoard.__new__(AgentTaskBoard)
+
+
+def test_devmode_economy_writes_only_to_bound_dir_not_mtime_latest(tmp_path, monkeypatch):
+    """The economy record must land ONLY in the EXPLICIT active session dir bound from
+    this run's own artifact writes — never the newest dir by mtime. The mtime heuristic
+    let an aborted later run overwrite a PRIOR session's economy (corrupted T2121's 29/66
+    with a stray 23/43). Here a prior dir is newer by mtime, but the binding points at the
+    real active dir: the record lands in the bound dir and the prior dir is untouched."""
     import os, time
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
@@ -384,20 +421,45 @@ def test_devmode_economy_targets_active_dir_not_prior_run(tmp_path, monkeypatch)
         encoding="utf-8",
     )
     dm = tmp_path / "memory" / "devmode"
-    prior = dm / "2026-01-01T0000"
-    active = dm / "2026-01-02T0000"
-    prior.mkdir(parents=True)
+    active = dm / "2026-01-01T0000"   # the run we are actually in
+    prior = dm / "2026-01-02T0000"    # an UNRELATED dir that is NEWER by mtime
     active.mkdir(parents=True)
-    # Make `active` the most-recently-modified dir regardless of name ordering.
-    past = time.time() - 600
-    os.utime(prior, (past, past))
-    active_marker = active / "summary.md"
-    active_marker.write_text("active run artifact", encoding="utf-8")
-    from core.tasking.agent_taskboard import AgentTaskBoard
-    AgentTaskBoard._write_devmode_economy_record()
-    assert (active / "economy.md").is_file()
-    assert not (prior / "economy.md").exists()
+    prior.mkdir(parents=True)
+    os.utime(prior, (time.time() + 10, time.time() + 10))  # prior is the mtime-latest
+    agent = _devmode_board_agent()
+    agent._bind_active_devmode_dir_from_write({"path": str(active / "summary.md")})
+    agent._write_devmode_economy_record()
+    assert (active / "economy.md").is_file()           # bound dir written
+    assert not (prior / "economy.md").exists()          # mtime-latest NOT touched
     assert "errors: 2" in (active / "economy.md").read_text(encoding="utf-8")
+
+
+def test_devmode_economy_refuses_without_active_dir_binding(tmp_path, monkeypatch):
+    """The exact T2121 corruption: an aborted run that created no dir of its own must
+    NOT fall back to the newest existing dir. With no binding, the writer refuses and
+    the prior session's dir is left completely untouched."""
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    (mondir / "backend_monitor-1.jsonl").write_text(
+        json.dumps({"type": "provider_request", "payload": {}}), encoding="utf-8"
+    )
+    prior = tmp_path / "memory" / "devmode" / "2026-01-01T0000"
+    prior.mkdir(parents=True)
+    (prior / "economy.md").write_text("ORIGINAL — must not be overwritten", encoding="utf-8")
+    agent = _devmode_board_agent()  # no binding set → simulates the boot-stalled aborted run
+    agent._write_devmode_economy_record()
+    assert (prior / "economy.md").read_text(encoding="utf-8") == "ORIGINAL — must not be overwritten"
+
+
+def test_devmode_economy_binder_ignores_operator_pack_paths(tmp_path, monkeypatch):
+    """operator/devmode/ is the protocol pack, NOT a session dir — a write there must
+    never bind it as the active economy target."""
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    agent = _devmode_board_agent()
+    agent._bind_active_devmode_dir_from_write({"path": str(tmp_path / "operator" / "devmode" / "DEVMODE05" / "x.md")})
+    assert getattr(agent, "_active_devmode_session_dir", None) is None
 
 
 def test_devmode_economy_reconciles_stale_summary_counts(tmp_path, monkeypatch):
@@ -407,7 +469,6 @@ def test_devmode_economy_reconciles_stale_summary_counts(tmp_path, monkeypatch):
     When the runtime writes the authoritative economy.md it must also overwrite the
     stale counts on the summary's economy line — preserving any narration — so the
     two files can never disagree (single source of truth, runtime-owned)."""
-    import os, time
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
     mondir = tmp_path / "logs" / "monitor"
@@ -428,8 +489,9 @@ def test_devmode_economy_reconciles_stale_summary_counts(tmp_path, monkeypatch):
         "- **Tests:** 1 targeted test passes\n",
         encoding="utf-8",
     )
-    from core.tasking.agent_taskboard import AgentTaskBoard
-    AgentTaskBoard._write_devmode_economy_record()
+    agent = _devmode_board_agent()
+    agent._bind_active_devmode_dir_from_write({"path": str(active / "summary.md")})
+    agent._write_devmode_economy_record()
     out = (active / "summary.md").read_text(encoding="utf-8")
     assert "29 provider requests" in out
     assert "66 tool calls" in out

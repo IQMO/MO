@@ -1,5 +1,7 @@
 """MO agent task-board management mixin — extracted from core/agent.py (DEVMODE05 Phase 2)."""
 
+from pathlib import Path
+
 from .task_board import TaskBoard
 from ..backend_monitor import BackendMonitor
 from . import task_evidence
@@ -15,6 +17,12 @@ class AgentTaskBoard:
         execution is recorded as evidence, but the active task is only completed
         when the Agent explicitly calls the complete_task tool.
         """
+        # Bind the active DEVMODE session dir to whatever dir THIS run actually writes
+        # its artifacts into, so the economy writer targets it explicitly (never the
+        # newest dir by mtime — see _write_devmode_economy_record).
+        if tool_name in ("write_file", "edit_file"):
+            self._bind_active_devmode_dir_from_write(arguments or {})
+
         active = task_board.active_task_id()
         if not active:
             return False
@@ -154,24 +162,54 @@ class AgentTaskBoard:
                     changed = True
         return changed
 
-    @staticmethod
-    def _write_devmode_economy_record() -> None:
-        """Write the authoritative economy record (provider/tool/error/compression
-        counts from the live monitor) into the active self-protocol session dir at
-        closeout. Deterministic and runtime-owned — the model never authors these
-        numbers. Best-effort: a failure here must never break closeout."""
+    def _bind_active_devmode_dir_from_write(self, arguments: dict) -> None:
+        """Bind the active DEVMODE session dir to the dir THIS run writes its artifacts
+        into. Captured from each write_file/edit_file path under memory/devmode/<stamp>/
+        so the economy writer can target the explicit active dir instead of guessing the
+        newest dir by mtime (which let an aborted run overwrite a prior session). The
+        protocol pack at operator/devmode/ is NOT a session dir and is skipped."""
         try:
-            from ..backend_monitor import economy_summary, format_economy_record
             from ..path_defaults import mo_home
-            root = mo_home() / "memory" / "devmode"
-            if not root.is_dir():
+            path = str((arguments or {}).get("path") or (arguments or {}).get("file_path") or "")
+            norm = path.replace("\\", "/")
+            low = norm.lower()
+            key = "memory/devmode/"
+            i = low.find(key)
+            if i == -1 or "operator/devmode" in low:
                 return
-            dirs = [d for d in root.iterdir() if d.is_dir() and d.name[:1].isdigit()]
-            if not dirs:
+            stamp = norm[i + len(key):].split("/", 1)[0]  # preserve case (Linux is case-sensitive)
+            if not stamp or not stamp[:1].isdigit():
                 return
-            latest = max(dirs, key=lambda d: d.stat().st_mtime)  # the actively-written session, not name-sorted
-            summary = economy_summary()
-            (latest / "economy.md").write_text(
+            candidate = mo_home() / "memory" / "devmode" / stamp
+            if candidate.is_dir():
+                self._active_devmode_session_dir = candidate
+        except Exception:
+            pass
+
+    def _write_devmode_economy_record(self) -> None:
+        """Write the authoritative economy record (provider/tool/error/compression
+        counts from the live monitor) into the EXPLICIT active DEVMODE session dir
+        bound from this run's own artifact writes — NEVER the newest dir by mtime.
+
+        The mtime heuristic let an aborted later run (which created no dir of its own)
+        overwrite a PRIOR session's economy: it corrupted T2121's authentic 29/66 with
+        a stray 23/43 sourced from the aborted run's monitor file. If no active dir is
+        bound this run, REFUSE to write rather than guess. The model never authors these
+        numbers. Best-effort: a failure here must never break closeout.
+
+        Note (acceptable residual): the binding lives on the agent (per-process), so a
+        fresh process that stalls at boot without writing any artifact has no binding and
+        correctly refuses — fixing the observed cross-process corruption."""
+        try:
+            from ..backend_monitor import GHOST_SURFACES, economy_summary, format_economy_record
+            target = getattr(self, "_active_devmode_session_dir", None)
+            if target is None or not Path(target).is_dir():
+                return  # no explicit binding this run → refuse; never fall back to mtime
+            # Logical-run scoping: exclude interleaved Ghost/desktop turns that share this
+            # process's monitor file so the run's economy isn't inflated by them. Handoff
+            # segments keep route_source=user, so they remain counted (grouped together).
+            summary = economy_summary(exclude_surfaces=GHOST_SURFACES)
+            (Path(target) / "economy.md").write_text(
                 format_economy_record(summary), encoding="utf-8"
             )
             # Reconcile the model-authored economy line in summary.md. The model
@@ -182,7 +220,7 @@ class AgentTaskBoard:
             # one place the model still restates counts, so the two files can never
             # disagree. Surgical: only the numeric counts on the economy line are
             # rewritten — any model narration on that line is preserved.
-            AgentTaskBoard._reconcile_summary_economy_counts(latest / "summary.md", summary)
+            AgentTaskBoard._reconcile_summary_economy_counts(Path(target) / "summary.md", summary)
         except Exception:
             pass
 
