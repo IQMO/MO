@@ -109,6 +109,21 @@ class TestGatewayRunTurn:
         result = gw.run_turn("")
         assert isinstance(result, str)
 
+    def test_run_turn_forwards_on_action_to_agent(self):
+        captured = {}
+
+        class CapturingAgent(FakeAgent):
+            def run_turn(self, user_input, monitor=None, on_first_tool=None,
+                         on_board_update=None, on_action=None, **_kwargs):
+                self.calls.append(user_input)
+                captured["on_action"] = on_action
+                return "ok"
+
+        gw, agent, _ = make_gateway(agent=CapturingAgent())
+        sentinel = lambda _a: None
+        gw.run_turn("do a thing", on_action=sentinel)
+        assert captured["on_action"] is sentinel
+
 
 class TestRuntimeShouldCreateBoard:
     def test_resume_intent_returns_true(self):

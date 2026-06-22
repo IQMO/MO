@@ -93,6 +93,55 @@ class TestCompanionActionLog:
         assert cs._action_log[-1]["detail"] == "query 59"
 
 
+class TestCompanionActionCoverage:
+    """The action log must reflect what MO actually does, not just request+reply."""
+
+    def _cs(self):
+        from interface.companion.companion import CompanionSurface
+        return CompanionSurface(agent=None, gateway=None)
+
+    def test_on_action_logs_tool_with_summary(self):
+        cs = self._cs()
+        cs._on_action({"tool": "click", "summary": "click(x=120, y=340)"})
+        entry = cs._action_log[-1]
+        assert entry["kind"] == "action"
+        assert "click" in entry["detail"] and "120" in entry["detail"]
+
+    def test_on_action_logs_blocked_and_error(self):
+        cs = self._cs()
+        cs._on_action({"tool": "run", "summary": "run(rm -rf /)", "blocked": True})
+        cs._on_action({"tool": "write_file", "summary": "write_file(x)", "error": True})
+        kinds = [e["kind"] for e in cs._action_log]
+        assert "blocked" in kinds and "action_error" in kinds
+
+    def test_board_event_is_logged(self):
+        cs = self._cs()
+        cs._on_board_event({"kind": "task_completed", "text": "Captured the screen"})
+        assert any(e["kind"] == "task_completed" for e in cs._action_log)
+
+    def test_run_turn_passes_on_action_to_gateway(self):
+        cs = self._cs()
+        captured = {}
+
+        class FakeGateway:
+            last_task_board = None
+
+            def run_turn(self, user_input, **kwargs):
+                captured.update(kwargs)
+                return "done"
+
+        class FakeAgent:
+            def lane_scope(self, _lane):
+                from contextlib import nullcontext
+                return nullcontext()
+
+        cs._agent = FakeAgent()
+        cs._gateway = FakeGateway()
+        cs._run_turn("hi")
+        assert callable(captured.get("on_action"))
+        assert captured["on_action"] == cs._on_action
+
+
 class TestCompanionPanicStop:
     """Panic-stop state management."""
 

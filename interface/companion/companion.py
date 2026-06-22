@@ -291,6 +291,7 @@ class CompanionSurface:
                         self._set_status("Still working on the previous request…", "#ffcc44")
                         return
                     self._panic_stop_requested = False  # explicit action resumes after panic
+                    self._log_action("voice", text)  # log spoken requests too
                     self._turn_thread = threading.Thread(
                         target=self._run_turn, args=(text,), name="mo-companion-turn", daemon=True)
                     self._turn_thread.start()
@@ -504,6 +505,7 @@ class CompanionSurface:
                     on_assistant_text=self._on_assistant_text,
                     on_board_event=self._on_board_event,
                     on_proposal=self._on_proposal,
+                    on_action=self._on_action,
                     cancel_event=self._cancel_event,
                 )
             self._set_result(self._append_task_board(result))
@@ -528,6 +530,23 @@ class CompanionSurface:
         text = event.get("text", "")
         if kind in ("task_started", "task_completed", "task_blocked"):
             self._set_status(text, CYAN if kind == "task_completed" else "#5a8899")
+            # Record task transitions too — the action log should show how the
+            # work progressed, not just the tools.
+            self._log_action(kind, text or kind)
+
+    def _on_action(self, action: dict) -> None:
+        # Every tool MO runs, with a sanitized arg summary (click coords, typed
+        # text, command, file path). This is what makes the action log reflect
+        # what MO actually DID on the desktop — the whole point of the log.
+        tool = str(action.get("tool", "") or "tool")
+        summary = str(action.get("summary", "") or "")
+        detail = f"{tool}: {summary}" if summary and summary != tool else tool
+        if action.get("blocked"):
+            self._log_action("blocked", detail)
+        elif action.get("error"):
+            self._log_action("action_error", detail)
+        else:
+            self._log_action("action", detail)
 
     def _on_proposal(self, plan_text: str) -> None:
         # Show Ghost's plan before MO routes the work — same contract as the TUI /

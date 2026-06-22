@@ -91,7 +91,7 @@ def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
 class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
     """Turn-execution mixin: run loop, provider dispatch, tool handling."""
 
-    def run_turn(self, user_input: str, task_board: TaskBoard | None = None, monitor: BackendMonitor | None = None, on_board_update: object = None, on_token: object = None, on_activity: object = None, on_first_tool: object = None, cancel_event: object = None, on_assistant_text: object = None, on_board_event: object = None) -> str:
+    def run_turn(self, user_input: str, task_board: TaskBoard | None = None, monitor: BackendMonitor | None = None, on_board_update: object = None, on_token: object = None, on_activity: object = None, on_first_tool: object = None, cancel_event: object = None, on_assistant_text: object = None, on_board_event: object = None, on_action: object = None) -> str:
         """Execute a single turn: detect lane, call provider with full tools, dispatch, critique.
 
         Returns the final display text.
@@ -533,6 +533,21 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     if _abuse_warning and not block_reason:
                         result = _abuse_warning + "\n" + result
                     self._write_tool_audit(name, arguments, result, block_reason)
+
+                    # Per-action hook: surfaces (e.g. the desktop Companion action
+                    # log) get every tool MO runs, with a sanitized arg summary —
+                    # so the audit reflects what MO actually DID, not just the
+                    # request and the final reply. Best-effort; never breaks a turn.
+                    if on_action:
+                        try:
+                            on_action({
+                                "tool": name,
+                                "summary": self._safe_tool_summary(name, arguments),
+                                "blocked": bool(block_reason),
+                                "error": self._tool_result_is_error(result),
+                            })
+                        except Exception:
+                            pass
 
                     if monitor:
                         monitor.emit("tool_result", {"request": provider_requests, "surface": self._provider_surface(), "worker_id": self._provider_worker_id(), "tool": name, "blocked": bool(block_reason), "error": self._tool_result_is_error(result), "chars": len(result)})

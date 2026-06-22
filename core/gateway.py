@@ -85,6 +85,7 @@ class Gateway:
         route_source: str = "user",
         on_assistant_text: object = None,
         on_board_event: object = None,
+        on_action: object = None,
     ) -> str:
         """Execute a turn; create a taskboard lazily on first tool activity."""
         turn_id = f"turn-{int(time.time() * 1000)}"
@@ -178,6 +179,7 @@ class Gateway:
                     on_board_update=on_board_update,
                     on_assistant_text=on_assistant_text,
                     on_board_event=on_board_event,
+                    on_action=on_action,
                 )
 
                 result_text = self.agent.run_turn(
