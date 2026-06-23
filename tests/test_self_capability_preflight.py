@@ -454,6 +454,29 @@ The test_runner docs and examples were reviewed outside the error ledger.
     assert "edit_file" in v
 
 
+def test_closeout_attribution_ignores_incidental_names_after_leading_marker(tmp_path):
+    """Residual hole the prior fix missed: with the COMPLETE marker at the START of the
+    text, the broad ownership window let a tool named only in a later '## Tests' section
+    satisfy the ledger. Ownership is now scoped to the ledger + the marker's OWN paragraph,
+    so an incidental mention can't excuse a ledger that blames the wrong tool."""
+    import json
+    import core.self_maintenance.devmode_closeout as scp
+    mon = tmp_path / "backend_monitor-20260101-000000-test.jsonl"
+    mon.write_text("\n".join([
+        json.dumps({"type": "tool_result", "payload": {"tool": "test_runner", "error": True, "route_source": "user", "session_id": "s1"}}),
+        json.dumps({"type": "tool_result", "payload": {"tool": "edit_file", "error": True, "route_source": "user", "session_id": "s1"}}),
+    ]) + "\n", encoding="utf-8")
+    incidental = ("**[DEVMODE05 COMPLETE]** HEALTHY. 2 tool errors.\n\n"
+                  "## Tests\nRan test_runner, edit_file: all pass.\n\n"
+                  "## Tool Error Ledger\n| 1 | read_file | missing path | benign |\n")
+    v = scp._devmode05_closeout_evidence_violation(incidental, monitor_path=str(mon), session_ids={"s1"}, frozen_error_count=2)
+    assert v is not None and "test_runner" in v and "edit_file" in v
+    # honest: the ledger itself names the real tools -> passes
+    honest = ("**[DEVMODE05 COMPLETE]** HEALTHY. 2 tool errors.\n\n"
+              "## Tool Error Ledger\n| 1 | test_runner | bad | recovered |\n| 2 | edit_file | bad | recovered |\n")
+    assert scp._devmode05_closeout_evidence_violation(honest, monitor_path=str(mon), session_ids={"s1"}, frozen_error_count=2) is None
+
+
 def test_closeout_blocks_late_marker_stale_matrix_even_without_tool_errors(tmp_path):
     """Artifact validation must still run when the COMPLETE marker is in a closeout
     section instead of at the very beginning of the persisted summary."""

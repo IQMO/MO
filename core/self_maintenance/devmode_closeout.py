@@ -662,11 +662,15 @@ def _devmode05_tool_error_ownership_text(final_text: str) -> str:
     )
     if ledger:
         sections.append(ledger.group("body"))
+    # The terminal closeout LINE may own tools inline (short closeouts with no ledger
+    # section). Scope to the marker's OWN paragraph only — not a broad window, which
+    # would let an incidental tool name elsewhere (e.g. a passing-tests list) satisfy
+    # the ledger without owning the error.
     marker_text = _devmode05_terminal_marker_text(raw)
     if marker_text:
-        sections.append(marker_text[:1200])
+        sections.append(re.split(r"\n\s*\n", marker_text, maxsplit=1)[0])
     if not sections:
-        sections.append(raw[:1600])
+        sections.append(raw[:400])
     return "\n".join(sections)
 
 
