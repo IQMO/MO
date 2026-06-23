@@ -209,10 +209,13 @@ def test_gateway_creates_one_owned_board_lazily_on_first_tool_signal(tmp_path):
     assert board.source == "gateway"
     assert board.session_id == "session-owned"
     assert board.active_task_id() == "1"
-    # Fallback board (no Ghost on this agent): single-row
-    assert len(board.tasks) == 1
-    assert board.tasks[0].kind == "edit"
-    assert board.tasks[0].completion_gate == "tool"
+    # No Ghost plan: a build/reasoning turn now seeds the matching evidence-gated
+    # work procedure (inspect → … → report) instead of one generic row, with the
+    # objective anchored onto the active first step so the target stays visible.
+    assert len(board.tasks) > 1
+    assert board.tasks[0].status == "active"
+    assert board.tasks[-1].kind == "report"
+    assert board.tasks[-1].completion_gate == "final"
     assert "football game" in board.render()
 
 

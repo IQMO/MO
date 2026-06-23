@@ -731,16 +731,39 @@ def _new_gateway_board(
         rows = _devmode05_gateway_phase_rows()
     if is_vs05_activation(user_input):
         rows = _vs05_gateway_phase_rows()
+    if not rows:
+        # No Ghost plan: seed the matching build/reasoning work procedure so the
+        # board carries the proven evidence-gated phases instead of one generic
+        # row. Falls through to the single-row fallback for chat/unmatched turns.
+        rows = _work_procedure_rows(user_input, target)
     if rows:
         board.set_rows(f"{target}", rows, objective=user_input[:200])
     else:
-        # Ghost unavailable or produced no parseable JSON — single-row fallback
+        # Ghost unavailable and no matching procedure — single-row fallback
         board.set_rows(
             f"{target}",
             [{"id": "1", "text": f"Work on {target}", "status": "active", "kind": "edit", "completion_gate": "tool", "depends_on": []}],
             objective=user_input[:200],
         )
     return board
+
+
+def _work_procedure_rows(user_input: str, target: str = "") -> list[dict[str, object]] | None:
+    """Seed rows from the matching build/reasoning work procedure, if any.
+
+    The procedure is selected from *user_input*; *target* (the board objective) is
+    anchored onto the active first row so the board still shows what is being
+    worked on. Fail-open: any error yields None so board creation always falls
+    back to the single-row default and never breaks a turn.
+    """
+    try:
+        from .work_patterns import procedure_for
+        from .tasking.procedure import procedure_rows
+
+        procedure = procedure_for(user_input)
+        return procedure_rows(procedure, objective=target) if procedure else None
+    except Exception:
+        return None
 
 
 def _devmode05_gateway_phase_rows() -> list[dict[str, object]]:

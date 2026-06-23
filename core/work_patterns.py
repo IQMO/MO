@@ -126,6 +126,21 @@ def select_work_pattern(user_input: str) -> WorkPattern | None:
     return WorkPattern("build_verify", "build_create", complexity)
 
 
+def procedure_for(user_input: str):
+    """Return the crystallized WorkProcedure for this work turn, or None.
+
+    The same classifier that selects the prose work pattern selects the
+    structured, evidence-gated procedure used to seed the taskboard. Chat and
+    unmatched turns return None (no procedure, no board seeding).
+    """
+    pattern = select_work_pattern(user_input)
+    if not pattern:
+        return None
+    from .tasking.procedure import work_procedure_for
+
+    return work_procedure_for(pattern.name)
+
+
 def build_work_pattern_context(user_input: str) -> str:
     """Provider-facing compact pattern context, injected only for work turns."""
     if is_research_method_question(user_input):
