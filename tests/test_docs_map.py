@@ -14,6 +14,50 @@ def test_root_has_one_public_config_template():
     assert not Path("config.yaml").exists()
 
 
+def test_workspace_root_has_no_private_runtime_or_external_tooling_content():
+    forbidden_dirs = (
+        "memory",
+        "logs",
+        "." + "omx",
+        ".pytest_cache",
+        ".ruff_cache",
+        "__pycache__",
+        "operator",
+        ".mo",
+    )
+
+    present = [name for name in forbidden_dirs if Path(name).exists()]
+
+    assert present == []
+
+    external_runner_dir = Path("." + "agents")
+    if external_runner_dir.exists():
+        assert external_runner_dir.is_dir()
+        assert list(external_runner_dir.iterdir()) == []
+
+
+def test_public_docs_do_not_reference_external_tooling_markers():
+    public_docs = (
+        "README.md",
+        "MAP.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "config.example.yaml",
+    )
+    forbidden_markers = (
+        "." + "agents",
+        "." + "omx",
+        "oh-my-" + "codex",
+        "O" + "MX",
+        "profile-" + "build",
+    )
+
+    for relative_path in public_docs:
+        text = Path(relative_path).read_text(encoding="utf-8")
+        for marker in forbidden_markers:
+            assert marker not in text, f"{relative_path} contains {marker}"
+
+
 def test_root_map_stays_compact_and_points_to_authoritative_surfaces():
     path = Path("MAP.md")
     text = path.read_text(encoding="utf-8")
@@ -87,6 +131,25 @@ def test_current_docs_do_not_import_retired_root_trace_tools():
         assert "compileall -q core interface tools mo.py mo_monitor.py" not in text
         if "mo_monitor.py" in text:
             assert "private operator `mo_monitor.py`" in text
+
+
+def test_private_docs_index_declares_internal_untracked_boundary():
+    _require_private_docs()
+
+    docs_readme = Path("docs/README.md").read_text(encoding="utf-8")
+    tracking = Path("docs/TRACKING.md").read_text(encoding="utf-8")
+
+    assert "ignored by git" in docs_readme
+    assert "Public tracked documentation lives at the repository root" in docs_readme
+    assert "ignored by git" in tracking
+
+
+def test_private_docs_read_order_does_not_duplicate_backend_diagnostics():
+    _require_private_docs()
+
+    text = Path("docs/README.md").read_text(encoding="utf-8")
+
+    assert text.count("status/BACKEND-DIAGNOSTICS.md") == 1
 
 
 def test_e2e_mission_records_are_audit_not_current_status():
