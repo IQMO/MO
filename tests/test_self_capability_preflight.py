@@ -317,6 +317,27 @@ Session report:
     assert "do NOT rewrite a real deferred item as RESOLVED" in instruction
 
 
+def test_closeout_requires_session_artifacts_exist(tmp_path):
+    """A [DEVMODE05 COMPLETE] with a bound session dir missing summary/economy/manifest is
+    an INCOMPLETE closeout and must be blocked (live mo-1782208099: the completed-board guard
+    ended the turn before they were written). All three present → no violation; no dir → pass."""
+    import core.self_capability_preflight as scp
+    text = "[DEVMODE05 COMPLETE] HEALTHY. 0 tool errors."
+    sd = tmp_path / "2026-01-11T0000"
+    sd.mkdir()
+    # none present → blocked
+    assert scp._devmode05_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd) is not None
+    # 2 of 3 → still blocked, naming the missing one
+    (sd / "summary.md").write_text("x", encoding="utf-8")
+    (sd / "economy.md").write_text("x", encoding="utf-8")
+    v = scp._devmode05_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd)
+    assert v is not None and "manifest.json" in v
+    # all three → no artifact violation; and no bound dir → not enforced
+    (sd / "manifest.json").write_text("{}", encoding="utf-8")
+    assert scp._devmode05_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd) is None
+    assert scp._devmode05_closeout_evidence_violation(text, frozen_error_count=0, session_dir=None) is None
+
+
 def test_closeout_gate_uses_frozen_error_count_not_moving_live():
     """Freeze: the terminal gate owns the FROZEN closeout error count, not the live
     (moving) monitor — so post-freeze closeout-edit errors can't shift the target and loop

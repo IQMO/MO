@@ -337,6 +337,7 @@ def _devmode05_closeout_evidence_violation(
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
     frozen_error_count: int | None = None,
+    session_dir: "str | Path | None" = None,
 ) -> str | None:
     """Deterministic contradiction between a clean DEVMODE05 closeout and runtime
     truth — the internalized watcher. Returns a one-line block reason, or None.
@@ -378,7 +379,24 @@ def _devmode05_closeout_evidence_violation(
                     "explicitly and classify each (recovered/benign/unresolved); a clean "
                     "closeout that omits or denies them is blocked."
                 )
-        # 2. the session dir must carry a local-time stamp, not a future/skewed one.
+        # 2. the closeout artifacts must actually EXIST in the bound session dir. A
+        #    [DEVMODE05 COMPLETE] with no summary.md/economy.md/manifest.json is an
+        #    incomplete closeout — observed live mo-1782208099, where the completed-board
+        #    tool guard ended the turn before they were written. Only enforced when a dir
+        #    is bound (early states with no dir yet are not blocked here).
+        if session_dir is not None:
+            try:
+                sd = Path(session_dir)
+                missing = [n for n in ("summary.md", "economy.md", "manifest.json")
+                           if not (sd / n).is_file()]
+                if missing:
+                    return (
+                        "the session dir is missing required closeout artifact(s): "
+                        f"{', '.join(missing)} — write them before [DEVMODE05 COMPLETE]."
+                    )
+            except Exception:
+                pass
+        # 3. the session dir must carry a local-time stamp, not a future/skewed one.
         return _devmode05_future_stamp_violation()
     except Exception:
         return None
@@ -391,6 +409,7 @@ def devmode05_final_allows_stop(
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
     frozen_error_count: int | None = None,
+    session_dir: "str | Path | None" = None,
 ) -> bool:
     """Return True only when a DEVMODE05 final answer is a real stop boundary."""
     if not is_devmode05_activation(user_input):
@@ -408,7 +427,7 @@ def devmode05_final_allows_stop(
             return False
         if _devmode05_closeout_evidence_violation(
             final_text, monitor_path=monitor_path, session_ids=session_ids,
-            frozen_error_count=frozen_error_count,
+            frozen_error_count=frozen_error_count, session_dir=session_dir,
         ):
             return False
         return True
@@ -461,6 +480,7 @@ def devmode05_continuation_instruction(
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
     frozen_error_count: int | None = None,
+    session_dir: "str | Path | None" = None,
 ) -> str:
     """Explain why a DEVMODE05 stop claim was rejected and what must happen next."""
     base = (
@@ -486,7 +506,7 @@ def devmode05_continuation_instruction(
         )
     _violation = _devmode05_closeout_evidence_violation(
         final_text, monitor_path=monitor_path, session_ids=session_ids,
-        frozen_error_count=frozen_error_count,
+        frozen_error_count=frozen_error_count, session_dir=session_dir,
     )
     if text.startswith("[DEVMODE05 COMPLETE]") and _violation:
         return (

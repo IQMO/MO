@@ -144,6 +144,7 @@ class AgentTaskBoard:
                 monitor_path=monitor_path,
                 session_ids=run_ids or None,
                 frozen_error_count=getattr(self, "_devmode_closeout_frozen_errors", None),
+                session_dir=getattr(self, "_active_devmode_session_dir", None),
             ):
                 return False
             evidence = "final:devmode05_protocol_closeout"

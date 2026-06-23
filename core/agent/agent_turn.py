@@ -714,12 +714,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # _write_devmode_economy_record above) so the gate owns a stable terminal
             # count — post-freeze closeout-edit errors can't move the target and loop it.
             devmode_frozen_errs = getattr(self, "_devmode_closeout_frozen_errors", None)
+            devmode_session_dir = getattr(self, "_active_devmode_session_dir", None)
             if not devmode05_final_allows_stop(
                 user_input,
                 content,
                 monitor_path=devmode_monitor_path,
                 session_ids=devmode_run_ids or None,
                 frozen_error_count=devmode_frozen_errs,
+                session_dir=devmode_session_dir,
             ):
                 if protocol_stop_gate_continuations.get("devmode05", 0) < PROTOCOL_STOP_GATE_MAX:
                     protocol_stop_gate_continuations["devmode05"] = protocol_stop_gate_continuations.get("devmode05", 0) + 1
@@ -731,6 +733,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         monitor_path=devmode_monitor_path,
                         session_ids=devmode_run_ids or None,
                         frozen_error_count=devmode_frozen_errs,
+                        session_dir=devmode_session_dir,
                     ))
                     continue
                 if on_activity:
