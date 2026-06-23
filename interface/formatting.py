@@ -31,6 +31,16 @@ def token_status_from_agent(agent: Any) -> TokenStatus:
     saved_tokens = int(estimator()) if callable(estimator) else 0
     saved_chars = int(getattr(agent, "_tool_context_saved_chars", lambda: 0)() or 0) if callable(getattr(agent, "_tool_context_saved_chars", None)) else 0
     saving_ops = int(getattr(agent, "_tool_context_saving_ops", lambda: 0)() or 0) if callable(getattr(agent, "_tool_context_saving_ops", None)) else 0
+    # Footer is a single aggregate, so fold in session-compaction (momentum) savings —
+    # including the read_file code-skeleton — which /usage and /status show on a SEPARATE
+    # line. The chars are disjoint from compression/truncation, so adding is not
+    # double-counting; chars/4 matches the estimator.
+    try:
+        compaction_chars = max(0, int(getattr(agent, "session_compaction_total_saved", 0) or 0))
+    except (TypeError, ValueError):
+        compaction_chars = 0
+    saved_chars += compaction_chars
+    saved_tokens += round(compaction_chars / 4)
     return TokenStatus(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
