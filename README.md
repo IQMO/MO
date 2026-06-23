@@ -8,7 +8,7 @@
 
 MO is a Python terminal agent from [IQMO](https://github.com/IQMO). Install it
 once, add its generated `mo` command to your `PATH`, then call `mo` from any
-project folder. It gives OpenCode/OpenAI-compatible provider models real tools,
+project folder. It gives OpenAI-compatible provider models (the official DeepSeek API by default) real tools,
 then surrounds those models with a local runtime that tracks what actually
 happened: task evidence, sandboxed tool dispatch, private memory, code
 navigation, long-session continuity, and post-work review.
@@ -157,14 +157,17 @@ profile templates, session/log/cache folders, generated `mo` command shims, and
 a `.env` file for provider keys.
 
 Add a provider key to `~/.mo/.env` or your shell environment. The default
-example config is OpenCode-first:
+example config uses the **official DeepSeek API** (`api.deepseek.com`, OpenAI-compatible):
 
 ```env
-OPENCODE_API_KEY=your_key_here
+DEEPSEEK_API_KEY=your_key_here
 ```
 
-OpenAI-compatible providers can be added in `~/.mo/config.yaml`. Codex/OpenAI
-fallback can use your local `~/.codex/auth.json` when configured.
+OpenCode is kept as the automatic fallback (`OPENCODE_API_KEY`), so MO stays up if
+the DeepSeek balance hits zero. When the official DeepSeek API is the active
+provider, the TUI footer shows your live account balance. Any OpenAI-compatible
+provider can be added in `~/.mo/config.yaml`; Codex/OpenAI fallback can use your
+local `~/.codex/auth.json` when configured.
 
 Run MO:
 
@@ -204,7 +207,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Skills | Local read-before-acting best-practice packs (`skills/`, `~/.mo/skills`); the most relevant pack loads per task. No marketplace, no install |
 | Adaptive reasoning | Per-turn reasoning level (deep for real work, light for chatter) plus an opt-in per-provider `reasoning_effort` |
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
-| OpenCode/OpenAI providers | OpenCode-first config, OpenAI-compatible chat completions, and Codex/OpenAI fallback support |
+| DeepSeek / OpenAI providers | Default is the official DeepSeek API (`api.deepseek.com`, OpenAI-compatible); OpenCode automatic fallback; Codex/OpenAI fallback support. When the official DeepSeek API is active, the footer shows live account balance |
 | Provider failover | Providers can fail over on rate, auth, balance, timeout, or empty-response errors |
 | Code graph | First-class `code_search` / `find_callers` / `find_callees` tools plus structural-graph orientation, over local runtime state |
 | Cache-stable context | Byte-stable system+history prefix with per-turn context appended last, so the provider prefix cache covers the conversation; `/status` reports the measured cache-hit ratio |
