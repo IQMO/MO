@@ -171,6 +171,13 @@ class Gateway:
             setattr(self.agent, "_current_route_source", route_source)
         except Exception:
             traceback.print_exc()
+        # R2: clear any stale pre-vision snapshot left by a prior (e.g. background
+        # worker) turn so THIS turn's capture_screen restore uses this turn's
+        # provider; restored in the finally below.
+        try:
+            setattr(self.agent, "_pre_vision_provider", None)
+        except Exception:
+            traceback.print_exc()
 
         with monitor_context(
             turn_id=turn_id,
@@ -306,6 +313,15 @@ class Gateway:
                         self.monitor.emit("turn_error_park_failed", {"error": str(e)[:200]})
                 raise
             finally:
+                # R2: undo any per-turn capture_screen vision-provider switch so the
+                # next turn (and concurrent surfaces sharing this agent) start from
+                # the configured provider. No-op unless a screenshot switched it.
+                try:
+                    restore = getattr(self.agent, "restore_vision_provider", None)
+                    if callable(restore):
+                        restore()
+                except Exception:
+                    traceback.print_exc()
                 elapsed_ms = int((time.time() - started) * 1000)
                 if self.last_task_board is not None:
                     event, state = terminal_board_event(self.last_task_board, status)

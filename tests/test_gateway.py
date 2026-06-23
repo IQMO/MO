@@ -174,6 +174,48 @@ class TestGatewayTurnMutex:
         gw._turn_lock.release()
 
 
+class TestGatewayVisionProviderRestore:
+    """R2: a capture_screen vision-provider flip during a turn must be undone at the
+    gateway turn boundary so it never pollutes the next turn / a concurrent surface."""
+
+    class _VisionAgent(FakeAgent):
+        def __init__(self):
+            super().__init__(session_id="session-gw-vision")
+            self.entry_snapshot = "unset"
+            self.restored = False
+
+        def run_turn(self, user_input, monitor=None, on_first_tool=None,
+                     on_board_update=None, **_kwargs):
+            self.calls.append(user_input)
+            # The gateway must clear any stale snapshot before the turn runs.
+            self.entry_snapshot = getattr(self, "_pre_vision_provider", "unset")
+            # Simulate capture_screen flipping the shared provider mid-turn.
+            self._pre_vision_provider = ("text-prov-snapshot",)
+            self.provider_index = 99
+            return "turn complete"
+
+        def restore_vision_provider(self):
+            if getattr(self, "_pre_vision_provider", None) is None:
+                return False
+            self.provider_index = 0
+            self._pre_vision_provider = None
+            self.restored = True
+            return True
+
+    def test_gateway_clears_stale_snapshot_and_restores_after_turn(self):
+        agent = self._VisionAgent()
+        agent._pre_vision_provider = ("STALE-from-prior-worker",)  # left by a prior turn
+        agent.provider_index = 0
+        gw, _, _ = make_gateway(agent=agent)
+
+        gw.run_turn("read what's on my screen", route_source="user")
+
+        assert agent.entry_snapshot is None      # gateway cleared the stale snapshot at start
+        assert agent.restored is True            # restore_vision_provider called in finally
+        assert agent._pre_vision_provider is None
+        assert agent.provider_index == 0         # flipped-to-vision reverted
+
+
 class TestRuntimeShouldCreateBoard:
     def test_resume_intent_returns_true(self):
         agent = SimpleNamespace()

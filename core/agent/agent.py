@@ -967,6 +967,16 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         if target is None or target == self.provider_index:
             return getattr(self.active_provider, "supports_vision", False)
         old_provider, old_model = self.provider_name, self.model
+        # R2: record the pre-vision provider selection ONCE per turn so the turn
+        # boundary (gateway finally / provider_scope) can restore it. A screenshot
+        # flips the shared agent onto a vision-capable provider only for THIS turn's
+        # continuation; without a restore it silently pollutes the next turn — and
+        # any other surface reading the shared provider — onto the vision model.
+        if getattr(self, "_pre_vision_provider", None) is None:
+            self._pre_vision_provider = (
+                self.provider_index, self.provider_name, self.model,
+                self.api_mode, self.context_budget_tokens, self.context_budget_source,
+            )
         self.provider_index = target
         p = self.active_provider
         self.model = p.model
@@ -987,6 +997,44 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             provider=self.provider_name,
             model=self.model,
         )
+        return True
+
+    def restore_vision_provider(self) -> bool:
+        """Undo a per-turn ``capture_screen`` vision switch (R2).
+
+        Restores the exact provider selection captured by
+        ``switch_to_vision_provider`` so a screenshot taken during one turn cannot
+        leave the shared agent stuck on the vision provider for the next turn (or a
+        concurrent surface). No-op (returns ``False``) when no vision switch
+        happened this turn, so it never reverts a deliberate, sticky error-driven
+        fallback (``_next_provider``)."""
+        snapshot = getattr(self, "_pre_vision_provider", None)
+        if snapshot is None:
+            return False
+        from_provider, from_model = self.provider_name, self.model
+        (
+            self.provider_index,
+            self.provider_name,
+            self.model,
+            self.api_mode,
+            self.context_budget_tokens,
+            self.context_budget_source,
+        ) = snapshot
+        self._pre_vision_provider = None
+        if from_provider != self.provider_name or from_model != self.model:
+            append_provider_audit(
+                "vision_restore",
+                surface=self._provider_surface(),
+                session_id=getattr(self.session, "session_id", ""),
+                worker_id=self._provider_worker_id(),
+                reason="turn_end",
+                from_provider=from_provider,
+                from_model=from_model,
+                to_provider=self.provider_name,
+                to_model=self.model,
+                provider=self.provider_name,
+                model=self.model,
+            )
         return True
 
     def _next_provider(self, reason: str = "") -> bool:
