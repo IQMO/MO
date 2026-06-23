@@ -358,6 +358,58 @@ def test_closeout_gate_uses_frozen_error_count_not_moving_live():
     assert scp.devmode05_final_allows_stop(ui, text, frozen_error_count=10) is False
 
 
+def test_capability_matrix_missing_paths_helper():
+    """Only EXISTING/ACTIVE rows are checked; a real path passes, a missing one is flagged."""
+    import core.self_maintenance.devmode_closeout as scp
+    text = (
+        "| a | gateway | core/gateway.py | EXISTING/ACTIVE | ENHANCED |\n"
+        "| b | gone | core/this_does_not_exist_zzz.py | EXISTING/ACTIVE | ENHANCED |\n"
+        "| c | also | core/also_gone_zzz.py | — | NEW |\n"   # NEW row: not a current-existence claim
+    )
+    bad = scp._capability_matrix_missing_paths(text)
+    assert "core/this_does_not_exist_zzz.py" in bad
+    assert "core/gateway.py" not in bad          # exists -> not flagged
+    assert "core/also_gone_zzz.py" not in bad     # not EXISTING/ACTIVE -> not checked
+
+
+def test_closeout_blocks_stale_capability_matrix(tmp_path):
+    """A capability-matrix.md marking a deleted source path EXISTING/ACTIVE blocks the
+    clean closeout (the T2206 stale-baseline failure: self_capability_preflight.py)."""
+    import core.self_maintenance.devmode_closeout as scp
+    text = "[DEVMODE05 COMPLETE] HEALTHY. 0 tool errors."
+    sd = tmp_path / "2026-01-11T0000"
+    sd.mkdir()
+    for n in ("summary.md", "economy.md", "manifest.json"):
+        (sd / n).write_text("x", encoding="utf-8")
+    (sd / "capability-matrix.md").write_text(
+        "| 1 | preflight | core/this_does_not_exist_zzz.py | EXISTING/ACTIVE | ENHANCED |\n",
+        encoding="utf-8")
+    v = scp._devmode05_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd)
+    assert v is not None and "core/this_does_not_exist_zzz.py" in v
+    # matrix that only cites a real path -> no matrix violation
+    (sd / "capability-matrix.md").write_text(
+        "| 1 | gateway | core/gateway.py | EXISTING/ACTIVE | ENHANCED |\n", encoding="utf-8")
+    assert scp._devmode05_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd) is None
+
+
+def test_closeout_blocks_mis_attributed_error_ledger(tmp_path):
+    """The error ledger must name the ACTUAL erroring tools from the monitor — the T2206
+    failure where the ledger blamed read_file while test_runner/edit_file actually errored."""
+    import json
+    import core.self_maintenance.devmode_closeout as scp
+    mon = tmp_path / "backend_monitor-20260101-000000-test.jsonl"
+    mon.write_text(
+        json.dumps({"type": "tool_result", "payload": {"tool": "test_runner", "error": True, "route_source": "user", "session_id": "s1"}}) + "\n",
+        encoding="utf-8")
+    # closeout names the WRONG tool -> blocked (monitor truth is test_runner)
+    wrong = "[DEVMODE05 COMPLETE] HEALTHY. 1 tool error: read_file missing path param."
+    v = scp._devmode05_closeout_evidence_violation(wrong, monitor_path=str(mon), session_ids={"s1"})
+    assert v is not None and "test_runner" in v
+    # closeout that names the real erroring tool -> attribution passes
+    right = "[DEVMODE05 COMPLETE] HEALTHY. 1 tool error: test_runner (recovered)."
+    assert scp._devmode05_closeout_evidence_violation(right, monitor_path=str(mon), session_ids={"s1"}) is None
+
+
 def test_devmode05_operator_owned_deferred_is_valid_terminal(tmp_path, monkeypatch):
     """External-watcher governance fix (2026-06-23): a DEVMODE05 closeout may report
     OPERATOR-OWNED remainders (operator-decision pending / supervised fix-lane / recorded

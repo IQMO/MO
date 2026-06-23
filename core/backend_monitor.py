@@ -359,9 +359,12 @@ def economy_summary(
         "provider_requests": 0, "provider_responses": 0, "provider_errors": 0,
         "tool_calls": 0, "tool_errors": 0, "sandbox_blocked": 0,
         "compression_events": 0,
+        "error_tools": [], "blocked_tools": [],
     }
     if not path or not Path(path).exists():
         return out
+    _err_tools: "set[str]" = set()
+    _blk_tools: "set[str]" = set()
     for line in Path(path).open(encoding="utf-8", errors="replace"):
         line = line.strip()
         if not line:
@@ -396,14 +399,20 @@ def economy_summary(
         elif t == "tool_result":
             if p.get("error") or p.get("is_error"):
                 out["tool_errors"] += 1
+                _err_tools.add(str(p.get("tool") or ""))
             if p.get("blocked"):
                 out["sandbox_blocked"] += 1
+                _blk_tools.add(str(p.get("tool") or ""))
         elif t == "tool_error":
             out["tool_errors"] += 1
+            _err_tools.add(str(p.get("tool") or ""))
         elif t == "sandbox_blocked":
             out["sandbox_blocked"] += 1
+            _blk_tools.add(str(p.get("tool") or ""))
         elif t == "tool_compress":
             out["compression_events"] += 1
+    out["error_tools"] = sorted(t for t in _err_tools if t)
+    out["blocked_tools"] = sorted(t for t in _blk_tools if t)
     return out
 
 

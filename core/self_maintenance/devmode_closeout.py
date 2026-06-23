@@ -64,6 +64,24 @@ def _devmode05_future_stamp_violation() -> str | None:
         return None
 
 
+_MATRIX_REPO_PATH_RE = re.compile(r"(?:core|interface|tools|tests)/[\w./-]+\.py")
+
+
+def _capability_matrix_missing_paths(text: str) -> list[str]:
+    """Return repo .py paths a capability matrix marks EXISTING/ACTIVE that do not
+    resolve on disk — i.e. the matrix was built from stale data, not live source.
+    Paths resolve against the process cwd (the project root for a real run)."""
+    missing: list[str] = []
+    for line in str(text or "").splitlines():
+        if "existing/active" not in line.lower():
+            continue
+        for raw in _MATRIX_REPO_PATH_RE.findall(line):
+            candidate = raw.strip("`*_ ")
+            if candidate and not Path(candidate).exists() and candidate not in missing:
+                missing.append(candidate)
+    return missing
+
+
 def _devmode05_closeout_evidence_violation(
     final_text: str,
     *,
@@ -112,6 +130,28 @@ def _devmode05_closeout_evidence_violation(
                     "explicitly and classify each (recovered/benign/unresolved); a clean "
                     "closeout that omits or denies them is blocked."
                 )
+        # 1b. the error ledger must own the ACTUAL erroring tools (monitor truth), not a
+        #     mis-attributed/confabulated tool. The monitor names which tools raised
+        #     error=True; a clean closeout that names none of them is a false ledger.
+        #     Only when the monitor is explicitly scoped (real run threads session_ids /
+        #     monitor_path) — never read an ambient/unscoped monitor that could false-block.
+        if monitor_path is not None or session_ids is not None:
+            try:
+                from ..backend_monitor import (
+                    GHOST_SURFACES as _GS,
+                    active_monitor_path as _amp,
+                    economy_summary as _es,
+                )
+                _mp = monitor_path or _amp()
+                _error_tools = [t for t in (_es(_mp, session_ids=session_ids, exclude_surfaces=_GS).get("error_tools") or []) if t]
+                if _error_tools and not any(tool.lower() in final_text.lower() for tool in _error_tools):
+                    return (
+                        "the error ledger is not monitor-truthful: the monitor records tool error(s) "
+                        f"on {', '.join(_error_tools)}, but the closeout names none of them. Report each "
+                        "erroring tool by its real name from economy/monitor evidence."
+                    )
+            except Exception:
+                pass
         # 2. the closeout artifacts must actually EXIST in the bound session dir. A
         #    [DEVMODE05 COMPLETE] with no summary.md/economy.md/manifest.json is an
         #    incomplete closeout — observed live mo-1782208099, where the completed-board
@@ -127,6 +167,18 @@ def _devmode05_closeout_evidence_violation(
                         "the session dir is missing required closeout artifact(s): "
                         f"{', '.join(missing)} — write them before [DEVMODE05 COMPLETE]."
                     )
+                # capability-matrix.md must not mark a deleted/relocated source path as
+                # EXISTING/ACTIVE (the stale-baseline blind spot). A missing path means the
+                # matrix was carried forward, not rebuilt from live source.
+                matrix = sd / "capability-matrix.md"
+                if matrix.is_file():
+                    stale = _capability_matrix_missing_paths(matrix.read_text(encoding="utf-8", errors="replace"))
+                    if stale:
+                        return (
+                            "capability-matrix.md marks deleted/nonexistent source path(s) as "
+                            f"EXISTING/ACTIVE: {', '.join(stale[:3])} — rebuild the matrix from live "
+                            "source before [DEVMODE05 COMPLETE]."
+                        )
             except Exception:
                 pass
         # 3. the session dir must carry a local-time stamp, not a future/skewed one.
