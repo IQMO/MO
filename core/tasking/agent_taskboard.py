@@ -322,6 +322,13 @@ class AgentTaskBoard:
             eco = dict(economy) if economy is not None else economy_summary(
                 monitor_path, session_ids=run_ids or None, exclude_surfaces=GHOST_SURFACES)
             frozen = getattr(self, "_devmode_closeout_frozen_errors", None)
+            # The manifest's tool_errors MUST equal economy.md (which uses the frozen
+            # count). Otherwise a manifest written at the complete/blocked hook (which
+            # recomputes the LIVE count) would disagree with economy.md — exactly the
+            # cross-artifact drift the manifest exists to prevent (observed T1047: manifest
+            # said 5 live while economy.md said the frozen 4).
+            if frozen is not None:
+                eco["tool_errors"] = frozen
             board = getattr(getattr(self, "gateway", None), "last_task_board", None)
             surface = str(getattr(self, "_current_route_source", "") or "") or None
             instance_id = getattr(self, "instance_id", None)

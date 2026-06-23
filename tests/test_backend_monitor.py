@@ -386,6 +386,35 @@ def test_economy_writer_writes_runtime_manifest_under_bound_dir(tmp_path, monkey
     assert (active / "manifest.json").is_file()
 
 
+def test_manifest_tool_errors_equal_frozen_not_live(tmp_path, monkeypatch):
+    """The manifest's tool_errors MUST equal economy.md (the frozen count) even when a
+    later hook recomputes the LIVE monitor count — otherwise the manifest disagrees with
+    economy.md, the exact cross-artifact drift it exists to prevent (observed live T1047:
+    manifest said 5 live while economy.md/summary said the frozen 4)."""
+    import json as _json
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    # Live monitor shows 5 tool errors...
+    rows = [{"type": "provider_request", "payload": {"session_id": "mo-x", "route_source": "user"}}]
+    rows += [{"type": "tool_result", "payload": {"session_id": "mo-x", "route_source": "user", "error": True}}
+             for _ in range(5)]
+    (mondir / "backend_monitor-1.jsonl").write_text("\n".join(_json.dumps(r) for r in rows), encoding="utf-8")
+    active = tmp_path / "memory" / "devmode" / "2026-01-10T0000"
+    active.mkdir(parents=True)
+    agent = _devmode_board_agent()
+    agent._active_devmode_session_dir = active
+    agent._devmode_run_session_ids = {"mo-x"}
+    agent._devmode_closeout_frozen_errors = 4  # ...but the run froze at 4
+    # The complete-hook recomputes live (5) but must apply the frozen 4.
+    agent._write_devmode_manifest_record(status="complete")
+    m = _json.loads((active / "manifest.json").read_text(encoding="utf-8"))
+    assert m["economy"]["tool_errors"] == 4   # frozen, equals economy.md — NOT the live 5
+    assert m["economy"]["frozen_tool_errors"] == 4
+    assert m["status"] == "complete"
+
+
 def test_economy_summary_excludes_ghost_and_groups_handoff_segments(tmp_path):
     """Logical-run scoping (amendment #5): one per-process monitor file holds the Main-MO
     run + its handoff segment + interleaved Ghost/desktop turns. Excluding Ghost surfaces
