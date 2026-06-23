@@ -171,8 +171,6 @@ class AgentTaskBoard:
             if not raw_path:
                 return None
             raw_norm = raw_path.replace("\\", "/").lower()
-            if "operator/devmode" in raw_norm:
-                return None
             if "memory/devmode" not in raw_norm:
                 return None
 
@@ -320,8 +318,7 @@ class AgentTaskBoard:
         into. Captured from each write_file/edit_file path under memory/devmode/<stamp>/
         so the economy writer can target the explicit active dir instead of guessing the
         newest dir by mtime (which let an aborted run overwrite a prior session). The
-        private operator pack (``~/.mo/operator/devmode/`` or legacy
-        ``operator/devmode/`` mentions) is NOT a session dir and is skipped."""
+        private operator pack is NOT a session dir and is skipped."""
         try:
             from ..path_defaults import mo_home
             path = str((arguments or {}).get("path") or (arguments or {}).get("file_path") or "")
@@ -329,7 +326,7 @@ class AgentTaskBoard:
             low = norm.lower()
             key = "memory/devmode/"
             i = low.find(key)
-            if i == -1 or "operator/devmode" in low:
+            if i == -1:
                 return
             stamp = norm[i + len(key):].split("/", 1)[0]  # preserve case (Linux is case-sensitive)
             if not stamp or not stamp[:1].isdigit():

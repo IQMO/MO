@@ -3,11 +3,13 @@
 import json
 import re
 import traceback
+from pathlib import Path
 from typing import Any
 
 from ..provider.provider_audit import append_provider_audit
 from ..tasking.task_board import TaskBoard, record_snapshot
 from ..session.session_momentum import maybe_compact_session
+from ..path_defaults import operator_pack_root
 from .agent_utils import _emit_task_board_update
 from ..self_capability_preflight import (
     devmode05_task_truth_continuation_instruction,
@@ -452,7 +454,15 @@ class AgentTurnRecoveryMixin:
                 # let the completed-board guard block the closeout batch and end the turn
                 # before economy.md/summary/manifest were written (live mo-1782208099).
                 path = str(args.get("path") or args.get("file_path") or "").replace("\\", "/").lower()
-                if ("memory/devmode" in path or "operator/devmode" in path
+                raw_path = str(args.get("path") or args.get("file_path") or "")
+                is_operator_pack_path = False
+                try:
+                    candidate = Path(raw_path).expanduser().resolve(strict=False)
+                    candidate.relative_to(operator_pack_root().resolve(strict=False))
+                    is_operator_pack_path = True
+                except (OSError, ValueError):
+                    is_operator_pack_path = False
+                if ("memory/devmode" in path or is_operator_pack_path
                         or any(path.endswith(a.lower()) for a in artifacts)):
                     continue
                 return False

@@ -12,6 +12,7 @@ from core.path_defaults import (
     ENV_HEARTBEAT_LEDGER_PATH,
     ENV_MO_CONFIG,
     ENV_MO_HOME,
+    ENV_MO_OPERATOR_PACK,
     ENV_MO_PROJECT_CWD,
     ENV_MO_STATE_HOME,
     ENV_TASKBOARD_LEDGER_DISABLE,
@@ -23,6 +24,7 @@ from core.path_defaults import (
     default_config_path,
     default_project_roots,
     mo_home,
+    operator_pack_root,
     private_state_enabled,
     project_cache_dir,
     project_cwd,
@@ -102,6 +104,28 @@ class TestMoHome:
     def test_none_config(self):
         result = mo_home(None)
         assert result.name == ".mo"
+
+
+class TestOperatorPackRoot:
+    def test_env_override_wins(self, monkeypatch, tmp_path):
+        pack = tmp_path / "custom-pack"
+        monkeypatch.setenv(ENV_MO_OPERATOR_PACK, str(pack))
+
+        assert operator_pack_root() == pack.resolve(strict=False)
+
+    def test_defaults_to_private_home_pack(self, monkeypatch, tmp_path):
+        monkeypatch.delenv(ENV_MO_OPERATOR_PACK, raising=False)
+        monkeypatch.setenv("MO_HOME", str(tmp_path / ".mo"))
+
+        assert operator_pack_root() == (tmp_path / ".mo" / "operator").resolve(strict=False)
+
+    def test_repo_local_operator_is_not_an_implicit_fallback(self, monkeypatch, tmp_path):
+        monkeypatch.delenv(ENV_MO_OPERATOR_PACK, raising=False)
+        monkeypatch.setenv("MO_HOME", str(tmp_path / ".mo"))
+        repo_operator = Path(repo_root()) / "operator" / "devmode"
+        # The assertion is intentionally independent of whether someone creates
+        # an ignored checkout-local operator/ folder later.
+        assert operator_pack_root() != repo_operator.parent.resolve(strict=False)
 
 
 class TestPrivateStateEnabled:

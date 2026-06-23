@@ -106,7 +106,7 @@ _CAPABILITY_FILES = (
     ("session closeout", "core/session/session_closeout.py", "captures dirty workspace, taskboard state, logs, and unresolved work"),
     ("heartbeat", "core/heartbeat.py", "records live taskboard/git/session continuity"),
     ("taskboard truth", "core/tasking/agent_taskboard.py", "task rows advance only via explicit complete_task evidence"),
-    ("live trace", "operator/mo_trace.py", "session recorder and behavior validator; run from `~/.mo/operator/mo_trace.py` to replay recent actions"),
+    ("live trace", "~/.mo/operator/mo_trace.py", "session recorder and behavior validator; run from `~/.mo/operator/mo_trace.py` to replay recent actions"),
     ("input behavior gates", "core/behavior_gates.py", "run_input_gates() — declarative pre-provider registry (threat scan + malicious-code refusal)"),
     ("content safety", "core/content_safety.py", "classify_harmful_coding_request() refuses malware/attack-tooling builds; dual-use-aware, operator-disableable"),
     ("write-time secret gate", "core/sandbox.py", "guard_tool_call blocks writing hardcoded secret literals into files (contains_hardcoded_secret_literal)"),
@@ -929,9 +929,9 @@ def _relevant_command_lines() -> list[str]:
 def _capability_file_lines(root: Path) -> list[str]:
     lines: list[str] = []
     for name, rel, note in _CAPABILITY_FILES:
-        if rel.startswith("operator/"):
-            path = operator_pack_root() / rel.removeprefix("operator/")
-            display = "~/.mo/operator/" + rel.removeprefix("operator/")
+        if rel.startswith("~/.mo/operator/"):
+            path = operator_pack_root() / rel.removeprefix("~/.mo/operator/")
+            display = rel
         else:
             path = root / rel
             display = rel

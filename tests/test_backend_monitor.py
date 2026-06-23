@@ -706,7 +706,7 @@ def test_devmode_economy_refuses_without_active_dir_binding(tmp_path, monkeypatc
 
 def test_devmode_economy_binder_ignores_operator_pack_paths(tmp_path, monkeypatch):
     """The private operator devmode pack is NOT a session dir, even when referenced
-    through a legacy operator/devmode-shaped path."""
+    through a private-home operator/devmode-shaped path."""
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     agent = _devmode_board_agent()
     agent._bind_active_devmode_dir_from_write({"path": str(tmp_path / "operator" / "devmode" / "DEVMODE05" / "x.md")})

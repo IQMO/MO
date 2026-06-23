@@ -45,21 +45,15 @@ def operator_pack_root(config: dict[str, Any] | None = None) -> Path:
     """Resolve the owner-only operator protocol pack root.
 
     Resolution order: ``MO_OPERATOR_PACK`` env > ``~/.mo/operator`` (the private
-    home — post-migration location) > legacy ``<repo>/operator`` (in-checkout,
-    pre-migration). The pack is owner-private and never ships, so its real home is
-    outside the product checkout; the legacy fallback keeps a transitional
-    in-checkout pack working. Returns the home location by default even when
-    absent — a user clone has neither pack nor token, so owner mode stays off.
+    home). The pack is owner-private and never ships, so the product checkout is
+    never a valid implicit source for it. Returns the home location by default
+    even when absent — a user clone has neither pack nor token, so owner mode
+    stays off.
     """
     env = os.getenv(ENV_MO_OPERATOR_PACK, "").strip()
     if env:
         return Path(env).expanduser().resolve(strict=False)
     home_pack = mo_home(config) / "operator"
-    if (home_pack / "devmode").exists():
-        return home_pack
-    legacy = Path(repo_root()) / "operator"
-    if (legacy / "devmode").exists():
-        return legacy
     return home_pack
 
 

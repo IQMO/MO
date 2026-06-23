@@ -36,10 +36,11 @@ def _tc(name, args):
 
 # ── Completed-board tool guard: closeout tools must be exempt ─────────
 
-def test_closeout_only_allows_economy_and_artifact_tools():
+def test_closeout_only_allows_economy_and_artifact_tools(monkeypatch):
     """After open=0 the model must still own economy.md and write the session
     artifacts — those are closeout, not re-discovery, and must NOT be blocked
     (else the closeout deadlocks to [DEVMODE05 BLOCKED], live mo-1782077188)."""
+    monkeypatch.setenv("MO_HOME", r"C:\Users\x\.mo")
     calls = [
         _tc("read_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\economy.md"}),
         _tc("write_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\summary.md", "content": "x"}),
