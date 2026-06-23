@@ -131,6 +131,13 @@ def build_devmode_manifest(
             "tool_errors": _i("tool_errors"),
             "sandbox_blocked": _i("sandbox_blocked"),
             "compression_events": _i("compression_events"),
+            # The per-tool error/blocked NAMES from the monitor — the authoritative
+            # error ledger the model must cite, not hand-author. Closing this gap is
+            # what makes a mis-attributed tool-error ledger (the T2206 false-clean,
+            # where read_file was blamed for test_runner/edit_file errors) impossible
+            # to pass off as runtime truth.
+            "error_tools": sorted(str(t) for t in (eco.get("error_tools") or []) if str(t).strip()),
+            "blocked_tools": sorted(str(t) for t in (eco.get("blocked_tools") or []) if str(t).strip()),
             "frozen_tool_errors": (int(frozen_tool_errors)
                                    if frozen_tool_errors is not None else _i("tool_errors")),
         },

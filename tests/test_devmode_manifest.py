@@ -57,6 +57,24 @@ def test_manifest_economy_matches_and_freezes(tmp_path):
     assert m["monitor"]["source"] == "mon.jsonl"
 
 
+def test_manifest_projects_error_and_blocked_tool_names(tmp_path):
+    """The manifest must carry the per-tool error/blocked NAMES (not just counts) so the
+    authoritative error ledger names which tools failed — closing the T2206 mis-attribution
+    gap. Names come straight from economy_summary; the manifest sorts/dedupes them."""
+    eco = {
+        "tool_errors": 3,
+        "error_tools": ["test_runner", "edit_file"],
+        "blocked_tools": ["read_file", "shell"],
+        "source": "mon.jsonl",
+    }
+    m = build_devmode_manifest(tmp_path, economy=eco, frozen_tool_errors=3)
+    assert m["economy"]["error_tools"] == ["edit_file", "test_runner"]   # sorted
+    assert m["economy"]["blocked_tools"] == ["read_file", "shell"]
+    # absent in economy -> empty lists, never missing keys
+    m2 = build_devmode_manifest(tmp_path, economy={"tool_errors": 0})
+    assert m2["economy"]["error_tools"] == [] and m2["economy"]["blocked_tools"] == []
+
+
 def test_manifest_status_complete_vs_blocked(tmp_path):
     for status in ("active", "complete", "blocked"):
         assert build_devmode_manifest(tmp_path, status=status)["status"] == status
