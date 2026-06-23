@@ -40,6 +40,34 @@ def test_companion_help_includes_command():
     assert "/companion" in SLASH_COMMAND_HELP
 
 
+def test_ghost_window_subcommand_and_companion_alias_route_to_window():
+    """`/ghost window [show|hide]` and the back-compat `/companion` both drive the
+    desktop Ghost window through one shared helper."""
+    from core.agent.agent_slash import AgentSlashCommands
+    obj = AgentSlashCommands.__new__(AgentSlashCommands)
+    calls = []
+
+    class FakeWindow:
+        def show(self): calls.append("show")
+        def hide(self): calls.append("hide")
+        def toggle(self): calls.append("toggle")
+
+    obj._companion = FakeWindow()
+    assert obj._cmd_ghost("window") == "[COMPANION TOGGLED]"
+    assert obj._cmd_ghost("window show") == "[COMPANION SHOWN]"
+    assert obj._cmd_companion("hide") == "[COMPANION HIDDEN]"   # alias still works
+    assert calls == ["toggle", "show", "hide"]
+
+
+def test_ghost_window_when_not_started_matches_companion_alias():
+    from core.agent.agent_slash import AgentSlashCommands
+    obj = AgentSlashCommands.__new__(AgentSlashCommands)
+    obj._companion = None
+    msg = obj._cmd_ghost("window")
+    assert "not started" in msg.lower()
+    assert obj._cmd_companion("") == msg   # alias gives the identical message
+
+
 # ------------------------------------------------------------------
 # Phase 4 — tray integration, action log, panic-stop
 # ------------------------------------------------------------------

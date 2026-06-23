@@ -305,16 +305,19 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         subcommands=(
             ("on", "enable Ghost mode — all messages route to Ghost"),
             ("off", "disable Ghost mode — messages route to MO"),
+            ("window", "show/hide the desktop Ghost window"),
         ),
         palette_description="toggle Ghost mode on/off or side-chat",
         palette_entries=(
             ("/ghost on", "enable Ghost mode"),
             ("/ghost off", "disable Ghost mode"),
+            ("/ghost window", "show/hide the desktop Ghost window"),
         ),
         help_lines=(
             "/ghost, /gh       toggle Ghost on/off or ask Ghost",
             "                  /ghost on        enable Ghost mode",
             "                  /ghost off       disable Ghost mode",
+            "                  /ghost window    show/hide the desktop Ghost window",
             "                  /ghost <question> ask Ghost a side-question",
             "                  Alt+G            toggle Ghost mode",
         ),
@@ -412,10 +415,10 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
     ),
     SlashCommandSpec(
         name="/companion",
-        description="toggle the on-screen Ghost desktop window",
+        description="alias of /ghost window — toggle the desktop Ghost window",
         category="Work",
-        palette_description="show/hide the Ghost desktop window",
-        help_lines=("/companion        toggle the on-screen Ghost desktop window",),
+        palette_description="alias of /ghost window (desktop Ghost window)",
+        help_lines=("/companion        alias of /ghost window — toggle the desktop Ghost window",),
     ),
 )
 

@@ -745,11 +745,16 @@ class AgentSlashCommands:
             return "[GHOST_ON]"
         if rest.lower() == "off":
             return "[GHOST_OFF]"
+        low = rest.lower()
+        if low in {"window", "desktop"} or low.startswith(("window ", "desktop ")):
+            parts = rest.split(None, 1)
+            return self._ghost_desktop_control(parts[1] if len(parts) > 1 else "toggle")
         if not rest or rest.lower() == "help":
             return (
                 "Ghost:\n"
                 "  Alt+G opens/hides the current Ghost/PRT panel in the TUI.\n"
                 "  Ctrl+O expands/collapses; Esc hides the panel.\n"
+                "  /ghost window   show/hide the desktop Ghost window (same as /companion).\n"
                 "  Ghost is side-check/planning only; send real work to MO when ready.\n"
                 "  MO keeps task progress aligned with real work.\n"
             )
@@ -783,20 +788,25 @@ class AgentSlashCommands:
             append_ghost_audit("side_chat_command_error", user_text=rest, response_text=result)
             return result
 
-    def _cmd_companion(self, rest: str) -> str:
-        """Toggle the desktop companion surface on/off."""
-        companion = getattr(self, "_companion", None)
-        if companion is None:
+    def _ghost_desktop_control(self, action: str) -> str:
+        """Show/hide/toggle the desktop Ghost window. Shared by `/ghost window` and
+        the back-compat `/companion` alias."""
+        window = getattr(self, "_companion", None)
+        if window is None:
             return "Ghost desktop window not started. Enable `ghost.enabled` (or legacy `desktop_companion.enabled`) in config."
-        rest_lower = (rest or "").strip().lower()
-        if rest_lower == "show":
-            companion.show()
+        action = (action or "").strip().lower()
+        if action == "show":
+            window.show()
             return "[COMPANION SHOWN]"
-        if rest_lower == "hide":
-            companion.hide()
+        if action == "hide":
+            window.hide()
             return "[COMPANION HIDDEN]"
-        companion.toggle()
+        window.toggle()
         return "[COMPANION TOGGLED]"
+
+    def _cmd_companion(self, rest: str) -> str:
+        """Back-compat alias for `/ghost window` — toggle the desktop Ghost window."""
+        return self._ghost_desktop_control(rest)
 
     @staticmethod
     def _ghost_safe_messages(raw_messages: list[dict], prompt: str) -> list[dict]:
