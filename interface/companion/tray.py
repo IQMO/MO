@@ -1,4 +1,4 @@
-"""MO Companion Tray — system-tray icon with quick menu.
+"""Ghost desktop tray — system-tray icon with quick menu.
 
 Phase 4 of the desktop companion: a resident tray icon (MO glyph) with
 right-click menu for Show/Hide, Guide/Do mode, action log, run-at-startup,
@@ -17,7 +17,7 @@ TRAY_TOOLTIP = "MO Ghost"
 
 
 class CompanionTray:
-    """System-tray icon for the MO Companion."""
+    """System-tray icon for the desktop Ghost."""
 
     def __init__(self, companion: Any) -> None:
         self._companion = companion

@@ -1,4 +1,4 @@
-"""MO Companion Voice — local STT + TTS for push-to-talk.
+"""Ghost desktop voice — local STT + TTS for push-to-talk.
 
 Phase 3 of the desktop companion: push-to-talk mic capture via sounddevice,
 speech-to-text via faster-whisper, and text-to-speech via piper-tts. All local,

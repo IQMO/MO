@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--show", action="store_true", help="Show the Ghost window immediately")
     args = parser.parse_args(argv)
 
-    if not acquire_runtime_lock(lock_name="ghost.lock", label="MO Ghost"):
+    if not acquire_runtime_lock(lock_name="ghost.lock", legacy_lock_names=("mo-companion.lock",), label="MO Ghost"):
         return 1
 
     config_path = args.config or default_config_path(agent_root=AGENT_ROOT, caller_cwd=CALLER_CWD)

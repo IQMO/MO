@@ -2,7 +2,7 @@
 
 Terminal MO instances are allowed to run concurrently; callers use this helper
 only for singleton resources such as the headless service, Telegram poller,
-scheduler, or Desktop Companion tray/hotkey. Callers may pass
+scheduler, or the desktop Ghost tray/hotkey. Callers may pass
 ``legacy_lock_names`` to also honor older lock-file names during a migration.
 """
 from __future__ import annotations

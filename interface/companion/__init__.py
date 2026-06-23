@@ -1,7 +1,7 @@
-"""MO Companion surface — desktop text-input overlay + global hotkey + voice + tray.
+"""Ghost desktop surface — on-screen text-input overlay + global hotkey + voice + tray.
 
-The companion is MO's on-screen surface: summon with Win+Alt+M, type, and get
-results back via Ghost → Gateway → overlay bubble. Phase 3 adds push-to-talk
+This is the desktop Ghost: summon with Win+Alt+M, type, and get results back via
+the Gateway on Ghost's isolated session → overlay bubble. Phase 3 adds push-to-talk
 voice: sounddevice captures the mic, faster-whisper transcribes it, and
 piper-tts can speak replies when a local voice model is configured. Phase 4 adds
 system-tray icon with Guide/Do modes, action log, run-at-startup, and panic-stop.

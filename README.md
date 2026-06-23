@@ -76,7 +76,7 @@ short `MO_INSTANCE_ID` and a separate default session slot
 (`main-<instance>`), so opening another terminal does not overwrite the first
 terminal's active session. Startup prints a notice when it sees recent sibling
 instances or a stale legacy lock. Singleton resources — the headless service,
-Telegram poller, scheduler, and Desktop Companion tray/hotkey — are still
+Telegram poller, scheduler, and desktop Ghost tray/hotkey — are still
 resource-locked so two terminals do not start the same poller or hotkey owner.
 Set `runtime.shared_session: true` only when you intentionally want the old
 shared `main` session behavior.
@@ -217,7 +217,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Learning loop | Recurring-pattern & workflow suggestions stay pending until you confirm; direct corrections/term definitions apply to your local profile |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
-| Desktop Companion | Optional local text/tray surface: summon with `Win+Alt+M`, use a small MO window near the cursor, Guide/Do mode, tray, action log, panic-stop, and optional local STT/TTS. Off by default; requires `desktop_companion.enabled: true`; voice deps are needed only when voice is enabled. Screen/cursor pointing stays on-demand through `capture_screen` and `point_on_screen`, not continuous watching |
+| Desktop Ghost | Optional local text/tray surface (presents as **Ghost**, with its own persona on an isolated session): summon with `Win+Alt+M`, use a small MO window near the cursor, Guide/Do mode, tray, action log, panic-stop, and optional local STT/TTS. Off by default; requires `ghost.enabled: true` (legacy `desktop_companion.enabled` still honored); voice deps are needed only when voice is enabled. Screen/cursor pointing stays on-demand through `capture_screen` and `point_on_screen`, not continuous watching |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
 | MCP tools | Connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments. Enabled by default but inert until you list a server (an empty `servers:` spawns nothing) |
 | Open in your browser | `open_url` opens a page in the operator's **default** browser, visibly (their own profile and logins) — the right tool for "open / show me / pull up X". Uses the OS default-browser handler (no hardcoded browser, no shell). Distinct from the autonomous browser-automation tools below |
@@ -227,8 +227,8 @@ export PATH="$HOME/.mo/bin:$PATH"
 
 Inside MO, use `/help` for commands or press `F4` for the command palette.
 
-Companion voice is opt-in and push-to-talk only. The mic button is hidden until
-`desktop_companion.voice.stt_enabled: true`; microphone capture uses
+Ghost (desktop) voice is opt-in and push-to-talk only. The mic button is hidden until
+`ghost.voice.stt_enabled: true` (legacy `desktop_companion.voice.stt_enabled` still honored); microphone capture uses
 `sounddevice`, while transcription requires `faster-whisper`. Spoken replies are
 also separate: the current built-in TTS path uses `piper-tts` and a configured
 local Piper voice model.
@@ -284,7 +284,7 @@ adapts through their own approved profile and learning surfaces.
 
 ## Current Rough Edges
 
-- Terminal-first experience; Companion is optional and local, not a packaged desktop app yet.
+- Terminal-first experience; the desktop Ghost is optional and local, not a packaged desktop app yet.
 - Provider setup is manual and expects you to understand your endpoint.
 - Internals are moving quickly; docs and command surfaces may change.
 - Some advanced paths, such as service mode, tracing, hooks, and PRT fix loops,

@@ -13,7 +13,7 @@ Pillow>=10.0
 websocket-client>=1.6
 pyautogui>=0.9.54
 #
-# Companion surface (set desktop_companion.enabled: true in ~/.mo/config.yaml):
+# Ghost desktop surface (set ghost.enabled: true in ~/.mo/config.yaml):
 #   window                     -> tkinter (built into Python — no pip)
 #   global hotkey (Win+Alt+M)  -> keyboard
 #   system tray icon + menu    -> pystray (icon uses Pillow, above)

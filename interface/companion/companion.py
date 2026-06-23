@@ -847,7 +847,7 @@ def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | N
     if not isinstance(companion_cfg, dict) or not companion_cfg.get("enabled", False):
         return None
 
-    resource_lock = acquire_runtime_lock(lock_name="ghost.lock", label="MO Ghost")
+    resource_lock = acquire_runtime_lock(lock_name="ghost.lock", legacy_lock_names=("mo-companion.lock",), label="MO Ghost")
     if resource_lock is None:
         return None
 
