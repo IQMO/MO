@@ -143,6 +143,7 @@ class AgentTaskBoard:
                 final_text,
                 monitor_path=monitor_path,
                 session_ids=run_ids or None,
+                frozen_error_count=getattr(self, "_devmode_closeout_frozen_errors", None),
             ):
                 return False
             evidence = "final:devmode05_protocol_closeout"
@@ -217,8 +218,10 @@ class AgentTaskBoard:
             if prev is None or Path(prev) != candidate:
                 # A different session dir = a new logical run → start a fresh id set so
                 # this run's economy can never count a PRIOR Main/user run's events that
-                # share the same per-process monitor file.
+                # share the same per-process monitor file. Also unfreeze the closeout error
+                # count so a new run freezes its own terminal count.
                 self._devmode_run_session_ids = set()
+                self._devmode_closeout_frozen_errors = None
             self._active_devmode_session_dir = candidate
             self._track_devmode_run_session_id()
         except Exception:
@@ -271,6 +274,17 @@ class AgentTaskBoard:
                 session_ids=run_ids or None,
                 exclude_surfaces=GHOST_SURFACES,
             )
+            # Freeze the tool-error count at the FIRST closeout write. Post-freeze artifact
+            # edits (e.g. an edit_file old-text-not-found while writing the summary) would
+            # otherwise bump the live count N -> N+1, invalidating the just-written ledger
+            # and making the closeout gate reject every attempt — an unbounded N->N+1 loop
+            # that exhausted the turn budget (observed live mo-1782179985). The frozen value
+            # IS the authoritative terminal count; the gate and the artifacts all use it.
+            frozen = getattr(self, "_devmode_closeout_frozen_errors", None)
+            if frozen is None:
+                frozen = int(summary.get("tool_errors", 0) or 0)
+                self._devmode_closeout_frozen_errors = frozen
+            summary["tool_errors"] = frozen
             atomic_write_text(Path(target) / "economy.md", format_economy_record(summary), encoding="utf-8")
             # Reconcile the model-authored economy line in summary.md. The model
             # writes summary.md BEFORE the closeout completes, so its hand-counted
@@ -310,6 +324,42 @@ class AgentTaskBoard:
             new_text = "\n".join(fix_line(ln) for ln in text.split("\n"))
             if new_text != text:
                 atomic_write_text(summary_path, new_text, encoding="utf-8")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _reconcile_summary_terminal_marker(summary_path, *, blocked: bool) -> bool:
+        """When the run ends BLOCKED, a summary.md that still claims [DEVMODE05 COMPLETE]
+        is a lie (observed T0403: COMPLETE in summary while the run hit the budget and
+        emitted a continuation capsule). Deterministically rewrite the marker to
+        [DEVMODE05 BLOCKED]. Returns True if it changed anything."""
+        try:
+            if not blocked or not summary_path.exists():
+                return False
+            text = summary_path.read_text(encoding="utf-8", errors="replace")
+            if "[DEVMODE05 COMPLETE]" not in text:
+                return False
+            new_text = text.replace(
+                "[DEVMODE05 COMPLETE]",
+                "[DEVMODE05 BLOCKED] (reconciled: run ended blocked, not complete)",
+            )
+            atomic_write_text(summary_path, new_text, encoding="utf-8")
+            return True
+        except Exception:
+            return False
+
+    def _reconcile_devmode_summary_marker(self, final_text: str) -> None:
+        """If the model's terminal answer is [DEVMODE05 BLOCKED], make summary.md agree —
+        a blocked run must never leave a [DEVMODE05 COMPLETE] in its summary."""
+        try:
+            from ..self_capability_preflight import _devmode05_terminal_prefix_text
+            text = _devmode05_terminal_prefix_text(final_text) or ""
+            if not text.startswith("[DEVMODE05 BLOCKED]"):
+                return
+            target = getattr(self, "_active_devmode_session_dir", None)
+            if target is None:
+                return
+            AgentTaskBoard._reconcile_summary_terminal_marker(Path(target) / "summary.md", blocked=True)
         except Exception:
             pass
 

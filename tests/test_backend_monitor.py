@@ -482,6 +482,40 @@ def test_devmode_economy_writes_only_to_bound_dir_not_mtime_latest(tmp_path, mon
     assert "errors: 2" in (active / "economy.md").read_text(encoding="utf-8")
 
 
+def test_economy_writer_freezes_error_count_across_closeout_edits(tmp_path, monkeypatch):
+    """Freeze: the FIRST closeout write captures the tool-error count; later writes — after
+    more errors accumulate from closeout artifact edits — keep reporting the FROZEN count,
+    so economy.md and the terminal gate never chase a moving number (the mo-1782179985
+    N->N+1 loop that exhausted the turn budget)."""
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    monpath = mondir / "backend_monitor-1.jsonl"
+
+    def write_monitor(n_err):
+        rows = [{"type": "provider_request", "payload": {"session_id": "mo-x", "route_source": "user"}}]
+        rows += [{"type": "tool_result", "payload": {"session_id": "mo-x", "route_source": "user", "error": True}}
+                 for _ in range(n_err)]
+        monpath.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+
+    active = tmp_path / "memory" / "devmode" / "2026-01-05T0000"
+    active.mkdir(parents=True)
+    agent = _devmode_board_agent()
+    agent._active_devmode_session_dir = active
+    agent._devmode_run_session_ids = {"mo-x"}
+
+    write_monitor(8)              # first closeout write sees 8 errors -> freezes at 8
+    agent._write_devmode_economy_record()
+    assert agent._devmode_closeout_frozen_errors == 8
+    assert "errors: 8" in (active / "economy.md").read_text(encoding="utf-8")
+
+    write_monitor(10)             # 2 more errors from closeout edits...
+    agent._write_devmode_economy_record()
+    eco = (active / "economy.md").read_text(encoding="utf-8")
+    assert "errors: 8" in eco and "errors: 10" not in eco  # still the FROZEN 8
+
+
 def test_devmode_economy_isolates_one_main_run_from_another_in_same_file(tmp_path, monkeypatch):
     """Logical-run scoping must isolate one Main/user DEVMODE run from ANOTHER Main/user
     run that shares the same per-process monitor file — not just exclude Ghost/desktop.

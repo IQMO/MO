@@ -704,14 +704,22 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # cycle: the next continuation turn reads the real counts and can finalize.
             if devmode05_active:
                 self._write_devmode_economy_record()
+                # A [DEVMODE05 BLOCKED] terminal must never leave a [DEVMODE05 COMPLETE]
+                # in summary.md (observed T0403). Reconcile the marker deterministically.
+                self._reconcile_devmode_summary_marker(content)
 
             devmode_monitor_path = getattr(monitor, "path", None) if monitor is not None else None
             devmode_run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            # Use the error count frozen at the first closeout write (set by
+            # _write_devmode_economy_record above) so the gate owns a stable terminal
+            # count — post-freeze closeout-edit errors can't move the target and loop it.
+            devmode_frozen_errs = getattr(self, "_devmode_closeout_frozen_errors", None)
             if not devmode05_final_allows_stop(
                 user_input,
                 content,
                 monitor_path=devmode_monitor_path,
                 session_ids=devmode_run_ids or None,
+                frozen_error_count=devmode_frozen_errs,
             ):
                 if protocol_stop_gate_continuations.get("devmode05", 0) < PROTOCOL_STOP_GATE_MAX:
                     protocol_stop_gate_continuations["devmode05"] = protocol_stop_gate_continuations.get("devmode05", 0) + 1
@@ -722,6 +730,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         content,
                         monitor_path=devmode_monitor_path,
                         session_ids=devmode_run_ids or None,
+                        frozen_error_count=devmode_frozen_errs,
                     ))
                     continue
                 if on_activity:

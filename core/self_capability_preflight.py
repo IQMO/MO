@@ -336,26 +336,34 @@ def _devmode05_closeout_evidence_violation(
     *,
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
+    frozen_error_count: int | None = None,
 ) -> str | None:
     """Deterministic contradiction between a clean DEVMODE05 closeout and runtime
     truth — the internalized watcher. Returns a one-line block reason, or None.
-    Fail-open: any error returns None so it can never wedge a legitimate closeout."""
+    Fail-open: any error returns None so it can never wedge a legitimate closeout.
+
+    ``frozen_error_count`` (when provided) is the count frozen at the FIRST closeout write;
+    the gate owns THAT number instead of re-reading the live monitor, so post-freeze
+    closeout-edit errors cannot move the target and loop the gate forever."""
     try:
         text = _devmode05_terminal_prefix_text(final_text) or ""
         if not text.startswith("[DEVMODE05 COMPLETE]"):
             return None
         # 1. real tool errors must be explicitly owned — not denied, not merely
-        #    adjacent to a stray "economy.md" mention or a loose digit. Scope to the
-        #    Main-MO run (exclude Ghost/desktop turns that share the monitor file) so a
-        #    Ghost error never forces the DEVMODE closeout to own it.
-        from .backend_monitor import GHOST_SURFACES, active_monitor_path, economy_summary
-        if monitor_path is None:
-            monitor_path = active_monitor_path()
-        errs = int(economy_summary(
-            monitor_path,
-            session_ids=session_ids,
-            exclude_surfaces=GHOST_SURFACES,
-        ).get("tool_errors", 0) or 0)
+        #    adjacent to a stray "economy.md" mention or a loose digit. Use the FROZEN
+        #    terminal count if one was captured at closeout; else scope to the Main-MO run
+        #    (exclude Ghost/desktop turns that share the monitor file) live.
+        if frozen_error_count is not None:
+            errs = int(frozen_error_count)
+        else:
+            from .backend_monitor import GHOST_SURFACES, active_monitor_path, economy_summary
+            if monitor_path is None:
+                monitor_path = active_monitor_path()
+            errs = int(economy_summary(
+                monitor_path,
+                session_ids=session_ids,
+                exclude_surfaces=GHOST_SURFACES,
+            ).get("tool_errors", 0) or 0)
         if errs > 0:
             low = final_text.lower()
             denies = any(p in low for p in (
@@ -382,6 +390,7 @@ def devmode05_final_allows_stop(
     *,
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
+    frozen_error_count: int | None = None,
 ) -> bool:
     """Return True only when a DEVMODE05 final answer is a real stop boundary."""
     if not is_devmode05_activation(user_input):
@@ -397,7 +406,10 @@ def devmode05_final_allows_stop(
     if text.startswith("[DEVMODE05 COMPLETE]"):
         if _devmode05_completion_reports_open_work(text):
             return False
-        if _devmode05_closeout_evidence_violation(final_text, monitor_path=monitor_path, session_ids=session_ids):
+        if _devmode05_closeout_evidence_violation(
+            final_text, monitor_path=monitor_path, session_ids=session_ids,
+            frozen_error_count=frozen_error_count,
+        ):
             return False
         return True
     allowed_prefixes = (
@@ -448,6 +460,7 @@ def devmode05_continuation_instruction(
     *,
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
+    frozen_error_count: int | None = None,
 ) -> str:
     """Explain why a DEVMODE05 stop claim was rejected and what must happen next."""
     base = (
@@ -471,7 +484,10 @@ def devmode05_continuation_instruction(
             "item as RESOLVED, and do NOT claim 'Remaining: none' when such items exist). Finalize "
             "with: 'No actionable product work remains; operator-decision items remain: <list, or none>.'"
         )
-    _violation = _devmode05_closeout_evidence_violation(final_text, monitor_path=monitor_path, session_ids=session_ids)
+    _violation = _devmode05_closeout_evidence_violation(
+        final_text, monitor_path=monitor_path, session_ids=session_ids,
+        frozen_error_count=frozen_error_count,
+    )
     if text.startswith("[DEVMODE05 COMPLETE]") and _violation:
         return (
             "[DEVMODE05 AUTONOMY] Your [DEVMODE05 COMPLETE] contradicts runtime evidence: "

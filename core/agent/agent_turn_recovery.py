@@ -473,37 +473,34 @@ class AgentTurnRecoveryMixin:
                 latest_user = str(message.get("content") or "")
                 break
         if is_devmode05_activation(latest_user):
+            # CRITICAL-budget: do NOT re-seed a fresh session for a DEVMODE05 run. A fresh
+            # context handoff makes the model re-orient ("I'll start DEVMODE05 by first
+            # reading...") and burn the last rounds, hitting the hard stop (observed live
+            # mo-1782179985: 75/80 reseed -> restart -> BLOCKED). Force the conclusion IN
+            # PLACE in the current session — tools are already blocked by the caller, and
+            # there is no budget left to use a relieved context anyway.
             if self._devmode05_taskboard_completed():
-                focus = (
-                    f"[TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
-                    "DEVMODE05 taskboard is already complete/open=0. Produce [DEVMODE05 COMPLETE] now from existing evidence. "
-                    "Do NOT call any more tools in this completed turn."
+                self.session.add_assistant(
+                    f"[DEVMODE05 TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
+                    "The taskboard is complete (open=0). Produce [DEVMODE05 COMPLETE] NOW from the "
+                    "evidence already gathered. Do NOT call any tools. Do NOT re-read state. Do NOT "
+                    "restart the protocol."
                 )
-                reason = (
-                    f"devmode05-completed-closeout ({tool_rounds}/{max_tools} rounds)"
+                action = "force_complete_in_place"
+            else:
+                self.session.add_assistant(
+                    f"[DEVMODE05 TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
+                    "STOP. Emit [DEVMODE05 BLOCKED] with a continuation capsule NOW, from the current "
+                    "context only: completed work, unresolved finding IDs, dirty files, tests run, and "
+                    "the exact next action. Do NOT call any tools. Do NOT re-read state. Do NOT restart "
+                    "DEVMODE05. The next fresh/resume turn continues from this capsule."
                 )
-                self._perform_context_handoff(
-                    focus=focus,
-                    reason=reason,
-                    latest_user="",
-                    expose_notice=False,
-                )
-                return
-            focus = (
-                f"[TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
-                "DEVMODE05 is not complete. Return [DEVMODE05 BLOCKED] with a continuation capsule now: "
-                "completed work, unresolved finding IDs, dirty files, tests run, and the exact next action. "
-                "Do NOT call any more tools in this exhausted turn. The next fresh DEVMODE05/resume turn must continue from this capsule without re-asking or redoing completed discovery."
-            )
-            reason = (
-                f"devmode05-tool-budget-continuation ({tool_rounds}/{max_tools} rounds)"
-            )
-            self._perform_context_handoff(
-                focus=focus,
-                reason=reason,
-                latest_user="",
-                expose_notice=False,
-            )
+                action = "force_blocked_in_place"
+            if monitor:
+                monitor.emit("turn_health", {
+                    "tool_rounds": tool_rounds, "max_tool_rounds": max_tools,
+                    "action": action, "protocol": "devmode05", "reseed": False,
+                })
             return
         if self._has_open_runtime_work():
             focus = (

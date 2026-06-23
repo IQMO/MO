@@ -180,54 +180,49 @@ def test_handoff_triggers_at_5_remaining():
     assert "compacted" not in (result2 or "").lower()
 
 
-def test_devmode05_handoff_requests_continuation_capsule_not_final_answer():
+def _assistant_text(agent):
+    return " ".join(m.get("content", "") for m in agent.session.messages if m.get("role") == "assistant")
+
+
+def test_devmode05_critical_budget_forces_blocked_in_place_no_reseed():
+    """At remaining<=5 for an INCOMPLETE DEVMODE05 run, the runtime must NOT re-seed a
+    fresh session — a reseed made the model re-orient ("I'll start DEVMODE05 by first
+    reading...") and burn the last rounds → hard BLOCKED (live mo-1782179985). It forces
+    the [DEVMODE05 BLOCKED] continuation capsule IN PLACE in the current session."""
     agent = _agent(max_tool_rounds=80)
     agent._session = Session("sys")
     agent.session.add_user("start DEVMODE05")
     agent._provider_surface = lambda: "main"
     handoff_calls = []
-
-    def fake_handoff(**kwargs):
-        handoff_calls.append(kwargs)
-        agent._handoff_count += 1
-
-    agent._perform_context_handoff = fake_handoff
+    agent._perform_context_handoff = lambda **kw: handoff_calls.append(kw)
     agent._sessions = SimpleNamespace()
     agent.config["agent"]["context_handoff_threshold"] = 0.50
 
-    result = agent._check_turn_health(75, None, monitor=None)
+    agent._check_turn_health(75, None, monitor=None)
 
-    assert len(handoff_calls) == 1
-    assert "DEVMODE05 is not complete" in handoff_calls[0]["focus"]
-    assert "continuation capsule" in handoff_calls[0]["focus"]
-    assert "provide your final answer NOW" not in handoff_calls[0]["focus"]
-    assert "DEVMODE05 continuation capsule" in (result or "")
-    assert "Produce your final answer now" not in (result or "")
+    assert handoff_calls == []  # NO fresh context handoff / reseed
+    mandate = _assistant_text(agent)
+    assert "[DEVMODE05 BLOCKED]" in mandate
+    assert "continuation capsule" in mandate
+    assert "Do NOT restart" in mandate  # no "start DEVMODE05 again" path
 
 
-def test_devmode05_completed_board_handoff_requests_complete_not_continuation():
+def test_devmode05_completed_board_critical_budget_forces_complete_in_place_no_reseed():
     agent = _agent(max_tool_rounds=80)
     agent._session = Session("sys")
     agent.session.add_user("start DEVMODE05")
     agent.gateway = SimpleNamespace(last_task_board=TaskBoard(tasks=[TaskItem("1", "Closeout", "completed")]))
     agent._provider_surface = lambda: "main"
     handoff_calls = []
-
-    def fake_handoff(**kwargs):
-        handoff_calls.append(kwargs)
-        agent._handoff_count += 1
-
-    agent._perform_context_handoff = fake_handoff
+    agent._perform_context_handoff = lambda **kw: handoff_calls.append(kw)
     agent._sessions = SimpleNamespace()
 
-    result = agent._check_turn_health(75, None, monitor=None)
+    agent._check_turn_health(75, None, monitor=None)
 
-    assert len(handoff_calls) == 1
-    assert "taskboard is already complete/open=0" in handoff_calls[0]["focus"]
-    assert "[DEVMODE05 COMPLETE]" in handoff_calls[0]["focus"]
-    assert "DEVMODE05 is not complete" not in handoff_calls[0]["focus"]
-    assert "Produce [DEVMODE05 COMPLETE]" in (result or "")
-    assert "DEVMODE05 continuation capsule" not in (result or "")
+    assert handoff_calls == []  # NO reseed
+    mandate = _assistant_text(agent)
+    assert "[DEVMODE05 COMPLETE]" in mandate
+    assert "Do NOT restart" in mandate
 
 
 def test_devmode05_tool_blocked_instruction_requires_terminal_marker():

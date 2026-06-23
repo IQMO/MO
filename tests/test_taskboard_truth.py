@@ -470,6 +470,38 @@ def test_self_completed_empty_phase_row_is_backfilled_at_closeout(monkeypatch):
     assert ok, f"closeout still blocked after backfill: {reasons}"
 
 
+def test_blocked_run_reconciles_summary_complete_marker_to_blocked(tmp_path):
+    """A run that ends [DEVMODE05 BLOCKED] must not leave a [DEVMODE05 COMPLETE] in
+    summary.md (the T0403 lie). The marker is reconciled deterministically."""
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    summary = tmp_path / "summary.md"
+    summary.write_text("# Summary\n## Closeout\n- [DEVMODE05 COMPLETE]\n", encoding="utf-8")
+    # Not blocked -> untouched.
+    assert AgentTaskBoard._reconcile_summary_terminal_marker(summary, blocked=False) is False
+    assert "[DEVMODE05 COMPLETE]" in summary.read_text(encoding="utf-8")
+    # Blocked -> rewritten.
+    assert AgentTaskBoard._reconcile_summary_terminal_marker(summary, blocked=True) is True
+    out = summary.read_text(encoding="utf-8")
+    assert "[DEVMODE05 COMPLETE]" not in out
+    assert "[DEVMODE05 BLOCKED]" in out
+
+
+def test_reconcile_devmode_summary_marker_fires_only_on_blocked_terminal(tmp_path):
+    """The agent hook reconciles summary.md ONLY when the terminal answer is BLOCKED —
+    a COMPLETE terminal leaves the summary's COMPLETE intact."""
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    agent = AgentTaskBoard.__new__(AgentTaskBoard)
+    active = tmp_path / "2026-01-06T0000"
+    active.mkdir()
+    (active / "summary.md").write_text("## Closeout\n- [DEVMODE05 COMPLETE]\n", encoding="utf-8")
+    agent._active_devmode_session_dir = active
+    agent._reconcile_devmode_summary_marker("[DEVMODE05 COMPLETE] HEALTHY.")
+    assert "[DEVMODE05 COMPLETE]" in (active / "summary.md").read_text(encoding="utf-8")
+    agent._reconcile_devmode_summary_marker("[DEVMODE05 BLOCKED] turn budget exhausted; continuation capsule")
+    out = (active / "summary.md").read_text(encoding="utf-8")
+    assert "[DEVMODE05 COMPLETE]" not in out and "[DEVMODE05 BLOCKED]" in out
+
+
 def test_complete_task_never_closes_a_row_with_zero_evidence():
     """A phase row the model completes via complete_task WITHOUT running any tool of its
     own must not close evidence-empty (observed live mo-1782177115: DEVMODE tasks 5-6

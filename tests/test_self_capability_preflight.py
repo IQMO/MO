@@ -317,6 +317,24 @@ Session report:
     assert "do NOT rewrite a real deferred item as RESOLVED" in instruction
 
 
+def test_closeout_gate_uses_frozen_error_count_not_moving_live():
+    """Freeze: the terminal gate owns the FROZEN closeout error count, not the live
+    (moving) monitor — so post-freeze closeout-edit errors can't shift the target and loop
+    the gate forever (the mo-1782179985 N->N+1 loop that exhausted the turn budget)."""
+    import core.self_capability_preflight as scp
+    text = "[DEVMODE05 COMPLETE] HEALTHY. 8 tool errors (all recovered); see economy.md."
+    # Owns the frozen 8 -> no violation, regardless of whatever the live monitor now says.
+    assert scp._devmode05_closeout_evidence_violation(text, frozen_error_count=8) is None
+    # A frozen count the text does NOT own -> still flagged (must own the frozen number).
+    assert scp._devmode05_closeout_evidence_violation(text, frozen_error_count=10) is not None
+    # Frozen 0 -> nothing to own -> no violation.
+    assert scp._devmode05_closeout_evidence_violation("[DEVMODE05 COMPLETE] clean.", frozen_error_count=0) is None
+    # devmode05_final_allows_stop threads the frozen count through.
+    ui = "start DEVMODE05"
+    assert scp.devmode05_final_allows_stop(ui, text, frozen_error_count=8) is True
+    assert scp.devmode05_final_allows_stop(ui, text, frozen_error_count=10) is False
+
+
 def test_devmode05_operator_owned_deferred_is_valid_terminal(tmp_path, monkeypatch):
     """External-watcher governance fix (2026-06-23): a DEVMODE05 closeout may report
     OPERATOR-OWNED remainders (operator-decision pending / supervised fix-lane / recorded
