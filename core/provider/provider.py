@@ -1,7 +1,10 @@
 """MO — provider routing.
 
-Primary: OpenCode/OpenAI-compatible chat completions.
-Fallback: OpenAI Codex OAuth from ~/.codex/auth.json via Responses API.
+Providers are OpenAI-compatible chat-completions endpoints — e.g. the official
+DeepSeek API (``api.deepseek.com``) or an OpenCode relay — plus an optional OpenAI
+Codex OAuth provider (Responses API, from ``~/.codex/auth.json``). The active
+provider and its fallback come from ``model.default`` / ``model.fallback``, each
+matched against a provider NAME or a MODEL id (see ``_order_provider_chain``).
 """
 
 import base64
@@ -800,6 +803,8 @@ def first_vision_provider_index(providers, *, can_accept=None) -> int | None:
 
 
 def _provider_matches_selector(provider: BaseProvider, selector: str) -> bool:
+    """True when ``selector`` (a ``model.default``/``fallback`` value) matches this
+    provider by its NAME, its MODEL id, or ``name/model``."""
     value = str(selector or "").strip().lower()
     if not value:
         return False

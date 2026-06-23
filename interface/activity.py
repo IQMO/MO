@@ -172,6 +172,14 @@ def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = N
         pct = round(status.saved_tokens_est / max(1, total_est) * 100, 1)
         saved_part = f" ◎~{format_k(status.saved_tokens_est)} ({pct}%)"
     base = f"{prefix}{token_part}{saved_part} · {model_label}{reasoning_text}"
+    # Official DeepSeek API only: show live account balance (cached, non-blocking).
+    try:
+        from core.provider.deepseek_balance import balance_text as _ds_balance
+        _bal = _ds_balance(getattr(agent, "active_provider", None))
+        if _bal:
+            base = f"{base} · {_bal}"
+    except Exception:
+        pass
     frags = [("class:footer", base)]
     if notice_frag:
         frags.extend([("class:footer", " • "), notice_frag])

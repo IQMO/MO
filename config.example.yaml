@@ -16,6 +16,16 @@ providers:
   #   1. api_key_env: OPENCODE_API_KEY  (recommended - reads from environment)
   #   2. api_key: "sk-..."              (direct value - less secure, not recommended)
   
+  # Official DeepSeek API — the default MO provider. Needs a funded DEEPSEEK_API_KEY
+  # (https://platform.deepseek.com). OpenAI-compatible. When this provider is active,
+  # MO shows the live account balance in the TUI footer (GET /user/balance).
+  - name: deepseek
+    type: chat_completions
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    model: deepseek-v4-pro
+
+  # OpenCode relay (alternative / fallback) — serves the same deepseek-v4 models.
   - name: opencode
     type: chat_completions
     base_url: https://opencode.ai/zen/go/v1
@@ -47,11 +57,10 @@ providers:
     model: gpt-5.5
 
 model:
-  # Main MO: DeepSeek v4 Pro first, then normal Codex. Flash is for Ghost only.
-  default: deepseek-v4-pro
-  # Fallback stays within the same provider key by default so a new user with
-  # one key still has working fallback. Point it at a paid/second-account
-  # provider (e.g. openai-codex) only if you have that login configured.
+  # Main MO: the official DeepSeek API (the `deepseek` provider) → OpenCode fallback,
+  # so a zero DeepSeek balance never takes MO down. `default`/`fallback` select a
+  # provider by its NAME or by a MODEL id; here we select by provider name.
+  default: deepseek
   fallback: opencode-pro
 
 runtime:
