@@ -103,6 +103,13 @@ def route_line_style(style: str, line: str) -> str:
         return "class:ghost-route-blocked"
     if lowered in {"mo routed", "mo queued", "worker routed", "receiver accepted"}:
         return "class:ghost-route"
+    # Route-receipt rejections ("MO unavailable", "MO queue unavailable", "Worker
+    # unavailable") start with the surface name rather than a glyph; flag them blocked
+    # so they never read as a normal answer. Anchored on the surface name to avoid
+    # false-positives on ordinary prose that merely mentions "unavailable".
+    if tokens and tokens[0].lower() in {"mo", "worker"} and \
+            any(word in lowered for word in ("unavailable", "conflict")):
+        return "class:ghost-route-blocked"
     return style
 
 

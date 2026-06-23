@@ -682,11 +682,24 @@ class GhostControllerMixin:
             summary = "✓ Worker finished" if record.state == "completed" else "! Worker blocked"
             detail = str(record.result_summary or record.objective or objective)[:90]
             notification = f"{summary} — {detail}"
-            self._record_ghost_history("notification", "", notification, route="background")
-            if self._ghost_panel_open:
-                self._ghost_panel_lines = [("class:ghost-hint", notification)]
+            self._record_background_notification(notification)
             self._add("class:activity", f"  {notification}")
             if self._app:
                 self._app.invalidate()
 
         return runtime.start(objective, source="ghost", worker_id=worker_id, on_finish=_on_finish)
+
+    def _record_background_notification(self, notification: str) -> None:
+        """Record a background-worker notification to Ghost history without yanking a
+        user who is paging back through earlier entries off their current position."""
+        browsing = (
+            self._ghost_panel_open
+            and self._ghost_history_index is not None
+            and self._ghost_history_index < len(self._ghost_history) - 1
+        )
+        prev_index = self._ghost_history_index
+        self._record_ghost_history("notification", "", notification, route="background")
+        if browsing:
+            self._ghost_history_index = max(0, min(prev_index, len(self._ghost_history) - 1))
+        elif self._ghost_panel_open:
+            self._ghost_panel_lines = [("class:ghost-hint", notification)]

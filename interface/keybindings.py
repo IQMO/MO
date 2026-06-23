@@ -221,7 +221,9 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
             event.app.invalidate()
         elif b.complete_state:
             b.complete_previous()
-        elif tui._ghost_panel_open:
+        elif tui._ghost_panel_open and b.document.on_first_line:
+            # Page Ghost history only at the top of the draft (shell-style); inside a
+            # multi-line draft, Up must still move the cursor instead of hijacking it.
             tui._show_ghost_history(-1)
         elif input_allows_transcript_scroll(b):
             tui._scroll_transcript(3)
@@ -236,7 +238,9 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
             event.app.invalidate()
         elif b.complete_state:
             b.complete_next()
-        elif tui._ghost_panel_open:
+        elif tui._ghost_panel_open and b.document.on_last_line:
+            # Page Ghost history only at the bottom of the draft; inside a multi-line
+            # draft, Down must still move the cursor instead of hijacking it.
             tui._show_ghost_history(1)
         elif input_allows_transcript_scroll(b):
             tui._scroll_transcript(-3)

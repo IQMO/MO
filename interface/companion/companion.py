@@ -83,6 +83,9 @@ class CompanionSurface:
         self._turn_thread: threading.Thread | None = None
         self._hotkey_listener: Any = None
         self._voice_btn: Any = None
+        self._mode_label: Any = None
+        self._tts_warned = False  # surface a TTS-unavailable note at most once per session
+        self._stopped = False  # set once the GUI loop has torn down — no late queueing
         self._visible = False
         self._gui_events: queue.Queue[str | Callable[[], None]] = queue.Queue()
         self._gui_ready = threading.Event()
@@ -157,6 +160,13 @@ class CompanionSurface:
     @property
     def mode(self) -> str:
         return self._tray.mode if self._tray else self._mode
+
+    def _mode_indicator(self) -> tuple[str, str]:
+        """(label, color) for the header mode badge. Do uses an alert color
+        because that mode lets MO actuate the desktop; Guide stays calm."""
+        if self.mode == "guide":
+            return ("● Guide — MO explains", "#5a8899")
+        return ("● Do — MO can act", "#ffaa33")
 
     def panic_stop(self) -> None:
         """Emergency stop: interrupt the in-flight turn and block the next one."""
@@ -286,23 +296,8 @@ class CompanionSurface:
         if self._recording_voice:
             # second click → stop, transcribe, submit
             self._recording_voice = False
-            self._set_status("Transcribing…", CYAN)
-
-            def _finish() -> None:
-                text = voice.stop_and_transcribe()
-                if text and not text.startswith("[STT") and not text.startswith("[Voice"):
-                    if self._turn_thread is not None and self._turn_thread.is_alive():
-                        self._set_status("Still working on the previous request…", "#ffcc44")
-                        return
-                    self._panic_stop_requested = False  # explicit action resumes after panic
-                    self._log_action("voice", text)  # log spoken requests too
-                    self._turn_thread = threading.Thread(
-                        target=self._run_turn, args=(text,), name="mo-companion-turn", daemon=True)
-                    self._turn_thread.start()
-                else:
-                    self._set_status(text or "[No speech detected]", "#ff4444")
-
-            threading.Thread(target=_finish, name="mo-companion-voice", daemon=True).start()
+            self._set_voice_btn_color(CYAN)  # mic no longer hot
+            self._finish_voice_capture(voice)
             return
         # first click → start (don't start over a running turn)
         if self._turn_thread is not None and self._turn_thread.is_alive():
@@ -310,9 +305,60 @@ class CompanionSurface:
             return
         if voice.start_recording():
             self._recording_voice = True
+            self._set_voice_btn_color("#ff4444")  # visible hot-mic cue
             self._set_status("Recording… click 🎤 again to stop", CYAN)
         else:
-            self._set_status("Could not start the microphone.", "#ff4444")
+            rec = getattr(voice, "recorder", None)
+            reason = (getattr(rec, "last_error", "") or "").strip() if rec else ""
+            msg = f"Could not start the microphone — {reason}" if reason \
+                else "Could not start the microphone — check OS mic permissions."
+            self._set_status(msg, "#ff4444")
+
+    def _set_voice_btn_color(self, color: str) -> None:
+        if not self._root or self._voice_btn is None:
+            return
+        self._post_gui_call(
+            lambda: self._voice_btn.config(fg=color) if self._voice_btn else None)
+
+    def _finish_voice_capture(self, voice: Any) -> None:
+        """Stop capture, transcribe, and submit — shared by the manual second click
+        and the max-seconds auto-stop, so both land in the same place."""
+        self._set_status("Transcribing…", CYAN)
+
+        def _finish() -> None:
+            text = voice.stop_and_transcribe()
+            if text and not text.startswith("[STT") and not text.startswith("[Voice"):
+                if self._turn_thread is not None and self._turn_thread.is_alive():
+                    self._set_status("Still working on the previous request…", "#ffcc44")
+                    return
+                self._panic_stop_requested = False  # explicit action resumes after panic
+                self._log_action("voice", text)  # log spoken requests too
+                self._turn_thread = threading.Thread(
+                    target=self._run_turn, args=(text,), name="mo-companion-turn", daemon=True)
+                self._turn_thread.start()
+            else:
+                self._set_status(text or "[No speech detected]", "#ff4444")
+
+        threading.Thread(target=_finish, name="mo-companion-voice", daemon=True).start()
+
+    def _on_tts_error(self, reason: str) -> None:
+        if self._tts_warned:
+            return
+        self._tts_warned = True
+        self._set_status(f"Voice output unavailable — {reason}", "#ffcc44")
+
+    def _poll_voice_autostop(self) -> None:
+        """The recorder can self-stop at the max-seconds cap from its audio thread.
+        Reflect that on the GUI instead of leaving a stale 'Recording…' hint with the
+        mic already released — finish the buffered capture exactly like a 2nd click."""
+        if not self._recording_voice or self._voice is None:
+            return
+        rec = getattr(self._voice, "recorder", None)
+        if rec is None or getattr(rec, "_recording", False):
+            return
+        self._recording_voice = False
+        self._set_voice_btn_color(CYAN)
+        self._finish_voice_capture(self._voice)
 
     # ------------------------------------------------------------------
     # GUI
@@ -355,6 +401,11 @@ class CompanionSurface:
                  font=("Segoe UI", 16, "bold")).pack(side="left", padx=(0, 8))
         tk.Label(header, text="MO Companion", fg=CYAN, bg=CARD,
                  font=("Segoe UI", 12, "bold")).pack(side="left")
+        # Mode indicator: the user must be able to SEE whether MO will drive the
+        # desktop (Do) or only explain (Guide) — mode was previously tray-only.
+        self._mode_label = tk.Label(header, text="", bg=CARD,
+                                    font=("Segoe UI", 9, "bold"))
+        self._mode_label.pack(side="right")
 
         # status line
         self._status_label = tk.Label(card, text="Ask anything — press Enter",
@@ -367,7 +418,12 @@ class CompanionSurface:
         entry_frame.pack(fill="x", padx=10, pady=(0, 6))
 
         if self._voice_input_configured():
-            self._voice_btn = tk.Label(entry_frame, text="🎤", fg=CYAN, bg=CARD,
+            # Grey the mic when STT is configured but the backend isn't actually
+            # ready, so the affordance reflects capability, not just intent. The
+            # click handler still explains why it's unavailable.
+            stt_ready = bool(self._voice and self._voice.stt_available)
+            self._voice_btn = tk.Label(entry_frame, text="🎤",
+                                       fg=CYAN if stt_ready else "#555f66", bg=CARD,
                                        font=("Segoe UI", 14), cursor="hand2")
             self._voice_btn.pack(side="right", padx=(6, 0))
             self._voice_btn.bind("<Button-1>", lambda _e: self._on_voice_input())
@@ -380,11 +436,19 @@ class CompanionSurface:
         self._entry.bind("<Return>", self._on_submit)
         self._entry.bind("<Escape>", lambda _e: self.hide())
 
-        # response label
-        self._response = tk.Label(card, text="", fg=TEXT, bg=CARD,
-                                  font=("Segoe UI", 10), anchor="w",
-                                  justify="left", wraplength=380)
-        self._response.pack(fill="both", padx=10, pady=(0, 8))
+        # response area — scrollable read-only Text so long replies are never
+        # silently clipped by the fixed-height window (they scroll instead).
+        resp_frame = tk.Frame(card, bg=CARD)
+        resp_frame.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        resp_scroll = tk.Scrollbar(resp_frame)
+        resp_scroll.pack(side="right", fill="y")
+        self._response = tk.Text(resp_frame, fg=TEXT, bg=CARD,
+                                 font=("Segoe UI", 10), wrap="word",
+                                 height=5, relief="flat", borderwidth=0,
+                                 highlightthickness=0, cursor="arrow",
+                                 yscrollcommand=resp_scroll.set, state="disabled")
+        self._response.pack(side="left", fill="both", expand=True)
+        resp_scroll.config(command=self._response.yview)
 
         # bottom hint
         hint = "Esc to hide  ·  Win+Alt+M to summon"
@@ -411,6 +475,9 @@ class CompanionSurface:
                 win.winfo_screenwidth(),
                 win.winfo_screenheight(),
             ))
+            if self._mode_label is not None:
+                text, color = self._mode_indicator()
+                self._mode_label.config(text=text, fg=color)
             win.deiconify()
             self._entry.focus_set()
             self._visible = True
@@ -421,6 +488,7 @@ class CompanionSurface:
 
         def _do_stop(*_args: Any) -> None:
             self._running = False
+            self._stopped = True
             win.destroy()
             root.destroy()
 
@@ -445,6 +513,7 @@ class CompanionSurface:
                 self._drain_gui_events(handlers)
                 if not self._running:
                     break
+                self._poll_voice_autostop()
                 root.update()
                 root.update_idletasks()
                 time.sleep(0.05)  # ~20fps; blocking yield so the loop never busy-spins
@@ -532,9 +601,11 @@ class CompanionSurface:
                 )
             self._set_result(self._append_task_board(result))
             self._log_action("turn_complete", result[:200])
-            # Speak result if TTS enabled
+            # Speak result if TTS enabled; surface a one-time note when the backend
+            # claims availability (piper imports) but can't actually speak (no model,
+            # no audio device) so the user isn't met with silent dead air.
             if self._voice and self._voice.tts_available:
-                self._voice.speak_result(result)
+                self._voice.speak_result(result, on_error=self._on_tts_error)
         except Exception as exc:
             self._set_status(f"Error: {exc}", "#ff4444")
             self._log_action("turn_error", str(exc)[:200])
@@ -600,8 +671,7 @@ class CompanionSurface:
         if not self._root:
             return
         self._stream_buf += str(delta or "")
-        buf = self._stream_buf[:600]
-        self._post_gui_call(lambda: self._response.config(text=buf) if self._response else None)
+        self._render_response(self._stream_buf, follow_tail=True)
 
     # ------------------------------------------------------------------
     # UI helpers (thread-safe via tkinter event queue)
@@ -610,17 +680,39 @@ class CompanionSurface:
     def _set_status(self, text: str, color: str) -> None:
         if not self._root or not self._status_label:
             return
-        self._post_gui_call(lambda: self._status_label.config(text=text[:120], fg=color))
+        msg = str(text or "")
+        if len(msg) > 120:
+            msg = msg[:117] + "…"  # signal truncation rather than chop silently
+        self._post_gui_call(lambda: self._status_label.config(text=msg, fg=color))
 
     def _set_response(self, text: str) -> None:
-        if not self._root or not self._response:
+        self._render_response(text, follow_tail=False)
+
+    def _render_response(self, text: str, *, follow_tail: bool) -> None:
+        # Single render-layer chokepoint for the response Text. Redacts (covers
+        # _set_result, _on_proposal, streaming, taskboard) so nothing secret shows
+        # on-screen, and scrolls to the tail while streaming / to the top for a
+        # finished answer.
+        if not self._root or self._response is None:
             return
-        self._post_gui_call(lambda: self._response.config(text=text[:1500]))
+        safe = redact_sensitive_text(str(text or ""))[:4000]
+
+        def _apply() -> None:
+            widget = self._response
+            if widget is None:
+                return
+            widget.config(state="normal")
+            widget.delete("1.0", "end")
+            widget.insert("1.0", safe)
+            widget.config(state="disabled")
+            widget.see("end" if follow_tail else "1.0")
+
+        self._post_gui_call(_apply)
 
     def _set_result(self, text: str) -> None:
         summary = (text or "").strip()
-        if len(summary) > 1200:
-            summary = summary[:1197] + "..."
+        if len(summary) > 4000:  # the Text scrolls; only mark a genuinely huge clip
+            summary = summary[:3997] + "..."
         self._set_response(summary)
         self._set_status("Done — Esc to hide", "#44cc88")
 
@@ -648,7 +740,9 @@ class CompanionSurface:
         return self._post_gui_call(event_name)
 
     def _post_gui_call(self, callback: str | Callable[[], None]) -> bool:
-        if self._root is None:
+        # Once stopped, the drain loop has exited and nothing will run a queued
+        # callback — report False rather than a misleading "queued" success.
+        if self._root is None or self._stopped:
             return False
         try:
             self._gui_events.put_nowait(callback)

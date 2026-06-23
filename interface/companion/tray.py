@@ -134,17 +134,20 @@ class CompanionTray:
 
     def _on_mode_guide(self, _icon: Any, _item: Any) -> None:
         self._mode = "guide"
+        self._update_title()
 
     def _on_mode_do(self, _icon: Any, _item: Any) -> None:
         self._mode = "do"
+        self._update_title()
 
     def _on_show_log(self, _icon: Any, _item: Any) -> None:
-        if self._companion and hasattr(self._companion, "show_action_log"):
+        if self._companion:
             self._companion.show_action_log()
 
     def _on_toggle_startup(self, _icon: Any, _item: Any) -> None:
         enabled = self._startup_enabled()
-        self._set_startup(not enabled)
+        if not self._set_startup(not enabled):
+            self._notify("Run-at-Startup needs the optional 'pywin32' package.")
 
     def _on_panic_stop(self, _icon: Any, _item: Any) -> None:
         if self._companion:
@@ -156,6 +159,23 @@ class CompanionTray:
         self._running = False
         if self._tray:
             self._tray.stop()
+
+    def _update_title(self) -> None:
+        """Reflect the current mode in the always-visible tray tooltip."""
+        try:
+            if self._tray is not None:
+                self._tray.title = f"{TRAY_TOOLTIP} — {self._mode.capitalize()} mode"
+        except Exception:
+            pass
+
+    def _notify(self, message: str) -> None:
+        """Best-effort tray balloon so silent actions (e.g. a failed startup toggle)
+        give the user feedback. Degrades quietly if the backend can't notify."""
+        try:
+            if self._tray is not None:
+                self._tray.notify(message, TRAY_TOOLTIP)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Startup management (Windows)
@@ -171,7 +191,9 @@ class CompanionTray:
             return False
 
     @staticmethod
-    def _set_startup(enable: bool) -> None:
+    def _set_startup(enable: bool) -> bool:
+        """Create/remove the Startup shortcut. Returns True on success, False if it
+        couldn't (e.g. pywin32 missing) so the caller can tell the user."""
         try:
             import pythoncom
             from win32com.client import Dispatch
@@ -196,10 +218,12 @@ class CompanionTray:
             else:
                 if shortcut_path.exists():
                     shortcut_path.unlink()
+            return True
         except ImportError:
-            pass  # win32com not available
+            return False  # win32com not available
         except Exception:
             traceback.print_exc()
+            return False
 
 
 def start_tray_if_enabled(

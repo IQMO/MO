@@ -35,6 +35,11 @@ class FakeBuffer:
     def cursor_down(self, count=1):
         self.down = count
 
+    @property
+    def document(self):
+        from prompt_toolkit.document import Document
+        return Document(self.text, self.cursor_position)
+
 
 class FakePalette:
     def __init__(self):
@@ -408,3 +413,37 @@ def test_removed_ghost_slash_text_keeps_arrow_keys_in_editor():
 
     assert tui._input_buf.up == 1
     assert not hasattr(tui, "transcript_delta")
+
+
+def test_arrows_move_cursor_in_multiline_draft_while_ghost_panel_open():
+    """IFDEV05 A3-F1: with the Ghost panel open, Up/Down inside a multi-line draft
+    must move the cursor, not hijack into Ghost-history paging."""
+    tui = FakeTui()
+    tui._ghost_panel_open = True
+    tui._input_buf.text = "line one\nline two\nline three"
+    tui._input_buf.cursor_position = 13  # within "line two" -> not first/last line
+    kb = build_tui_key_bindings(tui)
+    event = SimpleNamespace(app=FakeApp(tui._input_buf))
+
+    _binding_by_key(kb, "Keys.Up").handler(event)
+    assert tui._input_buf.up == 1
+    assert not hasattr(tui, "ghost_history_delta")  # not paged into history
+
+    _binding_by_key(kb, "Keys.Down").handler(event)
+    assert tui._input_buf.down == 1
+    assert not hasattr(tui, "ghost_history_delta")
+
+
+def test_arrows_page_ghost_history_at_draft_edge_when_panel_open():
+    """IFDEV05 A3-F1: at the top/bottom edge of the draft (incl. empty input),
+    Up/Down still page Ghost history — the common case is preserved."""
+    tui = FakeTui()
+    tui._ghost_panel_open = True
+    tui._input_buf.text = ""  # empty -> on_first_line and on_last_line both True
+    kb = build_tui_key_bindings(tui)
+    event = SimpleNamespace(app=FakeApp(tui._input_buf))
+
+    _binding_by_key(kb, "Keys.Up").handler(event)
+    assert tui.ghost_history_delta == -1
+    _binding_by_key(kb, "Keys.Down").handler(event)
+    assert tui.ghost_history_delta == 1

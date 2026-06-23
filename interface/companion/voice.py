@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import threading
 import traceback
-from typing import Any
+from typing import Any, Callable
 
 _MODEL_CACHE: dict[str, Any] = {}
 
@@ -174,14 +174,17 @@ class VoiceSpeaker:
             traceback.print_exc()
             return False
 
-    def speak_async(self, text: str) -> None:
-        """Speak in a background thread (non-blocking)."""
+    def speak_async(self, text: str, on_error: Callable[[str], None] | None = None) -> None:
+        """Speak in a background thread (non-blocking). If speaking fails (no model,
+        no audio device), invoke on_error with the reason instead of dying silently."""
         if not text or not text.strip():
             return
-        threading.Thread(
-            target=self.speak, args=(text,),
-            name="mo-companion-tts", daemon=True,
-        ).start()
+
+        def _run() -> None:
+            if not self.speak(text) and on_error is not None:
+                on_error(self._load_error or "voice output failed")
+
+        threading.Thread(target=_run, name="mo-companion-tts", daemon=True).start()
 
 
 # ------------------------------------------------------------------
@@ -203,6 +206,7 @@ class PushToTalkRecorder:
         self._recording = False
         self._buffer: list[Any] = []
         self._stream: Any = None
+        self.last_error = ""  # human-readable reason start() failed (mic perms, etc.)
 
     @property
     def available(self) -> bool:
@@ -215,13 +219,16 @@ class PushToTalkRecorder:
     def start(self) -> bool:
         """Begin recording. Returns True on success."""
         if self._recording:
+            self.last_error = "already recording"
             return False
         if not self.available:
+            self.last_error = "audio backend (sounddevice) not installed"
             return False
         try:
             import sounddevice as sd
             self._buffer = []
             self._collected = 0
+            self.last_error = ""
             self._stream = sd.InputStream(
                 samplerate=self._sample_rate,
                 channels=1,
@@ -231,18 +238,21 @@ class PushToTalkRecorder:
             self._stream.start()
             self._recording = True
             return True
-        except Exception:
+        except Exception as exc:
+            self.last_error = str(exc) or exc.__class__.__name__
             traceback.print_exc()
             return False
 
     def stop(self) -> Any | None:
         """Stop recording and return the raw audio as a numpy array (float32)."""
-        if not self._recording:
+        # Tear the stream down even if the cap-callback already cleared _recording —
+        # otherwise the InputStream (and the OS mic) stays open until process exit.
+        if not self._recording and self._stream is None:
             return None
         self._recording = False
         try:
             import numpy as np
-            if self._stream:
+            if self._stream is not None:
                 self._stream.stop()
                 self._stream.close()
                 self._stream = None
@@ -266,6 +276,12 @@ class PushToTalkRecorder:
         # recording can't grow memory unbounded or capture indefinitely.
         if self._collected >= self._max_samples:
             self._recording = False
+            # Release the mic device too, not just the flag — a forgotten recording
+            # must not leave the InputStream (and the OS mic) hot. CallbackStop halts
+            # the PortAudio stream cleanly; stop() then closes it.
+            if self._stream is not None:
+                import sounddevice as sd
+                raise sd.CallbackStop
             return
         chunk = indata.copy()
         self._buffer.append(chunk)
@@ -312,10 +328,10 @@ class CompanionVoice:
             return ""
         return self.recognizer.transcribe(audio)
 
-    def speak_result(self, text: str) -> None:
+    def speak_result(self, text: str, on_error: Callable[[str], None] | None = None) -> None:
         """Speak the result text via TTS (async, non-blocking)."""
         if not self.tts_available:
             return
         # Speak only the first ~300 chars for brevity
         summary = text.strip()[:300]
-        self.speaker.speak_async(summary)
+        self.speaker.speak_async(summary, on_error=on_error)

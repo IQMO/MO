@@ -1,0 +1,323 @@
+"""IFDEV05 2026-06-23T0136 — Companion/Ghost UX regression tests.
+
+Covers the findings fixed this session (P1 cluster + the full deferred sweep):
+- A1-F1 render-layer redaction          - A2-F1 mic released on auto-stop
+- A1-F2 Guide/Do mode indicator         - A2-F2 auto-stop finishes the capture
+- A1-F3 hot-mic button color            - A2-F3 TTS failure surfaced (not silent)
+- A1-F4 no late GUI queueing post-stop  - A2-F5 mic-start failure reason
+- A1-F5 status ellipsis                 - A2-F6 startup-toggle feedback
+- A1-F6 scrollable (un-clipped) replies - A2-F8 tray tooltip reflects mode
+- A3-F2 blocked-route receipt styling   - A3-F3 history browse position preserved
+The A3-F1 arrow-key fix lives in tests/test_keybindings.py (needs that harness).
+"""
+import sys
+import threading
+import types
+
+import pytest
+
+SECRET = "AKIAIOSFODNN7EXAMPLE"  # redact_sensitive_text -> [redacted-token]
+
+
+def _drain(cs):
+    cs._drain_gui_events({})
+
+
+class _FakeLabel:
+    def __init__(self):
+        self.kwargs = {}
+
+    def config(self, **kwargs):
+        self.kwargs.update(kwargs)
+
+
+class _FakeText:
+    """Stands in for the scrollable response tk.Text widget."""
+    def __init__(self):
+        self.text = ""
+        self.state = None
+        self.seen = None
+
+    def config(self, **kwargs):
+        if "state" in kwargs:
+            self.state = kwargs["state"]
+
+    def delete(self, *_a):
+        self.text = ""
+
+    def insert(self, _idx, s):
+        self.text += s
+
+    def see(self, idx):
+        self.seen = idx
+
+
+# ---------------------------------------------------------------- A1-F1 / A1-F6
+def test_set_response_redacts_and_renders_to_text():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._response = _FakeText()
+    cs._set_response(f"here is the key {SECRET} ok")
+    _drain(cs)
+    assert SECRET not in cs._response.text
+    assert "[redacted-token]" in cs._response.text
+    assert cs._response.state == "disabled"  # left read-only
+    assert cs._response.seen == "1.0"         # finished answer scrolls to top
+
+
+def test_on_assistant_text_redacts_and_follows_tail():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._response = _FakeText()
+    cs._on_assistant_text(f"streaming {SECRET} reply")
+    _drain(cs)
+    assert SECRET not in cs._response.text
+    assert cs._response.seen == "end"  # streaming follows the tail
+
+
+# ---------------------------------------------------------------- A1-F2
+def test_mode_indicator_distinguishes_guide_and_do():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._mode = "guide"
+    g_text, g_color = cs._mode_indicator()
+    cs._mode = "do"
+    d_text, d_color = cs._mode_indicator()
+    assert "Guide" in g_text and "Do" in d_text
+    assert g_color != d_color  # Do uses a distinct alert color (it can actuate)
+
+
+# ---------------------------------------------------------------- A1-F3
+def test_voice_button_color_helper_posts_config():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._voice_btn = _FakeLabel()
+    cs._set_voice_btn_color("#ff4444")
+    _drain(cs)
+    assert cs._voice_btn.kwargs["fg"] == "#ff4444"
+
+
+# ---------------------------------------------------------------- A1-F4
+def test_post_gui_call_refused_after_stop():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    assert cs._post_gui_call(lambda: None) is True
+    cs._stopped = True
+    assert cs._post_gui_call(lambda: None) is False  # no misleading "queued" success
+
+
+# ---------------------------------------------------------------- A1-F5
+def test_set_status_ellipsizes_long_text():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._status_label = _FakeLabel()
+    cs._set_status("x" * 300, "#fff")
+    _drain(cs)
+    text = cs._status_label.kwargs["text"]
+    assert len(text) <= 120 and text.endswith("…")
+
+
+# ---------------------------------------------------------------- A2-F1
+def _fake_sounddevice():
+    mod = types.ModuleType("sounddevice")
+
+    class CallbackStop(Exception):
+        pass
+
+    mod.CallbackStop = CallbackStop
+    return mod
+
+
+def test_recorder_releases_stream_on_autostop(monkeypatch):
+    """A2-F1: hitting the max-seconds cap must release the mic device (CallbackStop),
+    not merely flip the recording flag — otherwise the InputStream stays hot."""
+    from interface.companion.voice import PushToTalkRecorder
+    sd = _fake_sounddevice()
+    monkeypatch.setitem(sys.modules, "sounddevice", sd)
+
+    closed = {"stop": 0, "close": 0}
+
+    class FakeStream:
+        def stop(self):
+            closed["stop"] += 1
+
+        def close(self):
+            closed["close"] += 1
+
+    rec = PushToTalkRecorder(sample_rate=100, max_seconds=1.0)  # cap = 100 samples
+    rec._recording = True
+    rec._stream = FakeStream()
+
+    with pytest.raises(sd.CallbackStop):
+        for _ in range(5):
+            rec._audio_callback([0.0] * 50, 50, None, None)
+    assert rec._recording is False
+
+    rec.stop()  # must tear down even though _recording is already False
+    assert closed["stop"] == 1 and closed["close"] == 1
+    assert rec._stream is None
+
+
+def test_recorder_callback_without_stream_stays_test_safe():
+    from interface.companion.voice import PushToTalkRecorder
+    rec = PushToTalkRecorder(sample_rate=100, max_seconds=1.0)
+    rec._recording = True
+    for _ in range(5):
+        rec._audio_callback([0.0] * 50, 50, None, None)  # _stream is None -> no raise
+    assert sum(len(c) for c in rec._buffer) <= 100
+    assert rec._recording is False
+
+
+# ---------------------------------------------------------------- A2-F2
+def test_poll_voice_autostop_finishes_capture_when_recorder_self_stopped():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._recording_voice = True
+
+    class FakeRec:
+        _recording = False  # recorder hit the cap on its own thread
+
+    class FakeVoice:
+        recorder = FakeRec()
+
+    cs._voice = FakeVoice()
+    finished = []
+    cs._finish_voice_capture = lambda v: finished.append(v)
+    cs._poll_voice_autostop()
+    assert cs._recording_voice is False
+    assert finished == [cs._voice]
+
+
+def test_poll_voice_autostop_noop_while_still_recording():
+    from interface.companion.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._recording_voice = True
+
+    class FakeRec:
+        _recording = True
+
+    class FakeVoice:
+        recorder = FakeRec()
+
+    cs._voice = FakeVoice()
+    finished = []
+    cs._finish_voice_capture = lambda v: finished.append(v)
+    cs._poll_voice_autostop()
+    assert cs._recording_voice is True and finished == []
+
+
+# ---------------------------------------------------------------- A2-F3
+def test_speak_async_invokes_on_error_when_speak_fails():
+    from interface.companion.voice import VoiceSpeaker
+    spk = VoiceSpeaker(voice_model_path="")  # no model -> speak() returns False
+    errors = []
+    done = threading.Event()
+
+    def on_err(reason):
+        errors.append(reason)
+        done.set()
+
+    spk.speak_async("hello", on_error=on_err)
+    assert done.wait(3.0)
+    assert errors and "model" in errors[0].lower()
+
+
+# ---------------------------------------------------------------- A2-F5
+def test_recorder_start_records_last_error_when_backend_missing(monkeypatch):
+    from interface.companion.voice import PushToTalkRecorder
+    rec = PushToTalkRecorder()
+    monkeypatch.setattr(type(rec), "available", property(lambda self: False))
+    assert rec.start() is False
+    assert rec.last_error  # non-empty, human-readable reason
+
+
+# ---------------------------------------------------------------- A2-F6
+def test_toggle_startup_notifies_on_failure(monkeypatch):
+    from interface.companion.tray import CompanionTray
+    t = CompanionTray(None)
+    notes = []
+    t._notify = lambda m: notes.append(m)
+    monkeypatch.setattr(CompanionTray, "_set_startup", staticmethod(lambda enable: False))
+    monkeypatch.setattr(CompanionTray, "_startup_enabled", staticmethod(lambda: False))
+    t._on_toggle_startup(None, None)
+    assert notes and "pywin32" in notes[0]
+
+
+def test_toggle_startup_silent_on_success(monkeypatch):
+    from interface.companion.tray import CompanionTray
+    t = CompanionTray(None)
+    notes = []
+    t._notify = lambda m: notes.append(m)
+    monkeypatch.setattr(CompanionTray, "_set_startup", staticmethod(lambda enable: True))
+    monkeypatch.setattr(CompanionTray, "_startup_enabled", staticmethod(lambda: False))
+    t._on_toggle_startup(None, None)
+    assert notes == []
+
+
+# ---------------------------------------------------------------- A2-F8
+def test_tray_update_title_reflects_mode():
+    from interface.companion.tray import CompanionTray
+    t = CompanionTray(None)
+
+    class FakeIcon:
+        title = "x"
+
+    t._tray = FakeIcon()
+    t._mode = "do"
+    t._update_title()
+    assert "Do" in t._tray.title
+
+
+# ---------------------------------------------------------------- A3-F2
+def test_route_line_style_flags_unavailable_receipt_blocked():
+    from interface.ghost_panel import route_line_style
+    assert route_line_style("class:ghost-response", "MO queue unavailable · queued") \
+        == "class:ghost-route-blocked"
+    assert route_line_style("class:ghost-response", "Worker unavailable") \
+        == "class:ghost-route-blocked"
+    # ordinary prose that merely mentions the word must NOT be restyled
+    assert route_line_style("class:ghost-response", "The service was unavailable yesterday") \
+        == "class:ghost-response"
+
+
+# ---------------------------------------------------------------- A3-F3
+def _bg_harness(monkeypatch):
+    monkeypatch.setattr("interface.ghost_history.append_ghost_audit", lambda *a, **k: None)
+    from interface.ghost_controller import GhostControllerMixin
+    from interface.ghost_history import GhostHistoryMixin
+
+    class H(GhostControllerMixin, GhostHistoryMixin):
+        def __init__(self):
+            self._ghost_history = []
+            self._ghost_history_index = None
+            self._ghost_panel_lines = []
+            self._ghost_panel_open = True
+            self._app = None
+
+    h = H()
+    for i in range(4):
+        h._record_ghost_history("reply", f"q{i}", f"a{i}")
+    return h
+
+
+def test_background_notification_preserves_browse_position(monkeypatch):
+    h = _bg_harness(monkeypatch)
+    h._ghost_history_index = 1  # user paged back to an earlier entry
+    h._ghost_panel_lines = [("class:ghost-user", "q1")]
+    h._record_background_notification("worker done")
+    assert h._ghost_history_index == 1                       # not yanked to latest
+    assert h._ghost_panel_lines == [("class:ghost-user", "q1")]  # panel not overwritten
+
+
+def test_background_notification_updates_panel_when_not_browsing(monkeypatch):
+    h = _bg_harness(monkeypatch)
+    h._ghost_history_index = 3  # at the latest entry -> not browsing
+    h._record_background_notification("worker done")
+    assert h._ghost_panel_lines == [("class:ghost-hint", "worker done")]
