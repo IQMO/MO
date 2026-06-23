@@ -53,3 +53,36 @@ def test_public_docs_describe_multi_instance_model():
         assert "resource-lock" in text or "resource lock" in text
     assert "shared_session: false" in config
     assert "legacy shared `main` session" in config
+
+
+def test_current_docs_do_not_import_retired_root_trace_tools():
+    current_paths = [
+        Path("MAP.md"),
+        Path("docs/README.md"),
+        Path("docs/TRACKING.md"),
+        Path("docs/status/DOCS-CURRENT-STATUS-AUDIT.md"),
+        Path("docs/status/BACKEND-DIAGNOSTICS.md"),
+        Path("docs/deployment/DOCKER-READINESS.md"),
+        Path("docs/taskboard/TASKBOARD-CURRENT-IMPLEMENTATION-REPORT.md"),
+    ]
+
+    for path in current_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "status/TRACE-VALIDATION-COMPLETE" not in text
+        assert "../mo_trace.py" not in text
+        assert "core/mo_trace.py" not in text
+        if "mo_monitor.py" in text:
+            assert "private operator `mo_monitor.py`" in text
+
+
+def test_e2e_mission_records_are_audit_not_current_status():
+    mission_names = [
+        "MISSION_E2E_BEHAVIORAL_COVERAGE.md",
+        "MISSION1_LIVE_CHECKLIST.md",
+        "MISSION_PREMORTEM_FAULT_TOLERANCE.md",
+        "DUMPZONE-MOMENTUM-COMPLETE.md",
+    ]
+
+    for name in mission_names:
+        assert not (Path("docs/status") / name).exists()
+        assert (Path("docs/audit") / name).exists()

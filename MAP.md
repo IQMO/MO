@@ -23,9 +23,9 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Live runtime state (logs, audits) lives under the private state home (`~/.mo` / `MO_HOME` / `MO_STATE_HOME`), NOT the checkout.
 - Multiple terminal instances are allowed: stable `MO_INSTANCE_ID`, default `main-<instance>` session; `runtime.shared_session: true` is the legacy shared-main escape hatch.
 - Singleton surfaces are resource-locked: headless service, Telegram poller, scheduler, Desktop Companion tray/hotkey.
-- `memory/traces/` — live trace artifacts and validator input.
-- `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
-- `memory/structural_graph/` — graph, code map, focused map artifacts.
+- Logical private-state `memory/traces/` — trace artifacts and validator input.
+- Logical private-state `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
+- Logical private-state `memory/structural_graph/` — graph, code map, focused map artifacts.
 - Owner-private session records are gitignored/local only; never tracked or shipped.
 
 ## Verification

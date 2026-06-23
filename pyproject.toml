@@ -12,12 +12,14 @@
 # drowning in style noise. Enforce locally/CI with: `python -m ruff check .`
 line-length = 120
 target-version = "py310"
+cache-dir = "tmp/ruff-cache"
 extend-exclude = ["tmp", "logs", "memory", "docs", "personal"]
 
 [tool.ruff.lint]
 select = ["F", "E9"]  # pyflakes + syntax errors
 
 [tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
 testpaths = ["tests"]
 norecursedirs = ["tmp", ".git", "__pycache__", ".pytest_cache", ".ruff_cache", "logs", "memory", "operator", "docs", "personal"]
 markers = [

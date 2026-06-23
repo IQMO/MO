@@ -7,6 +7,8 @@ from __future__ import annotations
 import os
 import sys
 
+sys.dont_write_bytecode = True
+
 from core.text_safety import configure_utf8_stdio
 
 configure_utf8_stdio()

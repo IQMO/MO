@@ -1,6 +1,10 @@
 import shutil
+import sys
 import pytest
 from pathlib import Path
+
+
+sys.dont_write_bytecode = True
 
 
 # State must live under ~/.mo (or MO_STATE_HOME), NEVER the project checkout.
@@ -10,6 +14,17 @@ from pathlib import Path
 # old silent create-then-remove, which hid the problem) and then clean up so the
 # tree is left tidy. A failing run points straight at the offending writer.
 _WATCHED_STATE_DIRS = ("memory", "logs")
+_GENERATED_CACHE_DIRS = ("__pycache__", ".pytest_cache", ".ruff_cache")
+
+
+def _remove_checkout_generated_caches(root: Path) -> None:
+    for name in _GENERATED_CACHE_DIRS:
+        if name == "__pycache__":
+            targets = [p for p in root.rglob(name) if p.is_dir()]
+        else:
+            targets = [root / name] if (root / name).exists() else []
+        for target in targets:
+            shutil.rmtree(target, ignore_errors=True)
 
 
 def pytest_configure(config):
@@ -61,6 +76,7 @@ def pytest_sessionfinish(session, exitstatus):
         for d in leaked:
             shutil.rmtree(root / d, ignore_errors=True)
         session.exitstatus = 1
+    _remove_checkout_generated_caches(root)
 
 
 def pytest_collection_modifyitems(config, items):
