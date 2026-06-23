@@ -98,7 +98,7 @@ def _devmode05_closeout_evidence_violation(
     the gate owns THAT number instead of re-reading the live monitor, so post-freeze
     closeout-edit errors cannot move the target and loop the gate forever."""
     try:
-        text = _devmode05_terminal_prefix_text(final_text) or ""
+        text = _devmode05_terminal_marker_text(final_text) or ""
         if not text.startswith("[DEVMODE05 COMPLETE]"):
             return None
         # 1. real tool errors must be explicitly owned — not denied, not merely
@@ -143,11 +143,20 @@ def _devmode05_closeout_evidence_violation(
                     economy_summary as _es,
                 )
                 _mp = monitor_path or _amp()
-                _error_tools = [t for t in (_es(_mp, session_ids=session_ids, exclude_surfaces=_GS).get("error_tools") or []) if t]
-                if _error_tools and not any(tool.lower() in final_text.lower() for tool in _error_tools):
+                _error_tools = [
+                    t for t in (_es(_mp, session_ids=session_ids, exclude_surfaces=_GS).get("error_tools") or [])
+                    if t
+                ]
+                ownership_text = _devmode05_tool_error_ownership_text(final_text)
+                missing_tools = [
+                    tool for tool in _error_tools
+                    if tool.lower() not in ownership_text.lower()
+                ]
+                if missing_tools:
                     return (
                         "the error ledger is not monitor-truthful: the monitor records tool error(s) "
-                        f"on {', '.join(_error_tools)}, but the closeout names none of them. Report each "
+                        f"on {', '.join(_error_tools)}, but the closeout does not name "
+                        f"{', '.join(missing_tools)}. Report each "
                         "erroring tool by its real name from economy/monitor evidence."
                     )
             except Exception:
@@ -618,6 +627,47 @@ def _devmode05_terminal_prefix_text(final_text: str) -> str:
     if heading:
         text = text[heading.start(1):]
     return text
+
+
+def _devmode05_terminal_marker_text(final_text: str) -> str:
+    """Return text starting at a DEVMODE05/VS05 marker even in persisted summaries.
+
+    Provider final answers normally start with the marker. Session summaries often place
+    the marker near the closeout section after headings and evidence, so prefix-only
+    normalization would skip the closeout evidence checks when validating artifacts.
+    """
+    text = _devmode05_terminal_prefix_text(final_text)
+    if text.startswith(("[DEVMODE05 COMPLETE]", "[DEVMODE05 BLOCKED]", "[VS05 COMPLETE]", "[VS05 BLOCKED]")):
+        return text
+    raw = str(final_text or "")
+    marker = re.search(r"(?is)\[(?:DEVMODE05|VS05)\s+(?:COMPLETE|BLOCKED)\]", raw)
+    if not marker:
+        return text
+    return raw[marker.start():]
+
+
+def _devmode05_tool_error_ownership_text(final_text: str) -> str:
+    """Extract the text that is allowed to satisfy tool-error attribution.
+
+    A real tool name appearing elsewhere in a long report (for example in a passing test
+    list) must not accidentally satisfy the tool-error ledger. Prefer the explicit
+    Tool Error Ledger section when present, plus the terminal closeout line.
+    """
+    raw = str(final_text or "")
+    sections: list[str] = []
+    ledger = re.search(
+        r"(?ims)^#{1,6}\s*Tool Error Ledger\s*$"
+        r"(?P<body>.*?)(?=^#{1,6}\s|\Z)",
+        raw,
+    )
+    if ledger:
+        sections.append(ledger.group("body"))
+    marker_text = _devmode05_terminal_marker_text(raw)
+    if marker_text:
+        sections.append(marker_text[:1200])
+    if not sections:
+        sections.append(raw[:1600])
+    return "\n".join(sections)
 
 
 def _strip_leading_markdown_prefix(text: str) -> str:

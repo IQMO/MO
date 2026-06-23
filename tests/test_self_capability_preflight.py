@@ -410,6 +410,70 @@ def test_closeout_blocks_mis_attributed_error_ledger(tmp_path):
     assert scp._devmode05_closeout_evidence_violation(right, monitor_path=str(mon), session_ids={"s1"}) is None
 
 
+def test_closeout_blocks_t2206_summary_shape_wrong_error_tools_and_stale_matrix(tmp_path):
+    """T2206 regression: the persisted summary marker appears late, the error ledger
+    blamed read_file, and the matrix marked a deleted source path EXISTING/ACTIVE."""
+    import json
+    import core.self_maintenance.devmode_closeout as scp
+
+    mon = tmp_path / "backend_monitor-20260623-220617-test.jsonl"
+    mon.write_text(
+        "\n".join([
+            json.dumps({"type": "tool_result", "payload": {"tool": "test_runner", "error": True, "route_source": "user", "session_id": "s1"}}),
+            json.dumps({"type": "tool_result", "payload": {"tool": "test_runner", "error": True, "route_source": "user", "session_id": "s1"}}),
+            json.dumps({"type": "tool_result", "payload": {"tool": "edit_file", "error": True, "route_source": "user", "session_id": "s1"}}),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    sd = tmp_path / "2026-06-23T2206"
+    sd.mkdir()
+    for n in ("summary.md", "economy.md", "manifest.json"):
+        (sd / n).write_text("x", encoding="utf-8")
+    (sd / "capability-matrix.md").write_text(
+        "| 23 | preflight | core/this_does_not_exist_zzz.py | EXISTING/ACTIVE | ENHANCED |\n",
+        encoding="utf-8",
+    )
+    summary = """# DEVMODE05 Session Summary
+
+## Tool Error Ledger
+| # | Tool | Root Cause | Recovery |
+| 1 | read_file | Missing path | Self-corrected |
+| 2 | read_file | Missing path | Self-corrected |
+
+## Tests
+The test_runner docs and examples were reviewed outside the error ledger.
+
+- **[DEVMODE05 COMPLETE]** — 2 tool errors, both read_file, recovered.
+"""
+
+    v = scp._devmode05_closeout_evidence_violation(
+        summary, monitor_path=str(mon), session_ids={"s1"}, frozen_error_count=2, session_dir=sd
+    )
+    assert v is not None
+    assert "test_runner" in v
+    assert "edit_file" in v
+
+
+def test_closeout_blocks_late_marker_stale_matrix_even_without_tool_errors(tmp_path):
+    """Artifact validation must still run when the COMPLETE marker is in a closeout
+    section instead of at the very beginning of the persisted summary."""
+    import core.self_maintenance.devmode_closeout as scp
+
+    sd = tmp_path / "2026-06-23T2206"
+    sd.mkdir()
+    for n in ("summary.md", "economy.md", "manifest.json"):
+        (sd / n).write_text("x", encoding="utf-8")
+    (sd / "capability-matrix.md").write_text(
+        "| 23 | preflight | core/this_does_not_exist_zzz.py | EXISTING/ACTIVE | ENHANCED |\n",
+        encoding="utf-8",
+    )
+    summary = "# DEVMODE05 Session Summary\n\n## Closeout\n- **[DEVMODE05 COMPLETE]** — clean.\n"
+
+    v = scp._devmode05_closeout_evidence_violation(summary, frozen_error_count=0, session_dir=sd)
+    assert v is not None
+    assert "core/this_does_not_exist_zzz.py" in v
+
+
 def test_devmode05_operator_owned_deferred_is_valid_terminal(tmp_path, monkeypatch):
     """External-watcher governance fix (2026-06-23): a DEVMODE05 closeout may report
     OPERATOR-OWNED remainders (operator-decision pending / supervised fix-lane / recorded
