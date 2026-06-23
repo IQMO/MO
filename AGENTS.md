@@ -37,6 +37,7 @@ These are hard rules. They exist because the opposite behavior has repeatedly wa
 - `docs/` — design docs, proposals
 - `tmp/` — temporary artifacts only
 - Planning artifacts must use MO-native locations: durable maintainer plans go under `docs/proposals/`, scratch goes under `tmp/`, and runtime/private session state goes through `core.path_defaults.resolve_state_path()`. Do not create third-party orchestration folders in this checkout just because an external Codex skill suggests them.
+- **Light startup is a standing rule.** Every terminal MO instance is its own process, so keep the agent import path lean: do not import a heavy SDK (e.g. `openai`, `httpx`) at module top in `core/provider/` or anything on the `core.agent.agent` import chain. Defer them to first use behind a small loader (`provider._ensure_openai()` / `provider._httpx()`); the cost is then amortized into the first network call. Importing `core.agent.agent` should stay near ~0.3s / ~300 modules — re-check with `python -X importtime` before adding a top-level dependency import.
 
 ## MO Runtime Truth
 - `core/prompts/system.md` — authoritative MO runtime behavior prompt.
