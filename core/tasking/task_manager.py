@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_json
+
 
 class TaskManager:
     """Persist current task board state as a single JSON file.
@@ -67,10 +69,7 @@ class TaskManager:
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
         # Atomic write: a crash or a concurrent surface mid-write must not leave a
         # truncated/half-written current.json that breaks board resume.
-        payload = json.dumps(self._data, indent=2, ensure_ascii=False)
-        tmp = self.current_file.with_name(self.current_file.name + ".tmp")
-        tmp.write_text(payload, encoding="utf-8")
-        tmp.replace(self.current_file)
+        atomic_write_json(self.current_file, self._data, indent=2, ensure_ascii=False)
 
     def clear(self) -> None:
         """Archive the current session then remove current.json."""
@@ -89,10 +88,7 @@ class TaskManager:
         ts = datetime.now().strftime("%Y%m%dT%H%M%S")
         archive_path = archive_dir / f"session_{ts}.json"
         try:
-            archive_path.write_text(
-                json.dumps(self._data, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            atomic_write_json(archive_path, self._data, indent=2, ensure_ascii=False)
         except OSError:
             pass
 

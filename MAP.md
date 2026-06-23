@@ -4,8 +4,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 
 ## Runtime Truth
 - `core/prompts/system.md` — MO runtime behavior prompt.
-- `core/self_capability_preflight.py` — preflight and stop gates for owner-only
-  self-maintenance work (inert unless the owner's private pack is present).
+- `core/self_capability_preflight.py` — owner-only self-maintenance preflight/stop gates; inert without the private pack.
 
 ## Core Surfaces
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).
@@ -18,24 +17,21 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `core/session/` — session, closeout, momentum.
 - `core/provider/` — providers, audit, capacity.
 - `core/ghost/` — ghost side-check routing, context, audit.
-- `core/mcp/` — MCP client + manager (operator-configured local tool servers, off by default).
+- `core/mcp/` — MCP client + manager (enabled by default, inert until servers are listed).
 
 ## Runtime State
-- Live runtime state (logs, audits) lives under the private state home
-  (`~/.mo` / `MO_HOME` / `MO_STATE_HOME`), NOT under the checkout. A `logs/`
-  dir in the checkout is only dev-run residue and is gitignored.
+- Live runtime state (logs, audits) lives under the private state home (`~/.mo` / `MO_HOME` / `MO_STATE_HOME`), NOT the checkout.
+- Multiple terminal instances are allowed: stable `MO_INSTANCE_ID`, default `main-<instance>` session; `runtime.shared_session: true` is the legacy shared-main escape hatch.
+- Singleton surfaces are resource-locked: headless service, Telegram poller, scheduler, Desktop Companion tray/hotkey.
 - `memory/traces/` — live trace artifacts and validator input.
 - `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
 - `memory/structural_graph/` — graph, code map, focused map artifacts.
-- Owner-private session records are gitignored and exist only in the owner's
-  local checkout (never tracked, never shipped).
+- Owner-private session records are gitignored/local only; never tracked or shipped.
 
 ## Verification
 - Focused tests first: `python -m pytest tests/<target>.py -q`.
-- Tiered sweeps: `-m smoke` (~156 tests, seconds), `-m "smoke or unit"`
-  (~1,060 tests, <1 min) — auto-tiered by conftest.
-- Broad Python suite when behavior changes: `python -m pytest -q`
-  (full suite needs a shell timeout of 300s+).
+- Tiered sweeps: `-m smoke` (~156 tests) or `-m "smoke or unit"` (~1,060 tests) — auto-tiered by conftest.
+- Broad Python suite when behavior changes: `python -m pytest -q` (use a shell timeout of 300s+).
 - Do not use Node tooling; this is a Python project.
 
 ## Working Rules

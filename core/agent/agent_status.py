@@ -22,6 +22,7 @@ class AgentStatusCommands:
         lines = [
             f"MO status{name_part}:",
             f"  model:      {self.provider_name} / {self.model}",
+            f"  instance:   {getattr(self, 'instance_id', 'unknown')}",
             f"  session id: {self.session.session_id}",
             f"  turns:      {self.session.turn_count}",
             f"  workspace:  {self._active_lane or 'default (read/write)'}",

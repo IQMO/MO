@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from ..atomic_write import atomic_write_json
 from ..consistency_boundary import check_consistency_boundary, emit_consistency_boundary
 from ..coordination_state import active_conflicts_for_text
 from ..env_utils import int_env
@@ -774,7 +775,7 @@ class GoalRunner:
             root = Path(resolve_state_path("memory/goal-runs", getattr(self.agent, "config", {}) if self.agent is not None else None))
             root.mkdir(parents=True, exist_ok=True)
             path = root / f"{plan.run_id}.json"
-            path.write_text(json.dumps(plan.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+            atomic_write_json(path, plan.as_dict(), indent=2, ensure_ascii=False)
             _prune_goal_runs(root)
         except Exception:
             traceback.print_exc()

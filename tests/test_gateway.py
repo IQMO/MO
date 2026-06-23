@@ -1,6 +1,7 @@
 """Tests for core/gateway.py — turn coordinator and taskboard lifecycle owner."""
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 
@@ -98,6 +99,21 @@ class TestGatewayRunTurn:
         gw, agent, _ = make_gateway()
         result = gw.run_turn("test input")
         assert isinstance(result, str)
+
+    def test_run_turn_monitor_uses_real_surface_and_instance(self, tmp_path):
+        agent = FakeAgent()
+        agent.instance_id = "inst-test"
+        monitor = BackendMonitor(tmp_path / "monitor.jsonl")
+        gw = Gateway(agent, monitor=monitor)
+
+        gw.run_turn("desktop request", route_source="companion")
+
+        events = [json.loads(line) for line in monitor.path.read_text(encoding="utf-8").splitlines()]
+        turn_start = next(event for event in events if event["type"] == "turn_start")
+        payload = turn_start["payload"]
+        assert payload["route_source"] == "companion"
+        assert payload["surface"] == "desktop"
+        assert payload["instance_id"] == "inst-test"
 
     def test_run_turn_calls_agent(self):
         gw, agent, _ = make_gateway()

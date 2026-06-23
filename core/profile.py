@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from .atomic_write import atomic_write_json, atomic_write_text
 from .env_utils import int_env
 from .text_utils import cap_by_tokens, token_aware_truncation_enabled
 
@@ -136,7 +137,7 @@ class Profile:
         p = Path(self._path)
         p.parent.mkdir(parents=True, exist_ok=True)
         self.last_active = time.time()
-        p.write_text(json.dumps(self._to_raw(), indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(p, self._to_raw(), indent=2, ensure_ascii=False)
 
     def _to_raw(self) -> dict:
         projects_raw = {}
@@ -219,7 +220,7 @@ class Profile:
         for fname, template in TEMPLATE_FILES.items():
             path = pdir / fname
             if not path.exists():
-                path.write_text(template.format(operator_name=name).strip() + "\n", encoding="utf-8")
+                atomic_write_text(path, template.format(operator_name=name).strip() + "\n", encoding="utf-8")
 
     def sync_operator_profile_files(self) -> None:
         """Update generated operator identity lines without overwriting custom profile notes."""
@@ -239,7 +240,7 @@ class Profile:
                 updated = re.sub(r"(?m)^- \*\*Name:\*\*\s*.*$", f"- **Name:** {name}", updated, count=1)
             else:
                 updated = updated.replace(lines[0], lines[0] + f"\n\n- **Name:** {name}", 1) if lines else f"# Operator Profile — {name}\n\n- **Name:** {name}"
-            operator_path.write_text(updated.rstrip() + "\n", encoding="utf-8")
+            atomic_write_text(operator_path, updated.rstrip() + "\n", encoding="utf-8")
         except Exception:
             traceback.print_exc()
 
@@ -248,7 +249,7 @@ class Profile:
             lines = text.splitlines()
             if lines and re.match(r"^# .*Thinking Model$", lines[0]):
                 lines[0] = f"# {name} Thinking Model"
-                thinking_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+                atomic_write_text(thinking_path, "\n".join(lines).rstrip() + "\n", encoding="utf-8")
         except Exception:
             traceback.print_exc()
 
@@ -499,7 +500,7 @@ def _prune_profile_learning(path: Path) -> None:
             return
         prefix = text[:matches[0].start()].rstrip()
         body = text[matches[-max_entries].start():].strip()
-        path.write_text(f"{prefix}\n\n{body}\n", encoding="utf-8")
+        atomic_write_text(path, f"{prefix}\n\n{body}\n", encoding="utf-8")
     except Exception:
         return
 
@@ -514,7 +515,7 @@ def _prune_behavior_learning(path: Path) -> None:
         if len(rules) <= max_entries:
             return
         kept = [line for line in lines if not line.startswith("- [")] + rules[-max_entries:]
-        path.write_text("\n".join(kept).rstrip() + "\n", encoding="utf-8")
+        atomic_write_text(path, "\n".join(kept).rstrip() + "\n", encoding="utf-8")
     except Exception:
         return
 
@@ -583,7 +584,7 @@ def _append_behavior_learning(path: Path, entries: list[tuple[str, str, str, str
         updated += f"\n- [{category}] {clean} <!-- insight:{fp} -->"
         changed = True
     if changed:
-        path.write_text(updated.rstrip() + "\n", encoding="utf-8")
+        atomic_write_text(path, updated.rstrip() + "\n", encoding="utf-8")
         _prune_behavior_learning(path)
 
 

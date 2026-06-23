@@ -54,11 +54,15 @@ def test_headless_service_starts_surfaces_and_stops_without_tui(monkeypatch):
 
 def test_mo_service_entrypoint_uses_runtime_lock(monkeypatch):
     calls = []
-    monkeypatch.setattr(mo_service, "acquire_runtime_lock", lambda label: calls.append(("lock", label)) or object())
+    monkeypatch.setattr(
+        mo_service,
+        "acquire_runtime_lock",
+        lambda **kwargs: calls.append(("lock", kwargs)) or object(),
+    )
     monkeypatch.setattr(mo_service, "service_main", lambda: calls.append(("service",)) or 0)
 
     assert mo_service.main() == 0
-    assert calls == [("lock", "MO Agent service"), ("service",)]
+    assert calls == [("lock", {"lock_name": "mo-service.lock", "label": "MO Agent service"}), ("service",)]
 
 
 def test_runtime_lock_blocks_legacy_live_lock(tmp_path, monkeypatch):

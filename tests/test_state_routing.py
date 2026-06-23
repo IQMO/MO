@@ -75,5 +75,38 @@ def test_resolve_state_path_never_returns_cwd_memory():
             f"resolve_state_path({rel!r}) -> {resolved} points into the checkout"
 
 
+def test_async_structural_graph_refresh_keeps_admitted_state_home(tmp_path, monkeypatch):
+    """A background graph refresh can outlive temporary env changes; it must use
+    the state home active when the refresh was admitted, not whatever env exists
+    when the thread body finally runs."""
+    import core.graph.structural_graph as sg
+
+    admitted_home = _state_home()
+    later_home = tmp_path / "later-home"
+    calls = []
+
+    monkeypatch.setattr(sg, "graph_exists", lambda _root: True)
+    monkeypatch.setattr(sg, "_refresh_command", lambda _root: [])
+
+    def fake_build(_root, *, config=None, **_kwargs):
+        calls.append(config)
+        return {"built": True, "path": str(tmp_path / "graph.json")}
+
+    class FakeThread:
+        def __init__(self, *, target, name, daemon):
+            self.target = target
+
+        def start(self):
+            monkeypatch.setenv("MO_STATE_HOME", str(later_home))
+            self.target()
+
+    monkeypatch.setattr(sg, "build_structural_graph", fake_build)
+    monkeypatch.setattr(sg.threading, "Thread", FakeThread)
+
+    assert sg.maybe_update_graph_async(root=tmp_path, reason="test") is True
+    assert calls
+    assert Path(calls[0]["runtime"]["home"]).resolve() == admitted_home
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

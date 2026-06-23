@@ -21,10 +21,17 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from ..atomic_write import atomic_write_json, atomic_write_text
 from ..backend_monitor import get_monitor, redact_monitor_text
 from ..env_utils import int_env
 from ..number_utils import as_optional_int as _as_int
-from ..path_defaults import private_state_enabled, project_cache_dir
+from ..path_defaults import (
+    ENV_MO_HOME,
+    ENV_MO_STATE_HOME,
+    ENV_MO_STATE_LOCAL,
+    private_state_enabled,
+    project_cache_dir,
+)
 from ..text_utils import DEFAULT_CONTEXT_STOPWORDS
 
 STRUCTURAL_GRAPH_DIR = Path("memory") / "structural_graph"
@@ -75,12 +82,12 @@ def project_root(cwd: str | Path | None = None) -> Path:
     return path
 
 
-def native_graph_path(root: str | Path | None = None) -> Path:
+def native_graph_path(root: str | Path | None = None, *, config: dict[str, Any] | None = None) -> Path:
     root_path = project_root(root)
     # Private-by-default: the native graph cache lives under ~/.mo/cache, never the
     # project tree — unless the user explicitly opted into project-local state.
-    if private_state_enabled():
-        return project_cache_dir("structural_graph", root_path) / STRUCTURAL_GRAPH_FILE
+    if private_state_enabled(config):
+        return project_cache_dir("structural_graph", root_path, config=config) / STRUCTURAL_GRAPH_FILE
     return root_path / STRUCTURAL_GRAPH_DIR / STRUCTURAL_GRAPH_FILE
 
 
@@ -88,9 +95,9 @@ def compatibility_graph_path(root: str | Path | None = None) -> Path:
     return project_root(root) / COMPAT_STRUCTURAL_GRAPH_DIR / STRUCTURAL_GRAPH_FILE
 
 
-def graph_path(root: str | Path | None = None) -> Path:
+def graph_path(root: str | Path | None = None, *, config: dict[str, Any] | None = None) -> Path:
     root_path = project_root(root)
-    native = native_graph_path(root_path)
+    native = native_graph_path(root_path, config=config)
     if native.is_file():
         return native
     compat = compatibility_graph_path(root_path)
@@ -261,7 +268,7 @@ def build_focused_map(
     files = _focused_files(data, board_summary, query=query)
     out_path = Path(output) if output else focused_map_path
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(_render_focused_map(status, board_summary, files, query=query), encoding="utf-8")
+    atomic_write_text(out_path, _render_focused_map(status, board_summary, files, query=query), encoding="utf-8")
     return {
         "built": True,
         "path": str(out_path),
@@ -273,7 +280,12 @@ def build_focused_map(
     }
 
 
-def build_structural_graph(root: str | Path | None = None, *, max_files: int | None = None) -> dict[str, Any]:
+def build_structural_graph(
+    root: str | Path | None = None,
+    *,
+    max_files: int | None = None,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build or incrementally refresh MO's native community code map."""
     if not structural_graph_enabled():
         return {"built": False, "reason": "disabled"}
@@ -283,12 +295,12 @@ def build_structural_graph(root: str | Path | None = None, *, max_files: int | N
 
         files = [path for path in private_map._discover_files(root_path) if not _is_structural_graph_artifact(path)]
         if not files:
-            return {"built": False, "reason": "no indexable files", "path": str(native_graph_path(root_path))}
+            return {"built": False, "reason": "no indexable files", "path": str(native_graph_path(root_path, config=config))}
         limit = int(max_files or getattr(private_map, "_max_files", lambda: getattr(private_map, "DEFAULT_MAX_FILES", 350))() or 350)
         if len(files) > limit:
-            return {"built": False, "reason": f"project has {len(files)} indexable files; limit is {limit}", "path": str(native_graph_path(root_path)), "files": len(files)}
+            return {"built": False, "reason": f"project has {len(files)} indexable files; limit is {limit}", "path": str(native_graph_path(root_path, config=config)), "files": len(files)}
         fingerprints = private_map._fingerprints(root_path, files)
-        graph_path_private = private_map._graph_path(root_path)
+        graph_path_private = private_map._graph_path(root_path, config=config)
         private_graph = private_map._load_graph(graph_path_private)
         stale = private_map._stale_files(private_graph, fingerprints)
         delta_limit = int_env("MO_STRUCTURAL_GRAPH_DELTA_LIMIT", SMALL_STALE_UPDATE_LIMIT)
@@ -301,15 +313,15 @@ def build_structural_graph(root: str | Path | None = None, *, max_files: int | N
             private_graph = private_map._build_graph(root_path, files, fingerprints)
             private_map._save_graph(graph_path_private, private_graph)
         graph = _structural_graph_from_private_map(private_graph, root_path, fingerprints)
-        path = native_graph_path(root_path)
+        path = native_graph_path(root_path, config=config)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(path, graph, indent=2, ensure_ascii=False)
         _write_native_sidecars(path, graph)
         _maybe_generate_code_map(path)
         _emit(status, root=root_path, file_count=len(files))
         return {"built": True, "status": status, "path": str(path), "nodes": len(graph.get("nodes", [])), "edges": len(_edge_list(graph)), "files": len(files), "stale_files": len(stale)}
     except Exception as exc:
-        return {"built": False, "reason": f"{type(exc).__name__}: {exc}", "path": str(native_graph_path(root_path))}
+        return {"built": False, "reason": f"{type(exc).__name__}: {exc}", "path": str(native_graph_path(root_path, config=config))}
 
 
 def select_context(
@@ -651,6 +663,7 @@ def maybe_update_graph_async(
     if str(os.environ.get("MO_STRUCTURAL_GRAPH_AUTO_UPDATE", "1")).strip().lower() in {"0", "false", "off", "no"}:
         return False
     root_path = project_root(root)
+    state_config = _state_config_snapshot()
     if not graph_exists(root_path) and not auto_build_enabled():
         return False
     command = _refresh_command(root_path)
@@ -671,7 +684,7 @@ def maybe_update_graph_async(
                 ok = proc.returncode == 0
                 detail = (proc.stderr or proc.stdout or reason)[:500]
             else:
-                result = build_structural_graph(root_path)
+                result = build_structural_graph(root_path, config=state_config)
                 ok = bool(result.get("built"))
                 detail = str(result.get("reason") or result.get("path") or reason)[:500]
             status = "structural_graph_update_ok" if ok else "structural_graph_update_failed"
@@ -690,6 +703,23 @@ def maybe_update_graph_async(
 
     threading.Thread(target=worker, name="mo-structural-graph-update", daemon=True).start()
     return True
+
+
+def _state_config_snapshot() -> dict[str, Any] | None:
+    """Capture state-home env for work that may run after env restoration.
+
+    Pytest and embedded runtimes can temporarily set ``MO_STATE_HOME``. A
+    background graph worker can outlive that temporary env and otherwise drift
+    back to the real default home. Passing this config through path helpers keeps
+    the worker on the state surface active when it was admitted.
+    """
+    local = str(os.environ.get(ENV_MO_STATE_LOCAL, "")).strip().lower()
+    if local in {"1", "true", "yes", "on"}:
+        return {"runtime": {"state": "project"}}
+    home = os.environ.get(ENV_MO_HOME) or os.environ.get(ENV_MO_STATE_HOME)
+    if home:
+        return {"runtime": {"home": home, "state": "private"}}
+    return None
 
 
 def _refresh_command(root_path: Path) -> list[str]:
@@ -817,12 +847,14 @@ def _write_native_sidecars(path: Path, graph: dict[str, Any]) -> None:
             source = _norm_path(node.get("source_file"))
             if cid is not None and cid not in labels:
                 labels[cid] = _community_key(source).replace("_", " ").title()
-        (path.parent / ".structural_labels.json").write_text(
-            json.dumps({str(k): v for k, v in sorted(labels.items())}, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        atomic_write_json(
+            path.parent / ".structural_labels.json",
+            {str(k): v for k, v in sorted(labels.items())},
+            indent=2,
+            ensure_ascii=False,
         )
         analysis = _native_analysis(graph)
-        (path.parent / ".structural_analysis.json").write_text(json.dumps(analysis, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(path.parent / ".structural_analysis.json", analysis, indent=2, ensure_ascii=False)
     except Exception:
         traceback.print_exc()
 

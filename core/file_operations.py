@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .atomic_write import atomic_write_text
 from .path_defaults import resolve_state_path
 
 FILE_OPS_PATH = Path("memory/file_operations.jsonl")
@@ -147,7 +148,7 @@ def _prune_file_ops(path: Path) -> None:
     try:
         lines = [line for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
         if len(lines) > MAX_KEEP:
-            path.write_text("\n".join(lines[-MAX_KEEP:]) + "\n", encoding="utf-8")
+            atomic_write_text(path, "\n".join(lines[-MAX_KEEP:]) + "\n", encoding="utf-8")
     except Exception:
         return
 

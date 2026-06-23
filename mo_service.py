@@ -25,7 +25,7 @@ from core.service import main as service_main
 
 
 def main() -> int:
-    if not acquire_runtime_lock(label="MO Agent service"):
+    if not acquire_runtime_lock(lock_name="mo-service.lock", label="MO Agent service"):
         return 1
     return service_main()
 

@@ -17,7 +17,7 @@ def test_root_map_stays_compact_and_points_to_authoritative_surfaces():
 
 
 def test_boundary_docs_do_not_advertise_old_nested_operator_layout():
-    stale = "gitignored `operator/` + `docs/` + `~/.mo`"
+    stale = "gitignored " + "`operator/`" + " + `docs/` + `~/.mo`"
     for path in (Path("MAP.md"), Path("CLAUDE.md")):
         text = path.read_text(encoding="utf-8")
         assert stale not in text
@@ -33,3 +33,17 @@ def test_companion_voice_docs_separate_capture_from_transcription():
     assert "transcription requires faster-whisper" in config
     assert "microphone capture uses" in readme
     assert "transcription requires `faster-whisper`" in readme
+
+
+def test_public_docs_describe_multi_instance_model():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    map_text = Path("MAP.md").read_text(encoding="utf-8")
+    agents = Path("AGENTS.md").read_text(encoding="utf-8")
+    config = Path("config.example.yaml").read_text(encoding="utf-8")
+
+    for text in (readme, map_text, agents):
+        assert "MO_INSTANCE_ID" in text
+        assert "main-<instance>" in text
+        assert "resource-lock" in text or "resource lock" in text
+    assert "shared_session: false" in config
+    assert "legacy shared `main` session" in config

@@ -191,7 +191,7 @@ def build_prd_context() -> str:
         "Interaction: " + _join(PRD_ALIGNMENT_PROTOCOL) + ".",
         "Schema: " + _join(PRD_SCHEMA) + ".",
         "MO alignment: keep the smallest complete high-quality slice; preserve freeform operator wording; map acceptance criteria to verifiable checks only when execution starts.",
-        "Boundaries: no public /skill surface, no marketplace install (operator-configured local MCP servers ARE allowed — off by default, sandbox-gated), no fake taskboard progress, no pretending assumptions are evidence.",
+        "Boundaries: no public /skill surface, no marketplace install (operator-configured local MCP servers ARE allowed — inert until configured, sandbox-gated), no fake taskboard progress, no pretending assumptions are evidence.",
         "Taskboard truth still comes from Gateway/tool/runtime evidence, not the PRD text.",
     ]
     return "\n".join(lines)

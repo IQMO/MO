@@ -705,12 +705,24 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             if devmode05_active:
                 self._write_devmode_economy_record()
 
-            if not devmode05_final_allows_stop(user_input, content):
+            devmode_monitor_path = getattr(monitor, "path", None) if monitor is not None else None
+            devmode_run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            if not devmode05_final_allows_stop(
+                user_input,
+                content,
+                monitor_path=devmode_monitor_path,
+                session_ids=devmode_run_ids or None,
+            ):
                 if protocol_stop_gate_continuations.get("devmode05", 0) < PROTOCOL_STOP_GATE_MAX:
                     protocol_stop_gate_continuations["devmode05"] = protocol_stop_gate_continuations.get("devmode05", 0) + 1
                     if on_activity:
                         on_activity("continuing DEVMODE05...")
-                    self.session.add_assistant(devmode05_continuation_instruction(user_input, content))
+                    self.session.add_assistant(devmode05_continuation_instruction(
+                        user_input,
+                        content,
+                        monitor_path=devmode_monitor_path,
+                        session_ids=devmode_run_ids or None,
+                    ))
                     continue
                 if on_activity:
                     on_activity("DEVMODE05 stop-gate disagreement — allowing stop after cap")

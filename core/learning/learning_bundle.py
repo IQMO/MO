@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_json, atomic_write_text
 from ..text_safety import contains_secret_value
 
 BUNDLE_VERSION = "mo-learning-bundle-v1"
@@ -58,7 +59,7 @@ def export_learning_bundle(profile: Any, *, path: str | Path | None = None) -> d
     stamp = datetime.now().strftime("%Y-%m-%dT%H%M")
     out = Path(path) if path else memory / "exports" / f"mo-learning-bundle-{stamp}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(out, bundle, ensure_ascii=False, indent=2)
     return {
         "exported": True,
         "path": str(out),
@@ -117,7 +118,7 @@ def import_learning_bundle(profile: Any, path: str | Path, *, confirm: bool = Fa
     if profile_files:
         review_dir.mkdir(parents=True, exist_ok=True)
         for name, content in profile_files.items():
-            (review_dir / name).write_text(str(content), encoding="utf-8")
+            atomic_write_text(review_dir / name, str(content), encoding="utf-8")
     plan.update({"imported": True, "dry_run": False, "review_dir": str(review_dir) if profile_files else ""})
     return plan
 

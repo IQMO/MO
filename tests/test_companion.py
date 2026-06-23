@@ -239,6 +239,7 @@ def test_start_companion_passes_companion_config(monkeypatch):
             return True
 
     monkeypatch.setattr(companion_module, "CompanionSurface", DummyCompanion)
+    monkeypatch.setattr(companion_module, "acquire_runtime_lock", lambda **_kwargs: object())
     agent = type("Agent", (), {
         "config": {
             "desktop_companion": {

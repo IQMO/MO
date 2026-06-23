@@ -17,6 +17,7 @@ import time
 import traceback
 from typing import Any, Callable
 
+from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
 from core.sandbox import redact_sensitive_text
 from interface.companion.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
 from interface.companion.tray import CompanionTray, start_tray_if_enabled
@@ -128,6 +129,8 @@ class CompanionSurface:
             self._tray.stop()
         if not self._post_gui_event("<<CompanionStop>>"):
             self._running = False
+        release_runtime_lock(getattr(self, "_runtime_lock", None))
+        self._runtime_lock = None
 
     # ------------------------------------------------------------------
     # Public control
@@ -824,6 +827,10 @@ def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | N
     if not isinstance(companion_cfg, dict) or not companion_cfg.get("enabled", False):
         return None
 
+    resource_lock = acquire_runtime_lock(lock_name="mo-companion.lock", label="MO Companion")
+    if resource_lock is None:
+        return None
+
     try:
         companion = CompanionSurface(
             agent,
@@ -831,8 +838,11 @@ def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | N
             voice_config=companion_cfg.get("voice", {}),
             companion_config=companion_cfg,
         )
+        companion._runtime_lock = resource_lock
         if companion.start():
             return companion
+        release_runtime_lock(resource_lock)
     except Exception:
+        release_runtime_lock(resource_lock)
         traceback.print_exc()
     return None

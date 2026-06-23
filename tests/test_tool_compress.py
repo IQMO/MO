@@ -388,6 +388,7 @@ def test_status_includes_mo_operational_runtime_rows():
     agent.profile = type("Profile", (), {"user_name": "", "user_alias": "", "total_sessions": 0, "total_turns": 0})()
     agent.provider_name = "test"
     agent.model = "test-model"
+    agent.instance_id = "inst-test"
     agent.session = type("Session", (), {
         "session_id": "s1", "turn_count": 0, "messages": [], "max_history": 50,
         "created_at": 0, "trimmed_messages_count": 0,
@@ -406,6 +407,7 @@ def test_status_includes_mo_operational_runtime_rows():
 
     assert "Runtime:" in result
     assert "model:      test / test-model" in result
+    assert "instance:   inst-test" in result
     assert "session id: s1" in result
     assert "session:    s1" not in result
     assert "heartbeat:" in result

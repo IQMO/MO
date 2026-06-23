@@ -369,6 +369,25 @@ def test_economy_summary_excludes_ghost_and_groups_handoff_segments(tmp_path):
     assert seg["provider_requests"] == 1 and seg["tool_calls"] == 1
 
 
+def test_economy_summary_excludes_events_by_surface_when_route_source_missing(tmp_path):
+    """Some monitor events are surface-tagged but not route_source-tagged; those still
+    must be excluded from a Main-MO run's economy."""
+    from core.backend_monitor import GHOST_SURFACES, economy_summary
+    mon = tmp_path / "backend_monitor-surface.jsonl"
+    rows = [
+        {"type": "provider_request", "payload": {"session_id": "mo-1", "surface": "terminal"}},
+        {"type": "tool_call", "payload": {"session_id": "mo-1", "surface": "desktop"}},
+        {"type": "tool_result", "payload": {"session_id": "mo-1", "surface": "desktop", "error": True}},
+    ]
+    mon.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+
+    scoped = economy_summary(mon, session_ids={"mo-1"}, exclude_surfaces=GHOST_SURFACES)
+
+    assert scoped["provider_requests"] == 1
+    assert scoped["tool_calls"] == 0
+    assert scoped["tool_errors"] == 0
+
+
 def test_devmode_closeout_writes_authoritative_economy(tmp_path, monkeypatch):
     """The runtime writes economy.md to the active session dir at closeout — the
     model never authors economy numbers (it faked them at T1734)."""
@@ -394,6 +413,35 @@ def test_devmode_closeout_writes_authoritative_economy(tmp_path, monkeypatch):
     text = eco.read_text(encoding="utf-8")
     assert "Provider requests: 1" in text
     assert "errors: 1" in text
+
+
+def test_devmode_economy_uses_active_monitor_not_mtime_latest(tmp_path, monkeypatch):
+    """Multiple MO processes can leave monitor files in the same dir. The economy writer
+    must read this process's active monitor, not whichever file has newest mtime."""
+    from core.backend_monitor import BackendMonitor, set_monitor
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    active_log = mondir / "backend_monitor-active.jsonl"
+    latest_log = mondir / "backend_monitor-latest.jsonl"
+    active_log.write_text(json.dumps({"type": "provider_request", "payload": {}}) + "\n", encoding="utf-8")
+    latest_log.write_text(json.dumps({"type": "tool_result", "payload": {"error": True}}) + "\n", encoding="utf-8")
+    latest_log.touch()
+    monitor = BackendMonitor(active_log)
+    set_monitor(monitor)
+    try:
+        sess = tmp_path / "memory" / "devmode" / "2026-01-01T0100"
+        sess.mkdir(parents=True)
+        agent = _devmode_board_agent()
+        agent._bind_active_devmode_dir_from_write({"path": str(sess / "summary.md")})
+        agent._write_devmode_economy_record()
+    finally:
+        set_monitor(None)
+
+    text = (sess / "economy.md").read_text(encoding="utf-8")
+    assert "Provider requests: 1" in text
+    assert "errors: 0" in text
 
 
 def _devmode_board_agent():
@@ -488,8 +536,8 @@ def test_devmode_economy_refuses_without_active_dir_binding(tmp_path, monkeypatc
 
 
 def test_devmode_economy_binder_ignores_operator_pack_paths(tmp_path, monkeypatch):
-    """operator/devmode/ is the protocol pack, NOT a session dir — a write there must
-    never bind it as the active economy target."""
+    """The private operator devmode pack is NOT a session dir, even when referenced
+    through a legacy operator/devmode-shaped path."""
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     agent = _devmode_board_agent()
     agent._bind_active_devmode_dir_from_write({"path": str(tmp_path / "operator" / "devmode" / "DEVMODE05" / "x.md")})

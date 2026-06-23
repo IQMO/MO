@@ -32,6 +32,7 @@ from core.initializer import initialize_mo, render_init_report
 from core.path_defaults import default_config_path
 from core.provider.provider import ConfigLoadError, ProviderError, clean_provider_error
 from core.state_migration import apply_state_migration, parse_migration_request, plan_state_migration, render_state_migration_report
+from core.instance import render_existing_instances_notice
 from core.runtime_lock import acquire_runtime_lock
 from interface.terminal_loop import run_main_loop
 
@@ -103,8 +104,6 @@ def main(argv: list[str] | None = None):
         print(render_init_report(initialize_mo(project_path=CALLER_CWD)))
         print("\nRun `python mo.py` again after adding provider keys to ~/.mo/.env or your shell environment.")
         return
-    if not _acquire_lock():
-        sys.exit(1)
     try:
         agent = create_agent(config_path)
     except ConfigLoadError as exc:
@@ -117,6 +116,9 @@ def main(argv: list[str] | None = None):
         print(f"  config: {config_path}", file=sys.stderr)
         print("Fix provider credentials or run `mo --init` to regenerate a private config.", file=sys.stderr)
         sys.exit(2)
+    notice = render_existing_instances_notice(getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {})
+    if notice:
+        print(notice)
     gateway = Gateway(agent)
     telegram = None
     heartbeat = None

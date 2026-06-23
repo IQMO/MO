@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_text
 from ..backend_monitor import redact_monitor_text
 from ..env_utils import int_env
 
@@ -198,7 +199,7 @@ def update_learning_suggestion_status(
     if not changed:
         return False
     try:
-        src.write_text("\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
+        atomic_write_text(src, "\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
     except OSError:
         return False
     return True
@@ -211,7 +212,7 @@ def _prune_learning_suggestions(path: Path) -> None:
     try:
         lines = [line for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
         if len(lines) > keep:
-            path.write_text("\n".join(lines[-keep:]) + "\n", encoding="utf-8")
+            atomic_write_text(path, "\n".join(lines[-keep:]) + "\n", encoding="utf-8")
     except Exception:
         return
 
@@ -346,7 +347,7 @@ def expire_stale_suggestions(
                 expired += 1
             rows.append(row)
         if expired:
-            src.write_text("\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
+            atomic_write_text(src, "\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
     except OSError:
         return 0
     return expired

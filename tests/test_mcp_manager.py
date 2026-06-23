@@ -10,15 +10,15 @@ MOCK = str(Path(__file__).parent / "fixtures" / "mock_mcp_server.py")
 
 
 def _cfg(enabled=True, command=None, args=None):
-    return {
-        "mcp": {
-            "enabled": enabled,
-            "servers": [
-                {"name": "mock", "command": command or sys.executable,
-                 "args": args if args is not None else [MOCK]}
-            ],
-        }
+    mcp = {
+        "servers": [
+            {"name": "mock", "command": command or sys.executable,
+             "args": args if args is not None else [MOCK]}
+        ],
     }
+    if enabled is not None:
+        mcp["enabled"] = enabled
+    return {"mcp": mcp}
 
 
 def test_disabled_is_empty():
@@ -34,6 +34,21 @@ def test_no_mcp_config_is_empty():
     mgr = McpManager.from_config({})
     assert mgr.tool_definitions() == []
     mgr.shutdown()
+
+
+def test_mcp_config_defaults_enabled_but_empty_servers_are_inert():
+    mgr = McpManager.from_config({"mcp": {"servers": []}})
+    assert mgr.tool_definitions() == []
+    mgr.shutdown()
+
+
+def test_mcp_servers_do_not_require_enabled_true():
+    mgr = McpManager.from_config(_cfg(enabled=None))
+    try:
+        names = {d["function"]["name"] for d in mgr.tool_definitions()}
+        assert "mcp__mock__echo" in names
+    finally:
+        mgr.shutdown()
 
 
 def test_exposes_namespaced_tools():

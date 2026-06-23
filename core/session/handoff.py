@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from ..atomic_write import atomic_write_text
 from ..backend_monitor import redact_monitor_text, tool_call_names
 from ..graph.code_graph import build_code_graph_context, should_include_code_graph_context
 from ..coordination_state import goal_summary_lines, worker_summary_lines
@@ -401,7 +402,7 @@ def build_compact_summary(agent: Any, *, focus: str = "", reason: str = "", late
 def write_handoff_document(document: str, *, prefix: str = "mo-handoff") -> Path:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     path = Path(tempfile.gettempdir()) / f"{prefix}-{stamp}-{os.getpid()}.md"
-    path.write_text(redact_monitor_text(document, 80_000), encoding="utf-8")
+    atomic_write_text(path, redact_monitor_text(document, 80_000), encoding="utf-8")
     _cleanup_old_handoff_documents(prefix=prefix)
     return path
 

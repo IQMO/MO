@@ -73,6 +73,20 @@ def get_monitor() -> "BackendMonitor | None":
     return _ACTIVE_MONITOR
 
 
+def active_monitor_path() -> Path | None:
+    """Return the active monitor path only when it belongs to the current monitor dir."""
+    monitor = get_monitor()
+    path = Path(getattr(monitor, "path", "")) if monitor is not None else None
+    if not path or not path.exists():
+        return None
+    try:
+        if path.parent.resolve() != BackendMonitor._monitor_dir().resolve():
+            return None
+    except Exception:
+        return None
+    return path
+
+
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,'\"}]+"),
     re.compile(r"(?i)(api[_-]?key\s*[:=]\s*)[^\s,'\"}]+"),
@@ -322,6 +336,7 @@ def economy_summary(
     *,
     session_ids: "set[str] | frozenset[str] | None" = None,
     exclude_surfaces: "set[str] | frozenset[str] | None" = None,
+    instance_ids: "set[str] | frozenset[str] | None" = None,
 ) -> dict[str, Any]:
     """Deterministic provider/tool/error/compression counts from a backend monitor.
 
@@ -331,13 +346,12 @@ def economy_summary(
     ``tool_result.blocked`` (NOT only the rarer ``tool_error``/``sandbox_blocked``
     event types — those miss a failed ``tool_result`` that later recovered).
 
-    Logical-run scoping (multi-instance proposal, amendment #5): one per-process monitor
-    file can hold a Main-MO run PLUS its handoff segments PLUS interleaved Ghost/desktop
-    turns. ``session_ids`` restricts counting to a run's own segment ids (events whose
-    ``payload.session_id`` is in the set; events with no session_id are skipped when this
-    filter is active). ``exclude_surfaces`` drops events whose ``payload.route_source`` is
-    in the set (e.g. ``GHOST_SURFACES``) — events with no route_source are kept. Defaults
-    (both ``None``) preserve the original whole-file behavior for existing callers.
+    Logical-run scoping (multi-instance proposal, amendment #5): one process monitor can
+    hold a Main-MO run PLUS handoff segments PLUS interleaved Ghost/desktop turns.
+    ``session_ids`` restricts counting to a run's segment ids. ``instance_ids`` can
+    further restrict to specific process instances. ``exclude_surfaces`` drops events
+    tagged by either route_source or normalized surface (e.g. ``GHOST_SURFACES``).
+    Defaults preserve whole-file behavior for existing callers.
     """
     path = Path(monitor_path) if monitor_path else latest_monitor_path()
     out = {
@@ -362,9 +376,14 @@ def economy_summary(
             sid = p.get("session_id") or d.get("session_id")
             if sid not in session_ids:
                 continue  # not part of this logical run's segments
+        if instance_ids is not None:
+            iid = p.get("instance_id") or d.get("instance_id")
+            if iid not in instance_ids:
+                continue
         if exclude_surfaces:
-            rs = p.get("route_source") or d.get("route_source")
-            if rs in exclude_surfaces:
+            exclude = {_monitor_surface_key(item) for item in exclude_surfaces}
+            surfaces = _monitor_surface_keys(p, d)
+            if exclude.intersection(surfaces):
                 continue  # Ghost/desktop turn — not part of the Main-MO run
         if t == "provider_request":
             out["provider_requests"] += 1
@@ -384,6 +403,35 @@ def economy_summary(
         elif t == "tool_compress":
             out["compression_events"] += 1
     return out
+
+
+def _monitor_surface_key(value: Any) -> str:
+    raw = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "": "",
+        "user": "terminal",
+        "main": "terminal",
+        "pc": "terminal",
+        "companion": "desktop",
+    }
+    return aliases.get(raw, raw)
+
+
+def _monitor_surface_keys(payload: dict[str, Any], event: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    for value in (
+        payload.get("route_source"),
+        payload.get("surface"),
+        event.get("route_source"),
+        event.get("surface"),
+    ):
+        raw = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+        if raw:
+            keys.add(raw)
+        normalized = _monitor_surface_key(raw)
+        if normalized:
+            keys.add(normalized)
+    return keys
 
 
 def format_economy_record(summary: dict[str, Any] | None = None) -> str:

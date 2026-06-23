@@ -70,6 +70,23 @@ def test_main_provider_error_is_mo_native_without_traceback(monkeypatch, capsys)
     assert "Traceback" not in captured.err
 
 
+def test_main_does_not_take_global_runtime_lock(monkeypatch):
+    DummyMonitor.opened = False
+    DummyMonitor.closed = False
+    monkeypatch.setattr(mo.os.path, "exists", lambda _path: True)
+    monkeypatch.setattr(mo, "_acquire_lock", lambda: (_ for _ in ()).throw(AssertionError("global lock used")))
+    monkeypatch.setattr(mo, "create_agent", lambda _config: DummyAgent())
+    monkeypatch.setattr(mo, "Gateway", DummyGateway)
+    monkeypatch.setattr(mo, "render_existing_instances_notice", lambda _config: "")
+    monkeypatch.setattr(mo, "Console", lambda: None)
+    monkeypatch.setattr(mo, "HAS_RICH", False)
+    monkeypatch.setattr(input_module, "HAS_PROMPT_TOOLKIT", False)
+    monkeypatch.delenv("MO_OPEN_BACKEND_MONITOR", raising=False)
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": (_ for _ in ()).throw(EOFError()))
+
+    mo.main()
+
+
 def test_main_does_not_open_runtime_monitor_without_opt_in(monkeypatch):
     DummyMonitor.opened = False
     DummyMonitor.closed = False

@@ -25,6 +25,7 @@ _SECONDARY_BUSY_MESSAGE = (
 
 from .backend_monitor import BackendMonitor, monitor_context
 from .gateway_helpers import select_template
+from .heartbeat import normalize_surface
 from .runtime_work_signals import (
     looks_like_interrupted_resume_request,
     tool_is_runtime_work_signal,
@@ -155,6 +156,8 @@ class Gateway:
         started = time.time()
         session = getattr(self.agent, "session", None)
         session_id = str(getattr(session, "session_id", "") or "")
+        surface = normalize_surface(route_source)
+        instance_id = str(getattr(self.agent, "instance_id", "") or "")
         result_text = ""
         status = "ok"
         self.previous_task_board = self.last_task_board
@@ -169,10 +172,18 @@ class Gateway:
         except Exception:
             traceback.print_exc()
 
-        with monitor_context(turn_id=turn_id, session_id=session_id, surface="main", route_source=route_source):
+        with monitor_context(
+            turn_id=turn_id,
+            session_id=session_id,
+            surface=surface,
+            route_source=route_source,
+            instance_id=instance_id,
+        ):
             self.monitor.emit("turn_start", {
                 "input": str(user_input or "")[:300],
                 "route_source": route_source,
+                "surface": surface,
+                "instance_id": instance_id,
                 "messages": len(getattr(session, "messages", []) or []),
             })
             try:

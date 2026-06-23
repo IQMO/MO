@@ -180,3 +180,16 @@ def test_scheduler_service_starts_from_config(tmp_path, monkeypatch):
     assert service.paths.jobs == paths.jobs
     assert service.tick_seconds == 999
     assert getattr(agent, "scheduler_service") is service
+
+
+def test_scheduler_service_resource_lock_loser_does_not_start(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    agent = SimpleNamespace(config={"scheduler": {
+        "enabled": True,
+        "jobs_path": str(paths.jobs),
+        "runs_path": str(paths.runs),
+        "lock_path": str(paths.lock),
+    }})
+    monkeypatch.setattr("core.scheduler.acquire_runtime_lock", lambda **_kwargs: None)
+
+    assert start_scheduler_service_if_enabled(agent, gateway=SimpleNamespace()) is None

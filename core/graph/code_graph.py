@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from ..atomic_write import atomic_write_json
+
 from ..backend_monitor import get_monitor, redact_monitor_text
 from ..env_utils import int_env
 from ..path_defaults import private_state_enabled, project_cache_dir
@@ -176,10 +178,10 @@ def _project_root(cwd: str) -> Path:
     return path
 
 
-def _graph_path(root: Path) -> Path:
+def _graph_path(root: Path, config: dict[str, Any] | None = None) -> Path:
     # Private-by-default: cache under ~/.mo/cache, not the project tree.
-    if private_state_enabled():
-        return project_cache_dir("code_graph", root) / "knowledge-graph.json"
+    if private_state_enabled(config):
+        return project_cache_dir("code_graph", root, config=config) / "knowledge-graph.json"
     return root / "memory" / "code_graph" / "knowledge-graph.json"
 
 
@@ -243,7 +245,7 @@ def _load_graph(path: Path) -> dict[str, Any] | None:
 def _save_graph(path: Path, graph: dict[str, Any]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(path, graph, indent=2, ensure_ascii=False)
     except Exception:
         traceback.print_exc()
 

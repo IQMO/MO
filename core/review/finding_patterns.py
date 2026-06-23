@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..atomic_write import atomic_write_json
+
 if TYPE_CHECKING:
     from core.review.diff_review import ReviewFinding
 
@@ -40,7 +42,7 @@ class FindingPatterns:
             
     def _save(self, data: dict):
         self.history_dir.mkdir(parents=True, exist_ok=True)
-        self.patterns_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        atomic_write_json(self.patterns_file, data, indent=2)
 
     def record_finding(self, finding: "ReviewFinding", action: str):
         """Store finding with its context for future learning.

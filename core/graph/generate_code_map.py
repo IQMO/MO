@@ -24,6 +24,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_json, atomic_write_text
+
 DEFAULT_GRAPH = Path("memory/structural_graph/graph.json")
 HTML_NAME = "code_map.html"
 ANNOTATIONS_NAME = "task_annotations.json"
@@ -58,8 +60,8 @@ def generate_code_map(
     positions, cache_hit = _layout_with_cache(nodes, links, data, cache_path, iterations=iterations)
     payload = _payload(nodes, links, degrees, positions, annotations, root=root)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    annotations_path.write_text(json.dumps(annotations, indent=2, sort_keys=True), encoding="utf-8")
-    out_path.write_text(_render_html(payload), encoding="utf-8")
+    atomic_write_json(annotations_path, annotations, indent=2, sort_keys=True)
+    atomic_write_text(out_path, _render_html(payload), encoding="utf-8")
     return {
         "generated": True,
         "path": str(out_path),
@@ -160,9 +162,10 @@ def _layout_with_cache(
         if len(positions) >= len(nodes):
             return positions, True
     positions = _package_cluster_layout(nodes, links, iterations=iterations)
-    cache_path.write_text(
-        json.dumps({"fingerprint": fingerprint, "positions": {k: [round(v[0], 4), round(v[1], 4)] for k, v in positions.items()}}, sort_keys=True),
-        encoding="utf-8",
+    atomic_write_json(
+        cache_path,
+        {"fingerprint": fingerprint, "positions": {k: [round(v[0], 4), round(v[1], 4)] for k, v in positions.items()}},
+        sort_keys=True,
     )
     return positions, False
 

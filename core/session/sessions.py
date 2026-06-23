@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from ..atomic_write import atomic_write_json
 from .session import Session
 
 
@@ -39,10 +40,10 @@ def _emit_session_event(kind: str, **payload: Any) -> None:
 class SessionManager:
     """Manages named sessions as JSON files under memory/sessions/."""
 
-    def __init__(self, sessions_dir: str = "memory/sessions"):
+    def __init__(self, sessions_dir: str = "memory/sessions", *, default_name: str = "main"):
         self.dir = Path(sessions_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
-        self._current_name: str = "main"
+        self._current_name: str = str(default_name or "main").strip() or "main"
 
     def _path(self, name: str) -> Path:
         safe = "".join(c for c in str(name or "") if c.isalnum() or c in "-_.")[:64] or "session"
@@ -117,7 +118,7 @@ class SessionManager:
         if meta:
             data["meta"] = meta
         path = self._path(name)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+        atomic_write_json(path, data, indent=2, ensure_ascii=False, default=str)
 
     def load(self, name: str) -> dict | None:
         """Load a session from disk. Returns raw dict or None."""

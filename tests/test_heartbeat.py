@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+import json
+import time
 
 from core.heartbeat import (
     _prune_heartbeat_ledger,
@@ -58,6 +60,28 @@ def test_surface_continuity_context_mentions_recent_other_surface(tmp_path):
     assert "Surface Continuity" in context
     assert "telegram" in context
     assert "Current surface: terminal" in context
+
+
+def test_surface_continuity_context_ignores_other_instances(tmp_path):
+    path = tmp_path / "heartbeats.jsonl"
+    agent = DummyAgent()
+    now = time.time()
+    path.write_text(
+        "\n".join([
+            json.dumps({
+                "created_at": now,
+                "surface": "telegram",
+                "instance_id": "other-instance",
+                "slot": "main-other",
+                "session_id": "mo-other",
+            }),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+
+    context = build_surface_continuity_context(agent, current_surface="terminal", path=path)
+
+    assert context == ""
 
 
 def test_render_heartbeat_status_from_snapshot(tmp_path):

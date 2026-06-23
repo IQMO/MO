@@ -3,7 +3,7 @@
 Reads `config.mcp`, starts enabled servers, aggregates their tools under a
 namespaced id (`mcp__<server>__<tool>`), exposes them as MO tool definitions, and
 routes calls. A server that fails to start is reported degraded and skipped — it
-never crashes MO. Off by default (`mcp.enabled: false`).
+never crashes MO. Explicit `mcp.enabled: false` disables the bridge.
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class McpManager:
     def from_config(cls, config: dict | None) -> "McpManager":
         mcp_cfg = ((config or {}).get("mcp") or {}) if isinstance(config, dict) else {}
         mgr = cls([])
-        if not mcp_cfg.get("enabled"):
+        if mcp_cfg.get("enabled") is False:
             return mgr
         for spec in mcp_cfg.get("servers") or []:
             if not isinstance(spec, dict) or spec.get("enabled") is False:

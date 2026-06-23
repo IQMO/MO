@@ -32,6 +32,7 @@ from ..critic import AnswerCritic
 from ..sandbox import redact_sensitive_text
 from ..path_defaults import ENV_MO_STATE_HOME, default_config_path, default_project_roots, mo_home, private_state_enabled, project_cwd, repo_root, resolve_state_path
 from ..backend_monitor import BackendMonitor, get_monitor, preview_provider_messages, preview_provider_response
+from ..instance import get_instance_id, instance_session_slot, shared_session_enabled
 from ..provider.provider_audit import append_provider_audit
 from ..work_patterns import build_ghost_work_guidance
 from ..runtime_work_signals import looks_like_interrupted_resume_request
@@ -70,6 +71,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self.agent_root = repo_root()
         self.project_cwd = str(project_cwd())
         self.runtime_home = str(mo_home(self.config))
+        self.instance_id = get_instance_id()
         self.invoked_as = os.environ.get("MO_INVOKED_AS", "mo")
         if private_state_enabled(self.config) and not os.environ.get("PYTEST_CURRENT_TEST"):
             os.environ.setdefault(ENV_MO_STATE_HOME, self.runtime_home)
@@ -133,9 +135,13 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self._sessions = None
         try:
             from ..session.sessions import SessionManager
-            self._sessions = SessionManager(resolve_state_path("memory/sessions", self.config))
-            # Auto-resume latest saved session on startup
-            if self._sessions:
+            shared_session = shared_session_enabled(self.config)
+            default_slot = "main" if shared_session else instance_session_slot(self.instance_id)
+            self._sessions = SessionManager(resolve_state_path("memory/sessions", self.config), default_name=default_slot)
+            # Multi-instance default: each terminal starts on its own fresh slot.
+            # Compatibility escape hatch: runtime.shared_session: true restores the
+            # old global-main/latest auto-resume behavior.
+            if self._sessions and shared_session:
                 latest_name = self._sessions.latest()
                 if latest_name:
                     data = self._sessions.load(latest_name)
@@ -227,8 +233,8 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         from tools import TOOL_DEFINITIONS
         self.tool_definitions = self._ordered_tool_definitions(TOOL_DEFINITIONS)
 
-        # MCP (Model Context Protocol) — operator-configured, off by default.
-        # Bridges configured servers' tools into the model's tool set, sandbox-gated.
+        # MCP (Model Context Protocol) — operator-configured and inert until
+        # servers are listed; configured tools are sandbox-gated.
         self.mcp_manager = None
         try:
             from core.mcp import McpManager
@@ -240,7 +246,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 import atexit
                 atexit.register(mgr.shutdown)
             else:
-                mgr.shutdown()  # off / no tools — release any subprocesses
+                mgr.shutdown()  # disabled / no tools — release any subprocesses
         except Exception:
             traceback.print_exc()
 
@@ -644,7 +650,10 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
 
     def _provider_surface(self) -> str:
         state = getattr(self, "_thread_state", None)
-        return str(getattr(state, "provider_surface", "main") or "main")
+        surface = str(getattr(state, "provider_surface", "") or "")
+        if surface:
+            return surface
+        return str(getattr(self, "_current_route_source", "") or "main")
 
     def _provider_worker_id(self) -> str:
         state = getattr(self, "_thread_state", None)
@@ -870,7 +879,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self.last_handoff_notice = notice if expose_notice else ""
         append_provider_audit(
             "context_handoff",
-            surface="main",
+            surface=self._provider_surface(),
             provider=getattr(self, "provider_name", ""),
             model=getattr(self, "model", ""),
             session_id=old_session_id,

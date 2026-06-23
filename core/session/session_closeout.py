@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_text
 from ..backend_monitor import redact_monitor_text
 from ..coordination_state import goal_summary_lines, worker_summary_lines
 from .handoff import context_pressure
@@ -220,7 +221,7 @@ def write_session_closeout(
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(closeout.created_at))
     path = _unique_closeout_path(out_dir, stamp, _safe_slug(closeout.session_id or 'session'))
-    path.write_text(render_session_closeout_markdown(closeout), encoding="utf-8")
+    atomic_write_text(path, render_session_closeout_markdown(closeout), encoding="utf-8")
     prune_session_closeouts(out_dir, keep=keep)
     return path
 

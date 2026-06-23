@@ -59,6 +59,10 @@ runtime:
   # Project folders are read/edited only when the operator asks; MO should not create project-local state by default.
   home: ~/.mo
   state: private
+  # Multiple terminal MO processes are allowed. By default each process gets its
+  # own `main-<instance>` session slot so they do not overwrite one another.
+  # Set true only if you intentionally want the legacy shared `main` session.
+  shared_session: false
 
 agent:
   max_tool_rounds: 80

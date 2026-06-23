@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_json
 from ..backend_monitor import get_monitor, redact_monitor_text
 from .handoff import context_pressure
 from ..number_utils import as_int as _as_int
@@ -173,7 +174,7 @@ def _archive_chain(archive_dir: Path, chain: list[dict[str, Any]], counter: int)
     while path.exists():
         suffix += 1
         path = archive_dir / f"{stamp}_chain{counter}_{suffix}.json"
-    path.write_text(json.dumps(chain, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    atomic_write_json(path, chain, indent=2, ensure_ascii=False, default=str)
     return str(path)
 
 

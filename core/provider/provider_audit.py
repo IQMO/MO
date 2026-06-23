@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_text
 from ..backend_monitor import redact_monitor_text
 from ..env_utils import int_env
 from ..path_defaults import resolve_state_path
@@ -90,6 +91,6 @@ def _prune_provider_audit_log(path: Path) -> None:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-keep_lines:]
         while len(("\n".join(lines) + "\n").encode("utf-8")) > max_bytes and len(lines) > 1:
             lines.pop(0)
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        atomic_write_text(path, "\n".join(lines) + "\n", encoding="utf-8")
     except Exception:
         return

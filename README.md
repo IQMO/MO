@@ -71,6 +71,16 @@ MO keeps more than chat text. It tracks task state, touched files, tool evidence
 provider/tool audits, session state, and code-map orientation so long work can
 continue without silently forgetting the important parts.
 
+Multiple terminal MO instances can run at the same time. Each process gets a
+short `MO_INSTANCE_ID` and a separate default session slot
+(`main-<instance>`), so opening another terminal does not overwrite the first
+terminal's active session. Startup prints a notice when it sees recent sibling
+instances or a stale legacy lock. Singleton resources — the headless service,
+Telegram poller, scheduler, and Desktop Companion tray/hotkey — are still
+resource-locked so two terminals do not start the same poller or hotkey owner.
+Set `runtime.shared_session: true` only when you intentionally want the old
+shared `main` session behavior.
+
 ### Code-aware, not grep-drunk
 
 MO includes local code intelligence exposed as first-class tools — fuzzy symbol
@@ -199,6 +209,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Code graph | First-class `code_search` / `find_callers` / `find_callees` tools plus structural-graph orientation, over local runtime state |
 | Cache-stable context | Byte-stable system+history prefix with per-turn context appended last, so the provider prefix cache covers the conversation; `/status` reports the measured cache-hit ratio |
 | Session continuity | Long work preserves task state, evidence, files, and context orientation |
+| Multiple local instances | Several `mo` terminals can run concurrently; each gets its own `main-<instance>` session by default, while singleton resources stay resource-locked |
 | Memory recall | Past-turn recall ranked by relevance (FTS5 bm25); optional meaning-based (embeddings) recall — either an OpenAI-compatible endpoint (no dependency) or a fully-offline on-device ONNX model (optional `fastembed`). Off by default; never touches the internet, only your own history |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
@@ -266,8 +277,8 @@ adapts through their own approved profile and learning surfaces.
 - A secrets-focused critic checks outgoing answers, and modified files can be
   scanned by turn-end safety checks.
 - MO does not need an inbound network listener for normal use.
-- Optional Telegram support uses outbound polling; run only one poller for a bot
-  token at a time.
+- Optional Telegram support uses outbound polling. MO uses a resource lock so
+  only one poller owns that surface at a time.
 - Backend monitor logs are diagnostics only. Runtime task truth stays with the
   Gateway and task board.
 

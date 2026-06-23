@@ -9,6 +9,7 @@ import pytest
 from core.runtime_lock import (
     RuntimeLock,
     acquire_runtime_lock,
+    release_runtime_lock,
     _live_owner,
     _pid_alive,
     _register_cleanup,
@@ -89,6 +90,13 @@ class TestAcquireRuntimeLock:
             
             assert lock is not None
             assert lock.pid == os.getpid()
+
+    def test_release_lock_removes_current_process_lock(self, temp_lock_dir):
+        lock = acquire_runtime_lock(lock_name="test.lock", legacy_lock_names=())
+
+        release_runtime_lock(lock)
+
+        assert not lock.path.exists()
 
     def test_acquire_lock_checks_legacy_locks(self, temp_lock_dir):
         """Test that legacy lock files are checked."""

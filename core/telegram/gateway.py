@@ -20,6 +20,7 @@ from core.auto_reply import maybe_auto_reply
 from core.backend_monitor import get_monitor, redact_monitor_text
 from core.heartbeat import record_heartbeat
 from core.path_defaults import resolve_state_path
+from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
 from core.secrets import resolve_secret, secret_status
 from core.session.session import Session
 
@@ -183,6 +184,8 @@ class TelegramGateway:
         thread = self._poll_thread
         if thread and thread.is_alive():
             thread.join(timeout=max(0.0, timeout))
+        release_runtime_lock(getattr(self, "_runtime_lock", None))
+        self._runtime_lock = None
 
     def _handle_stop(self, *, sender_id: str, chat_id: str, chat_type: str = "private") -> str:
         ok, msg = self.authorize_or_pair(str(sender_id), chat_type=chat_type)
@@ -574,6 +577,12 @@ def start_telegram_gateway_if_enabled(agent: Any, gateway: Any = None) -> Telegr
         if monitor:
             monitor.emit("session_event", {"kind": "telegram_not_started", "reason": f"missing env {telegram.token_env}"})
         return telegram
+    resource_lock = acquire_runtime_lock(lock_name="mo-telegram-poller.lock", label="MO Telegram poller")
+    if resource_lock is None:
+        if monitor:
+            monitor.emit("session_event", {"kind": "telegram_not_started", "reason": "resource lock held"})
+        return telegram
+    telegram._runtime_lock = resource_lock
     stop_event = threading.Event()
     telegram._stop_event = stop_event
 

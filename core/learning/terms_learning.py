@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..atomic_write import atomic_write_text
 from ..text_safety import contains_secret_value
 from ..threat_scan import scan_text
 
@@ -87,7 +88,7 @@ def record_terms_learning(profile: Any, user_text: str) -> list[str]:
     terms_path = Path(profile_path).parent / "profile" / "terms.md"
     terms_path.parent.mkdir(parents=True, exist_ok=True)
     if not terms_path.exists():
-        terms_path.write_text("# Operator Terms\n\n", encoding="utf-8")
+        atomic_write_text(terms_path, "# Operator Terms\n\n", encoding="utf-8")
 
     try:
         existing = terms_path.read_text(encoding="utf-8")
@@ -118,7 +119,7 @@ def record_terms_learning(profile: Any, user_text: str) -> list[str]:
     if not changed:
         return []
     try:
-        terms_path.write_text(updated.rstrip() + "\n", encoding="utf-8")
+        atomic_write_text(terms_path, updated.rstrip() + "\n", encoding="utf-8")
         if hasattr(profile, "_profile_cache_mtimes"):
             profile._profile_cache_mtimes = None
         if hasattr(profile, "_profile_cache_text"):

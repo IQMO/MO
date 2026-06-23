@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from ..atomic_write import atomic_write_text
 from .task_board import TaskBoard
 from ..backend_monitor import BackendMonitor
 from . import task_evidence
@@ -108,7 +109,16 @@ class AgentTaskBoard:
                 return False
             evidence = "final:vs05_protocol_closeout"
         elif is_devmode05_activation(user_input):
-            if not devmode05_final_allows_stop(user_input, final_text):
+            from ..backend_monitor import active_monitor_path
+            self._track_devmode_run_session_id()
+            monitor_path = active_monitor_path()
+            run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            if not devmode05_final_allows_stop(
+                user_input,
+                final_text,
+                monitor_path=monitor_path,
+                session_ids=run_ids or None,
+            ):
                 return False
             evidence = "final:devmode05_protocol_closeout"
         elif is_ifdev05_activation(user_input):
@@ -167,7 +177,8 @@ class AgentTaskBoard:
         into. Captured from each write_file/edit_file path under memory/devmode/<stamp>/
         so the economy writer can target the explicit active dir instead of guessing the
         newest dir by mtime (which let an aborted run overwrite a prior session). The
-        protocol pack at operator/devmode/ is NOT a session dir and is skipped."""
+        private operator pack (``~/.mo/operator/devmode/`` or legacy
+        ``operator/devmode/`` mentions) is NOT a session dir and is skipped."""
         try:
             from ..path_defaults import mo_home
             path = str((arguments or {}).get("path") or (arguments or {}).get("file_path") or "")
@@ -223,7 +234,7 @@ class AgentTaskBoard:
         fresh process that stalls at boot without writing any artifact has no binding and
         correctly refuses — fixing the observed cross-process corruption."""
         try:
-            from ..backend_monitor import GHOST_SURFACES, economy_summary, format_economy_record
+            from ..backend_monitor import GHOST_SURFACES, active_monitor_path, economy_summary, format_economy_record
             target = getattr(self, "_active_devmode_session_dir", None)
             if target is None or not Path(target).is_dir():
                 return  # no explicit binding this run → refuse; never fall back to mtime
@@ -235,13 +246,13 @@ class AgentTaskBoard:
             # surface-only exclusion if no ids were captured (best-effort, never blocks).
             self._track_devmode_run_session_id()
             run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            monitor_path = active_monitor_path()
             summary = economy_summary(
+                monitor_path,
                 session_ids=run_ids or None,
                 exclude_surfaces=GHOST_SURFACES,
             )
-            (Path(target) / "economy.md").write_text(
-                format_economy_record(summary), encoding="utf-8"
-            )
+            atomic_write_text(Path(target) / "economy.md", format_economy_record(summary), encoding="utf-8")
             # Reconcile the model-authored economy line in summary.md. The model
             # writes summary.md BEFORE the closeout completes, so its hand-counted
             # numbers go stale by the closeout delta (observed: summary 26/63 vs
@@ -279,7 +290,7 @@ class AgentTaskBoard:
 
             new_text = "\n".join(fix_line(ln) for ln in text.split("\n"))
             if new_text != text:
-                summary_path.write_text(new_text, encoding="utf-8")
+                atomic_write_text(summary_path, new_text, encoding="utf-8")
         except Exception:
             pass
 

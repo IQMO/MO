@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from .atomic_write import atomic_write_text
 from .backend_monitor import get_monitor, redact_monitor_text
+from .instance import get_instance_id
 from .number_utils import as_int as _as_int
 from .path_defaults import ENV_MO_STATE_HOME, HEARTBEAT_LEDGER_PATH, ENV_HEARTBEAT_LEDGER_DISABLE, ENV_HEARTBEAT_LEDGER_PATH
 
@@ -131,7 +133,7 @@ def _prune_heartbeat_ledger(
         if len(lines) <= max_lines:
             return
         kept = lines[-max_lines:]
-        ledger_path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        atomic_write_text(ledger_path, "\n".join(kept) + "\n", encoding="utf-8")
     except Exception:
         return
 
@@ -152,6 +154,7 @@ def build_heartbeat_snapshot(
         "created_at": time.time(),
         "event": str(event or "heartbeat")[:80],
         "surface": normalize_surface(surface),
+        "instance_id": get_instance_id(),
         "note": redact_monitor_text(note, 240),
         "pid": os.getpid(),
         "cwd": redact_monitor_text(os.getcwd(), 260),
@@ -171,7 +174,13 @@ def build_heartbeat_snapshot(
     return snapshot
 
 
-def read_recent_heartbeats(*, limit: int = 5, path: str | Path | None = None, surface: str = "") -> list[dict[str, Any]]:
+def read_recent_heartbeats(
+    *,
+    limit: int = 5,
+    path: str | Path | None = None,
+    surface: str = "",
+    instance_id: str = "",
+) -> list[dict[str, Any]]:
     """Read recent heartbeat snapshots, oldest-to-newest. Returns [] on failure."""
     try:
         ledger_path = _resolve_heartbeat_path(path)
@@ -181,6 +190,7 @@ def read_recent_heartbeats(*, limit: int = 5, path: str | Path | None = None, su
     except Exception:
         return []
     wanted = normalize_surface(surface) if surface else ""
+    wanted_instance = str(instance_id or "").strip()
     matches: list[dict[str, Any]] = []
     for raw in reversed(raw_lines):
         try:
@@ -190,6 +200,8 @@ def read_recent_heartbeats(*, limit: int = 5, path: str | Path | None = None, su
         if not isinstance(item, dict):
             continue
         if wanted and normalize_surface(str(item.get("surface") or "")) != wanted:
+            continue
+        if wanted_instance and str(item.get("instance_id") or "") != wanted_instance:
             continue
         matches.append(item)
         if len(matches) >= max(1, int(limit or 1)):
@@ -237,7 +249,7 @@ def build_surface_continuity_context(
 ) -> str:
     """Return provider-facing continuity context when the user changes surfaces."""
     current = normalize_surface(current_surface or getattr(agent, "_current_route_source", "terminal"))
-    recent = read_recent_heartbeats(limit=12, path=path)
+    recent = read_recent_heartbeats(limit=12, path=path, instance_id=get_instance_id())
     other = None
     for item in reversed(recent):
         surface = normalize_surface(str(item.get("surface") or ""))
@@ -267,7 +279,8 @@ def build_surface_continuity_context(
 
 
 def render_heartbeat_status(agent: Any = None, *, gateway: Any = None, path: str | Path | None = None) -> str:
-    latest = read_recent_heartbeats(limit=1, path=path)
+    instance_id = str(getattr(agent, "instance_id", "") or get_instance_id()) if agent is not None else ""
+    latest = read_recent_heartbeats(limit=1, path=path, instance_id=instance_id)
     if latest:
         item = latest[-1]
     elif agent is not None:

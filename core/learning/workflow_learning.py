@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from ..atomic_write import atomic_write_text
 from ..env_utils import int_env
 from ..text_safety import contains_secret_value
 from ..threat_scan import scan_text
@@ -313,7 +314,7 @@ def _expire_stale_candidates(path: Path, *, ttl_days: int | None = None) -> int:
     ]
     dropped = len(records) - len(kept)
     if dropped:
-        path.write_text("\n".join(json.dumps(r, ensure_ascii=False, sort_keys=True) for r in kept) + ("\n" if kept else ""), encoding="utf-8")
+        atomic_write_text(path, "\n".join(json.dumps(r, ensure_ascii=False, sort_keys=True) for r in kept) + ("\n" if kept else ""), encoding="utf-8")
     return dropped
 
 
@@ -444,7 +445,7 @@ def _prune_jsonl(path: Path, env_name: str, default: int) -> None:
         lines = [line for line in lines if line.strip()]
         if len(lines) <= keep:
             return
-        path.write_text("\n".join(lines[-keep:]) + "\n", encoding="utf-8")
+        atomic_write_text(path, "\n".join(lines[-keep:]) + "\n", encoding="utf-8")
     except Exception:
         return
 
@@ -483,7 +484,7 @@ def _rewrite_candidate_status(path: Path, candidate_id: str, promoted: dict[str,
     if not records:
         return
     out = [promoted if str(record.get("id") or "") == candidate_id else record for record in records]
-    path.write_text("".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in out), encoding="utf-8")
+    atomic_write_text(path, "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in out), encoding="utf-8")
     _prune_jsonl(path, "MO_WORKFLOW_CANDIDATE_MAX", 100)
 
 

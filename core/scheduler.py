@@ -20,6 +20,7 @@ from .backend_monitor import get_monitor, redact_monitor_text
 from .heartbeat import record_heartbeat
 from .session.session import Session
 from .path_defaults import resolve_state_path
+from .runtime_lock import acquire_runtime_lock, release_runtime_lock
 from .secrets import resolve_secret
 
 DEFAULT_SCHEDULER_DIR = "memory/scheduler"
@@ -89,6 +90,8 @@ class SchedulerService:
         thread = self._thread
         if thread and thread.is_alive():
             thread.join(timeout=max(0.0, timeout))
+        release_runtime_lock(getattr(self, "_runtime_lock", None))
+        self._runtime_lock = None
         _emit_scheduler_event("scheduler_stopped", {})
 
     def startup_check(self, *, now: float | None = None) -> dict[str, Any]:
@@ -269,6 +272,10 @@ def start_scheduler_service_if_enabled(agent: Any, gateway: Any = None) -> Sched
         return None
     if os.environ.get(ENV_SCHEDULER_DISABLE, "").lower() in {"1", "true", "yes"}:
         return None
+    resource_lock = acquire_runtime_lock(lock_name="mo-scheduler.lock", label="MO scheduler")
+    if resource_lock is None:
+        _emit_scheduler_event("scheduler_not_started", {"reason": "resource lock held"})
+        return None
     paths = SchedulerPaths(
         jobs=Path(resolve_state_path(scheduler_cfg.get("jobs_path") or DEFAULT_JOBS_PATH, cfg)),
         runs=Path(resolve_state_path(scheduler_cfg.get("runs_path") or DEFAULT_RUNS_PATH, cfg)),
@@ -281,7 +288,10 @@ def start_scheduler_service_if_enabled(agent: Any, gateway: Any = None) -> Sched
         tick_seconds=float(scheduler_cfg.get("tick_seconds", 30) or 30),
         enabled=True,
     )
-    service.start()
+    service._runtime_lock = resource_lock
+    if not service.start():
+        release_runtime_lock(resource_lock)
+        return None
     try:
         setattr(agent, "scheduler_service", service)
     except Exception:

@@ -109,10 +109,11 @@ def test_vs05_readonly_source_roots_extracts_existing_absolute_paths(tmp_path):
 
 def test_preflight_context_user_clone_has_no_protocol_recipe(monkeypatch):
     """RC2-lite: the detailed DEVMODE05/VS05 protocol rules live in the operator
-    pack (operator/devmode/preflight-rules.json), not in public code. A user clone
-    (no pack) gets only a generic self-review reminder — no protocol shape — plus
-    generic capability orientation. The detailed owner-path assertions live in
-    operator/tests/ so the recipe is not published in the public test suite either."""
+    pack (``~/.mo/operator/devmode/preflight-rules.json`` or MO_OPERATOR_PACK),
+    not in public code. A user clone (no pack) gets only a generic self-review
+    reminder — no protocol shape — plus generic capability orientation. The
+    detailed owner-path assertions live in the private pack tests so the recipe is
+    not published in the public test suite either."""
     import core.self_capability_preflight as scp
 
     monkeypatch.setattr(scp, "_load_owner_preflight_rules", lambda: [])

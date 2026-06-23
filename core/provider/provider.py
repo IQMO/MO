@@ -16,6 +16,7 @@ import yaml
 from dotenv import load_dotenv
 import traceback
 
+from ..atomic_write import atomic_write_json
 from ..path_defaults import codex_auth_path, default_config_path, mo_home
 
 
@@ -439,7 +440,7 @@ class CodexOAuthProvider(BaseProvider):
                 tokens[key] = body[key]
         data["tokens"] = tokens
         try:
-            self.auth_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            atomic_write_json(self.auth_path, data, indent=2)
         except Exception:
             pass
         return new_access
