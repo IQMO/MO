@@ -15,7 +15,8 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `core/goal/` — goal runner and goal auditor.
 - `core/graph/` — `core/graph/structural_graph.py`, code graph, code-map HTML.
 - `core/learning/` — memory, knowledge store, workflow/feedback/trace learning.
-- `core/session/` — session, closeout, momentum.
+- `core/session/` — session, closeout, momentum; old completed tool chains can compact Python source reads to recoverable structure skeletons.
+- `core/code_skeleton.py` — Python AST skeleton compressor for session momentum only; keeps imports/signatures/docstrings, drops bodies, and returns empty on no-gain/non-Python so callers keep existing behavior.
 - `core/provider/` — providers, audit, capacity.
 - `core/ghost/` — ghost side-check routing, context, audit.
 - `core/mcp/` — MCP client + manager (enabled by default, inert until servers are listed).

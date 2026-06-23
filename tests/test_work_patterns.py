@@ -180,6 +180,17 @@ def test_reference_comparison_pattern_triggers_on_compare_requests():
         assert "Zero-adoption is a valid" in ctx
 
 
+def test_reference_comparison_requires_measurement_for_economy_claims():
+    from core.work_patterns import build_work_pattern_context
+
+    ctx = build_work_pattern_context("compare MO token compression against that reference repo")
+
+    assert "baseline-vs-adopt measurement" in ctx
+    assert "current behavior" in ctx
+    assert "candidate behavior" in ctx
+    assert "recoverability/fallback" in ctx
+
+
 def test_mindset_patterns_do_not_hijack_normal_turns():
     from core.work_patterns import select_work_pattern
 

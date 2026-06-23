@@ -206,6 +206,8 @@ def build_work_pattern_context(user_input: str) -> str:
             "Recommend adopting ONLY what is proven better and fits the project's direction; translating an idea into the "
             "project's own patterns beats copying the reference's architecture. "
             "If adoption is approved, use MO's lean-build ladder instead of copying whole foreign structures. "
+            "For token, cost, performance, or compression claims, run a project-local baseline-vs-adopt measurement before closeout; "
+            "record current behavior, candidate behavior, recoverability/fallback, and the measured win or mark it as unproven. "
             "Zero-adoption is a valid, honest outcome. No source edits until the operator approves specific items."
         )
     return build_dna_context(design=False)

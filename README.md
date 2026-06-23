@@ -71,6 +71,11 @@ MO keeps more than chat text. It tracks task state, touched files, tool evidence
 provider/tool audits, session state, and code-map orientation so long work can
 continue without silently forgetting the important parts.
 
+When old completed tool chains contain large Python source reads, MO can compact
+them into recoverable code-structure skeletons: imports, class/function
+signatures, and first-line docstrings stay in context, while full bodies remain
+archived under the private runtime state for exact re-read when needed.
+
 Multiple terminal MO instances can run at the same time. Each process gets a
 short `MO_INSTANCE_ID` and a separate default session slot
 (`main-<instance>`), so opening another terminal does not overwrite the first
@@ -217,6 +222,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Skills | Local read-before-acting best-practice packs (`skills/`, `~/.mo/skills`); the most relevant pack loads per task. No marketplace, no install |
 | Adaptive reasoning | Per-turn reasoning level (deep for real work, light for chatter) plus an opt-in per-provider `reasoning_effort` |
 | Lean-build work patterns | Build/fix/audit/review/adoption guidance checks reuse, deletion, stdlib/native options, and existing helpers before adding code or abstractions |
+| Recoverable code skeletons | Old completed Python source reads compact to imports/signatures/docstrings during session momentum, with full originals archived under private runtime state |
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
 | DeepSeek / OpenAI providers | Default is the official DeepSeek API (`api.deepseek.com`, OpenAI-compatible); OpenCode automatic fallback; Codex/OpenAI fallback support. When the official DeepSeek API is active, the footer shows live account balance |
 | Provider failover | Providers can fail over on rate, auth, balance, timeout, or empty-response errors |
