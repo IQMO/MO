@@ -22,6 +22,7 @@ nul
 with open*
 personal/
 .claude/
+.agents/
 # Legacy in-checkout operator path. The live owner pack resolves from
 # ~/.mo/operator or MO_OPERATOR_PACK; keep accidental local copies unshipped.
 operator/
