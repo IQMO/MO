@@ -190,6 +190,10 @@ class AgentTaskBoard:
                 if not real and carried:
                     task.evidence = [*(task.evidence or []), *carried]
                     changed = True
+        # This finalize runs only after the protocol stop gate passed → the run is
+        # closing out. For DEVMODE, mark the manifest status="complete".
+        if is_devmode05_activation(user_input):
+            self._write_devmode_manifest_record(status="complete")
         return changed
 
     def _bind_active_devmode_dir_from_write(self, arguments: dict) -> None:
@@ -295,6 +299,53 @@ class AgentTaskBoard:
             # disagree. Surgical: only the numeric counts on the economy line are
             # rewritten — any model narration on that line is preserved.
             AgentTaskBoard._reconcile_summary_economy_counts(Path(target) / "summary.md", summary)
+            # Runtime-owned manifest: one authoritative projection of this run's outputs
+            # (monitor, economy, taskboard, artifacts, status) so the model never
+            # hand-tracks its own counts. Best-effort, never model-authored.
+            self._write_devmode_manifest_record(status="active", economy=summary)
+        except Exception:
+            pass
+
+    def _write_devmode_manifest_record(self, *, status: str = "active", economy: dict | None = None,
+                                       warnings: list | None = None,
+                                       reconciliations: dict | None = None) -> None:
+        """Project this DEVMODE run's runtime truth into manifest.json (see
+        core/tasking/devmode_manifest.py). Best-effort; a failure must never break closeout."""
+        try:
+            from .devmode_manifest import build_devmode_manifest, write_devmode_manifest
+            from ..backend_monitor import GHOST_SURFACES, active_monitor_path, economy_summary
+            target = getattr(self, "_active_devmode_session_dir", None)
+            if target is None or not Path(target).is_dir():
+                return
+            run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            monitor_path = active_monitor_path()
+            eco = dict(economy) if economy is not None else economy_summary(
+                monitor_path, session_ids=run_ids or None, exclude_surfaces=GHOST_SURFACES)
+            frozen = getattr(self, "_devmode_closeout_frozen_errors", None)
+            board = getattr(getattr(self, "gateway", None), "last_task_board", None)
+            surface = str(getattr(self, "_current_route_source", "") or "") or None
+            instance_id = getattr(self, "instance_id", None)
+            warns = list(warnings or [])
+            if int(eco.get("provider_errors", 0) or 0) > 0:
+                warns.append("provider_error_retry_present")
+            manifest = build_devmode_manifest(
+                Path(target),
+                economy=eco,
+                frozen_tool_errors=frozen,
+                run_session_ids=run_ids,
+                instance_ids={instance_id} if instance_id else None,
+                surface=surface,
+                status=status,
+                monitor_path=str(monitor_path) if monitor_path else None,
+                task_board=board,
+                warnings=warns,
+                reconciliations=reconciliations,
+            )
+            # final_row_token_only warning from the projected board.
+            if any(t.get("final_token_only") for t in manifest["taskboard"]["tasks"]):
+                if "final_row_token_only" not in manifest["warnings"]:
+                    manifest["warnings"].append("final_row_token_only")
+            write_devmode_manifest(Path(target), manifest)
         except Exception:
             pass
 
@@ -359,7 +410,13 @@ class AgentTaskBoard:
             target = getattr(self, "_active_devmode_session_dir", None)
             if target is None:
                 return
-            AgentTaskBoard._reconcile_summary_terminal_marker(Path(target) / "summary.md", blocked=True)
+            changed = AgentTaskBoard._reconcile_summary_terminal_marker(Path(target) / "summary.md", blocked=True)
+            # A blocked terminal must leave the manifest status="blocked" — it can never
+            # read "complete" (acceptance criterion 7).
+            self._write_devmode_manifest_record(
+                status="blocked",
+                reconciliations={"summary_terminal_marker": "changed" if changed else "ok"},
+            )
         except Exception:
             pass
 

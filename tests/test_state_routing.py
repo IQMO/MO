@@ -108,5 +108,20 @@ def test_async_structural_graph_refresh_keeps_admitted_state_home(tmp_path, monk
     assert Path(calls[0]["runtime"]["home"]).resolve() == admitted_home
 
 
+def test_devmode_manifest_routes_to_state_home():
+    """The runtime-owned DEVMODE manifest.json must land under the private state home
+    (the bound session dir), never in the checkout."""
+    from core.path_defaults import mo_home
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    agent = AgentTaskBoard.__new__(AgentTaskBoard)
+    sess = mo_home() / "memory" / "devmode" / "2026-01-08T0000"
+    sess.mkdir(parents=True, exist_ok=True)
+    agent._bind_active_devmode_dir_from_write({"path": str(sess / "summary.md")})
+    agent._write_devmode_manifest_record(status="active", economy={"tool_errors": 0})
+    manifest = sess / "manifest.json"
+    assert manifest.is_file()
+    _assert_under_state_home(manifest, "devmode manifest")
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

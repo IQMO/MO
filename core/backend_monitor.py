@@ -356,7 +356,7 @@ def economy_summary(
     path = Path(monitor_path) if monitor_path else latest_monitor_path()
     out = {
         "source": path.name if path else None,
-        "provider_requests": 0, "provider_responses": 0,
+        "provider_requests": 0, "provider_responses": 0, "provider_errors": 0,
         "tool_calls": 0, "tool_errors": 0, "sandbox_blocked": 0,
         "compression_events": 0,
     }
@@ -389,6 +389,8 @@ def economy_summary(
             out["provider_requests"] += 1
         elif t == "provider_response":
             out["provider_responses"] += 1
+        elif t == "provider_error":
+            out["provider_errors"] += 1
         elif t == "tool_call":
             out["tool_calls"] += 1
         elif t == "tool_result":
@@ -441,7 +443,7 @@ def format_economy_record(summary: dict[str, Any] | None = None) -> str:
         "### Economy Record (Gate 2f — runtime/monitor, authoritative)\n"
         f"- Source: {s.get('source')}\n"
         f"- Provider requests: {s.get('provider_requests', 0)} "
-        f"(responses: {s.get('provider_responses', 0)})\n"
+        f"(responses: {s.get('provider_responses', 0)}, errors: {s.get('provider_errors', 0)})\n"
         f"- Tool calls: {s.get('tool_calls', 0)} "
         f"(errors: {s.get('tool_errors', 0)}, sandbox-blocked: {s.get('sandbox_blocked', 0)})\n"
         f"- Compression events: {s.get('compression_events', 0)}\n"

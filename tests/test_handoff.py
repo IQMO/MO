@@ -44,6 +44,19 @@ def _agent_with_session(*, budget_tokens=250, max_history=50):
     return agent
 
 
+def test_handoff_artifact_references_include_devmode_manifest(tmp_path):
+    """A resumed model should get the active DEVMODE run's manifest.json path in the
+    handoff references — one run-level map instead of scattered artifact paths."""
+    from core.session.handoff import _artifact_references
+    sess = tmp_path / "2026-01-09T0000"
+    sess.mkdir()
+    (sess / "manifest.json").write_text('{"status": "active"}', encoding="utf-8")
+    agent = _agent_with_session()
+    agent._active_devmode_session_dir = sess
+    refs = _artifact_references(agent)
+    assert any("manifest.json" in r and str(sess.name) in r for r in refs)
+
+
 def test_compact_handoff_summary_includes_file_refs_and_graph(tmp_path, monkeypatch):
     # Seed at the resolved private state path (where the handoff reads), not cwd.
     from core.path_defaults import resolve_state_path

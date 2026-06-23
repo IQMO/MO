@@ -832,6 +832,19 @@ def _artifact_references(
     ]
     candidates.extend(name for name in static_names if Path(name).exists())
 
+    # The active DEVMODE run's runtime-owned manifest.json — one authoritative map of the
+    # run's outputs (monitor, economy, taskboard, artifacts, status). A resumed model
+    # should see this single index instead of rebuilding from scattered paths (orientation
+    # only, not proof by itself).
+    devmode_dir = getattr(agent, "_active_devmode_session_dir", None)
+    if devmode_dir is not None:
+        try:
+            manifest = Path(devmode_dir) / "manifest.json"
+            if manifest.is_file():
+                candidates.append(str(manifest))
+        except Exception:
+            pass
+
     for line in changed or []:
         if line.startswith("##"):
             continue

@@ -339,6 +339,53 @@ def test_economy_summary_counts_tool_result_errors(tmp_path):
     assert s["compression_events"] == 1
 
 
+def test_economy_summary_counts_provider_errors(tmp_path):
+    """A provider empty-response retry shows as a provider_error event — the economy must
+    count it and surface it in economy.md (T0450: the retry was lost from artifact truth)."""
+    from core.backend_monitor import economy_summary, format_economy_record
+    mon = tmp_path / "backend_monitor-pe.jsonl"
+    rows = [
+        {"type": "provider_request", "payload": {}},
+        {"type": "provider_response", "payload": {}},
+        {"type": "provider_error", "payload": {"reason": "empty provider response"}},
+        {"type": "tool_call", "payload": {}},
+    ]
+    mon.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    s = economy_summary(mon)
+    assert s["provider_errors"] == 1
+    assert "errors: 1" in format_economy_record(s)  # surfaced in economy.md
+
+
+def test_economy_writer_writes_runtime_manifest_under_bound_dir(tmp_path, monkeypatch):
+    """The economy writer also projects a runtime-owned manifest.json into the bound dir
+    with economy counts matching economy.md (acceptance criteria 1, 3)."""
+    import json as _json
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    (mondir / "backend_monitor-1.jsonl").write_text("\n".join(_json.dumps(r) for r in [
+        {"type": "provider_request", "payload": {"session_id": "mo-x", "route_source": "user"}},
+        {"type": "provider_error", "payload": {"session_id": "mo-x", "route_source": "user"}},
+        {"type": "tool_call", "payload": {"session_id": "mo-x", "route_source": "user"}},
+        {"type": "tool_result", "payload": {"session_id": "mo-x", "route_source": "user", "error": True}},
+    ]), encoding="utf-8")
+    active = tmp_path / "memory" / "devmode" / "2026-01-07T0000"
+    active.mkdir(parents=True)
+    agent = _devmode_board_agent()
+    agent._active_devmode_session_dir = active
+    agent._devmode_run_session_ids = {"mo-x"}
+    agent._write_devmode_economy_record()
+    manifest = _json.loads((active / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "active"
+    assert manifest["economy"]["tool_errors"] == 1   # equals economy.md
+    assert manifest["economy"]["provider_errors"] == 1
+    assert "errors: 1" in (active / "economy.md").read_text(encoding="utf-8")
+    assert "provider_error_retry_present" in manifest["warnings"]
+    # manifest landed under MO_STATE_HOME (the bound dir), not anywhere else
+    assert (active / "manifest.json").is_file()
+
+
 def test_economy_summary_excludes_ghost_and_groups_handoff_segments(tmp_path):
     """Logical-run scoping (amendment #5): one per-process monitor file holds the Main-MO
     run + its handoff segment + interleaved Ghost/desktop turns. Excluding Ghost surfaces
