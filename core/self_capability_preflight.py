@@ -56,6 +56,8 @@ _SELF_SCOPE_MARKERS = {
     "devmode05",
     "mo",
     "vs05",
+    "iam05",
+    "expert audit",
     "versus mode",
     "versus-mode",
     "your behavior",
@@ -118,9 +120,12 @@ def _pack_present() -> bool:
     """True when the untracked operator protocol pack is on disk."""
     try:
         devmode = operator_pack_root() / "devmode"
-        return (devmode / "DEVMODE05.md").exists() or (devmode / "VS05.md").exists() or (
-            devmode / "IFDEV05.md"
-        ).exists()
+        return (
+            (devmode / "DEVMODE05.md").exists()
+            or (devmode / "VS05.md").exists()
+            or (devmode / "IFDEV05.md").exists()
+            or (devmode / "IAM05.md").exists()
+        )
     except Exception:
         return False
 
@@ -186,6 +191,16 @@ def is_ifdev05_activation(user_input: str) -> bool:
     return operator_protocols_installed()
 
 
+def is_iam05_activation(user_input: str) -> bool:
+    """Return True when the operator has activated IAM05 expert-honesty audit mode."""
+    text = " ".join(str(user_input or "").strip().lower().split())
+    if not text:
+        return False
+    if not re.search(r"\b(?:start\s+)?(?:iam\s*05|expert\s+audit)\b", text):
+        return False
+    return operator_protocols_installed()
+
+
 def vs05_readonly_source_roots(user_input: str) -> list[str]:
     """Return existing local source roots explicitly supplied to a VS05 turn.
 
@@ -241,7 +256,7 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     text = " ".join(str(user_input or "").strip().lower().split())
     if not text:
         return False
-    if is_devmode05_activation(text) or is_vs05_activation(text) or is_ifdev05_activation(text):
+    if is_devmode05_activation(text) or is_vs05_activation(text) or is_ifdev05_activation(text) or is_iam05_activation(text):
         return True
     scope_hit = any(_marker_in_text(marker, text) for marker in _SELF_SCOPE_MARKERS)
     action_hit = any(_marker_in_text(word, text) for word in _SELF_ACTION_WORDS)
@@ -293,7 +308,12 @@ def _devmode05_future_stamp_violation() -> str | None:
         return None
 
 
-def _devmode05_closeout_evidence_violation(final_text: str) -> str | None:
+def _devmode05_closeout_evidence_violation(
+    final_text: str,
+    *,
+    monitor_path: str | Path | None = None,
+    session_ids: "set[str] | frozenset[str] | None" = None,
+) -> str | None:
     """Deterministic contradiction between a clean DEVMODE05 closeout and runtime
     truth — the internalized watcher. Returns a one-line block reason, or None.
     Fail-open: any error returns None so it can never wedge a legitimate closeout."""
@@ -305,8 +325,14 @@ def _devmode05_closeout_evidence_violation(final_text: str) -> str | None:
         #    adjacent to a stray "economy.md" mention or a loose digit. Scope to the
         #    Main-MO run (exclude Ghost/desktop turns that share the monitor file) so a
         #    Ghost error never forces the DEVMODE closeout to own it.
-        from .backend_monitor import GHOST_SURFACES, economy_summary
-        errs = int(economy_summary(exclude_surfaces=GHOST_SURFACES).get("tool_errors", 0) or 0)
+        from .backend_monitor import GHOST_SURFACES, active_monitor_path, economy_summary
+        if monitor_path is None:
+            monitor_path = active_monitor_path()
+        errs = int(economy_summary(
+            monitor_path,
+            session_ids=session_ids,
+            exclude_surfaces=GHOST_SURFACES,
+        ).get("tool_errors", 0) or 0)
         if errs > 0:
             low = final_text.lower()
             denies = any(p in low for p in (
@@ -327,7 +353,13 @@ def _devmode05_closeout_evidence_violation(final_text: str) -> str | None:
         return None
 
 
-def devmode05_final_allows_stop(user_input: str, final_text: str) -> bool:
+def devmode05_final_allows_stop(
+    user_input: str,
+    final_text: str,
+    *,
+    monitor_path: str | Path | None = None,
+    session_ids: "set[str] | frozenset[str] | None" = None,
+) -> bool:
     """Return True only when a DEVMODE05 final answer is a real stop boundary."""
     if not is_devmode05_activation(user_input):
         return True
@@ -342,7 +374,7 @@ def devmode05_final_allows_stop(user_input: str, final_text: str) -> bool:
     if text.startswith("[DEVMODE05 COMPLETE]"):
         if _devmode05_completion_reports_open_work(text):
             return False
-        if _devmode05_closeout_evidence_violation(final_text):
+        if _devmode05_closeout_evidence_violation(final_text, monitor_path=monitor_path, session_ids=session_ids):
             return False
         return True
     allowed_prefixes = (
@@ -387,7 +419,13 @@ def vs05_final_allows_stop(user_input: str, final_text: str) -> bool:
     return text.startswith(allowed_prefixes)
 
 
-def devmode05_continuation_instruction(user_input: str, final_text: str) -> str:
+def devmode05_continuation_instruction(
+    user_input: str,
+    final_text: str,
+    *,
+    monitor_path: str | Path | None = None,
+    session_ids: "set[str] | frozenset[str] | None" = None,
+) -> str:
     """Explain why a DEVMODE05 stop claim was rejected and what must happen next."""
     base = (
         "[DEVMODE05 AUTONOMY] Do not stop at a checkpoint, report, or approval question. "
@@ -410,7 +448,7 @@ def devmode05_continuation_instruction(user_input: str, final_text: str) -> str:
             "item as RESOLVED, and do NOT claim 'Remaining: none' when such items exist). Finalize "
             "with: 'No actionable product work remains; operator-decision items remain: <list, or none>.'"
         )
-    _violation = _devmode05_closeout_evidence_violation(final_text)
+    _violation = _devmode05_closeout_evidence_violation(final_text, monitor_path=monitor_path, session_ids=session_ids)
     if text.startswith("[DEVMODE05 COMPLETE]") and _violation:
         return (
             "[DEVMODE05 AUTONOMY] Your [DEVMODE05 COMPLETE] contradicts runtime evidence: "
