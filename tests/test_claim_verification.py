@@ -3,8 +3,11 @@
 Conservative: real stale-prone claims fire; ordinary coding prose never does.
 """
 from core.claim_verification import (
+    detect_completion_claim,
     detect_unverified_current_state_claim,
     unverified_claim_signal,
+    unverified_completion_claim_signal,
+    used_completion_verifying_tools,
     used_verifying_tools,
 )
 
@@ -66,3 +69,58 @@ def test_signal_suppressed_when_verified():
 
 def test_signal_none_on_ordinary_answer():
     assert unverified_claim_signal("I added a regression test; 12 pass.", {}) is None
+
+
+# ── completion/cleanliness detector: true positives (assumption-claims) ──
+def test_completion_claims_fire():
+    for text in [
+        "Everything's clean now.",
+        "It's clean, nothing to commit.",
+        "All tests pass.",
+        "The suite is green.",
+        "No issues found.",
+        "No regressions.",
+        "Product and VPS are fully synced.",
+        "Verified clean.",
+        "It all checks out.",
+    ]:
+        assert detect_completion_claim(text), text
+
+
+# ── completion detector: true negatives (ordinary prose must NOT fire) ──
+def test_completion_detector_does_not_overfire():
+    for text in [
+        "I edited the function and will run the tests next.",
+        "This should fix the import error.",
+        "Let me clean up the temp files.",     # 'clean up', not a cleanliness verdict
+        "The cleanup routine runs on exit.",
+        "I'm done editing; reviewing now.",     # bare 'done' must not fire
+    ]:
+        assert detect_completion_claim(text) is None, text
+
+
+# ── completion verifying tools (broader: tests/shell/git count) ──
+def test_completion_verifying_tools():
+    assert used_completion_verifying_tools({"test_runner": 1}) is True
+    assert used_completion_verifying_tools({"shell": 1}) is True
+    assert used_completion_verifying_tools({"git_status": 1}) is True
+    assert used_completion_verifying_tools({"read_file": 1}) is True
+    assert used_completion_verifying_tools({"edit_file": 3}) is False   # editing isn't verifying
+    assert used_completion_verifying_tools({}) is False
+
+
+# ── combined completion signal: claim + no check = flag ──
+def test_completion_signal_fires_without_checks():
+    assert unverified_completion_claim_signal("All tests pass.", {}) == "tests-pass claim"
+    assert unverified_completion_claim_signal("It's clean.", {"edit_file": 2}) is not None
+
+
+def test_completion_signal_suppressed_when_checked():
+    # A real check this turn (tests/shell/git/read) clears the flag.
+    assert unverified_completion_claim_signal("All tests pass.", {"test_runner": 1}) is None
+    assert unverified_completion_claim_signal("It's clean.", {"git_status": 1}) is None
+    assert unverified_completion_claim_signal("No regressions.", {"shell": 1}) is None
+
+
+def test_completion_signal_none_on_ordinary_answer():
+    assert unverified_completion_claim_signal("I refactored the parser.", {}) is None

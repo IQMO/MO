@@ -673,6 +673,20 @@ class AgentTurnRecoveryMixin:
         )
 
     @staticmethod
+    def _unverified_completion_claim_instruction(label: str) -> str:
+        """Fed back once when an answer asserts clean/passing/synced/no-issues state
+        but the turn ran no verifying tool. Driven enforcement of verify-before-claiming
+        (the prompt-only rule the operator kept having to re-correct)."""
+        return (
+            f"[VERIFY BEFORE CLAIMING] Your answer makes a completion/cleanliness claim "
+            f"({label}) but this turn ran no verifying tool (no test_runner/shell/git_status/"
+            "read/search). Do not assert clean / done / passing / synced / no-issues from "
+            "assumption or a prior turn. Either run the check now and cite the result, or "
+            "rewrite the claim to state only what you actually verified this turn. Then give "
+            "your final answer."
+        )
+
+    @staticmethod
     def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
         if is_vs05_activation(user_input):
             return vs05_task_truth_continuation_instruction()
