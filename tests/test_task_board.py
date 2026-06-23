@@ -17,7 +17,6 @@ def test_render_counts_and_symbols():
     expected = (
         "4 tasks (1 done, 3 open)\n"
         "  √ Inspect current files\n"
-        "       ↳ read_file:a.py\n"
         "  → Extract shared helper\n"
         "  □ Run tests\n"
         "  ! Verify browser behavior — dev server failed to start"
@@ -149,7 +148,7 @@ def test_render_rich_symbols():
     rendered = render_rich(board)
     assert board.render_rich() == rendered
     assert "[green]√[/green] [dim]Done[/dim]" in rendered
-    assert "      [dim]↳ evidence[/dim]" in rendered
+    assert "↳" not in rendered  # per-task evidence sub-line removed (clean one-line-per-task)
     assert "[orange1]→[/orange1] Active" in rendered
     assert "[dim]□ Pending[/dim]" in rendered
     assert "[red]![/red] Blocked [dim]— needs approval[/dim]" in rendered

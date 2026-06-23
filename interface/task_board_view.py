@@ -69,11 +69,6 @@ def render_plain(board: TaskBoard) -> str:
         if len(title) > 100:
             title = title[:97] + "..."
         lines.append(f"  {prefix} {title}{suffix}")
-        if task.get("evidence"):
-            last_ev = str(task["evidence"][-1])
-            if len(last_ev) > 100:
-                last_ev = last_ev[:97] + "..."
-            lines.append(f"       ↳ {last_ev}")
     return "\n".join(lines)
 
 
@@ -98,12 +93,5 @@ def render_rich(board: TaskBoard) -> str:
             lines.append(f"    [red]![/red] {title}{suffix}")
         else:
             lines.append(f"    [dim]□ {title}[/dim]")
-            
-        if task.get("evidence"):
-            last_ev = str(task["evidence"][-1])
-            if len(last_ev) > 100:
-                last_ev = last_ev[:97] + "..."
-            last_ev = rich_escape(last_ev)
-            lines.append(f"       [dim]↳ {last_ev}[/dim]")
     return "\n".join(lines)
 
