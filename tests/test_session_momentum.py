@@ -37,6 +37,36 @@ def test_compact_completed_tool_chains_replaces_old_chain_with_orientation_summa
     assert "orientation only, not proof" in compacted[0]["content"]
 
 
+def test_compact_keeps_code_skeleton_for_read_file_of_python():
+    """An old read_file-of-Python chain compacts to a summary that KEEPS the file's
+    structure (signatures/docstrings) and drops bodies — MO's per-format compressor does
+    0% on source files, so this is where the ~90% code win lands. Original is archived."""
+    py_src = '"""Module doc."""\nimport os\n\nclass Bar:\n    """Bar holds state."""\n'
+    for i in range(40):
+        py_src += (f"\n    def m{i}(self, a, b):\n        total = a + b\n"
+                   f"        for k in range(a):\n            total += k * b\n        return total\n")
+    numbered = "[Lines 1-N of N]\n" + "\n".join(f"{i}: {ln}" for i, ln in enumerate(py_src.splitlines(), 1))
+
+    session = Session("system", max_history=100)
+    session.add_user("read the module and summarize its shape")
+    session.add_message({"role": "assistant", "content": "", "tool_calls": [_tool_call("c1", "read_file", {"path": "bar.py"})]})
+    session.add_tool_result("c1", numbered)
+    session.add_assistant("read it.")
+    for idx in range(20):
+        session.add_user(f"recent {idx}")
+        session.add_assistant(f"answer {idx}")
+
+    result = compact_completed_tool_chains(session, keep_recent=18, max_chains=2)
+    assert result["changed"] is True
+    compacted = [m for m in session.messages if "SESSION MOMENTUM COMPACTED" in str(m.get("content", ""))]
+    assert len(compacted) == 1
+    content = compacted[0]["content"]
+    assert "Structure of read code" in content
+    assert "class Bar:" in content
+    assert "def m0(self, a, b): ..." in content      # signature kept
+    assert "total += k * b" not in content            # body dropped
+
+
 def test_compact_completed_tool_chains_skips_unfinished_tail():
     session = Session("system", max_history=100)
     session.add_user("start work")

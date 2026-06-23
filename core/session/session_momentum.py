@@ -153,6 +153,27 @@ def _match_completed_tool_chain(messages: list[dict[str, Any]], start: int, cuto
     if final_preview:
         lines.append(f"- Prior assistant outcome: {final_preview}")
     lines.append("- Re-run/read current files/tests before factual claims; append-only tool audit remains the durable receipt.")
+    # Keep the STRUCTURE of read_file-of-Python results (signatures/docstrings; bodies
+    # dropped — the original is archived above and read_file-recoverable). On real code
+    # this is a ~90% cut while the model keeps a navigable map of what it read; MO's
+    # per-format tool compressor does 0% on source files (no consecutive duplicate lines).
+    from ..code_skeleton import code_skeleton
+    skeletons: list[str] = []
+    for m in chain:
+        if m.get("role") != "tool":
+            continue
+        content = m.get("content")
+        if not isinstance(content, str):
+            continue
+        sk = code_skeleton(content)
+        if sk:
+            skeletons.append(sk)
+        if len(skeletons) >= 3:
+            break
+    if skeletons:
+        lines.append("- Structure of read code (bodies dropped; read_file to recover full):")
+        for sk in skeletons:
+            lines.append("```python\n" + sk + "\n```")
     summary = {"role": "assistant", "content": "\n".join(lines)}
     after_chars = _message_chars([summary])
     if after_chars >= before_chars:
