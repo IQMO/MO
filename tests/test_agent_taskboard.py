@@ -78,7 +78,7 @@ class TestAdvanceTaskBoardAfterTool:
                 with patch.object(tb, 'complete', wraps=tb.complete) as mock_complete:
                     result = atb._advance_task_board_after_tool(tb, "complete_task", {})
                     assert result is True
-                    mock_complete.assert_called_once_with("task-1")
+                    mock_complete.assert_called_once_with("task-1", evidence=None)
 
     def test_complete_task_does_not_append_its_own_evidence(self):
         from core.tasking.agent_taskboard import AgentTaskBoard
