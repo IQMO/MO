@@ -600,8 +600,10 @@ def test_devmode_economy_reconciles_stale_summary_counts(tmp_path, monkeypatch):
     active.mkdir(parents=True)
     (active / "summary.md").write_text(
         "# Summary\n"
-        "- **Economy:** 26 provider requests, 63 tool calls, 1 tool error "
+        "- **Economy:** 26 provider requests, 63 tool calls, 0 tool errors "
         "(BENIGN — exploratory probe), 5 compressions\n"
+        "## Closeout\n"
+        "- [DEVMODE05 COMPLETE] HEALTHY. 0 tool errors, all recovered.\n"
         "- **Tests:** 1 targeted test passes\n",
         encoding="utf-8",
     )
@@ -612,5 +614,10 @@ def test_devmode_economy_reconciles_stale_summary_counts(tmp_path, monkeypatch):
     assert "29 provider requests" in out
     assert "66 tool calls" in out
     assert "26 provider requests" not in out and "63 tool calls" not in out
+    # The tool-error count is normalized on EVERY line that mentions it — the economy
+    # line AND the closeout marker — so summary can't disagree with economy.md (watcher
+    # T0450: economy line said 4 while ledger/closeout still said 3). Monitor has 1 error.
+    assert "0 tool errors" not in out          # both the economy line AND closeout fixed
+    assert out.count("1 tool error") >= 2      # both lines now show the authoritative 1
     assert "(BENIGN — exploratory probe)" in out  # narration preserved
     assert "1 targeted test passes" in out  # unrelated lines untouched

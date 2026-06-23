@@ -307,18 +307,18 @@ class AgentTaskBoard:
             if not summary_path.exists():
                 return
             text = summary_path.read_text(encoding="utf-8", errors="replace")
-            subs = (
-                (r"\d+(?=\s+provider request)", summary.get("provider_requests", 0)),
-                (r"\d+(?=\s+tool calls)", summary.get("tool_calls", 0)),
-                (r"\d+(?=\s+tool error)", summary.get("tool_errors", 0)),
-                (r"\d+(?=\s+compression)", summary.get("compression_events", 0)),
-            )
-
             def fix_line(line: str) -> str:
-                if "provider request" not in line:  # the economy line is the only one with this phrase
-                    return line
-                for pat, val in subs:
-                    line = re.sub(pat, str(val), line)
+                # The tool-error count is reconciled on ANY line that mentions it — the
+                # economy line, the Tool Error Ledger, AND the closeout marker — so the
+                # summary can never disagree with economy.md (watcher T0450: economy line
+                # said 4 while the ledger/closeout/catalog still said 3).
+                if "tool error" in line:
+                    line = re.sub(r"\d+(?=\s+tool error)", str(summary.get("tool_errors", 0)), line)
+                # Provider/tool-call/compression counts are unique to the economy line.
+                if "provider request" in line:
+                    line = re.sub(r"\d+(?=\s+provider request)", str(summary.get("provider_requests", 0)), line)
+                    line = re.sub(r"\d+(?=\s+tool calls)", str(summary.get("tool_calls", 0)), line)
+                    line = re.sub(r"\d+(?=\s+compression)", str(summary.get("compression_events", 0)), line)
                 return line
 
             new_text = "\n".join(fix_line(ln) for ln in text.split("\n"))
