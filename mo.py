@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None):
     except Exception:
         heartbeat = None
     try:
-        from interface.companion import start_companion_if_enabled
+        from interface.ghost_desktop import start_companion_if_enabled
         companion = start_companion_if_enabled(agent, gateway)
         if companion:
             try:

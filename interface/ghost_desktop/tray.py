@@ -210,7 +210,7 @@ class CompanionTray:
                     shell = Dispatch("WScript.Shell")
                     shortcut = shell.CreateShortcut(str(shortcut_path))
                     shortcut.TargetPath = sys.executable
-                    shortcut.Arguments = "-m interface.companion"
+                    shortcut.Arguments = "-m interface.ghost_desktop"
                     shortcut.WorkingDirectory = str(Path(__file__).resolve().parent.parent.parent)
                     shortcut.Description = "MO Ghost — on-screen AI assistant"
                     shortcut.IconLocation = sys.executable

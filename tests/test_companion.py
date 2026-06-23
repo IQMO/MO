@@ -48,19 +48,19 @@ class TestCompanionPhase4Init:
     """CompanionSurface initializes Phase 4 attributes."""
 
     def test_companion_has_tray_attr(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None)
         assert cs._tray is None
         assert cs._action_log == []
         assert cs._panic_stop_requested is False
 
     def test_companion_accepts_top_level_config(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None, companion_config={"tray_enabled": True})
         assert cs._companion_cfg["tray_enabled"] is True
 
     def test_companion_default_mode_is_guide(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None)
         assert cs.mode == "guide"
 
@@ -69,7 +69,7 @@ class TestCompanionActionLog:
     """_log_action and action_log list management."""
 
     def test_log_action_appends_entry(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None)
         cs._log_action("submit", "test query")
         assert len(cs._action_log) == 1
@@ -79,13 +79,13 @@ class TestCompanionActionLog:
         assert "time" in entry
 
     def test_log_action_truncates_detail(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None)
         cs._log_action("turn_complete", "x" * 300)
         assert len(cs._action_log[0]["detail"]) == 200
 
     def test_log_action_caps_at_50(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None)
         for i in range(60):
             cs._log_action("submit", f"query {i}")
@@ -99,7 +99,7 @@ class TestCompanionActionCoverage:
     """The action log must reflect what MO actually does, not just request+reply."""
 
     def _cs(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         return CompanionSurface(agent=None, gateway=None)
 
     def test_on_action_logs_tool_with_summary(self):
@@ -184,7 +184,7 @@ class TestCompanionPanicStop:
     """Panic-stop state management."""
 
     def test_panic_stop_sets_flag_and_logs(self):
-        from interface.companion.companion import CompanionSurface
+        from interface.ghost_desktop.companion import CompanionSurface
         cs = CompanionSurface(agent=None, gateway=None)
         cs.panic_stop()
         assert cs._panic_stop_requested is True
@@ -193,7 +193,7 @@ class TestCompanionPanicStop:
 
 
 def test_companion_stop_stops_tray(monkeypatch):
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
 
     stopped = []
 
@@ -212,7 +212,22 @@ def test_companion_stop_stops_tray(monkeypatch):
 
 
 def test_companion_module_entrypoint_help():
-    """Regression: tray startup targets `python -m interface.companion`."""
+    """Regression: tray startup targets `python -m interface.ghost_desktop`."""
+    repo = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-m", "interface.ghost_desktop", "--help"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0
+    assert "Run MO Ghost" in result.stdout
+
+
+def test_legacy_companion_entrypoint_still_forwards():
+    """Back-compat: existing run-at-startup shortcuts invoke `python -m
+    interface.companion`, which must still forward to the renamed package."""
     repo = Path(__file__).resolve().parents[1]
     result = subprocess.run(
         [sys.executable, "-m", "interface.companion", "--help"],
@@ -226,7 +241,7 @@ def test_companion_module_entrypoint_help():
 
 
 def test_ghost_surface_config_prefers_ghost_with_legacy_fallback():
-    from interface.companion.companion import ghost_surface_config
+    from interface.ghost_desktop.companion import ghost_surface_config
     assert ghost_surface_config({"ghost": {"enabled": True}}) == {"enabled": True}
     assert ghost_surface_config({"desktop_companion": {"enabled": True}}) == {"enabled": True}
     # new key wins when both are present
@@ -239,7 +254,7 @@ def test_ghost_session_uses_desktop_persona():
     """The desktop Ghost runs on its own isolated session with the Ghost persona
     augmenting (not replacing) the main MO system prompt."""
     from types import SimpleNamespace
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     agent = SimpleNamespace(system_message="You are MO. Base rules here.", _session=None)
     cs = CompanionSurface(agent=agent, gateway=None)
     sess = cs._ensure_ghost_session()
@@ -249,7 +264,7 @@ def test_ghost_session_uses_desktop_persona():
 
 
 def test_start_companion_passes_companion_config(monkeypatch):
-    import interface.companion.companion as companion_module
+    import interface.ghost_desktop.companion as companion_module
 
     captured = {}
 
@@ -287,7 +302,7 @@ def test_start_companion_passes_companion_config(monkeypatch):
 def test_hotkey_registration_stores_and_removes_handle(monkeypatch):
     import sys
     import types
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
 
     removed = []
     keyboard = types.SimpleNamespace(
@@ -306,7 +321,7 @@ def test_hotkey_registration_stores_and_removes_handle(monkeypatch):
 
 
 def test_post_gui_event_uses_thread_safe_queue():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
 
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
@@ -316,7 +331,7 @@ def test_post_gui_event_uses_thread_safe_queue():
 
 
 def test_gui_status_updates_drain_on_gui_thread():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
 
     updates = []
 
@@ -336,14 +351,14 @@ def test_gui_status_updates_drain_on_gui_thread():
 
 
 def test_companion_geometry_opens_near_pointer_and_flips_at_edges():
-    from interface.companion.companion import companion_geometry_near_pointer
+    from interface.ghost_desktop.companion import companion_geometry_near_pointer
 
     assert companion_geometry_near_pointer(100, 100, 1920, 1080) == "440x200+124+124"
     assert companion_geometry_near_pointer(1900, 1060, 1920, 1080) == "440x200+1436+836"
 
 
 def test_voice_input_is_hidden_when_not_configured():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
 
     assert CompanionSurface(agent=None, gateway=None)._voice_input_configured() is False
     assert CompanionSurface(
@@ -359,7 +374,7 @@ def test_voice_input_is_hidden_when_not_configured():
 
 
 def test_voice_unavailable_message_separates_transcription_from_capture():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
 
     class FakeRecognizer:
         available = False

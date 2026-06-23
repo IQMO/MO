@@ -54,7 +54,7 @@ class _FakeText:
 
 # ---------------------------------------------------- redaction / response box
 def test_set_response_redacts_and_renders_to_text():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
     cs._response = _FakeText()
@@ -67,7 +67,7 @@ def test_set_response_redacts_and_renders_to_text():
 
 
 def test_on_assistant_text_redacts_and_follows_tail():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
     cs._response = _FakeText()
@@ -79,7 +79,7 @@ def test_on_assistant_text_redacts_and_follows_tail():
 
 # ----------------------------------------------------------- mode indicator
 def test_mode_indicator_distinguishes_guide_and_do():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._mode = "guide"
     g_text, g_color = cs._mode_indicator()
@@ -91,7 +91,7 @@ def test_mode_indicator_distinguishes_guide_and_do():
 
 # ----------------------------------------------------------- voice button
 def test_voice_button_color_helper_posts_config():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
     cs._voice_btn = _FakeLabel()
@@ -102,7 +102,7 @@ def test_voice_button_color_helper_posts_config():
 
 # ----------------------------------------------------------- GUI queueing
 def test_post_gui_call_refused_after_stop():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
     assert cs._post_gui_call(lambda: None) is True
@@ -112,7 +112,7 @@ def test_post_gui_call_refused_after_stop():
 
 # ----------------------------------------------------------- status text
 def test_set_status_ellipsizes_long_text():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
     cs._status_label = _FakeLabel()
@@ -136,7 +136,7 @@ def _fake_sounddevice():
 def test_recorder_releases_stream_on_autostop(monkeypatch):
     """Hitting the max-seconds cap must release the mic device (CallbackStop),
     not merely flip the recording flag — otherwise the InputStream stays hot."""
-    from interface.companion.voice import PushToTalkRecorder
+    from interface.ghost_desktop.voice import PushToTalkRecorder
     sd = _fake_sounddevice()
     monkeypatch.setitem(sys.modules, "sounddevice", sd)
 
@@ -164,7 +164,7 @@ def test_recorder_releases_stream_on_autostop(monkeypatch):
 
 
 def test_recorder_callback_without_stream_stays_test_safe():
-    from interface.companion.voice import PushToTalkRecorder
+    from interface.ghost_desktop.voice import PushToTalkRecorder
     rec = PushToTalkRecorder(sample_rate=100, max_seconds=1.0)
     rec._recording = True
     for _ in range(5):
@@ -175,7 +175,7 @@ def test_recorder_callback_without_stream_stays_test_safe():
 
 # ----------------------------------------------------------- voice autostop
 def test_poll_voice_autostop_finishes_capture_when_recorder_self_stopped():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
     cs._recording_voice = True
@@ -195,7 +195,7 @@ def test_poll_voice_autostop_finishes_capture_when_recorder_self_stopped():
 
 
 def test_poll_voice_autostop_noop_while_still_recording():
-    from interface.companion.companion import CompanionSurface
+    from interface.ghost_desktop.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
     cs._root = object()
     cs._recording_voice = True
@@ -215,7 +215,7 @@ def test_poll_voice_autostop_noop_while_still_recording():
 
 # ----------------------------------------------------------- TTS errors
 def test_speak_async_invokes_on_error_when_speak_fails():
-    from interface.companion.voice import VoiceSpeaker
+    from interface.ghost_desktop.voice import VoiceSpeaker
     spk = VoiceSpeaker(voice_model_path="")  # no model -> speak() returns False
     errors = []
     done = threading.Event()
@@ -231,7 +231,7 @@ def test_speak_async_invokes_on_error_when_speak_fails():
 
 # ----------------------------------------------------------- mic errors
 def test_recorder_start_records_last_error_when_backend_missing(monkeypatch):
-    from interface.companion.voice import PushToTalkRecorder
+    from interface.ghost_desktop.voice import PushToTalkRecorder
     rec = PushToTalkRecorder()
     monkeypatch.setattr(type(rec), "available", property(lambda self: False))
     assert rec.start() is False
@@ -240,7 +240,7 @@ def test_recorder_start_records_last_error_when_backend_missing(monkeypatch):
 
 # ----------------------------------------------------------- startup toggle
 def test_toggle_startup_notifies_on_failure(monkeypatch):
-    from interface.companion.tray import CompanionTray
+    from interface.ghost_desktop.tray import CompanionTray
     t = CompanionTray(None)
     notes = []
     t._notify = lambda m: notes.append(m)
@@ -251,7 +251,7 @@ def test_toggle_startup_notifies_on_failure(monkeypatch):
 
 
 def test_toggle_startup_silent_on_success(monkeypatch):
-    from interface.companion.tray import CompanionTray
+    from interface.ghost_desktop.tray import CompanionTray
     t = CompanionTray(None)
     notes = []
     t._notify = lambda m: notes.append(m)
@@ -263,7 +263,7 @@ def test_toggle_startup_silent_on_success(monkeypatch):
 
 # ----------------------------------------------------------- tray mode title
 def test_tray_update_title_reflects_mode():
-    from interface.companion.tray import CompanionTray
+    from interface.ghost_desktop.tray import CompanionTray
     t = CompanionTray(None)
 
     class FakeIcon:

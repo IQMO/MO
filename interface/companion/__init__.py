@@ -1,16 +1,20 @@
-"""Ghost desktop surface — on-screen text-input overlay + global hotkey + voice + tray.
+"""Back-compat shim — the desktop Ghost moved to ``interface.ghost_desktop``.
 
-This is the desktop Ghost: summon with Win+Alt+M, type, and get results back via
-the Gateway on Ghost's isolated session → overlay bubble. Phase 3 adds push-to-talk
-voice: sounddevice captures the mic, faster-whisper transcribes it, and
-piper-tts can speak replies when a local voice model is configured. Phase 4 adds
-system-tray icon with Guide/Do modes, action log, run-at-startup, and panic-stop.
+Kept only so existing run-at-startup shortcuts (``python -m interface.companion``)
+and any old top-level imports keep working after the module-merge pass. New code
+should import from ``interface.ghost_desktop``.
 """
 from __future__ import annotations
 
-from interface.companion.companion import CompanionSurface, start_companion_if_enabled
-from interface.companion.tray import CompanionTray, start_tray_if_enabled
-from interface.companion.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
+from interface.ghost_desktop import (
+    CompanionSurface,
+    CompanionTray,
+    CompanionVoice,
+    VoiceRecognizer,
+    VoiceSpeaker,
+    start_companion_if_enabled,
+    start_tray_if_enabled,
+)
 
 __all__ = [
     "CompanionSurface",

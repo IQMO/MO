@@ -26,8 +26,8 @@ from typing import Any, Callable
 
 from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
 from core.sandbox import redact_sensitive_text
-from interface.companion.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
-from interface.companion.tray import CompanionTray, start_tray_if_enabled
+from interface.ghost_desktop.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
+from interface.ghost_desktop.tray import CompanionTray, start_tray_if_enabled
 
 CYAN = "#00cccc"
 CARD = "#04141a"
