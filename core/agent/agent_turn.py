@@ -48,18 +48,22 @@ from ..graph.code_graph import build_code_graph_context, should_include_code_gra
 from ..context_bridge import ContextSource, build_active_context_bridge
 from ..coordination_state import build_main_coordination_context
 from ..mo_control_context import build_mo_control_context, should_include_mo_control_context
-from ..self_capability_preflight import (
-    build_self_capability_preflight_context,
+from ..owner_protocols import (
+    is_devmode05_activation,
+    is_ifdev05_activation,
+    is_vs05_activation,
+)
+from ..self_maintenance.devmode_closeout import (
     devmode05_continuation_instruction,
     devmode05_final_allows_stop,
     ifdev05_continuation_instruction,
     ifdev05_final_allows_stop,
-    is_devmode05_activation,
-    is_ifdev05_activation,
-    is_vs05_activation,
-    should_include_self_capability_preflight,
     vs05_continuation_instruction,
     vs05_final_allows_stop,
+)
+from ..self_maintenance.preflight import (
+    build_self_capability_preflight_context,
+    should_include_self_capability_preflight,
 )
 from ..project_context import build_project_context
 from ..work_patterns import build_work_pattern_context

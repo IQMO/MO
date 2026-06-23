@@ -130,7 +130,7 @@ class AgentTaskBoard:
     def _devmode_runtime_output_context(self, user_input: str) -> str:
         """Context block that tells DEVMODE05 the one allowed output directory."""
         try:
-            from ..self_capability_preflight import is_devmode05_activation
+            from ..owner_protocols import is_devmode05_activation
             if not is_devmode05_activation(user_input):
                 return ""
             target = self._ensure_devmode_session_dir()
@@ -163,7 +163,7 @@ class AgentTaskBoard:
         try:
             if name not in {"write_file", "edit_file"}:
                 return None
-            from ..self_capability_preflight import is_devmode05_activation
+            from ..owner_protocols import is_devmode05_activation
             if not is_devmode05_activation(user_input):
                 return None
             args = arguments or {}
@@ -236,12 +236,14 @@ class AgentTaskBoard:
         terminal report can close the remaining phase rows before the final
         consistency boundary reads task truth.
         """
-        from ..self_capability_preflight import (
-            devmode05_final_allows_stop,
-            ifdev05_final_allows_stop,
+        from ..owner_protocols import (
             is_devmode05_activation,
             is_ifdev05_activation,
             is_vs05_activation,
+        )
+        from ..self_maintenance.devmode_closeout import (
+            devmode05_final_allows_stop,
+            ifdev05_final_allows_stop,
             vs05_final_allows_stop,
         )
 
@@ -533,7 +535,7 @@ class AgentTaskBoard:
         """If the model's terminal answer is [DEVMODE05 BLOCKED], make summary.md agree —
         a blocked run must never leave a [DEVMODE05 COMPLETE] in its summary."""
         try:
-            from ..self_capability_preflight import _devmode05_terminal_prefix_text
+            from ..self_maintenance.devmode_closeout import _devmode05_terminal_prefix_text
             text = _devmode05_terminal_prefix_text(final_text) or ""
             if not text.startswith("[DEVMODE05 BLOCKED]"):
                 return

@@ -11,12 +11,14 @@ from ..tasking.task_board import TaskBoard, record_snapshot
 from ..session.session_momentum import maybe_compact_session
 from ..path_defaults import operator_pack_root
 from .agent_utils import _emit_task_board_update
-from ..self_capability_preflight import (
-    devmode05_task_truth_continuation_instruction,
-    ifdev05_task_truth_continuation_instruction,
+from ..owner_protocols import (
     is_devmode05_activation,
     is_ifdev05_activation,
     is_vs05_activation,
+)
+from ..self_maintenance.devmode_closeout import (
+    devmode05_task_truth_continuation_instruction,
+    ifdev05_task_truth_continuation_instruction,
     vs05_task_truth_continuation_instruction,
 )
 

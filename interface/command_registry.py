@@ -37,7 +37,7 @@ def _operator_protocols_visible() -> bool:
     an interface->core import cycle and to stay monkeypatchable in tests.
     """
     try:
-        from core.self_capability_preflight import operator_protocols_installed
+        from core.owner_protocols import operator_protocols_installed
 
         return bool(operator_protocols_installed())
     except Exception:

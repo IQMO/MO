@@ -27,7 +27,9 @@ _CORE_MODULES = (
     "core.provider.provider",
     "core.sandbox",
     "core.gateway",
-    "core.self_capability_preflight",
+    "core.owner_protocols",
+    "core.self_maintenance.preflight",
+    "core.self_maintenance.devmode_closeout",
     "tools",
 )
 

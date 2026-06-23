@@ -4,7 +4,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 
 ## Runtime Truth
 - `core/prompts/system.md` — MO runtime behavior prompt.
-- `core/self_capability_preflight.py` — owner-only self-maintenance preflight/stop gates; inert without the private pack.
+- `core/owner_protocols.py`, `core/self_maintenance/` — owner-only activation, preflight, and stop gates; inert without the private pack.
 
 ## Core Surfaces
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).

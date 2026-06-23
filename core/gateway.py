@@ -32,7 +32,7 @@ from .runtime_work_signals import (
 )
 from .tasking.task_board import TaskBoard, board_update_event, record_snapshot, resume_last_board
 from .tasking.task_board_registry import TaskBoardRegistry
-from .self_capability_preflight import is_devmode05_activation, is_vs05_activation
+from .owner_protocols import is_devmode05_activation, is_vs05_activation
 from .work_patterns import is_research_method_question
 
 if TYPE_CHECKING:

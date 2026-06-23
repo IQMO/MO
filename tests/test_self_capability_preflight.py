@@ -1,20 +1,22 @@
 from types import SimpleNamespace
 
 from core.agent.agent import Agent
-from core.self_capability_preflight import (
+from core.owner_protocols import (
+    is_devmode05_activation,
+    is_ifdev05_activation,
+    is_vs05_activation,
+    vs05_readonly_source_roots,
+)
+from core.self_maintenance.devmode_closeout import (
     devmode05_continuation_instruction,
     devmode05_final_allows_stop,
     devmode05_task_truth_continuation_instruction,
     ifdev05_continuation_instruction,
     ifdev05_final_allows_stop,
-    is_devmode05_activation,
-    is_ifdev05_activation,
-    is_vs05_activation,
-    should_include_self_capability_preflight,
     vs05_continuation_instruction,
     vs05_final_allows_stop,
-    vs05_readonly_source_roots,
 )
+from core.self_maintenance.preflight import should_include_self_capability_preflight
 
 
 def test_self_capability_preflight_detection_is_scoped():
@@ -114,7 +116,7 @@ def test_preflight_context_user_clone_has_no_protocol_recipe(monkeypatch):
     reminder — no protocol shape — plus generic capability orientation. The
     detailed owner-path assertions live in the private pack tests so the recipe is
     not published in the public test suite either."""
-    import core.self_capability_preflight as scp
+    import core.self_maintenance.preflight as scp
 
     monkeypatch.setattr(scp, "_load_owner_preflight_rules", lambda: [])
     text = scp.build_self_capability_preflight_context(
@@ -321,7 +323,7 @@ def test_closeout_requires_session_artifacts_exist(tmp_path):
     """A [DEVMODE05 COMPLETE] with a bound session dir missing summary/economy/manifest is
     an INCOMPLETE closeout and must be blocked (live mo-1782208099: the completed-board guard
     ended the turn before they were written). All three present → no violation; no dir → pass."""
-    import core.self_capability_preflight as scp
+    import core.self_maintenance.devmode_closeout as scp
     text = "[DEVMODE05 COMPLETE] HEALTHY. 0 tool errors."
     sd = tmp_path / "2026-01-11T0000"
     sd.mkdir()
@@ -342,7 +344,7 @@ def test_closeout_gate_uses_frozen_error_count_not_moving_live():
     """Freeze: the terminal gate owns the FROZEN closeout error count, not the live
     (moving) monitor — so post-freeze closeout-edit errors can't shift the target and loop
     the gate forever (the mo-1782179985 N->N+1 loop that exhausted the turn budget)."""
-    import core.self_capability_preflight as scp
+    import core.self_maintenance.devmode_closeout as scp
     text = "[DEVMODE05 COMPLETE] HEALTHY. 8 tool errors (all recovered); see economy.md."
     # Owns the frozen 8 -> no violation, regardless of whatever the live monitor now says.
     assert scp._devmode05_closeout_evidence_violation(text, frozen_error_count=8) is None
@@ -362,7 +364,7 @@ def test_devmode05_operator_owned_deferred_is_valid_terminal(tmp_path, monkeypat
     observation / accepted deferred) without being forced to a false "Remaining: none".
     The model must NOT have to rewrite them to RESOLVED to pass the gate — the exact T0000
     case (B2 supervised fix-lane + OBS-PERF-1 recorded observation)."""
-    import core.self_capability_preflight as scp
+    import core.self_maintenance.devmode_closeout as scp
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "nomon"))  # no tool errors
@@ -529,7 +531,7 @@ def test_clean_complete_stops_without_committing_artifacts(tmp_path, monkeypatch
     must NOT be committed. A clean COMPLETE (no open work) is a valid stop; the
     old 'commit docs/ artifacts before stopping' gate was removed (it forced the
     machinery leak into the product repo and could never fire post-gitignore)."""
-    from core.self_capability_preflight import (
+    from core.self_maintenance.devmode_closeout import (
         devmode05_final_allows_stop,
         vs05_final_allows_stop,
     )
@@ -547,7 +549,7 @@ def test_clean_complete_stops_without_committing_artifacts(tmp_path, monkeypatch
 def test_operator_mode_requires_owner_token(monkeypatch, tmp_path):
     """RC1: the copyable protocol pack alone must NOT unlock operator mode — a
     private ~/.mo/operator.token (which a user clone never has) is also required."""
-    import core.self_capability_preflight as scp
+    import core.owner_protocols as scp
 
     monkeypatch.delenv("MO_OPERATOR_PROTOCOLS", raising=False)
     monkeypatch.setattr(scp, "_pack_present", lambda: True)
@@ -571,7 +573,7 @@ def test_protocol_activation_requires_operator_pack(monkeypatch):
     """User clones have no devmode/ pack — the personal protocol terms are
     inert by absence; MO_OPERATOR_PROTOCOLS=1 (set suite-wide in conftest)
     or the real files restore them for the operator."""
-    from core.self_capability_preflight import (
+    from core.owner_protocols import (
         is_devmode05_activation,
         operator_protocols_installed,
     )
@@ -583,7 +585,7 @@ def test_protocol_activation_requires_operator_pack(monkeypatch):
     # Without env: falls back to the real file check (true on the operator
     # checkout, false on a user clone) — simulate the user clone explicitly.
     monkeypatch.delenv("MO_OPERATOR_PROTOCOLS", raising=False)
-    import core.self_capability_preflight as scp
+    import core.owner_protocols as scp
     monkeypatch.setattr(scp.Path, "exists", lambda self: False)
     assert scp.operator_protocols_installed() is False
     assert scp.is_devmode05_activation("start DEVMODE05") is False
@@ -595,7 +597,7 @@ def test_devmode05_closeout_gate_blocks_unowned_tool_errors(tmp_path, monkeypatc
     (the internalized watcher) — but never false-blocks a no-error session, and a
     closeout that owns the error finishes."""
     import json
-    import core.self_capability_preflight as scp
+    import core.self_maintenance.devmode_closeout as scp
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path))
     (tmp_path / "backend_monitor-1.jsonl").write_text(
@@ -621,7 +623,7 @@ def test_devmode05_closeout_gate_blocks_future_session_stamp(tmp_path, monkeypat
     T1930 bug) blocks the closeout; a normal past-dated stamp does not."""
     import shutil
     from datetime import datetime, timedelta
-    import core.self_capability_preflight as scp
+    import core.self_maintenance.devmode_closeout as scp
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "nomon"))  # no tool errors
@@ -644,7 +646,7 @@ def test_devmode05_closeout_gate_blocks_past_skewed_stamp(tmp_path, monkeypatch)
     legitimate run is never flagged."""
     import shutil
     from datetime import datetime, timedelta
-    import core.self_capability_preflight as scp
+    import core.self_maintenance.devmode_closeout as scp
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     mondir = tmp_path / "mon"

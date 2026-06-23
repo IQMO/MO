@@ -40,7 +40,7 @@ These are hard rules. They exist because the opposite behavior has repeatedly wa
 
 ## MO Runtime Truth
 - `core/prompts/system.md` — authoritative MO runtime behavior prompt.
-- `core/self_capability_preflight.py` — preflight/stop gates for owner-only self-maintenance work. Inert unless the owner's private pack is present; absent that, MO's project-audit/comparison mindset comes from work patterns instead.
+- `core/owner_protocols.py` + `core/self_maintenance/` — owner-protocol activation, preflight, and stop gates for self-maintenance work. Inert unless the owner's private pack is present; absent that, MO's project-audit/comparison mindset comes from work patterns instead.
 - This checkout is the active product source; the product name is **MO Agent** (any local folder name is just a checkout path, never user-facing). Operator-specific lineage/context lives in the private operator lane (`~/.mo/operator` or `MO_OPERATOR_PACK`) and private state, never in tracked product docs.
 - Do not duplicate those internals here; check source/protocol before capability claims.
 - Operator paths/servers/project names are never hardcoded in product code or product docs; operator data (identity, projects, server/repo/deploy knowledge, terms) lives in the per-user `~/.mo` profile. The optional `mo_control.*` external bridge resolves only from private config or env and is disabled by default.

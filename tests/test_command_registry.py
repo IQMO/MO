@@ -166,7 +166,7 @@ def test_vs05_is_operator_only_dispatchable_but_hidden_from_users(monkeypatch):
 
     # Operator build (pack installed) — visible.
     monkeypatch.setattr(
-        "core.self_capability_preflight.operator_protocols_installed", lambda: True
+        "core.owner_protocols.operator_protocols_installed", lambda: True
     )
     assert "/vs05" in slash_command_names()
     assert "VS05 comparison/adoption mode" in build_help_text()
@@ -174,7 +174,7 @@ def test_vs05_is_operator_only_dispatchable_but_hidden_from_users(monkeypatch):
 
     # Public build (no pack) — hidden from all user-facing surfaces.
     monkeypatch.setattr(
-        "core.self_capability_preflight.operator_protocols_installed", lambda: False
+        "core.owner_protocols.operator_protocols_installed", lambda: False
     )
     assert "/vs05" not in slash_command_names()
     assert "/vs05" not in build_help_text()

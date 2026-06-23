@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 from core.agent.agent import Agent
-from core.self_capability_preflight import devmode05_final_allows_stop
+from core.self_maintenance.devmode_closeout import devmode05_final_allows_stop
 from core.session.session import Session
 from core.tasking.task_board import TaskBoard, TaskItem
 

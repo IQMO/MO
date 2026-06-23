@@ -26,7 +26,7 @@ from .agent_utils import (
     WORKFLOW_SOURCE_PATH_RE,
     _prune_tool_audit_log,
 )
-from ..self_capability_preflight import (
+from ..owner_protocols import (
     is_devmode05_activation,
     is_ifdev05_activation,
     is_vs05_activation,
