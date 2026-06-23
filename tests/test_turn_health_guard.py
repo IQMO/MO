@@ -43,10 +43,25 @@ def test_closeout_only_allows_economy_and_artifact_tools():
     calls = [
         _tc("read_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\economy.md"}),
         _tc("write_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\summary.md", "content": "x"}),
+        # edit_file is a closeout write too — the model EDITS existing artifacts (and the
+        # operator rotation / global longitudinal) during closeout. Omitting it let the
+        # completed-board guard block the closeout batch and end the turn before
+        # economy.md/manifest were written (live mo-1782208099).
+        _tc("edit_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\workflow.md"}),
+        _tc("edit_file", {"path": r"C:\Users\x\.mo\operator\devmode\DEVMODE05\adversarial-rotation.json"}),
+        _tc("edit_file", {"file_path": r"C:\Users\x\.mo\memory\devmode\longitudinal.md"}),
         _tc("shell", {"command": "python -m pytest -q"}),
         _tc("complete_task", {"task_id": "6"}),
     ]
     assert Agent._devmode05_tool_calls_are_closeout_only(calls) is True
+
+
+def test_closeout_only_rejects_edit_to_non_artifact():
+    """edit_file is exempt only for artifact/devmode paths — editing product source after
+    completion is still post-completion probing and stays blocked."""
+    assert Agent._devmode05_tool_calls_are_closeout_only(
+        [_tc("edit_file", {"path": r"E:\MO-clean\core\agent\agent_turn.py"})]
+    ) is False
 
 
 def test_closeout_only_rejects_broad_discovery():

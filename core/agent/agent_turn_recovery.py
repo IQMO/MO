@@ -446,7 +446,11 @@ class AgentTurnRecoveryMixin:
                 args = {}
             if name == "complete_task":
                 continue
-            if name in ("read_file", "write_file"):
+            if name in ("read_file", "write_file", "edit_file"):
+                # edit_file is a closeout write too — the model often EDITS existing
+                # artifacts (summary/longitudinal/rotation) during closeout. Omitting it
+                # let the completed-board guard block the closeout batch and end the turn
+                # before economy.md/summary/manifest were written (live mo-1782208099).
                 path = str(args.get("path") or args.get("file_path") or "").replace("\\", "/").lower()
                 if ("memory/devmode" in path or "operator/devmode" in path
                         or any(path.endswith(a.lower()) for a in artifacts)):
