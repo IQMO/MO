@@ -54,7 +54,7 @@ def generate_code_map(
     root = graph_path.resolve().parents[2] if len(graph_path.resolve().parents) > 2 else Path(".")
     annotations = build_task_annotations(
         goal_dir=Path(resolve_state_path("memory/goal-runs")),
-        tool_audit=Path("logs/tool_audit.jsonl"),
+        tool_audit=Path(resolve_state_path("logs/tool_audit.jsonl")),
         root=root,
     )
     positions, cache_hit = _layout_with_cache(nodes, links, data, cache_path, iterations=iterations)
@@ -367,7 +367,7 @@ def _payload(
     *,
     root: Path,
 ) -> dict[str, Any]:
-    max_degree = max(degrees.values(), default=1)
+    max_degree = max(degrees.values(), default=1) or 1
     rendered_nodes = []
     group_counter: dict[str, int] = {}
     node_rank: dict[str, int] = {}  # per-group file-label priority (0 = most connected)

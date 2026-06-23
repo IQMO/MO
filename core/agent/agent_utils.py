@@ -1,4 +1,4 @@
-"""MO agent utility helpers — extracted from core/agent.py (DEVMODE05 CRITICAL #1)."""
+"""MO agent utility helpers."""
 
 import inspect
 import os

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
+from ..path_defaults import resolve_state_path
 from ..tasking import task_evidence
 from ..work_patterns import select_work_pattern
 
@@ -345,7 +346,7 @@ class GoalAuditor:
             if pdir.exists():
                 return pdir
         # Fallback
-        default = Path("memory/profile")
+        default = Path(resolve_state_path("memory/profile"))
         return default if default.exists() else None
 
     @staticmethod

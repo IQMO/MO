@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Iterable
 
 
-DEFAULT_SECRET_FILES = (Path(".env"), Path("memory/unreachable/secrets.env"))
 ENV_SECRET_FILES = "MO_SECRET_FILES"
 
 
@@ -44,13 +43,29 @@ def parse_env_file(path: str | Path) -> dict[str, str]:
     return out
 
 
+def _private_default_secret_files() -> list[Path]:
+    try:
+        from .path_defaults import mo_home
+
+        return [mo_home() / ".env"]
+    except Exception:
+        return [Path("~/.mo/.env").expanduser()]
+
+
 def secret_file_candidates(*, root: str | Path = ".", files: Iterable[str | Path] | None = None) -> list[Path]:
-    """Return local defaults, MO_SECRET_FILES, and explicit files in order."""
-    root_path = Path(root)
+    """Return explicit secret files, MO_SECRET_FILES, and private defaults.
+
+    The legacy cwd defaults (``.env`` and ``memory/unreachable/secrets.env``)
+    are intentionally not implicit anymore: MO may run inside arbitrary user
+    projects, so project-local secret files must be selected explicitly.
+    """
     candidates: list[Path] = []
 
-    for rel in DEFAULT_SECRET_FILES:
-        candidates.append(root_path / rel)
+    del root  # retained for API compatibility; no implicit cwd secret lookup.
+
+    for item in files or []:
+        if item:
+            candidates.append(Path(item))
 
     env_files = os.getenv(ENV_SECRET_FILES, "")
     for item in env_files.replace(";", os.pathsep).split(os.pathsep):
@@ -58,9 +73,7 @@ def secret_file_candidates(*, root: str | Path = ".", files: Iterable[str | Path
         if item:
             candidates.append(Path(item))
 
-    for item in files or []:
-        if item:
-            candidates.append(Path(item))
+    candidates.extend(_private_default_secret_files())
 
     deduped: list[Path] = []
     seen: set[str] = set()

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from core.tasking.devmode_manifest import (
     MANIFEST_NAME,
-    artifact_entry,
     build_devmode_manifest,
     load_devmode_manifest,
     write_devmode_manifest,

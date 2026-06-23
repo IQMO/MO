@@ -221,9 +221,8 @@ def _normalize_markdown_table_lines(text: str, *, columns: int = DEFAULT_RESPONS
                 formatted = _format_markdown_table(header, rows, max_width=max(40, int(columns or DEFAULT_RESPONSE_COLUMNS) - 4))
                 output.extend((formatted_line, True) for formatted_line in formatted)
                 continue
-        # Prose lines pass through unchanged — natural word-wrap (visual_rows)
-        # handles width. (IFDEV05 P1-004: an earlier sentence-split here chopped
-        # every multi-sentence paragraph onto separate lines, breaking flow.)
+        # Prose lines pass through unchanged; natural word-wrap (visual_rows)
+        # handles width without splitting multi-sentence paragraphs apart.
         output.append((line, False))
         index += 1
     return output

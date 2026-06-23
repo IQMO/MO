@@ -24,7 +24,7 @@ class FakeAgent:
                 agent.seen_sessions.append(session)
                 return session
 
-            def __exit__(self, exc_type, exc, tb):
+            def __exit__(self, _exc_type, _exc, _tb):
                 return False
 
         return _Ctx()

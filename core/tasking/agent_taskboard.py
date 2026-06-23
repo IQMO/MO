@@ -1,4 +1,4 @@
-"""MO agent task-board management mixin — extracted from core/agent.py (DEVMODE05 Phase 2)."""
+"""MO agent task-board management mixin."""
 
 from datetime import datetime
 from pathlib import Path

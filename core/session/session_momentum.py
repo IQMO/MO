@@ -343,8 +343,8 @@ def maybe_compact_session(
     # own.  One compaction pass costs a single prefix-cache miss but removes the
     # bulk from every later provider call, so the threshold is deliberately high.
     tool_chars_threshold = _as_int(agent_cfg.get("context_momentum_tool_chars_threshold", 48_000), 48_000)
-    # A3 (VS05): a model "work resolved" hint (set by the runtime on complete_task)
-    # lowers the old-content bar for one check, so resolved tool chains are freed
+    # A runtime "work resolved" hint (set by complete_task) lowers the
+    # old-content bar for one check, so resolved tool chains are freed
     # proactively instead of waiting for full pressure. Still requires meaningful
     # old content (reduced, not zeroed) so freed bytes justify the single
     # prefix-cache miss — no eager-compaction cost regression. Consumed once.

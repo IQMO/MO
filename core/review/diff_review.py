@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 import traceback
 
 from ..env_utils import int_env
-from ..path_defaults import ENV_MO_STATE_HOME
+from ..path_defaults import resolve_state_path
 
 
 def _prune_review_audit_log(path: Path) -> None:
@@ -51,9 +51,7 @@ def append_review_audit(report: "ReviewReport"):
     """
     if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MO_REVIEW_AUDIT_FORCE") != "1":
         return
-    state_home_raw = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-    state_home = Path(state_home_raw) if state_home_raw else None
-    log_path = (state_home / "logs" / "review_audit.jsonl") if state_home else Path("logs/review_audit.jsonl")
+    log_path = Path(resolve_state_path("logs/review_audit.jsonl"))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(report.to_dict(), ensure_ascii=False) + "\n")

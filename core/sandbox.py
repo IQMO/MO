@@ -257,10 +257,10 @@ def _split_shell_words_posix(command: str) -> list[str]:
 def _path_scan_command_text(command: str) -> str:
     """Return shell text to scan for real path arguments.
 
-    DEVMODE05 often verifies sandbox behavior with inline `python -c` snippets
-    that pass outside-root paths as strings into `guard_tool_call`. Those strings
-    are test data, not shell path arguments, so remove only safe sandbox self-test
-    code from the path scanner. General Python snippets are still scanned.
+    Sandbox self-tests often use inline `python -c` snippets that pass
+    outside-root paths as strings into `guard_tool_call`. Those strings are test
+    data, not shell path arguments, so remove only safe self-test code from the
+    path scanner. General Python snippets are still scanned.
     """
     command = _ssh_command_text_for_local_path_scan(command)
     parts = _split_shell_words_posix(command)

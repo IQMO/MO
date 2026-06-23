@@ -487,7 +487,7 @@ class AgentTurnRecoveryMixin:
                 latest_user = str(message.get("content") or "")
                 break
         if is_devmode05_activation(latest_user):
-            # CRITICAL-budget: do NOT re-seed a fresh session for a DEVMODE05 run. A fresh
+            # Critical budget: do NOT re-seed a fresh session for a DEVMODE05 run. A fresh
             # context handoff makes the model re-orient ("I'll start DEVMODE05 by first
             # reading...") and burn the last rounds, hitting the hard stop (observed live
             # mo-1782179985: 75/80 reseed -> restart -> BLOCKED). Force the conclusion IN

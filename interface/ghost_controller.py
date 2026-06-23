@@ -237,8 +237,8 @@ class GhostControllerMixin:
     def _ghost_complete(self, *, surface: str, request: str, messages: list[dict], max_tokens: int, monitor: object, worker_id: str):
         """Run ``complete_ghost_no_tools`` inside ``provider_scope`` when available.
 
-        Dedup of the scope / no-scope branches that were copy-pasted for both the
-        main Ghost reply and its retry (IFDEV05 P1-003).
+        Dedup of the scope / no-scope branches shared by the main Ghost reply
+        and its retry.
         """
         if hasattr(self.agent, "provider_scope"):
             scope = self.agent.provider_scope(surface, worker_id=worker_id)

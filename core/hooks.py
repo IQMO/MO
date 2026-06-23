@@ -1,10 +1,9 @@
 """User-facing lifecycle hooks on MO's monitor event stream.
 
-Adopted from VS05 T0215 candidate 2 in its minimal MO-native form: no matcher
-DSL, no callback registry — a small operator-owned YAML file maps monitor
-event types to shell commands. The monitor event stream is the only trigger
-source, so hooks observe exactly what the operator can already see in the
-monitor; they never gain runtime authority.
+A small operator-owned YAML file maps monitor event types to shell commands.
+The monitor event stream is the only trigger source, so hooks observe exactly
+what the operator can already see in the monitor; they never gain runtime
+authority.
 
 Config lives in the personalization lane (``~/.mo/hooks.yaml``), never in the
 product repo:

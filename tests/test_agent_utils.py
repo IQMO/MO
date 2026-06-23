@@ -1,4 +1,4 @@
-"""Tests for core/agent_utils.py — extracted helpers from agent.py (DEVMODE05 CRITICAL #1)."""
+"""Tests for core/agent_utils.py."""
 from __future__ import annotations
 
 import pytest

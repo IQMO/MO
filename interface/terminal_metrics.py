@@ -1,10 +1,9 @@
 """Shared terminal-size helpers for TUI mixins.
 
-Single source for the column/row probe that was previously duplicated across
-7+ call sites in the display, response, and transcript mixins (IFDEV05 D1).
-Lives in its own module so each consuming mixin — and its bare-mixin test
-harness — inherits the helpers directly, without depending on MoTui's full
-mixin composition.
+Single source for the column/row probe used by the display, response, and
+transcript mixins. Lives in its own module so each consuming mixin and its
+bare-mixin test harness inherits the helpers directly, without depending on
+MoTui's full mixin composition.
 """
 from __future__ import annotations
 

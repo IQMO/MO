@@ -1,4 +1,4 @@
-"""FB1 — verify-before-claiming detector (VS05 vs Fable 5).
+"""Verify-before-claiming detector tests.
 
 Conservative: real stale-prone claims fire; ordinary coding prose never does.
 """

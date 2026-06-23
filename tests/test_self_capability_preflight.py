@@ -193,7 +193,7 @@ def test_devmode_final_stop_accepts_markdown_wrapped_terminal_boundary():
 def test_cross_gate_vs05_does_not_block_devmode05_completion():
     """VS05 gate must not block a valid DEVMODE05 completion when both protocols are mentioned."""
     # User input mentions both VS05 and DEVMODE05 — VS05 gate should yield to DEVMODE05 completion
-    user_input = "Start DEVMODE05 to implement GAP-02. Commit T2005 VS05 closeout artifacts."
+    user_input = "Start DEVMODE05 to implement a finding. Commit T2005 VS05 closeout artifacts."
     # is_vs05_activation returns True (mentions VS05), is_devmode05_activation returns True
     assert vs05_final_allows_stop(user_input, "[DEVMODE05 COMPLETE] done") is True
     assert vs05_final_allows_stop(user_input, "[DEVMODE05 BLOCKED] provider timeout") is True
@@ -207,7 +207,7 @@ def test_cross_gate_devmode05_does_not_block_vs05_completion():
     # is_devmode05_activation returns True (mentions DEVMODE05), is_vs05_activation returns True
     assert devmode05_final_allows_stop(
         user_input,
-        "[VS05 COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nAdoption: none.\nReject: duplicate.\nArtifacts: docs/comparisons/vs05/run.\nApproval: required.",
+        "[VS05 COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nAdoption: none.\nReject: duplicate.\nArtifacts: ~/.mo/memory/comparisons/vs05/run.\nApproval: required.",
     ) is True
     assert devmode05_final_allows_stop(user_input, "[VS05 BLOCKED] sandbox blocked") is True
     # But DEVMODE05 gate still enforces its own completions
@@ -228,7 +228,7 @@ Matrix: MO-STRONGER 7, REFERENCE-STRONGER 1, EQUIVALENT 2.
 Adoption: none without operator approval.
 Reject: duplicate/provider-owned items rejected.
 Defer/Recheck: none active.
-Artifacts: docs/comparisons/vs05/2026-06-07T2121/.
+Artifacts: ~/.mo/memory/comparisons/vs05/2026-06-07T2121/.
 Approval: required before source edits.
 """
     assert vs05_final_allows_stop("START VS05 E:\\ref-a E:\\ref-b", text) is True
@@ -246,7 +246,7 @@ Scope: source-pair comparison.
 Matrix: MO-STRONGER 7, REFERENCE-STRONGER 1.
 Adoption: six items scoped for ref-b.
 Reject: duplicate legacy items.
-Artifacts: docs/comparisons/vs05/run.
+Artifacts: ~/.mo/memory/comparisons/vs05/run.
 Approval: Operator approval required before source edits in E:\\ref-b.
 """
     assert vs05_final_allows_stop("START VS05 E:\\ref-a E:\\ref-b", text) is False
@@ -263,7 +263,7 @@ def test_vs05_prefaced_complete_gets_specific_missing_terms_instruction():
 
 Target: current MO workspace.
 Matrix: MO-STRONGER 7.
-Artifacts: docs/comparisons/vs05/run.
+Artifacts: ~/.mo/memory/comparisons/vs05/run.
 """
     instruction = vs05_continuation_instruction("START VS05 E:\\ref-a E:\\ref-b", text)
 
@@ -540,7 +540,7 @@ def test_clean_complete_stops_without_committing_artifacts(tmp_path, monkeypatch
     assert vs05_final_allows_stop(
         "start VS05",
         "[VS05 COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nAdoption: none.\n"
-        "Reject: duplicate.\nArtifacts: docs/comparisons/vs05/run.\nApproval: required.",
+        "Reject: duplicate.\nArtifacts: ~/.mo/memory/comparisons/vs05/run.\nApproval: required.",
     ) is True
 
 

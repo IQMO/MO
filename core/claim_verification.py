@@ -1,10 +1,10 @@
-"""Verify-before-claiming detector (VS05 vs Fable 5, FB1).
+"""Verify-before-claiming detector.
 
-Fable 5 forces a tool-check before asserting current-state/version facts; MO only
-says so in prose (system.md). This module gives MO a *runtime, observable* signal:
+MO's system prompt requires checking before asserting current-state/version
+facts. This module gives MO a *runtime, observable* signal:
 when a turn asserts a stale-prone fact (a version, "the latest", or a
 knowledge-cutoff hedge) while using NO verifying tools, emit a signal so the
-behavior is visible to traces / DEVMODE05 self-diagnosis.
+behavior is visible to traces and self-diagnosis.
 
 Deliberately conservative — high-precision patterns only — so ordinary coding
 answers are never flagged. This is an observability signal, not a hard gate; a

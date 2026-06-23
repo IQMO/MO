@@ -1,4 +1,4 @@
-"""Gold footer contract enforcement for turn completion (VS05 GAP-01/05/06).
+"""Taskboard contract enforcement for turn completion.
 
 Wraps the existing ``check_task_board_contract`` diagnostic with enforcement
 parameters and produces a provider-facing continuation instruction when the
@@ -13,7 +13,7 @@ from typing import Any
 from .task_board import TaskBoard, check_task_board_contract
 
 
-# ── Per-turn enforcement reasons (GAP-06 evidence, GAP-05 sync) ──
+# Per-turn enforcement reasons: evidence, sync, and graph integrity.
 # Mid-work turns may legitimately have open/blocked tasks, so we only
 # enforce the evidence and sync dimensions.  The full "gold footer"
 # (require_completed + no blocked) is reserved for final sign-off.
@@ -33,8 +33,8 @@ def enforce_contract_gate(
     caller must feed *continuation_instruction* back to the provider instead of
     finalising the turn.
 
-    When *board_closing* is False (mid-work turn), only evidence (GAP-06) and
-    board↔persisted sync (GAP-05) are enforced.  When *board_closing* is True
+    When *board_closing* is False (mid-work turn), only evidence and
+    board-persisted sync are enforced.  When *board_closing* is True
     (gold footer), the full contract including ``require_completed`` is applied.
 
     When *task_ids* is provided, only reasons referencing those task IDs are
@@ -107,7 +107,7 @@ def _reason_matches_task_ids(reason: str, task_ids: set[str]) -> bool:
 
 
 def load_persisted_tasks_for_contract(board: TaskBoard | None = None) -> list[dict[str, Any]]:
-    """Best-effort load of persisted task rows for board-row sync (GAP-05).
+    """Best-effort load of persisted task rows for board-row sync.
 
     Returns an empty list when persistence is unavailable so callers can always
     pass the result to ``enforce_contract_gate`` without branching.

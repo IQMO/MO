@@ -1,4 +1,4 @@
-"""MO agent PRT integration mixin — extracted from core/agent.py (DEVMODE05 Phase 3)."""
+"""MO agent PRT integration mixin."""
 
 import os
 import subprocess

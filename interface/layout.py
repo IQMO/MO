@@ -14,8 +14,7 @@ from prompt_toolkit.utils import get_cwidth
 
 INPUT_MAX_ROWS = 5
 INPUT_PLACEHOLDER = "Type a message · /help for commands"
-# Shared startup-hint line for both the full TUI banner and the native loop
-# (IFDEV05 P1-007: the native loop appends ", /exit to quit.").
+# Shared startup-hint line for both the full TUI banner and the native loop.
 STARTUP_HINT = "Type /help for commands, /status for details"
 
 

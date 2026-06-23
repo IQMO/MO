@@ -1,9 +1,8 @@
-"""MO Agent — Tool implementations and definitions.
+"""MO Agent — tool implementations and provider-facing definitions.
 
-All 16 tools defined (incl. code_search / find_callers / find_callees, which
-surface MO's code graph as first-class tools instead of shell one-liners). Full
-tool list sent to provider every turn. Sandbox gates at dispatch time via
-core.sandbox.guard_tool_call().
+Code-search and caller/callee tools expose MO's graph as first-class tools
+instead of shell one-liners. The full tool list is sent to the provider each
+turn, with sandbox gates enforced at dispatch time via core.sandbox.guard_tool_call().
 """
 
 import os

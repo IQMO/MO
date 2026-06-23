@@ -43,8 +43,8 @@ def test_response_formats_markdown_section_labels_without_double_marker():
 
 
 def test_multi_sentence_prose_is_not_split_onto_separate_lines():
-    # IFDEV05 P1-004: prose must pass through unchanged so natural word-wrap
-    # (not a sentence-boundary split) controls line breaks.
+    # Prose must pass through unchanged so natural word-wrap (not a
+    # sentence-boundary split) controls line breaks.
     prose = "The fix works. It routes through the resolver. Done now."
     assert normalize_markdown_tables(prose) == prose
 

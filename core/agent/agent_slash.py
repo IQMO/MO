@@ -1,4 +1,4 @@
-"""MO agent slash-command mixin — extracted from core/agent.py (DEVMODE05 Phase 4)."""
+"""MO agent slash-command mixin."""
 
 import os
 import time

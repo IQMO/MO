@@ -744,10 +744,6 @@ def _load_runtime_env(config: dict) -> None:
         if path.exists():
             load_dotenv(dotenv_path=path, override=False)
 
-    # Keep explicit developer checkouts working, but only after private/config
-    # sibling env files have had first chance to populate missing variables.
-    load_dotenv(override=False)
-
 
 def _resolve_api_key(provider_cfg: dict) -> str:
     api_key_env = provider_cfg.get("api_key_env")

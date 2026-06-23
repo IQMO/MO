@@ -1,5 +1,5 @@
 # MO core package
-# Subpackage structure (GAP-07):
+# Subpackage structure:
 #   core/tasking/   — task board, task manager, task evidence, contract gate
 #   core/ghost/     — ghost proposal system
 #   core/review/    — diff review, scorer, fix loop, finding patterns

@@ -141,7 +141,7 @@ telegram:
   bot_username: ""
   dm_policy: pairing
   db_path: memory/telegram.sqlite
-  # Optional key=value files for TELEGRAM_BOT_TOKEN; keep real files gitignored.
+  # Optional key=value files for TELEGRAM_BOT_TOKEN. Defaults also check ~/.mo/.env.
   secret_files: []
   worker_count: 2
   allow_from: []
@@ -196,6 +196,7 @@ sandbox:
   # web_search: keyless DuckDuckGo Instant Answer by default (limited). For full web
   # results set env MO_WEB_SEARCH_PROVIDER=brave|serper and MO_WEB_SEARCH_API_KEY=<key>
   # (free tiers exist). No Python dependency — uses stdlib HTTP. Falls back to DDG if unset.
+  # Relative runtime-state paths resolve under ~/.mo by default, not the checkout.
   audit_log: logs/tool_audit.jsonl
   max_output_chars: 50000
   write_file_existing_max_lines: 250

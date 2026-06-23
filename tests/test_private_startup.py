@@ -398,3 +398,23 @@ def test_repo_config_requires_explicit_override(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MO_CONFIG", "config.yaml")
     assert default_config_path(agent_root=agent_root, caller_cwd=agent_root) == str(repo_config.resolve())
+
+
+def test_provider_runtime_env_ignores_cwd_env(tmp_path, monkeypatch):
+    from core.provider.provider import _load_runtime_env
+
+    project = tmp_path / "project"
+    home = tmp_path / "home"
+    project.mkdir()
+    home.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("MO_CWD_ONLY_SECRET", raising=False)
+    monkeypatch.delenv("MO_HOME_SECRET", raising=False)
+    monkeypatch.setenv("MO_HOME", str(home))
+    (project / ".env").write_text("MO_CWD_ONLY_SECRET=bad\n", encoding="utf-8")
+    (home / ".env").write_text("MO_HOME_SECRET=good\n", encoding="utf-8")
+
+    _load_runtime_env({"_config_path": str(home / "config.yaml"), "runtime": {"home": str(home)}})
+
+    assert os.getenv("MO_CWD_ONLY_SECRET") is None
+    assert os.getenv("MO_HOME_SECRET") == "good"

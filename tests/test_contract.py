@@ -1,4 +1,4 @@
-"""Tests for core/tasking/contract.py — gold-footer contract enforcement (VS05 GAP-01/05/06)."""
+"""Tests for core/tasking/contract.py taskboard contract enforcement."""
 
 import pytest
 from core.tasking.task_board import TaskBoard, TaskItem
@@ -125,7 +125,7 @@ class TestEnforceContractGate:
         assert not any("missing_evidence:3" in r for r in reasons)  # task 3 not scoped
 
     def test_persisted_tasks_sync_caught(self, board_all_done):
-        """GAP-05: persisted task with mismatched status triggers sync reason."""
+        """Persisted task with mismatched status triggers sync reason."""
         # "done" in persisted vs "completed" in board = equivalent, no trigger.
         # Use "active" (persisted) vs "completed" (board) for a real mismatch.
         persisted = [
@@ -139,7 +139,7 @@ class TestEnforceContractGate:
         assert any("task_sync:active_row_completed:2" in r for r in reasons)
 
     def test_persisted_tasks_missing_row_caught(self, board_all_done):
-        """GAP-05: persisted task with no board row triggers sync reason."""
+        """Persisted task with no board row triggers sync reason."""
         persisted = [
             {"id": "ghost", "status": "active", "title": "Ghost task"},
         ]

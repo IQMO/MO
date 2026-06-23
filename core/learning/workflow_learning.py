@@ -427,13 +427,17 @@ def _has_secret_warning(scan_result: Any) -> bool:
 
 
 def _candidate_path(profile: Any) -> Path:
+    from ..path_defaults import resolve_state_path
+
     profile_path = getattr(profile, "_path", None)
-    return Path(profile_path).parent / "workflow_candidates.jsonl" if profile_path else Path("memory/workflow_candidates.jsonl")
+    return Path(profile_path).parent / "workflow_candidates.jsonl" if profile_path else Path(resolve_state_path("memory/workflow_candidates.jsonl"))
 
 
 def _promoted_path(profile: Any) -> Path:
+    from ..path_defaults import resolve_state_path
+
     profile_path = getattr(profile, "_path", None)
-    return Path(profile_path).parent / "workflow_promoted.jsonl" if profile_path else Path("memory/workflow_promoted.jsonl")
+    return Path(profile_path).parent / "workflow_promoted.jsonl" if profile_path else Path(resolve_state_path("memory/workflow_promoted.jsonl"))
 
 
 def _prune_jsonl(path: Path, env_name: str, default: int) -> None:

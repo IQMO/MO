@@ -11,8 +11,8 @@ def test_internal_system_prompt_is_packaged_under_core():
 
 
 def test_internal_prompt_carries_honesty_directive():
-    # VS05 2026-06-20 (Fable 5): MO must default to honest pushback over flattery
-    # and own mistakes without groveling.
+    # MO must default to honest pushback over flattery and own mistakes without
+    # groveling.
     text, _source = load_system_prompt("")
 
     assert "Be honest over agreeable" in text

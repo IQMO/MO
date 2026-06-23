@@ -1,7 +1,7 @@
 """Interface parity / referential-integrity guardrails.
 
-These lock in invariants that IFDEV05 kept rediscovering by hand (and that MO
-once broke): every TUI mixin that probes terminal size must actually expose the
+These lock in invariants that interface audits kept rediscovering by hand:
+every TUI mixin that probes terminal size must actually expose the
 shared helper; every `class:` style referenced in the UI must exist in the
 theme; and the slash-command registry must be internally consistent and fully
 dispatchable. Catching these in pytest means they can't silently regress

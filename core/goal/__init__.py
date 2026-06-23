@@ -1,6 +1,6 @@
 # MO core.goal subpackage
 # Re-exports goal.py public names so existing `from core.goal import ...`
-# call sites keep working after the GAP-07 migration.
+# call sites keep working after the package split.
 from .goal import (
     GoalBudget,
     GoalPlan,

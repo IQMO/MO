@@ -1,3 +1,4 @@
+import os
 import shutil
 import sys
 import pytest
@@ -17,6 +18,37 @@ _WATCHED_STATE_DIRS = ("memory", "logs")
 _GENERATED_CACHE_DIRS = ("__pycache__", ".pytest_cache", ".ruff_cache")
 
 
+def _checkout_state_leaks(root: Path, before: set[str]) -> list[str]:
+    return [d for d in _WATCHED_STATE_DIRS if d not in before and (root / d).exists()]
+
+
+def _format_state_leak_message(root: Path, leaked: list[str]) -> str:
+    sample = []
+    for d in leaked:
+        for f in sorted((root / d).rglob("*")):
+            if f.is_file():
+                sample.append(str(f.relative_to(root)))
+    env_bits = {
+        "cwd": str(Path.cwd()),
+        "MO_STATE_HOME": os.environ.get("MO_STATE_HOME", ""),
+        "MO_HOME": os.environ.get("MO_HOME", ""),
+        "MO_STATE_LOCAL": os.environ.get("MO_STATE_LOCAL", ""),
+        "MO_PROJECT_CWD": os.environ.get("MO_PROJECT_CWD", ""),
+    }
+    return (
+        f"[STATE-POLLUTION] Test run created {leaked} in the project checkout "
+        f"({root}). A state writer bypassed resolve_state_path() and wrote to cwd "
+        "instead of ~/.mo. Find it and route its default through resolve_state_path.\n"
+        "  env: " + ", ".join(f"{k}={v}" for k, v in env_bits.items()) + "\n"
+        "  files: " + ", ".join(sample[:40])
+    )
+
+
+def _remove_checkout_state_dirs(root: Path, leaked: list[str]) -> None:
+    for d in leaked:
+        shutil.rmtree(root / d, ignore_errors=True)
+
+
 def _remove_checkout_generated_caches(root: Path) -> None:
     for name in _GENERATED_CACHE_DIRS:
         if name == "__pycache__":
@@ -31,6 +63,24 @@ def pytest_configure(config):
     from core.path_defaults import repo_root
     root = Path(repo_root())
     config._state_dirs_before = {d for d in _WATCHED_STATE_DIRS if (root / d).exists()}
+
+
+@pytest.fixture(autouse=True)
+def _fail_fast_on_checkout_state_pollution(request, monkeypatch):
+    """Fail at the offending test instead of only at session end."""
+    _ = monkeypatch  # ensure this guard tears down before monkeypatch restores cwd/env
+    if hasattr(request.config, "workerinput"):
+        yield
+        return
+    from core.path_defaults import repo_root
+    root = Path(repo_root())
+    before = getattr(request.config, "_state_dirs_before", set())
+    yield
+    leaked = _checkout_state_leaks(root, before)
+    if leaked:
+        message = _format_state_leak_message(root, leaked)
+        _remove_checkout_state_dirs(root, leaked)
+        pytest.fail(message)
 
 
 @pytest.fixture(autouse=True)
@@ -54,27 +104,17 @@ def _reset_module_state_singletons():
 
 
 def pytest_sessionfinish(session, exitstatus):
+    _ = exitstatus
     # Only the xdist controller (or a non-xdist run) adjudicates the shared cwd.
     if hasattr(session.config, "workerinput"):
         return
     from core.path_defaults import repo_root
     root = Path(repo_root())
     before = getattr(session.config, "_state_dirs_before", set())
-    leaked = [d for d in _WATCHED_STATE_DIRS if d not in before and (root / d).exists()]
+    leaked = _checkout_state_leaks(root, before)
     if leaked:
-        sample = []
-        for d in leaked:
-            for f in sorted((root / d).rglob("*")):
-                if f.is_file():
-                    sample.append(str(f.relative_to(root)))
-        print(
-            f"\n[STATE-POLLUTION] Test run created {leaked} in the project checkout "
-            f"({root}). A state writer bypassed resolve_state_path() and wrote to cwd "
-            "instead of ~/.mo. Find it and route its default through resolve_state_path.\n"
-            "  files: " + ", ".join(sample[:40])
-        )
-        for d in leaked:
-            shutil.rmtree(root / d, ignore_errors=True)
+        print("\n" + _format_state_leak_message(root, leaked))
+        _remove_checkout_state_dirs(root, leaked)
         session.exitstatus = 1
     _remove_checkout_generated_caches(root)
 
@@ -131,3 +171,8 @@ def _isolate_runtime_state_home(monkeypatch, tmp_path):
     the real ~/.mo, so no global MO_HOME net is needed (and MO_HOME would wrongly
     override a test's own MO_STATE_HOME, since mo_home() prefers MO_HOME)."""
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path / "state-home"))
+    # Agent startup can schedule an async graph refresh. Tests that exercise graph
+    # refresh behavior call it directly; the rest of the suite keeps background
+    # state writers off so failures are deterministic and never leak into the
+    # checkout after a test's monkeypatch context changes.
+    monkeypatch.setenv("MO_STRUCTURAL_GRAPH_AUTO_UPDATE", "0")

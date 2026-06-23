@@ -197,7 +197,7 @@ def test_maybe_compact_session_emits_monitor_event_under_pressure(tmp_path):
     assert '"kind": "session_compact"' in text
 
 
-# ── A3 (VS05): model "work resolved" hint -> proactive compaction ──
+# Model "work resolved" hint -> proactive compaction.
 
 def _agent_with_moderate_old_tool_chars(*, resolved_hint=False, factor=None):
     """~30K of old tool content — between the half (24K) and full (48K) bars,

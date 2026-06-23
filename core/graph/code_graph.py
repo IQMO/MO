@@ -44,9 +44,9 @@ _SKIP_DIRS = {
     ".ua-src",
 }
 _SKIP_FILES = {"config.yaml", ".env", ".env.local", ".env.production", "logs/provider_audit.jsonl", "logs/ghost_audit.jsonl"}
-_SKIP_PATH_PREFIXES = (
-    "docs/comparisons/",
-    "docs/devmode/_archived/",
+_SKIP_PATH_PREFIXES: tuple[str, ...] = ()
+_GENERATED_DOC_ARTIFACT_RE = re.compile(
+    r"^docs/(?:[^/]+/)*(?:_archived|\d{4}-\d{2}-\d{2}T\d{4})(?:/|$)"
 )
 _STOPWORDS = DEFAULT_CONTEXT_STOPWORDS
 _WORK_WORDS = {
@@ -210,7 +210,7 @@ def _indexable_path(rel: str) -> bool:
         return False
     if any(rel.startswith(prefix) for prefix in _SKIP_PATH_PREFIXES):
         return False
-    if re.match(r"^docs/devmode/\d{4}-\d{2}-\d{2}T\d{4}/", rel):
+    if _GENERATED_DOC_ARTIFACT_RE.match(rel):
         return False
     parts = rel.split("/")
     if any(part in _SKIP_DIRS for part in parts):

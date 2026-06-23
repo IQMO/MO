@@ -1,14 +1,14 @@
-"""IFDEV05 2026-06-23T0136 — Companion/Ghost UX regression tests.
+"""Companion/Ghost UX regression tests.
 
-Covers the findings fixed this session (P1 cluster + the full deferred sweep):
-- A1-F1 render-layer redaction          - A2-F1 mic released on auto-stop
-- A1-F2 Guide/Do mode indicator         - A2-F2 auto-stop finishes the capture
-- A1-F3 hot-mic button color            - A2-F3 TTS failure surfaced (not silent)
-- A1-F4 no late GUI queueing post-stop  - A2-F5 mic-start failure reason
-- A1-F5 status ellipsis                 - A2-F6 startup-toggle feedback
-- A1-F6 scrollable (un-clipped) replies - A2-F8 tray tooltip reflects mode
-- A3-F2 blocked-route receipt styling   - A3-F3 history browse position preserved
-The A3-F1 arrow-key fix lives in tests/test_keybindings.py (needs that harness).
+Covers the companion UX regressions that must stay locked:
+- render-layer redaction                 - mic released on auto-stop
+- Guide/Do mode indicator                - auto-stop finishes the capture
+- hot-mic button color                   - TTS failure surfaced
+- no late GUI queueing post-stop         - mic-start failure reason
+- status ellipsis                        - startup-toggle feedback
+- scrollable replies                     - tray tooltip reflects mode
+- blocked-route receipt styling          - history browse position preserved
+The arrow-key fix lives in tests/test_keybindings.py (needs that harness).
 """
 import sys
 import threading
@@ -52,7 +52,7 @@ class _FakeText:
         self.seen = idx
 
 
-# ---------------------------------------------------------------- A1-F1 / A1-F6
+# ---------------------------------------------------- redaction / response box
 def test_set_response_redacts_and_renders_to_text():
     from interface.companion.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
@@ -77,7 +77,7 @@ def test_on_assistant_text_redacts_and_follows_tail():
     assert cs._response.seen == "end"  # streaming follows the tail
 
 
-# ---------------------------------------------------------------- A1-F2
+# ----------------------------------------------------------- mode indicator
 def test_mode_indicator_distinguishes_guide_and_do():
     from interface.companion.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
@@ -89,7 +89,7 @@ def test_mode_indicator_distinguishes_guide_and_do():
     assert g_color != d_color  # Do uses a distinct alert color (it can actuate)
 
 
-# ---------------------------------------------------------------- A1-F3
+# ----------------------------------------------------------- voice button
 def test_voice_button_color_helper_posts_config():
     from interface.companion.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
@@ -100,7 +100,7 @@ def test_voice_button_color_helper_posts_config():
     assert cs._voice_btn.kwargs["fg"] == "#ff4444"
 
 
-# ---------------------------------------------------------------- A1-F4
+# ----------------------------------------------------------- GUI queueing
 def test_post_gui_call_refused_after_stop():
     from interface.companion.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
@@ -110,7 +110,7 @@ def test_post_gui_call_refused_after_stop():
     assert cs._post_gui_call(lambda: None) is False  # no misleading "queued" success
 
 
-# ---------------------------------------------------------------- A1-F5
+# ----------------------------------------------------------- status text
 def test_set_status_ellipsizes_long_text():
     from interface.companion.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
@@ -122,7 +122,7 @@ def test_set_status_ellipsizes_long_text():
     assert len(text) <= 120 and text.endswith("…")
 
 
-# ---------------------------------------------------------------- A2-F1
+# ----------------------------------------------------------- mic release
 def _fake_sounddevice():
     mod = types.ModuleType("sounddevice")
 
@@ -134,7 +134,7 @@ def _fake_sounddevice():
 
 
 def test_recorder_releases_stream_on_autostop(monkeypatch):
-    """A2-F1: hitting the max-seconds cap must release the mic device (CallbackStop),
+    """Hitting the max-seconds cap must release the mic device (CallbackStop),
     not merely flip the recording flag — otherwise the InputStream stays hot."""
     from interface.companion.voice import PushToTalkRecorder
     sd = _fake_sounddevice()
@@ -173,7 +173,7 @@ def test_recorder_callback_without_stream_stays_test_safe():
     assert rec._recording is False
 
 
-# ---------------------------------------------------------------- A2-F2
+# ----------------------------------------------------------- voice autostop
 def test_poll_voice_autostop_finishes_capture_when_recorder_self_stopped():
     from interface.companion.companion import CompanionSurface
     cs = CompanionSurface(agent=None, gateway=None)
@@ -213,7 +213,7 @@ def test_poll_voice_autostop_noop_while_still_recording():
     assert cs._recording_voice is True and finished == []
 
 
-# ---------------------------------------------------------------- A2-F3
+# ----------------------------------------------------------- TTS errors
 def test_speak_async_invokes_on_error_when_speak_fails():
     from interface.companion.voice import VoiceSpeaker
     spk = VoiceSpeaker(voice_model_path="")  # no model -> speak() returns False
@@ -229,7 +229,7 @@ def test_speak_async_invokes_on_error_when_speak_fails():
     assert errors and "model" in errors[0].lower()
 
 
-# ---------------------------------------------------------------- A2-F5
+# ----------------------------------------------------------- mic errors
 def test_recorder_start_records_last_error_when_backend_missing(monkeypatch):
     from interface.companion.voice import PushToTalkRecorder
     rec = PushToTalkRecorder()
@@ -238,7 +238,7 @@ def test_recorder_start_records_last_error_when_backend_missing(monkeypatch):
     assert rec.last_error  # non-empty, human-readable reason
 
 
-# ---------------------------------------------------------------- A2-F6
+# ----------------------------------------------------------- startup toggle
 def test_toggle_startup_notifies_on_failure(monkeypatch):
     from interface.companion.tray import CompanionTray
     t = CompanionTray(None)
@@ -261,7 +261,7 @@ def test_toggle_startup_silent_on_success(monkeypatch):
     assert notes == []
 
 
-# ---------------------------------------------------------------- A2-F8
+# ----------------------------------------------------------- tray mode title
 def test_tray_update_title_reflects_mode():
     from interface.companion.tray import CompanionTray
     t = CompanionTray(None)
@@ -275,7 +275,7 @@ def test_tray_update_title_reflects_mode():
     assert "Do" in t._tray.title
 
 
-# ---------------------------------------------------------------- A3-F2
+# ----------------------------------------------------------- route receipts
 def test_route_line_style_flags_unavailable_receipt_blocked():
     from interface.ghost_panel import route_line_style
     assert route_line_style("class:ghost-response", "MO queue unavailable · queued") \
@@ -287,7 +287,7 @@ def test_route_line_style_flags_unavailable_receipt_blocked():
         == "class:ghost-response"
 
 
-# ---------------------------------------------------------------- A3-F3
+# ----------------------------------------------------------- Ghost history
 def _bg_harness(monkeypatch):
     monkeypatch.setattr("interface.ghost_history.append_ghost_audit", lambda *a, **k: None)
     from interface.ghost_controller import GhostControllerMixin

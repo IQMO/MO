@@ -1,4 +1,4 @@
-"""MO agent turn-execution mixin — extracted from core/agent.py (DEVMODE05 Phase 5).
+"""MO agent turn-execution mixin.
 
 Core turn loop, provider calls, and per-turn context assembly. The per-tool-call
 dispatch phase and provider error/turn-limit recovery live in
@@ -559,8 +559,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         file_content = arguments.get("new_text" if name == "edit_file" else "content", "")
                         if file_path:
                             turn_modified_files.append((file_path, file_content))
-                    # A3 (VS05): completing a task is the model's semantic
-                    # "this work is resolved" signal — hint the next compaction to
+                    # Completing a task is the model's semantic "this work is
+                    # resolved" signal; hint the next compaction to
                     # free old resolved tool chains proactively. Runtime still
                     # decides (old completed chains only, never recent/prefix, and
                     # only when freed bytes justify the cache miss).
@@ -747,10 +747,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             critique_result = self._review_final_answer(content, monitor=monitor)
             final_text = critique_result.text
 
-            # FB1 (VS05 vs Fable 5): observable verify-before-claiming signal —
-            # flag a stale-prone current-state/version claim shipped with zero
-            # verifying tools this turn. Observability only (feeds DEVMODE05);
-            # no answer change, no forced continuation.
+            # Observable verify-before-claiming signal: flag a stale-prone
+            # current-state/version claim shipped with zero verifying tools this
+            # turn. Observability only; no answer change, no forced continuation.
             if monitor:
                 _claim_label = unverified_claim_signal(final_text, tool_call_counts)
                 if _claim_label:
@@ -774,7 +773,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 if protocol_closed or (not protocol_closed and self._finalize_task_board_for_answer(task_board)):
                     record_snapshot(task_board, "completed" if task_board.open_count() == 0 else "updated")
                     _emit_task_board_update(task_board, update="completed" if task_board.open_count() == 0 else "updated", on_board_update=on_board_update, on_board_event=on_board_event)
-            # ── VS05 GAP-01/05/06: contract gate on closing boards ──
+            # Contract gate on closing boards.
             if task_board and task_board.tasks and task_board.open_count() == 0:
                 # Self-protocol boards (DEVMODE05/IFDEV05) must have the WHOLE board
                 # evidenced at closeout, not only this turn's rows: continuation gates
@@ -817,8 +816,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     on_activity("done-claim conflicts with open tasks - continuing to resolve...")
                 self.session.add_assistant(self._done_claim_task_truth_instruction())
                 continue
-            # A2 (VS05): before finishing a code-editing turn, run the changed
-            # files' affected tests; if they fail, self-heal — force one bounded
+            # Before finishing a code-editing turn, run the changed files'
+            # affected tests; if they fail, self-heal — force one bounded
             # continuation with the failure so the model fixes it before claiming
             # done. Fail-open and gated (prt.run_affected_tests); reuses PRT's
             # bounded/recursion-guarded affected-test runner. No-op for doc-only
@@ -879,7 +878,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         )
 
     def _affected_test_failure_instruction(self, turn_modified_files: list) -> str | None:
-        """A2 (VS05): run the affected tests for code files this turn changed;
+        """Run the affected tests for code files this turn changed;
         return a self-heal instruction if they fail, else None.
 
         Fail-open: any error returns None so the verifier never blocks a turn.

@@ -147,11 +147,11 @@ def test_code_graph_does_not_index_secret_or_memory_files(tmp_path):
 def test_code_graph_excludes_generated_protocol_artifacts(tmp_path, monkeypatch):
     monkeypatch.setenv("MO_CODE_GRAPH_MAX_FILES", "2")
     (tmp_path / "core").mkdir()
-    (tmp_path / "docs" / "comparisons" / "vs05" / "2026-06-08T0300").mkdir(parents=True)
-    (tmp_path / "docs" / "devmode" / "2026-06-08T0400").mkdir(parents=True)
+    (tmp_path / "docs" / "generated" / "review" / "2026-06-08T0300").mkdir(parents=True)
+    (tmp_path / "docs" / "generated" / "_archived").mkdir(parents=True)
     (tmp_path / "core" / "agent.py").write_text("def real_source():\n    pass\n", encoding="utf-8")
-    (tmp_path / "docs" / "comparisons" / "vs05" / "2026-06-08T0300" / "summary.md").write_text("generated artifact", encoding="utf-8")
-    (tmp_path / "docs" / "devmode" / "2026-06-08T0400" / "summary.md").write_text("generated artifact", encoding="utf-8")
+    (tmp_path / "docs" / "generated" / "review" / "2026-06-08T0300" / "summary.md").write_text("generated artifact", encoding="utf-8")
+    (tmp_path / "docs" / "generated" / "_archived" / "summary.md").write_text("generated artifact", encoding="utf-8")
 
     context = build_code_graph_context("inspect real source generated artifact", cwd=str(tmp_path))
 
@@ -202,6 +202,5 @@ def _legacy_state_lane(monkeypatch, tmp_path):
     monkeypatch.delenv("MO_STATE_HOME", raising=False)
     monkeypatch.delenv("MO_HOME", raising=False)
     monkeypatch.setenv("MO_STATE_LOCAL", "1")  # explicit project-local opt-out (state is private-by-default)
-    from core.path_defaults import repo_root as _rr
-    monkeypatch.setenv("MO_PROJECT_CWD", str(_rr()))
     monkeypatch.chdir(tmp_path)  # project-local state -> tmp, never the repo root
+    monkeypatch.setenv("MO_PROJECT_CWD", str(tmp_path))

@@ -49,9 +49,9 @@ def test_write_learning_suggestions_default_routes_to_state_home(tmp_path):
 
 
 def test_focused_map_default_routes_to_state_home(tmp_path):
-    # Regression for the [STATE-POLLUTION] finding (DEVMODE05 2026-06-20): the
-    # focused-map writer used root/memory/structural_graph unconditionally,
-    # ignoring private-by-default, so focused_map.html landed in the checkout
+    # Regression for a state-pollution bug: the focused-map writer used
+    # root/memory/structural_graph unconditionally, ignoring private-by-default,
+    # so focused_map.html landed in the checkout
     # even though graph.json went to ~/.mo/cache.
     from core.graph.structural_graph import build_focused_map, build_structural_graph
 
@@ -60,7 +60,8 @@ def test_focused_map_default_routes_to_state_home(tmp_path):
         "from .provider import call\n\ndef run():\n    return call()\n", encoding="utf-8")
     (tmp_path / "core" / "provider.py").write_text(
         "def call():\n    return 1\n", encoding="utf-8")
-    build_structural_graph(tmp_path)
+    build_result = build_structural_graph(tmp_path)
+    _assert_under_state_home(build_result["path"], "build_structural_graph()")
 
     result = build_focused_map(tmp_path, query="runtime provider")
     _assert_under_state_home(result["path"], "build_focused_map()")
@@ -75,12 +76,93 @@ def test_resolve_state_path_never_returns_cwd_memory():
             f"resolve_state_path({rel!r}) -> {resolved} points into the checkout"
 
 
+def test_workflow_candidate_without_profile_routes_to_state_home():
+    from core.learning.workflow_learning import record_workflow_candidate
+
+    recorded = record_workflow_candidate(
+        None,
+        "From now on when I ask for audit work, verify files before reporting.",
+        "ok",
+    )
+
+    out = _state_home() / "memory" / "workflow_candidates.jsonl"
+    assert recorded is True
+    assert out.is_file()
+    _assert_under_state_home(out, "workflow candidate fallback")
+    assert not (Path.cwd() / "memory" / "workflow_candidates.jsonl").exists()
+
+
+def test_review_audit_default_routes_to_state_home(monkeypatch):
+    from core.review.diff_review import ReviewReport, append_review_audit
+
+    monkeypatch.setenv("MO_REVIEW_AUDIT_FORCE", "1")
+    report = ReviewReport(
+        diff_ref="HEAD",
+        files_changed=0,
+        additions=0,
+        deletions=0,
+        findings=[],
+        score=5.0,
+        unresolved_count=0,
+        affected_tests=[],
+        created_at=1.0,
+    )
+
+    append_review_audit(report)
+
+    out = _state_home() / "logs" / "review_audit.jsonl"
+    assert out.is_file()
+    _assert_under_state_home(out, "review audit fallback")
+    assert not (Path.cwd() / "logs" / "review_audit.jsonl").exists()
+
+
+def test_generate_code_map_uses_state_home_tool_audit():
+    import json
+
+    from core.graph.generate_code_map import generate_code_map
+
+    graph = _state_home() / "memory" / "structural_graph" / "graph.json"
+    graph.parent.mkdir(parents=True, exist_ok=True)
+    graph.write_text(
+        json.dumps(
+            {
+                "nodes": [{"id": "file:core/agent.py", "type": "file", "source_file": "core/agent.py"}],
+                "links": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    audit = _state_home() / "logs" / "tool_audit.jsonl"
+    audit.parent.mkdir(parents=True, exist_ok=True)
+    audit.write_text(
+        json.dumps(
+            {
+                "ts": 1.0,
+                "surface": "goal",
+                "worker_id": "route-test",
+                "tool": "edit_file",
+                "arguments": {"path": "core/agent.py"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = generate_code_map(graph, iterations=1)
+
+    annotations = json.loads(Path(result["annotations_path"]).read_text(encoding="utf-8"))
+    assert annotations["tasks"]["route-test"] == ["core/agent.py"]
+    _assert_under_state_home(result["annotations_path"], "code map annotations")
+    assert not (Path.cwd() / "logs" / "tool_audit.jsonl").exists()
+
+
 def test_async_structural_graph_refresh_keeps_admitted_state_home(tmp_path, monkeypatch):
     """A background graph refresh can outlive temporary env changes; it must use
     the state home active when the refresh was admitted, not whatever env exists
     when the thread body finally runs."""
     import core.graph.structural_graph as sg
 
+    monkeypatch.setenv("MO_STRUCTURAL_GRAPH_AUTO_UPDATE", "1")
     admitted_home = _state_home()
     later_home = tmp_path / "later-home"
     calls = []

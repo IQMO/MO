@@ -82,7 +82,7 @@ class TestTaskManager:
 
 
 class TestContractSync:
-    """GAP-05: persisted_tasks sync parameter in check_task_board_contract."""
+    """Persisted-task sync parameter in check_task_board_contract."""
 
     def _make_board(self, **kwargs) -> TaskBoard:
         tasks = kwargs.pop("tasks", [])
@@ -159,7 +159,7 @@ class TestContractSync:
 
 
 class TestRecordSnapshotIntegration:
-    """GAP-02: record_snapshot also writes current.json."""
+    """record_snapshot also writes current.json."""
 
     def test_record_snapshot_writes_current_json(self, tmp_path: Path):
         board = TaskBoard(turn_id="t1", session_id="s1")

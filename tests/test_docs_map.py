@@ -72,6 +72,11 @@ def test_current_docs_do_not_import_retired_root_trace_tools():
         Path("docs/status/BACKEND-DIAGNOSTICS.md"),
         Path("docs/deployment/DOCKER-READINESS.md"),
         Path("docs/taskboard/TASKBOARD-CURRENT-IMPLEMENTATION-REPORT.md"),
+        Path("docs/product/MO.md"),
+        Path("docs/product/MO-PRD.md"),
+        Path("docs/product/MO-HYGIENE-TASK-EVIDENCE-PLAN.md"),
+        Path("docs/interface/INTERFACE-PRODUCTION-READINESS-PLAN.md"),
+        Path("docs/status/TELEGRAM-HEARTBEAT-COMPLETE.md"),
     ]
 
     for path in current_paths:
@@ -79,6 +84,7 @@ def test_current_docs_do_not_import_retired_root_trace_tools():
         assert "status/TRACE-VALIDATION-COMPLETE" not in text
         assert "../mo_trace.py" not in text
         assert "core/mo_trace.py" not in text
+        assert "compileall -q core interface tools mo.py mo_monitor.py" not in text
         if "mo_monitor.py" in text:
             assert "private operator `mo_monitor.py`" in text
 

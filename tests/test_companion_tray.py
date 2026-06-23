@@ -111,7 +111,7 @@ class TestCompanionTrayStartup:
 
         mock_win32com = types.ModuleType("win32com")
         mock_win32com_client = types.ModuleType("win32com.client")
-        mock_win32com_client.Dispatch = lambda progid: MockShell()
+        mock_win32com_client.Dispatch = lambda _progid: MockShell()
         mock_win32com.client = mock_win32com_client
         monkeypatch.setitem(sys.modules, "win32com", mock_win32com)
         monkeypatch.setitem(sys.modules, "win32com.client", mock_win32com_client)
