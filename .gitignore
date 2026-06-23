@@ -22,8 +22,12 @@ nul
 with open*
 personal/
 .claude/
-# Legacy in-checkout operator path. The live owner pack resolves from
-# ~/.mo/operator or MO_OPERATOR_PACK; keep accidental local copies unshipped.
+# Leak-prevention safety net ONLY — the operator pack does NOT live here. It is a
+# profile-private pack at ~/.mo/operator (or MO_OPERATOR_PACK), optionally Git-backed
+# for its own backup; it is NOT part of this checkout and is NOT a submodule. The
+# resolver never reads a repo-local copy (core/path_defaults.py +
+# tests/test_path_defaults.py enforce this). This line only guarantees a stray
+# hand-copied operator/ can never be committed.
 operator/
 # Dev/maintainer design docs, proposals, audits — internal, not shipped.
 docs/

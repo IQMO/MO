@@ -46,9 +46,10 @@ def operator_pack_root(config: dict[str, Any] | None = None) -> Path:
 
     Resolution order: ``MO_OPERATOR_PACK`` env > ``~/.mo/operator`` (the private
     home). The pack is owner-private and never ships, so the product checkout is
-    never a valid implicit source for it. Returns the home location by default
-    even when absent — a user clone has neither pack nor token, so owner mode
-    stays off.
+    never a valid implicit source for it. It is a profile-private *pack* (optionally
+    Git-backed for its own backup), NOT a nested repo or submodule inside the product
+    checkout. Returns the home location by default even when absent — a user clone has
+    neither pack nor token, so owner mode stays off.
     """
     env = os.getenv(ENV_MO_OPERATOR_PACK, "").strip()
     if env:
