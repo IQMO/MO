@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .agent.agent_dna import build_dna_context, build_prd_context
+from .agent.agent_dna import build_dna_context, build_lean_build_context, build_prd_context
 from .gateway_helpers import select_template, words
 
 
@@ -162,14 +162,17 @@ def build_work_pattern_context(user_input: str) -> str:
     if pattern.name == "fix_verify":
         return (
             "### MO Internal Work Pattern — fix/verify\n"
-            "Reproduce or inspect evidence first, apply the smallest safe fix, then verify resolution with a local/static/runtime check. "
+            "Reproduce or inspect evidence first. "
+            + build_lean_build_context()
+            + " Apply the smallest safe fix, then verify resolution with a local/static/runtime check. "
             "Never claim fixed without verification evidence."
         )
     if pattern.name == "review_repair":
         return (
             "### MO Internal Work Pattern — review/repair/verify\n"
             "Inventory the scoped files/tests first, run focused checks to find confirmed failures/incompleteness, "
-            "apply the smallest safe fixes for confirmed issues, then rerun the relevant checks. "
+            + build_lean_build_context()
+            + " Apply the smallest safe fixes for confirmed issues, then rerun the relevant checks. "
             "Do not stop after a verification probe while repair work is still open."
         )
     if pattern.name == "review_evidence":
@@ -189,6 +192,8 @@ def build_work_pattern_context(user_input: str) -> str:
             "then targeted reads and scoped checks — not grep storms or serial file dumps. "
             "Catalog confirmed findings BEFORE fixing anything; each finding needs file:line evidence and a severity. "
             "Then fix one finding class at a time with the smallest safe change and verify each fix before the next. "
+            + build_lean_build_context()
+            + " "
             "Honest output: confirmed / suspected / clean — an empty catalog is a valid result, never invent findings. "
             "If the audit targets MO's own behavior, read the live trace/session evidence before theorizing."
         )
@@ -200,6 +205,7 @@ def build_work_pattern_context(user_input: str) -> str:
             "reference-stronger, or different-by-design — with evidence per row. "
             "Recommend adopting ONLY what is proven better and fits the project's direction; translating an idea into the "
             "project's own patterns beats copying the reference's architecture. "
+            "If adoption is approved, use MO's lean-build ladder instead of copying whole foreign structures. "
             "Zero-adoption is a valid, honest outcome. No source edits until the operator approves specific items."
         )
     return build_dna_context(design=False)

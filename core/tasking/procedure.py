@@ -75,9 +75,9 @@ _PROCEDURES: dict[str, WorkProcedure] = {
     "build_verify": WorkProcedure(
         "build_verify",
         (
-            WorkStep("Inspect context and requirements before building", "inspect",
-                     expected_evidence=("read/search of the relevant files",)),
-            WorkStep("Implement the smallest working version", "edit",
+            WorkStep("Inspect context and lean-build options", "inspect",
+                     expected_evidence=("read/search of relevant files and existing utilities",)),
+            WorkStep("Implement the smallest complete working version", "edit",
                      expected_evidence=("edit applied to the target file(s)",)),
             WorkStep("Verify with a local/static/runtime check", "verify",
                      expected_evidence=("test/check command output",)),
@@ -87,9 +87,9 @@ _PROCEDURES: dict[str, WorkProcedure] = {
     "design_build": WorkProcedure(
         "design_build",
         (
-            WorkStep("Inspect context and detect the local design system", "inspect",
+            WorkStep("Inspect design system and lean-build options", "inspect",
                      expected_evidence=("read of existing design tokens/components",)),
-            WorkStep("Set direction and adapt tokens, components, states, and motion", "edit",
+            WorkStep("Set direction and adapt existing tokens, components, states, and motion", "edit",
                      expected_evidence=("edit applied to the design/build target",)),
             WorkStep("Verify the result against real evidence", "verify",
                      expected_evidence=("render/test/check evidence",)),
@@ -99,8 +99,8 @@ _PROCEDURES: dict[str, WorkProcedure] = {
     "fix_verify": WorkProcedure(
         "fix_verify",
         (
-            WorkStep("Reproduce or inspect the failure evidence first", "inspect",
-                     expected_evidence=("reproduction or root-cause evidence",)),
+            WorkStep("Reproduce or inspect the failure and existing fix surface first", "inspect",
+                     expected_evidence=("reproduction/root-cause evidence and reuse target",)),
             WorkStep("Apply the smallest safe fix", "edit",
                      expected_evidence=("edit applied to the fix target",)),
             WorkStep("Verify resolution with a local/static/runtime check", "verify",
@@ -115,7 +115,7 @@ _PROCEDURES: dict[str, WorkProcedure] = {
                      expected_evidence=("listing of scoped targets",)),
             WorkStep("Run focused checks to find confirmed issues", "verify",
                      expected_evidence=("check output identifying confirmed issues",)),
-            WorkStep("Apply the smallest safe fixes for confirmed issues", "edit",
+            WorkStep("Apply the smallest safe fixes for confirmed issues; delete/reuse before adding", "edit",
                      expected_evidence=("edits applied to confirmed issues",)),
             WorkStep("Rerun the relevant checks", "verify",
                      expected_evidence=("rerun output after fixes",)),
@@ -141,7 +141,7 @@ _PROCEDURES: dict[str, WorkProcedure] = {
                      expected_evidence=("targeted read/check evidence",)),
             WorkStep("Catalog confirmed findings with file:line and severity", "verify",
                      expected_evidence=("findings catalog with file:line + severity",)),
-            WorkStep("Fix one finding class at a time and verify each fix", "edit",
+            WorkStep("Fix one finding class at a time with lean-build reuse/deletion checks", "edit",
                      expected_evidence=("per-class fix with verification",)),
             WorkStep("Report confirmed/suspected/clean honestly", "report", "final"),
         ),
@@ -153,7 +153,7 @@ _PROCEDURES: dict[str, WorkProcedure] = {
                      expected_evidence=("reference + current evidence captured",)),
             WorkStep("Build the comparison matrix with per-row evidence", "verify",
                      expected_evidence=("matrix with evidence per row",)),
-            WorkStep("Classify adopt/reject/defer/by-design and report (no edits until approval)", "report", "final"),
+            WorkStep("Classify adopt/reject/defer/by-design and report MO-native minimal adoptions", "report", "final"),
         ),
     ),
     "prd_planning": WorkProcedure(

@@ -91,6 +91,24 @@ class TestSelectWorkPattern:
 
         assert "MO Internal Build/Design DNA" in context
         assert "Hard rules:" in context
+        assert "Lean-build ladder" in context
+        assert "Ponytail" not in context
+
+    def test_build_context_includes_mo_native_lean_ladder(self):
+        context = build_work_pattern_context("build a small parser helper")
+
+        assert "Lean-build ladder" in context
+        assert "already present in MO or the target codebase" in context
+        assert "Python stdlib" in context
+        assert "Ponytail" not in context
+
+    def test_fix_context_includes_lean_ladder_without_replacing_verification(self):
+        context = build_work_pattern_context("fix the broken parser")
+
+        assert "fix/verify" in context
+        assert "Lean-build ladder" in context
+        assert "Verify" in context or "verify" in context
+        assert "Never claim fixed without verification evidence" in context
 
 
 class TestResearchMethodQuestion:

@@ -50,6 +50,16 @@ DESIGN_RULES = (
 )
 
 
+LEAN_BUILD_LADDER = (
+    "does this need to exist for the request",
+    "is the behavior already present in MO or the target codebase",
+    "can Python stdlib, platform-native behavior, or current project utilities solve it",
+    "can an already-installed dependency or existing helper solve it without new surface area",
+    "can a one-liner or small local helper solve it",
+    "only then add the minimum complete code",
+)
+
+
 MO_AGENT_DNA = AgentDnaSpec(
     name="MO Agent DNA",
     summary=(
@@ -65,6 +75,7 @@ MO_AGENT_DNA = AgentDnaSpec(
     build_loop=(
         "understand the operator's real objective and constraints",
         "inspect current repo/context before writing",
+        "apply the lean-build ladder before adding code or abstractions",
         "choose the tightest complete high-quality slice that satisfies the request",
         "build without broad rewrites or new dependencies unless approved",
         "mutate existing files with targeted edit_file chunks; use write_file for new/small full-file writes",
@@ -148,6 +159,20 @@ def _compact_rule_line() -> str:
     return "; ".join(f"{rule.code} {rule.title}: {rule.compact}" for rule in MO_AGENT_DNA.design_rules)
 
 
+def build_lean_build_context() -> str:
+    """Return MO's compact anti-overengineering ladder.
+
+    This is MO-native runtime guidance, not a public command or third-party skill.
+    It prevents work that should be deleted, reused, or solved with existing
+    primitives before token-saving compression has to clean up after it.
+    """
+    return (
+        "Lean-build ladder: "
+        + "; ".join(LEAN_BUILD_LADDER)
+        + ". Safety boundary: never remove required validation, security, recovery, accessibility, tests, or explicit operator requirements."
+    )
+
+
 def build_dna_context(*, design: bool = False) -> str:
     """Return compact provider context for build/design turns.
 
@@ -159,6 +184,7 @@ def build_dna_context(*, design: bool = False) -> str:
         "### MO Internal Build/Design DNA",
         MO_AGENT_DNA.summary,
         "Quality bar: tight scoped high-quality output, not cheap/simple output.",
+        build_lean_build_context(),
         "Build loop: " + _join(MO_AGENT_DNA.build_loop) + ".",
     ]
     if design:

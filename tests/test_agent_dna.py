@@ -1,5 +1,6 @@
 from core.agent.agent_dna import (
     MO_AGENT_DNA,
+    build_lean_build_context,
     build_dna_context,
     build_prd_context,
 )
@@ -17,6 +18,10 @@ def test_agent_dna_default_is_concrete_not_public_skill_surface():
     assert "Taskboard truth" in context
     assert "is this approach still valid" in context
     assert "wait for direction" in context
+    assert "Lean-build ladder" in context
+    assert "already present in MO or the target codebase" in context
+    assert "Python stdlib" in context
+    assert "Ponytail" not in context
     assert "/skill" not in context
     assert "Reply " not in context
 
@@ -27,6 +32,19 @@ def test_agent_dna_source_contains_full_design_methodology():
     assert "colors" in MO_AGENT_DNA.dna_template
     assert "signature visual idea" in MO_AGENT_DNA.direction_template
     assert "MO Internal Build/Design DNA" in build_dna_context(design=True)
+
+
+def test_lean_build_context_is_mo_native_and_safety_bounded():
+    context = build_lean_build_context()
+
+    assert "Lean-build ladder" in context
+    assert "does this need to exist" in context
+    assert "already present in MO or the target codebase" in context
+    assert "already-installed dependency" in context
+    assert "minimum complete code" in context
+    assert "never remove required validation" in context
+    assert "Ponytail" not in context
+    assert ".agents" not in context
 
 
 def test_prd_context_is_alignment_not_forced_build_gate_or_skill():

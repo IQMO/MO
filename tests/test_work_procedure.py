@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from core.gateway import _new_gateway_board, _work_procedure_rows
 from core.tasking.procedure import (
-    WorkProcedure,
-    WorkStep,
     procedure_rows,
     work_procedure_for,
 )
@@ -40,6 +38,17 @@ def test_procedure_rows_are_sequential_and_gated():
     # closes on a final report row
     assert rows[-1]["kind"] == "report"
     assert rows[-1]["completion_gate"] == "final"
+
+
+def test_work_procedures_seed_lean_build_checks_before_edits():
+    build_rows = procedure_rows(work_procedure_for("build_verify"))
+    assert "lean-build" in build_rows[0]["text"]
+    assert "existing utilities" in build_rows[0]["expected_evidence"][0]
+    assert "smallest complete" in build_rows[1]["text"]
+
+    fix_rows = procedure_rows(work_procedure_for("fix_verify"))
+    assert "existing fix surface" in fix_rows[0]["text"]
+    assert "smallest safe fix" in fix_rows[1]["text"]
 
 
 def test_classifier_selects_matching_procedure():

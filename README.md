@@ -89,6 +89,16 @@ and a structural graph under private runtime state. One graph call often replace
 a long grep/read sweep, so model context is spent on the problem, not on
 repeatedly rediscovering the repository.
 
+### Lean by default, not thin by default
+
+MO tries to avoid spending provider tokens on work that should not exist. For
+build, fix, audit, and adoption turns, its internal work pattern asks whether
+the behavior is already present, whether existing project utilities, Python
+stdlib, or platform-native behavior can solve it, and whether deletion or reuse
+is better than adding code. This is a quality gate, not a shortcut: validation,
+security, recovery, accessibility, tests, and explicit user requirements still
+win.
+
 ### Concise output, cache-stable context
 
 MO is answer-first. Tool output is structurally compressed before it reaches the
@@ -206,6 +216,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Content safety | Refuses to write malware/attack tooling (dual-use-aware: authorized pentest/CTF/defensive work passes) and blocks writing hardcoded secret literals into files — both before execution, on any provider |
 | Skills | Local read-before-acting best-practice packs (`skills/`, `~/.mo/skills`); the most relevant pack loads per task. No marketplace, no install |
 | Adaptive reasoning | Per-turn reasoning level (deep for real work, light for chatter) plus an opt-in per-provider `reasoning_effort` |
+| Lean-build work patterns | Build/fix/audit/review/adoption guidance checks reuse, deletion, stdlib/native options, and existing helpers before adding code or abstractions |
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
 | DeepSeek / OpenAI providers | Default is the official DeepSeek API (`api.deepseek.com`, OpenAI-compatible); OpenCode automatic fallback; Codex/OpenAI fallback support. When the official DeepSeek API is active, the footer shows live account balance |
 | Provider failover | Providers can fail over on rate, auth, balance, timeout, or empty-response errors |
@@ -216,7 +227,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Memory recall | Past-turn recall ranked by relevance (FTS5 bm25); optional meaning-based (embeddings) recall — either an OpenAI-compatible endpoint (no dependency) or a fully-offline on-device ONNX model (optional `fastembed`). Off by default; never touches the internet, only your own history |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
-| PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |
+| PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings, including proven overengineering/duplication as maintainability risk; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |
 | Learning loop | Recurring-pattern & workflow suggestions stay pending until you confirm; direct corrections/term definitions apply to your local profile |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |

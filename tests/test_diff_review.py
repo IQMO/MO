@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 # Import testable components
 from core.review.diff_review import (
+    PRT_REVIEW_SYSTEM,
     ReviewFinding,
     ReviewReport,
     append_review_audit,
@@ -102,6 +103,14 @@ class TestReviewDiff:
     
     Uses extensive mocking to avoid real git/subprocess calls.
     """
+
+    def test_review_prompt_includes_overengineering_without_external_branding(self):
+        assert "Overengineering" in PRT_REVIEW_SYSTEM
+        assert "category \"overengineering\"" in PRT_REVIEW_SYSTEM
+        assert "Python stdlib" in PRT_REVIEW_SYSTEM
+        assert "project utilities" in PRT_REVIEW_SYSTEM
+        assert "Ponytail" not in PRT_REVIEW_SYSTEM
+        assert ".agents" not in PRT_REVIEW_SYSTEM
 
     @patch("core.review.diff_review.subprocess.check_output")
     @patch("core.threat_scan.scan_text")

@@ -66,6 +66,9 @@ PRT_REVIEW_SYSTEM = (
     "- Be constructive: every comment should teach something — explain why it matters.\n"
     "- Also note what's done well: include positive observations about clean patterns.\n"
     "- Honest: if nothing is wrong, return an empty findings list.\n"
+    "- Overengineering is a maintainability issue: flag needless new files, abstractions, dependencies, duplicate helpers, "
+    "or code that existing project utilities, Python stdlib, or platform-native behavior can replace. "
+    "Use category \"overengineering\" and suggest delete/reuse/stdlib/native/shrink only when the diff lines prove it.\n"
     "- Calibrate severity to match these score penalties:\n"
     "  • critical (-1.0): security vulnerability, data loss, credential leak\n"
     "  • major (-0.5): functional bug, broken contract, test regression\n"
@@ -160,7 +163,7 @@ if TYPE_CHECKING:
 class ReviewFinding:
     id: str
     severity: str          # critical | major | minor | info
-    category: str          # breaking_change | bug_risk | missing_test | security | inconsistency | dead_code | style
+    category: str          # breaking_change | bug_risk | missing_test | security | inconsistency | dead_code | style | overengineering
     file: str
     line_range: list[int]
     message: str

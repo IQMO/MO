@@ -9,8 +9,9 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 ## Core Surfaces
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).
 - `core/agent/` — agent hub, turn loop, slash commands, PRT, utils.
-- `core/tasking/` — `core/tasking/task_board.py`, contract gate, task manager, evidence.
-- `core/review/` — diff review pipeline, scorer, iteration, finding patterns.
+- `core/work_patterns.py`, `core/agent/agent_dna.py` — compact internal work guidance, including the lean-build ladder that checks reuse/deletion/stdlib/native options before adding code.
+- `core/tasking/` — `core/tasking/task_board.py`, contract gate, task manager, evidence, and procedure rows seeded from work patterns.
+- `core/review/` — diff review pipeline, scorer, iteration, finding patterns; PRT can flag proven overengineering as maintainability risk.
 - `core/goal/` — goal runner and goal auditor.
 - `core/graph/` — `core/graph/structural_graph.py`, code graph, code-map HTML.
 - `core/learning/` — memory, knowledge store, workflow/feedback/trace learning.
