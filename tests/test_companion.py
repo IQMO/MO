@@ -29,7 +29,9 @@ def test_companion_slash_command_registered():
     assert spec is not None
     assert spec.name == "/companion"
     assert spec.category == "Work"
-    assert "companion" in spec.description.lower()
+    # Desktop surface now presents as "Ghost" (the /companion command name is kept
+    # for back-compat until the entity/command merge; description is Ghost-branded).
+    assert "ghost" in spec.description.lower()
 
 
 def test_companion_help_includes_command():
@@ -220,7 +222,7 @@ def test_companion_module_entrypoint_help():
         timeout=10,
     )
     assert result.returncode == 0
-    assert "Run MO Companion" in result.stdout
+    assert "Run MO Ghost" in result.stdout
 
 
 def test_start_companion_passes_companion_config(monkeypatch):

@@ -196,7 +196,7 @@ class CompanionSurface:
         import tkinter as tk
 
         popup = tk.Toplevel(root)
-        popup.title("MO Companion — Action Log")
+        popup.title("Ghost — Action Log")
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
         popup.configure(bg=CYAN)
@@ -409,7 +409,7 @@ class CompanionSurface:
         header.pack(fill="x", padx=10, pady=(8, 4))
         tk.Label(header, text=GLYPH, fg=CYAN, bg=CARD,
                  font=("Segoe UI", 16, "bold")).pack(side="left", padx=(0, 8))
-        tk.Label(header, text="MO Companion", fg=CYAN, bg=CARD,
+        tk.Label(header, text="Ghost", fg=CYAN, bg=CARD,
                  font=("Segoe UI", 12, "bold")).pack(side="left")
         # Mode indicator: the user must be able to SEE whether MO will drive the
         # desktop (Do) or only explain (Guide) — mode was previously tray-only.

@@ -13,7 +13,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-TRAY_TOOLTIP = "MO Companion"
+TRAY_TOOLTIP = "MO Ghost"
 
 
 class CompanionTray:
@@ -100,7 +100,7 @@ class CompanionTray:
                              checked=lambda item: self._startup_enabled()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Panic Stop", self._on_panic_stop),
-            pystray.MenuItem("Exit Companion", self._on_exit),
+            pystray.MenuItem("Exit Ghost", self._on_exit),
         )
 
         self._tray = pystray.Icon("mo-companion", icon, TRAY_TOOLTIP, menu)
@@ -210,7 +210,7 @@ class CompanionTray:
                     shortcut.TargetPath = sys.executable
                     shortcut.Arguments = "-m interface.companion"
                     shortcut.WorkingDirectory = str(Path(__file__).resolve().parent.parent.parent)
-                    shortcut.Description = "MO Companion — on-screen AI assistant"
+                    shortcut.Description = "MO Ghost — on-screen AI assistant"
                     shortcut.IconLocation = sys.executable
                     shortcut.Save()
                 finally:

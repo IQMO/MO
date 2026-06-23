@@ -412,10 +412,10 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
     ),
     SlashCommandSpec(
         name="/companion",
-        description="toggle the on-screen companion window",
+        description="toggle the on-screen Ghost desktop window",
         category="Work",
-        palette_description="show/hide desktop companion",
-        help_lines=("/companion        toggle the on-screen companion",),
+        palette_description="show/hide the Ghost desktop window",
+        help_lines=("/companion        toggle the on-screen Ghost desktop window",),
     ),
 )
 

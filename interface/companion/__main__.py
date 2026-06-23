@@ -32,10 +32,10 @@ from interface.companion.companion import CompanionSurface
 def main(argv: list[str] | None = None) -> int:
     configure_utf8_stdio()
     parser = argparse.ArgumentParser(
-        description="Run MO Companion as a resident desktop surface without the TUI.",
+        description="Run MO Ghost (desktop surface) as a resident window without the TUI.",
     )
     parser.add_argument("--config", default=None, help="Config path, default: ~/.mo/config.yaml (or MO_CONFIG)")
-    parser.add_argument("--show", action="store_true", help="Show the Companion window immediately")
+    parser.add_argument("--show", action="store_true", help="Show the Ghost window immediately")
     args = parser.parse_args(argv)
 
     if not acquire_runtime_lock(lock_name="mo-companion.lock", label="MO Companion"):
