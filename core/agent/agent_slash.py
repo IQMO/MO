@@ -787,7 +787,7 @@ class AgentSlashCommands:
         """Toggle the desktop companion surface on/off."""
         companion = getattr(self, "_companion", None)
         if companion is None:
-            return "Companion not started. Enable `desktop_companion.enabled` in config."
+            return "Ghost desktop window not started. Enable `ghost.enabled` (or legacy `desktop_companion.enabled`) in config."
         rest_lower = (rest or "").strip().lower()
         if rest_lower == "show":
             companion.show()

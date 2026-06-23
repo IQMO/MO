@@ -225,6 +225,29 @@ def test_companion_module_entrypoint_help():
     assert "Run MO Ghost" in result.stdout
 
 
+def test_ghost_surface_config_prefers_ghost_with_legacy_fallback():
+    from interface.companion.companion import ghost_surface_config
+    assert ghost_surface_config({"ghost": {"enabled": True}}) == {"enabled": True}
+    assert ghost_surface_config({"desktop_companion": {"enabled": True}}) == {"enabled": True}
+    # new key wins when both are present
+    assert ghost_surface_config({"ghost": {"a": 1}, "desktop_companion": {"a": 2}}) == {"a": 1}
+    assert ghost_surface_config(None) == {}
+    assert ghost_surface_config("nope") == {}
+
+
+def test_ghost_session_uses_desktop_persona():
+    """The desktop Ghost runs on its own isolated session with the Ghost persona
+    augmenting (not replacing) the main MO system prompt."""
+    from types import SimpleNamespace
+    from interface.companion.companion import CompanionSurface
+    agent = SimpleNamespace(system_message="You are MO. Base rules here.", _session=None)
+    cs = CompanionSurface(agent=agent, gateway=None)
+    sess = cs._ensure_ghost_session()
+    assert "You are MO." in sess.system_message                      # main prompt preserved
+    assert "Ghost — MO's desktop presence" in sess.system_message    # persona added
+    assert cs._ensure_ghost_session() is sess                        # cached, created once
+
+
 def test_start_companion_passes_companion_config(monkeypatch):
     import interface.companion.companion as companion_module
 

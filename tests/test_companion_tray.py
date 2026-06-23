@@ -118,7 +118,7 @@ class TestCompanionTrayStartup:
 
         CompanionTray._set_startup(True)
 
-        shortcut_path = startup_dir / "MO Companion.lnk"
+        shortcut_path = startup_dir / "MO Ghost.lnk"
         assert shortcut_path.exists() or any("create_shortcut" in str(c) for c in mock_dispatch_calls)
         assert created_shortcuts
         assert created_shortcuts[0].TargetPath == sys.executable

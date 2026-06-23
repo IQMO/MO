@@ -119,7 +119,7 @@ class VoiceSpeaker:
         if self._load_error:
             return False
         if not self._voice_model_path:
-            self._load_error = "no voice model path configured (set desktop_companion.voice.tts_model)"
+            self._load_error = "no voice model path configured (set ghost.voice.tts_model)"
             return False
         try:
             try:

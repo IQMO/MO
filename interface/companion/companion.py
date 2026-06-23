@@ -12,7 +12,7 @@ in a MO-branded overlay bubble. Runs as a daemon thread alongside the TUI.
 
 Architecture
     [Companion tkinter window]
-      → Gateway.run_turn(route_source="desktop") on an isolated Ghost session
+      → Gateway.run_turn(route_source="ghost") on an isolated Ghost session
       → Ghost planning seeds the board → MO executes (Guide/Do lane) → overlay bubble
 """
 from __future__ import annotations
@@ -298,7 +298,7 @@ class CompanionSurface:
         No blocking input(); the mic is closed on the second click — never left open."""
         voice = self._voice
         if not self._voice_input_configured():
-            self._set_status("Voice input is off in desktop_companion.voice.stt_enabled", "#ffcc44")
+            self._set_status("Voice input is off in ghost.voice.stt_enabled", "#ffcc44")
             return
         if voice is None or not voice.stt_available:
             self._set_status(self._voice_input_unavailable_message(), "#ffcc44")
@@ -573,12 +573,15 @@ class CompanionSurface:
         transcript from Main MO's `_session` so the two never cross-contaminate."""
         if self._ghost_session is None:
             from core.session.session import Session
-            sys_msg = (
+            from interface.ghost import ghost_desktop_system_message
+            base_sys = (
                 getattr(self._agent, "system_message", None)
                 or getattr(getattr(self._agent, "_session", None), "system_message", "")
                 or "system"
             )
-            self._ghost_session = Session(sys_msg)
+            # The desktop Ghost runs the Main-MO agent on its OWN isolated session, but
+            # with the Ghost desktop-presence persona so it speaks/acts AS Ghost.
+            self._ghost_session = Session(ghost_desktop_system_message(base_sys))
         return self._ghost_session
 
     def _run_turn(self, user_input: str) -> None:
@@ -601,7 +604,7 @@ class CompanionSurface:
             with self._agent.lane_scope(lane), self._agent.isolated_session(ghost_session):
                 result = self._gateway.run_turn(
                     user_input,
-                    route_source="desktop",
+                    route_source="ghost",
                     on_activity=self._on_activity,
                     on_assistant_text=self._on_assistant_text,
                     on_board_event=self._on_board_event,
@@ -819,6 +822,17 @@ class CompanionSurface:
 # Service starter (follows start_*_if_enabled pattern)
 # ------------------------------------------------------------------
 
+def ghost_surface_config(config: Any) -> dict:
+    """Read the desktop Ghost config block, preferring the new ``ghost`` key and
+    falling back to the legacy ``desktop_companion`` key for back-compat."""
+    if not isinstance(config, dict):
+        return {}
+    block = config.get("ghost")
+    if not isinstance(block, dict):
+        block = config.get("desktop_companion")
+    return block if isinstance(block, dict) else {}
+
+
 def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | None:
     """Start the desktop companion if config says so and deps are present.
 
@@ -826,15 +840,14 @@ def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | N
     Returns the CompanionSurface instance if started, None otherwise.
     """
     try:
-        config = getattr(agent, "config", None) or {}
-        companion_cfg = config.get("desktop_companion", {}) if isinstance(config, dict) else {}
+        companion_cfg = ghost_surface_config(getattr(agent, "config", None) or {})
     except Exception:
         companion_cfg = {}
 
     if not isinstance(companion_cfg, dict) or not companion_cfg.get("enabled", False):
         return None
 
-    resource_lock = acquire_runtime_lock(lock_name="mo-companion.lock", label="MO Companion")
+    resource_lock = acquire_runtime_lock(lock_name="ghost.lock", label="MO Ghost")
     if resource_lock is None:
         return None
 

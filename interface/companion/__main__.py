@@ -26,7 +26,7 @@ from core.path_defaults import default_config_path
 from core.provider.provider import ConfigLoadError, ProviderError, clean_provider_error
 from core.runtime_lock import acquire_runtime_lock
 from core.text_safety import configure_utf8_stdio
-from interface.companion.companion import CompanionSurface
+from interface.companion.companion import CompanionSurface, ghost_surface_config
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--show", action="store_true", help="Show the Ghost window immediately")
     args = parser.parse_args(argv)
 
-    if not acquire_runtime_lock(lock_name="mo-companion.lock", label="MO Companion"):
+    if not acquire_runtime_lock(lock_name="ghost.lock", label="MO Ghost"):
         return 1
 
     config_path = args.config or default_config_path(agent_root=AGENT_ROOT, caller_cwd=CALLER_CWD)
@@ -53,9 +53,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  config: {config_path}", file=sys.stderr)
         return 2
 
-    companion_cfg = agent.config.get("desktop_companion", {}) if isinstance(agent.config, dict) else {}
+    companion_cfg = ghost_surface_config(getattr(agent, "config", None))
     if not isinstance(companion_cfg, dict) or not companion_cfg.get("enabled", False):
-        print("MO Companion is disabled. Set desktop_companion.enabled: true in your MO config.", file=sys.stderr)
+        print("MO Ghost is disabled. Set ghost.enabled: true (or legacy desktop_companion.enabled) in your MO config.", file=sys.stderr)
         return 0
 
     gateway = Gateway(agent)

@@ -184,9 +184,10 @@ class CompanionTray:
     @staticmethod
     def _startup_enabled() -> bool:
         try:
-            startup = Path(os.environ.get("APPDATA", "")) / \
-                      "Microsoft/Windows/Start Menu/Programs/Startup/MO Companion.lnk"
-            return startup.exists()
+            startup_dir = Path(os.environ.get("APPDATA", "")) / \
+                          "Microsoft/Windows/Start Menu/Programs/Startup"
+            # Honor the new name and the legacy "MO Companion.lnk" during transition.
+            return (startup_dir / "MO Ghost.lnk").exists() or (startup_dir / "MO Companion.lnk").exists()
         except Exception:
             return False
 
@@ -200,7 +201,8 @@ class CompanionTray:
             startup_dir = Path(os.environ.get("APPDATA", "")) / \
                           "Microsoft/Windows/Start Menu/Programs/Startup"
             startup_dir.mkdir(parents=True, exist_ok=True)
-            shortcut_path = startup_dir / "MO Companion.lnk"
+            shortcut_path = startup_dir / "MO Ghost.lnk"
+            legacy_path = startup_dir / "MO Companion.lnk"
 
             if enable:
                 pythoncom.CoInitialize()
@@ -215,9 +217,16 @@ class CompanionTray:
                     shortcut.Save()
                 finally:
                     pythoncom.CoUninitialize()
+                # Migrate away the legacy shortcut so there are never two.
+                if legacy_path.exists():
+                    try:
+                        legacy_path.unlink()
+                    except Exception:
+                        pass
             else:
-                if shortcut_path.exists():
-                    shortcut_path.unlink()
+                for path in (shortcut_path, legacy_path):
+                    if path.exists():
+                        path.unlink()
             return True
         except ImportError:
             return False  # win32com not available
