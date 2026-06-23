@@ -1,5 +1,6 @@
 """MO agent task-board management mixin — extracted from core/agent.py (DEVMODE05 Phase 2)."""
 
+from datetime import datetime
 from pathlib import Path
 
 from ..atomic_write import atomic_write_text
@@ -91,6 +92,123 @@ class AgentTaskBoard:
                 if not es.startswith("final:") and es not in carried:
                     carried.append(es)
         return carried[:limit]
+
+    def _ensure_devmode_session_dir(self) -> Path | None:
+        """Create and bind the runtime-owned DEVMODE session dir before model writes.
+
+        The model used to create ``memory/devmode/<stamp>`` itself, which repeatedly
+        produced UTC/past/future stamps and let closeout gates fire too late. Product
+        runtime owns the directory now; the model receives the exact path as context
+        and writes artifacts there.
+        """
+        try:
+            current = getattr(self, "_active_devmode_session_dir", None)
+            if current is not None and Path(current).is_dir():
+                self._track_devmode_run_session_id()
+                return Path(current)
+
+            from ..path_defaults import mo_home
+            stamp = datetime.now().strftime("%Y-%m-%dT%H%M")
+            root = mo_home(getattr(self, "config", {}) or {}) / "memory" / "devmode"
+            target = root / stamp
+            target.mkdir(parents=True, exist_ok=True)
+            prev = getattr(self, "_active_devmode_session_dir", None)
+            if prev is None or Path(prev) != target:
+                self._devmode_run_session_ids = set()
+                self._devmode_closeout_frozen_errors = None
+            self._active_devmode_session_dir = target
+            self._active_devmode_session_dir_runtime_owned = True
+            self._track_devmode_run_session_id()
+            self._write_devmode_manifest_record(
+                status="active",
+                warnings=["runtime_owned_session_dir"],
+            )
+            return target
+        except Exception:
+            return None
+
+    def _devmode_runtime_output_context(self, user_input: str) -> str:
+        """Context block that tells DEVMODE05 the one allowed output directory."""
+        try:
+            from ..self_capability_preflight import is_devmode05_activation
+            if not is_devmode05_activation(user_input):
+                return ""
+            target = self._ensure_devmode_session_dir()
+            if target is None:
+                return ""
+            return (
+                "### DEVMODE05 Runtime Output Directory\n"
+                "The runtime already created and owns this DEVMODE05 session directory. "
+                "Write all session artifacts here and do not create another "
+                "`memory/devmode/<stamp>` folder.\n"
+                f"- active_session_dir: `{target}`\n"
+                f"- required closeout files: `{target / 'summary.md'}`, "
+                f"`{target / 'economy.md'}`, `{target / 'manifest.json'}`\n"
+                "If any older protocol text says to run mkdir or hand-roll a timestamp, "
+                "ignore that older text and use active_session_dir exactly."
+            )
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _path_is_relative_to(path: Path, root: Path) -> bool:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+    def _devmode_output_path_block_reason(self, user_input: str, name: str, arguments: dict | None) -> str | None:
+        """Reject DEVMODE artifact writes to any dir other than the runtime-owned one."""
+        try:
+            if name not in {"write_file", "edit_file"}:
+                return None
+            from ..self_capability_preflight import is_devmode05_activation
+            if not is_devmode05_activation(user_input):
+                return None
+            args = arguments or {}
+            raw_path = str(args.get("path") or args.get("file_path") or "").strip()
+            if not raw_path:
+                return None
+            raw_norm = raw_path.replace("\\", "/").lower()
+            if "operator/devmode" in raw_norm:
+                return None
+            if "memory/devmode" not in raw_norm:
+                return None
+
+            from ..path_defaults import mo_home
+            active = self._ensure_devmode_session_dir()
+            if active is None:
+                return None
+            active = Path(active).expanduser().resolve(strict=False)
+            state_root = (mo_home(getattr(self, "config", {}) or {}) / "memory" / "devmode").resolve(strict=False)
+            candidate = Path(raw_path).expanduser()
+            if not candidate.is_absolute():
+                candidate = Path.cwd() / candidate
+            candidate = candidate.resolve(strict=False)
+
+            candidate_under_state = self._path_is_relative_to(candidate, state_root)
+            if candidate_under_state:
+                rel = candidate.relative_to(state_root)
+                parts = rel.parts
+                if len(parts) <= 1:
+                    return None  # global devmode files, e.g. longitudinal.md
+                if parts[0][:1].isdigit() and self._path_is_relative_to(candidate, active):
+                    return None
+            else:
+                # Catches checkout-relative paths such as E:\MO-clean\memory\devmode\<stamp>\...
+                after = raw_norm.split("memory/devmode", 1)[1].lstrip("/")
+                first = after.split("/", 1)[0] if after else ""
+                if not first[:1].isdigit():
+                    return None
+
+            return (
+                "[DEVMODE05 OUTPUT BLOCKED] Runtime owns this run's artifact directory: "
+                f"{active}. Do not write DEVMODE session artifacts to {candidate}. "
+                "Use the active_session_dir path from context exactly."
+            )
+        except Exception:
+            return None
 
     def _finalize_task_board_for_answer(self, task_board: TaskBoard) -> bool:
         """Reflect final-answer truth without turning unfinished work red.
@@ -220,6 +338,13 @@ class AgentTaskBoard:
             if not candidate.is_dir():
                 return
             prev = getattr(self, "_active_devmode_session_dir", None)
+            if getattr(self, "_active_devmode_session_dir_runtime_owned", False) and prev is not None:
+                if Path(prev) != candidate:
+                    self._write_devmode_manifest_record(
+                        status="active",
+                        warnings=["session_dir_write_rejected"],
+                    )
+                    return
             if prev is None or Path(prev) != candidate:
                 # A different session dir = a new logical run → start a fresh id set so
                 # this run's economy can never count a PRIOR Main/user run's events that

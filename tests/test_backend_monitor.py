@@ -526,6 +526,65 @@ def _devmode_board_agent():
     return AgentTaskBoard.__new__(AgentTaskBoard)
 
 
+def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatch):
+    """DEVMODE output dirs are runtime-owned before the model writes any artifact."""
+    import core.tasking.agent_taskboard as atb
+    from datetime import datetime as real_datetime
+
+    class FixedDatetime:
+        @classmethod
+        def now(cls):
+            return real_datetime(2026, 1, 2, 3, 4)
+
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setattr(atb, "datetime", FixedDatetime)
+    agent = _devmode_board_agent()
+
+    target = agent._ensure_devmode_session_dir()
+
+    assert target == tmp_path / "memory" / "devmode" / "2026-01-02T0304"
+    assert target.is_dir()
+    assert (target / "manifest.json").is_file()
+    ctx = agent._devmode_runtime_output_context("start DEVMODE05")
+    assert str(target) in ctx
+    assert "do not create another" in ctx.lower()
+
+
+def test_devmode_output_blocks_wrong_session_dir(tmp_path, monkeypatch):
+    """Wrong DEVMODE artifact dirs are blocked before they can create polluted outputs."""
+    import core.tasking.agent_taskboard as atb
+    from datetime import datetime as real_datetime
+
+    class FixedDatetime:
+        @classmethod
+        def now(cls):
+            return real_datetime(2026, 1, 2, 3, 4)
+
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setattr(atb, "datetime", FixedDatetime)
+    agent = _devmode_board_agent()
+    active = agent._ensure_devmode_session_dir()
+
+    assert agent._devmode_output_path_block_reason(
+        "start DEVMODE05", "write_file", {"path": str(active / "summary.md")}
+    ) is None
+    assert agent._devmode_output_path_block_reason(
+        "start DEVMODE05", "edit_file", {"path": str(tmp_path / "memory" / "devmode" / "2026-01-02T0000" / "summary.md")}
+    )
+    from core.path_defaults import repo_root
+    assert agent._devmode_output_path_block_reason(
+        "start DEVMODE05", "write_file", {"path": str(Path(repo_root()) / "memory" / "devmode" / active.name / "summary.md")}
+    )
+    assert agent._devmode_output_path_block_reason(
+        "start DEVMODE05", "edit_file", {"path": str(tmp_path / "memory" / "devmode" / "longitudinal.md")}
+    ) is None
+    assert agent._devmode_output_path_block_reason(
+        "start DEVMODE05", "edit_file", {"path": str(tmp_path / "operator" / "devmode" / "DEVMODE05" / "adversarial-rotation.json")}
+    ) is None
+
+
 def test_devmode_economy_writes_only_to_bound_dir_not_mtime_latest(tmp_path, monkeypatch):
     """The economy record must land ONLY in the EXPLICIT active session dir bound from
     this run's own artifact writes — never the newest dir by mtime. The mtime heuristic

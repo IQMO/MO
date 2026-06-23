@@ -483,7 +483,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     # THE SINGLE GATE
                     operator_ok = self._operator_approved(user_input, name, arguments)
                     effective_roots = self._effective_allowed_roots_for_tool(user_input, name, arguments)
-                    block_reason = self._self_mutation_block_reason(user_input, name, arguments) or guard_tool_call(
+                    block_reason = self._devmode_output_path_block_reason(user_input, name, arguments) or \
+                        self._self_mutation_block_reason(user_input, name, arguments) or guard_tool_call(
                         name, arguments,
                         lane=self._effective_lane(),
                         allowed_roots=effective_roots,
@@ -970,6 +971,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         self_capability_context = ""
         if should_include_self_capability_preflight(user_input):
             self_capability_context = build_self_capability_preflight_context(user_input, cwd=getattr(self, "project_cwd", None))
+        devmode_output_context = self._devmode_runtime_output_context(user_input)
         code_graph_context = ""
         if should_include_code_graph_context(user_input):
             try:
@@ -1025,6 +1027,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             "project_context": bool(project_context),
             "mo_control": bool(mo_control_context),
             "self_capability": bool(self_capability_context),
+            "devmode_output": bool(devmode_output_context),
             "code_graph": bool(code_graph_context),
             "pending_interrupted": bool(pending_interrupted_context),
             "heartbeat": bool(heartbeat_context),
@@ -1047,6 +1050,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("project_context", "Project-local instructions (current working directory)", project_context, 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", max_chars=3200),
                 ContextSource("mo_control", "MO control workspace authority", mo_control_context, 3, "active policy/orientation for cross-repo/server work; live checks still win", max_chars=2600),
                 ContextSource("self_capability", "MO self-capability preflight", self_capability_context, 1, "hard gate for MO self/DEVMODE05 work; inventory existing capabilities before edits/builds", max_chars=7200),
+                ContextSource("devmode_output", "DEVMODE05 runtime-owned output directory", devmode_output_context, 1, "authoritative private artifact directory for this DEVMODE05 run; never hand-roll a memory/devmode timestamp", max_chars=1200),
                 ContextSource("pending_interrupted", "Paused interrupted work", pending_interrupted_context, 3, "continuity context only; do not resume unless relevant to current request", max_chars=1100),
                 ContextSource("workflow_learning", "Approved workflow learning", workflow_learning_context, 4, "operator-approved but relevance-gated; lower authority than current scope/evidence", max_chars=1200),
                 ContextSource("proactive_learning", "Confirmed learning suggestions", learning_context, 4, "operator-confirmed learning; lower authority than current scope/evidence", max_chars=1000),
