@@ -278,12 +278,15 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
 
 
 def _devmode05_future_stamp_violation() -> str | None:
-    """Block when the active session dir is stamped in the FUTURE — a correct local
-    stamp is always at/before now, so a future stamp (e.g. a T1930 dir created at
-    18:56) is a hand-typed/skewed stamp from skipping session_stamp.py. Past-dated
-    stamps are not flagged here (a long run legitimately stamps in the past)."""
+    """Block when the active session dir's stamp is implausibly far from the real session
+    time — a hand-typed/skewed stamp from skipping session_stamp.py. Catches BOTH skews:
+    FUTURE (e.g. the T1930 dir created at 18:56) and PAST relative to the actual session
+    start (observed mo-1782177115: a `2026-06-23T0112` dir created at 03:14, ~2h before the
+    session started). Past-skew is measured against the live monitor's start time, NOT
+    `now`, with a generous 90-min margin so a long-but-legitimate run is never flagged."""
     try:
         from datetime import datetime, timedelta
+        from pathlib import Path
         from .path_defaults import mo_home
         root = mo_home() / "memory" / "devmode"
         if not root.is_dir():
@@ -296,13 +299,33 @@ def _devmode05_future_stamp_violation() -> str | None:
             stamp_dt = datetime.strptime(latest.name, "%Y-%m-%dT%H%M")
         except ValueError:
             return None
-        if stamp_dt > datetime.now() + timedelta(minutes=5):
-            drift = (stamp_dt - datetime.now()).total_seconds() / 60.0
+        now = datetime.now()
+        if stamp_dt > now + timedelta(minutes=5):
+            drift = (stamp_dt - now).total_seconds() / 60.0
             return (
                 f"the session dir '{latest.name}' is stamped ~{drift:.0f} min in the FUTURE "
-                f"(local now {datetime.now():%Y-%m-%dT%H%M}) — a hand-typed/skewed stamp from "
+                f"(local now {now:%Y-%m-%dT%H%M}) — a hand-typed/skewed stamp from "
                 "skipping session_stamp.py. Rename the dir to the local-time stamp before finishing."
             )
+        # Past-skew vs the session's actual start, parsed from the live monitor filename
+        # (backend_monitor-YYYYMMDD-HHMMSS-...). A correct stamp sits within the session
+        # window; one stamped well BEFORE the session began is hand-typed/skewed.
+        try:
+            from .backend_monitor import latest_monitor_path
+            mon = latest_monitor_path()
+            m = re.search(r"backend_monitor-(\d{8})-(\d{6})", Path(mon).name) if mon else None
+            if m:
+                session_start = datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S")
+                if stamp_dt < session_start - timedelta(minutes=90):
+                    drift = (session_start - stamp_dt).total_seconds() / 60.0
+                    return (
+                        f"the session dir '{latest.name}' is stamped ~{drift:.0f} min BEFORE this "
+                        f"session actually started ({session_start:%Y-%m-%dT%H%M}, from the live "
+                        "monitor) — a hand-typed/skewed stamp from skipping session_stamp.py. "
+                        "Rename the dir to the correct local-time stamp before finishing."
+                    )
+        except Exception:
+            pass
         return None
     except Exception:
         return None

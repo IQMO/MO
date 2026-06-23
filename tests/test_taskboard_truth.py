@@ -468,3 +468,31 @@ def test_self_completed_empty_phase_row_is_backfilled_at_closeout(monkeypatch):
     from core.tasking.contract import enforce_contract_gate
     ok, reasons, _ = enforce_contract_gate(board, board_closing=True)
     assert ok, f"closeout still blocked after backfill: {reasons}"
+
+
+def test_complete_task_never_closes_a_row_with_zero_evidence():
+    """A phase row the model completes via complete_task WITHOUT running any tool of its
+    own must not close evidence-empty (observed live mo-1782177115: DEVMODE tasks 5-6
+    closed with evidence_count=0 yet passed the contract gate). The runtime attaches the
+    session's gathered evidence at the moment of completion — upstream of any gate, so it
+    can never loop. This covers the direct complete_task path (not just closeout finalize)."""
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Gather", "active", kind="inspect", completion_gate="tool"),
+        TaskItem("2", "Verify behavior/cost/handoff", "pending", kind="verify",
+                 completion_gate="verification", depends_on=["1"]),
+        TaskItem("3", "Write summary and close", "pending", kind="report",
+                 completion_gate="final", depends_on=["2"]),
+    ])
+    agent = object.__new__(Agent)
+    # Task 1 runs a real tool (accrues its own evidence), then completes → task 2 active.
+    agent._advance_task_board_after_tool(board, "read_file", {"path": "core/atomic_write.py"})
+    agent._advance_task_board_after_tool(board, "complete_task", {})
+    # Tasks 2 and 3 are completed back-to-back via complete_task with NO tools of their own
+    # (the exact live pattern). Neither may close empty.
+    agent._advance_task_board_after_tool(board, "complete_task", {})
+    agent._advance_task_board_after_tool(board, "complete_task", {})
+    for tid in ("2", "3"):
+        row = board.task(tid)
+        assert row.status == "completed"
+        nonfinal = [e for e in (row.evidence or []) if not str(e).startswith("final:")]
+        assert nonfinal, f"task {tid} closed with zero real evidence: {row.evidence!r}"

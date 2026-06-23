@@ -596,3 +596,31 @@ def test_devmode05_closeout_gate_blocks_future_session_stamp(tmp_path, monkeypat
     past = (datetime.now() - timedelta(minutes=40)).strftime("%Y-%m-%dT%H%M")
     (devmode / past).mkdir(parents=True)
     assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY.") is True
+
+
+def test_devmode05_closeout_gate_blocks_past_skewed_stamp(tmp_path, monkeypatch):
+    """A dir stamped well BEFORE the session actually started (hand-typed, session_stamp.py
+    skipped — the mo-1782177115 bug: a `T0112` dir created during an ~0311 session) blocks
+    the closeout. Measured against the live monitor's start time, not `now`, so a long-but-
+    legitimate run is never flagged."""
+    import shutil
+    from datetime import datetime, timedelta
+    import core.self_capability_preflight as scp
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    mondir = tmp_path / "mon"
+    mondir.mkdir()
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(mondir))
+    now = datetime.now()
+    # Live monitor: this session started ~now.
+    (mondir / f"backend_monitor-{now:%Y%m%d-%H%M%S}-abcd1234.jsonl").write_text("", encoding="utf-8")
+    devmode = tmp_path / "memory" / "devmode"
+    skewed = (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H%M")  # ~2h before session start
+    (devmode / skewed).mkdir(parents=True)
+    ui = "start DEVMODE05"
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY.") is False
+    assert "before this session" in scp.devmode05_continuation_instruction(ui, "[DEVMODE05 COMPLETE] HEALTHY.").lower()
+    # A correctly-stamped dir (≈ session start) passes.
+    shutil.rmtree(devmode / skewed)
+    (devmode / now.strftime("%Y-%m-%dT%H%M")).mkdir(parents=True)
+    assert scp.devmode05_final_allows_stop(ui, "[DEVMODE05 COMPLETE] HEALTHY.") is True

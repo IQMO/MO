@@ -42,8 +42,20 @@ class AgentTaskBoard:
         except StopIteration:
             return False
 
-        # Mark current task complete
-        task_board.complete(active)
+        # Mark current task complete. A phase row the model completes via complete_task
+        # without running any tool of its own would otherwise close with ZERO evidence
+        # (observed live mo-1782177115: DEVMODE tasks 5-6 closed empty yet passed the
+        # contract gate). Attach the session's already-gathered evidence so no completed
+        # row is evidence-empty — UPSTREAM attachment, the C1 principle (a gate-side
+        # rejection of empty rows loops; see the contract-gate history). Only backfills
+        # when the active row has none of its own AND the session gathered real evidence.
+        active_row = tasks[idx]
+        row_has_real = any(not str(e).startswith("final:") for e in (active_row.evidence or []))
+        if not row_has_real:
+            carried = self._session_gathered_evidence(task_board)
+            task_board.complete(active, evidence=carried or None)
+        else:
+            task_board.complete(active)
 
         # Activate next ready task
         next_id = None
@@ -66,6 +78,19 @@ class AgentTaskBoard:
     @staticmethod
     def _task_evidence_item_for_tool(tool_name: str, arguments: dict | None = None) -> str:
         return task_evidence.taskboard_tool_evidence_item(tool_name, arguments or {})
+
+    @staticmethod
+    def _session_gathered_evidence(task_board: TaskBoard, limit: int = 8) -> list[str]:
+        """Non-`final:` evidence the session gathered across all rows — the source used to
+        backfill a row completed with none of its own (so no completed row is ever
+        evidence-empty). Same set the closeout carry uses."""
+        carried: list[str] = []
+        for t in task_board.tasks:
+            for e in (t.evidence or []):
+                es = str(e)
+                if not es.startswith("final:") and es not in carried:
+                    carried.append(es)
+        return carried[:limit]
 
     def _finalize_task_board_for_answer(self, task_board: TaskBoard) -> bool:
         """Reflect final-answer truth without turning unfinished work red.
@@ -142,13 +167,7 @@ class AgentTaskBoard:
         # token. The rows carry the session's real evidence (not per-phase-specific):
         # precise per-phase attribution would require fragile phase auto-advance for
         # no honesty gain, so it is intentionally not done.
-        carried: list[str] = []
-        for t in task_board.tasks:
-            for e in (t.evidence or []):
-                es = str(e)
-                if not es.startswith("final:") and es not in carried:
-                    carried.append(es)
-        carried = carried[:8]
+        carried = self._session_gathered_evidence(task_board)
 
         changed = False
         for task in list(task_board.tasks):
