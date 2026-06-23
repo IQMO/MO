@@ -25,9 +25,12 @@ def test_manifest_artifact_entries_hash_present_and_record_missing(tmp_path):
     # economy.md + manifest.json are runtime-owned
     assert by_name["economy.md"]["runtime_owned"] is True
     assert by_name[MANIFEST_NAME]["runtime_owned"] is True
-    # acceptance criterion 5: the core artifacts are all indexed
+    # acceptance criterion 5: the core SESSION artifacts are all indexed
     for required in ("summary.md", "workflow.md", "catalog.md", "capability-matrix.md", "economy.md", MANIFEST_NAME):
         assert required in by_name
+    # longitudinal.md is a GLOBAL cross-session record (one level up), not a session
+    # artifact — it must NOT be indexed here (else it reports a false "missing").
+    assert "longitudinal.md" not in by_name
 
 
 def test_manifest_records_taskboard_evidence_and_token_only_rows(tmp_path):

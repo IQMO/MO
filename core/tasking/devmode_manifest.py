@@ -19,15 +19,17 @@ from ..atomic_write import atomic_write_text
 MANIFEST_NAME = "manifest.json"
 SCHEMA_VERSION = 1
 
-# Artifact files a DEVMODE session dir is expected to contain. The manifest indexes all
-# of them, recording missing ones as explicit entries rather than silent absence.
+# SESSION-LOCAL artifact files a DEVMODE session dir is expected to contain. The manifest
+# indexes all of them, recording missing ones as explicit entries rather than silent
+# absence. NOTE: `longitudinal.md` is deliberately excluded — it is a GLOBAL cross-session
+# record (`~/.mo/memory/devmode/longitudinal.md`, one level up), not a session artifact, so
+# listing it here reported a false "missing" (it never lives in the session dir).
 _ARTIFACT_NAMES = (
     "summary.md",
     "workflow.md",
     "catalog.md",
     "capability-matrix.md",
     "economy.md",
-    "longitudinal.md",
     MANIFEST_NAME,
 )
 _RUNTIME_OWNED = {"economy.md", MANIFEST_NAME}
