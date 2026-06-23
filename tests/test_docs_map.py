@@ -1,6 +1,12 @@
 from pathlib import Path
 
 
+def test_root_has_one_public_config_template():
+    assert Path("config.example.yaml").is_file()
+    assert not Path("config.mock.yaml").exists()
+    assert not Path("config.yaml").exists()
+
+
 def test_root_map_stays_compact_and_points_to_authoritative_surfaces():
     path = Path("MAP.md")
     text = path.read_text(encoding="utf-8")
