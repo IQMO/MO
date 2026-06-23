@@ -1,5 +1,12 @@
 from pathlib import Path
 
+import pytest
+
+
+def _require_private_docs() -> None:
+    if not Path("docs/README.md").exists():
+        pytest.skip("private docs tree is not present in this checkout")
+
 
 def test_root_has_one_public_config_template():
     assert Path("config.example.yaml").is_file()
@@ -56,6 +63,7 @@ def test_public_docs_describe_multi_instance_model():
 
 
 def test_current_docs_do_not_import_retired_root_trace_tools():
+    _require_private_docs()
     current_paths = [
         Path("MAP.md"),
         Path("docs/README.md"),
@@ -76,6 +84,7 @@ def test_current_docs_do_not_import_retired_root_trace_tools():
 
 
 def test_e2e_mission_records_are_audit_not_current_status():
+    _require_private_docs()
     mission_names = [
         "MISSION_E2E_BEHAVIORAL_COVERAGE.md",
         "MISSION1_LIVE_CHECKLIST.md",
