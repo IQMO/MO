@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from prompt_toolkit.utils import get_cwidth
 
 from core.review.diff_review import ReviewFinding, ReviewReport
-from core.ghost.ghost_routing import GhostRouteSuggestion, route_prt_report
+from core.ghost.ghost_routing import GhostRouteSuggestion
+from core.review.prt_report import route_prt_report
 from core.tasking.task_board import TaskBoard, TaskItem
 from core.workers import ensure_worker_registry
 from interface.main_terminal import MoTui

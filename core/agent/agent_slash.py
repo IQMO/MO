@@ -325,7 +325,7 @@ class AgentSlashCommands:
                     run_fix_loop(self, report)
                     
                 # Route the report
-                from core.ghost.ghost_routing import route_prt_report
+                from core.review.prt_report import route_prt_report
                 route_prt_report(self, report)
                 
                 if on_fin:

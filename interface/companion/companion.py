@@ -1,12 +1,19 @@
-"""MO Companion — the on-screen text-input surface.
+"""MO Companion — the desktop Ghost surface (on-screen text/voice input).
 
-Summon with Win+Alt+M (global hotkey) or `/companion` slash command. Type a
-request, press Enter, and MO processes it via Ghost → Gateway with results
-shown in a MO-branded overlay bubble. Runs as a daemon thread alongside the TUI.
+This IS the desktop "Ghost" (the transitional name "MO Companion" / `/companion`
+is being unified to Ghost — see the multi-instance/Ghost-separation proposal). It
+is a distinct surface from both the always-on "Ghost planning" step (which seeds
+the taskboard via Gateway.propose_work) and the TUI side-panel coordinator.
+
+Summon with Win+Alt+M (global hotkey) or `/companion`. Type/speak a request and
+the turn runs through the Gateway on Ghost's OWN isolated session (so the desktop
+conversation never bleeds into Main MO), gated by the Guide/Do lane; results show
+in a MO-branded overlay bubble. Runs as a daemon thread alongside the TUI.
 
 Architecture
-    [Companion tkinter window] → Gateway.run_turn(route_source="desktop")
-                                 → Ghost shapes → MO executes → overlay bubble
+    [Companion tkinter window]
+      → Gateway.run_turn(route_source="desktop") on an isolated Ghost session
+      → Ghost planning seeds the board → MO executes (Guide/Do lane) → overlay bubble
 """
 from __future__ import annotations
 
