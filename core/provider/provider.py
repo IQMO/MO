@@ -14,7 +14,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import httpx
 import yaml
 from dotenv import load_dotenv
 import traceback
@@ -39,12 +38,44 @@ def _capture_response_headers(provider_name: str, response_or_stream: Any) -> No
         except Exception:
             pass
 
-try:
-    from openai import OpenAI
-    HAS_OPENAI = True
-except ImportError:
-    HAS_OPENAI = False
-    OpenAI = None
+# The OpenAI SDK is heavy (~1.3s, ~1000 modules: its full `openai.types.*` tree)
+# yet is only needed when a provider client is actually constructed — never at
+# import time. Import it lazily so `import core.agent.agent` stays light (cold
+# start ~1.6s -> ~0.3s); this matters because every terminal MO instance is its
+# own process and pays the import. `OpenAI` stays a module attribute so tests
+# (and any patch("core.provider.provider.OpenAI")) keep working.
+OpenAI = None
+HAS_OPENAI: bool | None = None
+
+
+def _ensure_openai():
+    """Import the OpenAI SDK on first use; populate the module globals and return the class (or None).
+
+    Idempotent and patch-safe: if ``OpenAI`` is already set (a real import or a
+    test patch) it is not overwritten, so the lazy probe never clobbers a mock.
+    """
+    global OpenAI, HAS_OPENAI
+    if OpenAI is None:
+        try:
+            from openai import OpenAI as _OpenAI
+            OpenAI = _OpenAI
+        except ImportError:
+            OpenAI = None
+    HAS_OPENAI = OpenAI is not None
+    return OpenAI
+
+
+_httpx_mod = None
+
+
+def _httpx():
+    """Lazy-import httpx — only the Codex OAuth provider needs it, so keep it off
+    the default (DeepSeek/OpenAI-compatible) cold-start path."""
+    global _httpx_mod
+    if _httpx_mod is None:
+        import httpx as _h
+        _httpx_mod = _h
+    return _httpx_mod
 
 
 class ProviderError(RuntimeError):
@@ -105,6 +136,7 @@ class ChatCompletionsProvider(BaseProvider):
         # so providers that reject unknown params (unverified support) are unaffected.
         # Operators enable it only for providers known to accept it (o-series, etc.).
         self.reasoning_effort = str(reasoning_effort).strip().lower() if reasoning_effort else None
+        _ensure_openai()
         self.client = OpenAI(api_key=api_key, base_url=base_url, default_headers=headers or None, timeout=self.timeout, max_retries=0)
 
     @staticmethod
@@ -370,7 +402,7 @@ class CodexOAuthProvider(BaseProvider):
         # Responses API reasoning effort; default None → not sent (no behavior change).
         self.reasoning_effort = str(reasoning_effort).strip().lower() if reasoning_effort else None
         self.timeout_seconds = float(timeout or 60.0)
-        self.timeout = httpx.Timeout(self.timeout_seconds, connect=min(30.0, self.timeout_seconds))
+        self.timeout = _httpx().Timeout(self.timeout_seconds, connect=min(30.0, self.timeout_seconds))
         access_token = self._read_access_token()
         if self._access_token_expired(access_token):
             refreshed = self._refresh_access_token()
@@ -379,6 +411,7 @@ class CodexOAuthProvider(BaseProvider):
         headers = self._codex_headers(access_token)
         self.access_token = access_token
         self.default_headers = headers
+        _ensure_openai()
         self.client = OpenAI(
             api_key=access_token,
             base_url=self.base_url,
@@ -429,7 +462,7 @@ class CodexOAuthProvider(BaseProvider):
             "scope": "openid profile email",
         }
         try:
-            resp = httpx.post(self.oauth_token_url, json=payload, timeout=self.timeout, follow_redirects=True)
+            resp = _httpx().post(self.oauth_token_url, json=payload, timeout=self.timeout, follow_redirects=True)
             if resp.status_code >= 400:
                 return None
             body = resp.json()
@@ -632,7 +665,7 @@ class CodexOAuthProvider(BaseProvider):
         def _events():
             event_type = ""
             data_lines: list[str] = []
-            with httpx.stream("POST", url, headers=headers, json=request, timeout=self.timeout, follow_redirects=True) as response:
+            with _httpx().stream("POST", url, headers=headers, json=request, timeout=self.timeout, follow_redirects=True) as response:
                 if response.status_code >= 400:
                     detail = response.read().decode("utf-8", errors="replace")[:1000]
                     raise ProviderError(f"OpenAI Codex Responses stream failed ({response.status_code}): {detail}")
@@ -927,7 +960,7 @@ def _order_provider_chain(providers: list[BaseProvider], model_cfg: dict) -> lis
 
 def init_provider(config: dict = None):
     """Initialize provider chain from config."""
-    if not HAS_OPENAI:
+    if _ensure_openai() is None:
         raise RuntimeError("openai package not installed. Run: pip install -r requirements.txt")
     if config is None:
         config = load_config()
