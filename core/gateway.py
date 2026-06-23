@@ -160,9 +160,17 @@ class Gateway:
         instance_id = str(getattr(self.agent, "instance_id", "") or "")
         result_text = ""
         status = "ok"
+        # A secondary (desktop/Ghost) surface turn must NOT clobber the Main board
+        # that the TUI / heartbeat / /status all read from the shared last_task_board.
+        # Run it against its own registry slot and restore Main in the finally below;
+        # primary turns keep the original behavior exactly.
+        secondary = route_source in _SECONDARY_SURFACES
+        board_slot = surface if secondary else "main"
+        saved_main_board = self.last_task_board
+        saved_previous_board = getattr(self, "previous_task_board", None)
         self.previous_task_board = self.last_task_board
         self.last_task_board = None
-        self.task_board_registry.clear_board("main")
+        self.task_board_registry.clear_board(board_slot)
         resume_intent = _has_pending_resume_intent(self.agent, user_input)
         board_objective = _board_objective_text(self.agent, user_input, resume_intent=resume_intent)
 
@@ -239,11 +247,11 @@ class Gateway:
                     else:
                         board = _new_gateway_board(turn_id, session_id, board_objective, rows=ghost_plan_rows if ghost_plan_rows else None)
                     self.last_task_board = board
-                    self.task_board_registry.set_board("main", board)
+                    self.task_board_registry.set_board(board_slot, board)
                     board_holder[0] = board
                     record_snapshot(board, "created", source="gateway")
                     event = board_update_event(board, update="created")
-                    self.task_board_registry.record_event("main", board, update="created", event=event)
+                    self.task_board_registry.record_event(board_slot, board, update="created", event=event)
                     if on_board_update:
                         on_board_update(event["rich"])
                     if on_board_event:
@@ -326,7 +334,7 @@ class Gateway:
                 if self.last_task_board is not None:
                     event, state = terminal_board_event(self.last_task_board, status)
                     record_terminal_snapshot(self.last_task_board, event, source="gateway", state=state)
-                    self.task_board_registry.record_event("main", self.last_task_board, update=event)
+                    self.task_board_registry.record_event(board_slot, self.last_task_board, update=event)
                 self.monitor.emit("turn_end", {
                     "status": status,
                     "duration_ms": elapsed_ms,
@@ -342,6 +350,11 @@ class Gateway:
                     setattr(self.agent, "_current_route_source", previous_route_source)
                 except Exception:
                     traceback.print_exc()
+                # Restore the Main board after a secondary (desktop/Ghost) turn so a
+                # desktop turn never clobbers the board the TUI/heartbeat/status read.
+                if secondary:
+                    self.last_task_board = saved_main_board
+                    self.previous_task_board = saved_previous_board
 
             return result_text
 

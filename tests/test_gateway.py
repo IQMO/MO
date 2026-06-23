@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from core.backend_monitor import BackendMonitor
 from core.gateway import Gateway, _runtime_should_create_board, _SECONDARY_BUSY_MESSAGE
+from core.tasking.task_board import TaskBoard, TaskItem
 
 
 class FakeAgent:
@@ -214,6 +215,25 @@ class TestGatewayVisionProviderRestore:
         assert agent.restored is True            # restore_vision_provider called in finally
         assert agent._pre_vision_provider is None
         assert agent.provider_index == 0         # flipped-to-vision reverted
+
+
+class TestGatewaySecondaryBoardIsolation:
+    """A secondary (desktop/Ghost) turn must not clobber the Main board that the
+    TUI / heartbeat / /status read from the shared last_task_board (proposal #4)."""
+
+    def test_secondary_turn_preserves_main_board(self):
+        gw, agent, _ = make_gateway()
+        main_board = TaskBoard(tasks=[TaskItem("1", "main work", "active")])
+        gw.last_task_board = main_board
+        gw.run_turn("hi ghost", route_source="desktop")
+        assert gw.last_task_board is main_board   # desktop turn restored the Main board
+
+    def test_primary_turn_replaces_main_board(self):
+        gw, agent, _ = make_gateway()
+        old_board = TaskBoard(tasks=[TaskItem("1", "old", "completed")])
+        gw.last_task_board = old_board
+        gw.run_turn("build a thing", route_source="user")
+        assert gw.last_task_board is not old_board   # primary turn builds/replaces, not preserves
 
 
 class TestRuntimeShouldCreateBoard:
