@@ -22,10 +22,10 @@ nul
 with open*
 personal/
 .claude/
-# Leak-prevention safety net ONLY — the operator pack does NOT live here. It is a
-# profile-private pack at ~/.mo/operator (or MO_OPERATOR_PACK), optionally Git-backed
-# for its own backup; it is NOT part of this checkout and is NOT a submodule. The
-# resolver never reads a repo-local copy (core/path_defaults.py +
+# Leak-prevention safety net ONLY — owner-only protocol/state files do NOT live
+# here. They resolve from ~/.mo/operator (or MO_OPERATOR_PACK) under the user's
+# MO profile; this checkout is the one public product repo and never a submodule
+# host. The resolver never reads a repo-local copy (core/path_defaults.py +
 # tests/test_path_defaults.py enforce this). This line only guarantees a stray
 # hand-copied operator/ can never be committed.
 operator/

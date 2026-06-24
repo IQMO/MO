@@ -14,7 +14,7 @@ ENV_MO_HOME = "MO_HOME"
 ENV_MO_PROJECT_CWD = "MO_PROJECT_CWD"
 ENV_MO_STATE_HOME = "MO_STATE_HOME"
 ENV_MO_STATE_LOCAL = "MO_STATE_LOCAL"  # opt OUT of private-by-default → project-relative state
-ENV_MO_OPERATOR_PACK = "MO_OPERATOR_PACK"  # owner-only protocol pack root (private, never ships)
+ENV_MO_OPERATOR_PACK = "MO_OPERATOR_PACK"  # owner-only protocol root (profile-owned, never ships)
 ENV_TASKBOARD_LEDGER_PATH = "MO_TASKBOARD_LEDGER_PATH"
 ENV_TASKBOARD_LEDGER_DISABLE = "MO_TASKBOARD_LEDGER_DISABLE"
 ENV_HEARTBEAT_LEDGER_PATH = "MO_HEARTBEAT_LEDGER_PATH"
@@ -42,14 +42,13 @@ def mo_home(config: dict[str, Any] | None = None) -> Path:
 
 
 def operator_pack_root(config: dict[str, Any] | None = None) -> Path:
-    """Resolve the owner-only operator protocol pack root.
+    """Resolve the owner-only protocol/state root.
 
-    Resolution order: ``MO_OPERATOR_PACK`` env > ``~/.mo/operator`` (the private
-    home). The pack is owner-private and never ships, so the product checkout is
-    never a valid implicit source for it. It is a profile-private *pack* (optionally
-    Git-backed for its own backup), NOT a nested repo or submodule inside the product
-    checkout. Returns the home location by default even when absent — a user clone has
-    neither pack nor token, so owner mode stays off.
+    Resolution order: ``MO_OPERATOR_PACK`` env > ``~/.mo/operator`` under the
+    user's MO profile. Owner-only protocol files never ship, so the product checkout
+    is never a valid implicit source for them. This is not a nested repo or submodule
+    inside the product checkout. Returns the home location by default even when absent
+    — a user clone has neither protocol files nor owner token, so owner mode stays off.
     """
     env = os.getenv(ENV_MO_OPERATOR_PACK, "").strip()
     if env:

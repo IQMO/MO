@@ -1,8 +1,7 @@
 """Owner-only protocol activation gates.
 
-The private operator pack and owner token live under the per-user MO home. This
-module exposes only the product-side detection seam; it does not ship protocol
-content.
+Owner protocol files and the owner token live under the per-user MO profile. This
+module exposes only the product-side detection seam; it does not ship protocol content.
 """
 from __future__ import annotations
 
@@ -13,7 +12,7 @@ import re
 from .path_defaults import mo_home, operator_pack_root
 
 def _pack_present() -> bool:
-    """True when the untracked operator protocol pack is on disk."""
+    """True when the untracked owner protocol files are on disk."""
     try:
         devmode = operator_pack_root() / "devmode"
         return (
@@ -43,12 +42,12 @@ def _owner_token_present() -> bool:
 
 
 def operator_protocols_installed() -> bool:
-    """True only for the real operator: the private pack AND the owner token.
+    """True only for the real operator: owner protocol files AND the owner token.
 
     DEVMODE05/VS05 are personal operator protocols, not product features. They
-    require BOTH the untracked ``~/.mo/operator/devmode/`` pack AND a private owner
+    require BOTH the untracked ``~/.mo/operator/devmode/`` files AND a private owner
     token in ``~/.mo`` (``operator.token``) that a user clone never has — so the
-    copyable pack files alone cannot fake operator mode. On a user clone both are
+    copyable protocol files alone cannot fake operator mode. On a user clone both are
     absent, so the activation terms are inert by absence — no config, nothing to
     leak. ``MO_OPERATOR_PROTOCOLS=1`` forces installed-state for tests.
     """

@@ -4,7 +4,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 
 ## Runtime Truth
 - `core/prompts/system.md` — MO runtime behavior prompt.
-- `core/owner_protocols.py`, `core/self_maintenance/` — owner-only activation, preflight, and stop gates; inert without the private pack.
+- `core/owner_protocols.py`, `core/self_maintenance/` — owner-only activation, preflight, and stop gates; inert without the owner's profile protocol files and owner token.
 
 ## Core Surfaces
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).
@@ -23,13 +23,13 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `core/mcp/` — MCP client + manager (enabled by default, inert until servers are listed).
 
 ## Runtime State
-- Live runtime state (logs, audits) lives under the private state home (`~/.mo` / `MO_HOME` / `MO_STATE_HOME`), NOT the checkout.
+- Live runtime state (logs, audits) lives under the profile state home (`~/.mo` / `MO_HOME` / `MO_STATE_HOME`), NOT the checkout.
 - Multiple terminal instances are allowed: stable `MO_INSTANCE_ID`, default `main-<instance>` session; `runtime.shared_session: true` is the legacy shared-main escape hatch.
 - Singleton surfaces are resource-locked: headless service, Telegram poller, scheduler, desktop Ghost tray/hotkey.
-- Logical private-state `memory/traces/` — trace artifacts and validator input.
-- Logical private-state `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
-- Logical private-state `memory/structural_graph/` — graph, code map, focused map artifacts.
-- Owner-private session records are gitignored/local only; never tracked or shipped.
+- Logical profile-state `memory/traces/` — trace artifacts and validator input.
+- Logical profile-state `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
+- Logical profile-state `memory/structural_graph/` — graph, code map, focused map artifacts.
+- Owner-only session records are gitignored/local only; never tracked or shipped.
 
 ## Verification
 - Focused tests first: `python -m pytest tests/<target>.py -q`.
@@ -42,4 +42,4 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Prefer existing MO systems over new parallel mechanisms.
 - Keep protocols split into modules, not oversized root prompts.
 - Never print secrets or credential values.
-- Boundary: operator-private material lives under private state (`~/.mo`, including `~/.mo/operator` or `MO_OPERATOR_PACK`) or ignored local-only paths and never ships; a pre-push guard blocks leaks. Operator-only commands use `operator_only=True`. See AGENTS.md "Boundary".
+- Boundary: owner-only material lives under profile state (`~/.mo`, including `~/.mo/operator` or `MO_OPERATOR_PACK`) or ignored local-only paths and never ships; a pre-push guard blocks leaks. Operator-only commands use `operator_only=True`. See AGENTS.md "Boundary".

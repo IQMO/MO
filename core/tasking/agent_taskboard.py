@@ -319,8 +319,8 @@ class AgentTaskBoard:
         """Bind the active DEVMODE session dir to the dir THIS run writes its artifacts
         into. Captured from each write_file/edit_file path under memory/devmode/<stamp>/
         so the economy writer can target the explicit active dir instead of guessing the
-        newest dir by mtime (which let an aborted run overwrite a prior session). The
-        private operator pack is NOT a session dir and is skipped."""
+        newest dir by mtime (which let an aborted run overwrite a prior session).
+        The owner profile protocol root is NOT a session dir and is skipped."""
         try:
             from ..path_defaults import mo_home
             path = str((arguments or {}).get("path") or (arguments or {}).get("file_path") or "")

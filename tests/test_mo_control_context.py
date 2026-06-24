@@ -118,7 +118,7 @@ def test_control_workspace_is_readable_but_not_writable_by_tools(tmp_path, monke
 
 
 def test_devmode_effective_roots_include_operator_pack_and_records(tmp_path, monkeypatch):
-    """DEVMODE05 tools must reach the migrated private pack and session records."""
+    """DEVMODE05 tools must reach owner profile protocol files and session records."""
     from core.agent.agent import Agent
     import core.agent.agent_turn_dispatch as dispatch
     from core.sandbox import guard_tool_call
