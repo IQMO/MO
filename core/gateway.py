@@ -32,7 +32,12 @@ from .runtime_work_signals import (
 )
 from .tasking.task_board import TaskBoard, board_update_event, record_snapshot, resume_last_board
 from .tasking.task_board_registry import TaskBoardRegistry
-from .owner_protocols import is_devmode05_activation, is_vs05_activation
+from .owner_protocols import (
+    is_devmode05_activation,
+    is_owner_protocol_activation,
+    is_vs05_activation,
+    owner_protocol_name,
+)
 from .work_patterns import is_research_method_question
 
 if TYPE_CHECKING:
@@ -212,7 +217,13 @@ class Gateway:
                 # Ghost generates intent guardrails AND structured taskboard rows.
                 ghost_plan_text = ""
                 ghost_plan_rows: list[dict[str, object]] = []
-                protocol_activation = is_devmode05_activation(user_input) or is_vs05_activation(user_input)
+                # ALL owner protocols (DEVMODE05/VS05/IFDEV05/IAM05) skip the generic
+                # ghost board-seeding. Previously only DEVMODE05/VS05 did, so IAM05/IFDEV05
+                # fell through and inherited a DEVMODE05-flavored ghost board their own
+                # closeout never advances — a stale open board tripping the generic
+                # done-claim gate (live mo-1782300201). A protocol drives its own task
+                # truth (or none); it must never get a contaminated cross-protocol board.
+                protocol_activation = is_owner_protocol_activation(user_input)
                 if protocol_activation:
                     try:
                         setattr(self.agent, "_pending_turn_proposal", "")
@@ -220,7 +231,7 @@ class Gateway:
                         traceback.print_exc()
                     self.monitor.emit("session_event", {
                         "kind": "protocol_ghost_proposal_skipped",
-                        "protocol": "VS05" if is_vs05_activation(user_input) else "DEVMODE05",
+                        "protocol": owner_protocol_name(user_input),
                     })
                 elif self.should_show_task_board(user_input) and hasattr(self.agent, "propose_work"):
                     raw_proposal = self.agent.propose_work(user_input, monitor=self.monitor)

@@ -96,6 +96,31 @@ def is_iam05_activation(user_input: str) -> bool:
     return operator_protocols_installed()
 
 
+def is_owner_protocol_activation(user_input: str) -> bool:
+    """True when ANY owner-only protocol (DEVMODE05/VS05/IFDEV05/IAM05) is activated.
+
+    Lets the gateway scope protocol turns uniformly. The original gateway check covered
+    only DEVMODE05/VS05, so IFDEV05/IAM05 fell through to the generic ghost board-seeding —
+    and IAM05 then inherited a DEVMODE05-flavored ghost board (context-bled from a prior
+    DEVMODE05 turn in the same session) that its own closeout never advances, leaving a
+    stale open board that tripped the generic done-claim gate (observed live mo-1782300201)."""
+    return (is_devmode05_activation(user_input) or is_vs05_activation(user_input)
+            or is_ifdev05_activation(user_input) or is_iam05_activation(user_input))
+
+
+def owner_protocol_name(user_input: str) -> str:
+    """Return the active owner-protocol name (DEVMODE05/VS05/IFDEV05/IAM05), or ''."""
+    if is_devmode05_activation(user_input):
+        return "DEVMODE05"
+    if is_vs05_activation(user_input):
+        return "VS05"
+    if is_ifdev05_activation(user_input):
+        return "IFDEV05"
+    if is_iam05_activation(user_input):
+        return "IAM05"
+    return ""
+
+
 def vs05_readonly_source_roots(user_input: str) -> list[str]:
     """Return existing local source roots explicitly supplied to a VS05 turn.
 
