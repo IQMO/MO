@@ -25,6 +25,8 @@ from .claim_verification import (
     unverified_claim_signal,
     unverified_completion_claim_signal,
 )
+from .owner_protocols import is_devmode05_activation, is_ifdev05_activation
+from .tasking.contract import enforce_contract_gate, load_persisted_tasks_for_contract
 
 
 @dataclass(frozen=True)
@@ -158,3 +160,50 @@ def run_verify_edits_gate(
     if on_activity:
         on_activity("changed-file tests failing - fixing before finishing...")
     return instruction
+
+
+def run_contract_gate(
+    agent: Any,
+    task_board: Any,
+    user_input: str,
+    turn_initial_completed_ids: set,
+    *,
+    count: int,
+    max_continuations: int,
+    on_activity: Callable[[str], None] | None = None,
+) -> tuple[str | None, int]:
+    """Return ``(instruction, updated_count)`` for the closing-board contract gate.
+
+    ``instruction`` is a corrective re-prompt when a board with no open rows fails the
+    contract gate (closed rows lack evidence), else None. Migrated verbatim from
+    ``run_turn``'s inline block, preserving exactly: the board-closing condition
+    (tasks present AND ``open_count() == 0``); the DEVMODE05/IFDEV05 *whole-board*
+    enforcement vs the normal *turn-scoped* (``task_ids`` = rows completed THIS turn)
+    branch; the ``enforce_contract_gate`` call; the counter bounded by
+    ``max_continuations``; and the disagreement-after-cap behavior (once the cap is hit
+    it logs and allows the close, returning None).
+
+    The counter is threaded through (``count`` in, updated count out) instead of held
+    here, so it stays a ``run_turn`` local and this gate stays decoupled from the other
+    counter-bearing gates.
+    """
+    if not (task_board and task_board.tasks and task_board.open_count() == 0):
+        return None, count
+    persisted = load_persisted_tasks_for_contract(task_board)
+    if is_devmode05_activation(user_input) or is_ifdev05_activation(user_input):
+        contract_task_ids = None  # enforce the whole board
+    else:
+        completed_now = {t.id for t in task_board.tasks if t.status == "completed"} - turn_initial_completed_ids
+        contract_task_ids = completed_now or None
+    contract_ok, contract_reasons, contract_instruction = enforce_contract_gate(
+        task_board, persisted_tasks=persisted, board_closing=True, task_ids=contract_task_ids,
+    )
+    if contract_ok:
+        return None, count
+    if count < max_continuations:
+        if on_activity:
+            on_activity(f"contract gate blocked: {'; '.join(contract_reasons[:3])}")
+        return contract_instruction, count + 1
+    if on_activity:
+        on_activity("contract gate disagreement — allowing close after cap")
+    return None, count

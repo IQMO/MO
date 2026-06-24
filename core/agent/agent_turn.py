@@ -28,11 +28,10 @@ from ..backend_monitor import (
 )
 from ..session.handoff import context_pressure
 from ..tool_compress import compress as tool_compress
-from ..final_gates import run_claim_gates, run_done_claim_gate, run_verify_edits_gate
+from ..final_gates import run_claim_gates, run_contract_gate, run_done_claim_gate, run_verify_edits_gate
 from ..learning.proactive_learning import build_learning_context
 from ..learning.workflow_learning import build_workflow_learning_context
 from ..learning.feedback_learning import record_feedback_learning
-from ..tasking.contract import enforce_contract_gate, load_persisted_tasks_for_contract
 from .agent_turn_dispatch import AgentTurnDispatchMixin
 from .agent_turn_recovery import AgentTurnRecoveryMixin
 from .agent_utils import (
@@ -764,30 +763,19 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 if protocol_closed or (not protocol_closed and self._finalize_task_board_for_answer(task_board)):
                     record_snapshot(task_board, "completed" if task_board.open_count() == 0 else "updated")
                     _emit_task_board_update(task_board, update="completed" if task_board.open_count() == 0 else "updated", on_board_update=on_board_update, on_board_event=on_board_event)
-            # Contract gate on closing boards.
-            if task_board and task_board.tasks and task_board.open_count() == 0:
-                # Self-protocol boards (DEVMODE05/IFDEV05) must have the WHOLE board
-                # evidenced at closeout, not only this turn's rows: continuation gates
-                # split these runs across turns, so turn-scoping let earlier-turn rows
-                # close EMPTY (observed live — a multi-turn DEVMODE05 marked done with
-                # no evidence). Normal boards keep turn-scoped enforcement, unchanged.
-                persisted = load_persisted_tasks_for_contract(task_board)
-                if is_devmode05_activation(user_input) or is_ifdev05_activation(user_input):
-                    contract_task_ids = None  # enforce the whole board
-                else:
-                    _completed_now = {t.id for t in task_board.tasks if t.status == "completed"} - turn_initial_completed_ids
-                    contract_task_ids = _completed_now or None
-                contract_ok, contract_reasons, contract_instruction = enforce_contract_gate(
-                    task_board, persisted_tasks=persisted, board_closing=True, task_ids=contract_task_ids,
-                )
-                if not contract_ok and contract_gate_continuations < PROTOCOL_STOP_GATE_MAX:
-                    contract_gate_continuations += 1
-                    if on_activity:
-                        on_activity(f"contract gate blocked: {'; '.join(contract_reasons[:3])}")
-                    self.session.add_assistant(contract_instruction)
-                    continue
-                if not contract_ok and on_activity:
-                    on_activity("contract gate disagreement — allowing close after cap")
+            # Contract gate on closing boards — migrated to the registry. Same
+            # board-closing condition, DEVMODE05/IFDEV05 whole-board vs turn-scoped
+            # branching, enforce_contract_gate call, counter bound, and
+            # disagreement-after-cap behavior. The counter stays a run_turn local,
+            # threaded through and reassigned from the return.
+            _contract_instr, contract_gate_continuations = run_contract_gate(
+                self, task_board, user_input, turn_initial_completed_ids,
+                count=contract_gate_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
+                on_activity=on_activity,
+            )
+            if _contract_instr:
+                self.session.add_assistant(_contract_instr)
+                continue
             boundary_report = self._run_consistency_boundary("turn_final", user_text=user_input, final_text=final_text, learning_notes=notes, task_board=task_board)
             if (
                 self_protocol_truth_continuations < PROTOCOL_STOP_GATE_MAX

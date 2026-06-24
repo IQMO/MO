@@ -1,9 +1,11 @@
 """Final-phase claim-gate registry: dispatch order, once-per-turn, payloads."""
 from types import SimpleNamespace
 
+import core.final_gates as fg
 from core.final_gates import (
     CLAIM_GATES,
     run_claim_gates,
+    run_contract_gate,
     run_done_claim_gate,
     run_verify_edits_gate,
 )
@@ -157,3 +159,88 @@ def test_verify_edits_runner_invoked_when_not_yet_fired():
     calls = []
     run_verify_edits_gate(_verify_agent("", calls=calls), ["a.py"], fired=set())
     assert calls == [["a.py"]]
+
+
+# ── contract gate (Move 3 increment 4: closing-board, counter, devmode branch) ──
+class _Task:
+    def __init__(self, id, status):
+        self.id = id
+        self.status = status
+
+
+class _Board:
+    def __init__(self, tasks, open_count=0):
+        self.tasks = tasks
+        self._open = open_count
+
+    def open_count(self):
+        return self._open
+
+
+def _patch_contract(monkeypatch, result, capture=None):
+    """Stub enforce_contract_gate (-> result) and load_persisted (-> []); record kwargs."""
+    monkeypatch.setattr(fg, "load_persisted_tasks_for_contract", lambda board: [])
+
+    def _enforce(board, *, persisted_tasks, board_closing, task_ids):
+        if capture is not None:
+            capture["task_ids"] = task_ids
+            capture["board_closing"] = board_closing
+        return result
+
+    monkeypatch.setattr(fg, "enforce_contract_gate", _enforce)
+
+
+def test_contract_gate_silent_when_board_not_closing(monkeypatch):
+    _patch_contract(monkeypatch, (False, ["r"], "FIX"))
+    # open rows remain -> not a closing board -> no enforcement, count untouched.
+    board = _Board([_Task("1", "active")], open_count=1)
+    assert run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2) == (None, 0)
+    # empty / no board -> silent too.
+    assert run_contract_gate(object(), None, "do x", set(), count=0, max_continuations=2) == (None, 0)
+
+
+def test_contract_gate_passes_when_contract_ok(monkeypatch):
+    _patch_contract(monkeypatch, (True, [], ""))
+    board = _Board([_Task("1", "completed")], open_count=0)
+    assert run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2) == (None, 0)
+
+
+def test_contract_gate_fires_and_increments(monkeypatch):
+    _patch_contract(monkeypatch, (False, ["row 1 lacks evidence"], "CLOSE-WITH-EVIDENCE"))
+    board = _Board([_Task("1", "completed")], open_count=0)
+    out, count = run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2)
+    assert out == "CLOSE-WITH-EVIDENCE"
+    assert count == 1
+
+
+def test_contract_gate_counter_bounds_and_does_not_loop(monkeypatch):
+    _patch_contract(monkeypatch, (False, ["r"], "FIX"))
+    board = _Board([_Task("1", "completed")], open_count=0)
+    count = 0
+    # Fires while count < max (2): 0 -> 1 -> 2.
+    out, count = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
+    assert (out, count) == ("FIX", 1)
+    out, count = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
+    assert (out, count) == ("FIX", 2)
+    # At the cap: disagreement, allow close (None), count unchanged -> no infinite loop.
+    out, count = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
+    assert (out, count) == (None, 2)
+
+
+def test_contract_gate_normal_turn_is_turn_scoped(monkeypatch):
+    capture = {}
+    _patch_contract(monkeypatch, (True, [], ""), capture=capture)
+    # A row completed THIS turn (not in turn_initial) -> task_ids scoped to it.
+    board = _Board([_Task("1", "completed"), _Task("2", "completed")], open_count=0)
+    run_contract_gate(object(), board, "ordinary work", {"2"}, count=0, max_continuations=2)
+    assert capture["task_ids"] == {"1"}  # only the row newly completed this turn
+    assert capture["board_closing"] is True
+
+
+def test_contract_gate_devmode_enforces_whole_board(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")  # force operator-protocols installed
+    capture = {}
+    _patch_contract(monkeypatch, (True, [], ""), capture=capture)
+    board = _Board([_Task("1", "completed"), _Task("2", "completed")], open_count=0)
+    run_contract_gate(object(), board, "start devmode05", {"2"}, count=0, max_continuations=2)
+    assert capture["task_ids"] is None  # whole board, not turn-scoped
