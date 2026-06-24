@@ -125,7 +125,8 @@ def test_codex_provider_raw_sse_handles_completed_response_with_null_output(monk
         captured.update({"method": method, "url": url, **kwargs})
         return FakeStream()
 
-    monkeypatch.setattr(provider_module.httpx, "stream", fake_stream)
+    # httpx is lazy-imported via _httpx(); patch the module object that accessor returns.
+    monkeypatch.setattr(provider_module._httpx(), "stream", fake_stream)
 
     response = provider.complete(messages=[{"role": "user", "content": "hi"}], tools=[], temperature=0, max_tokens=25)
 

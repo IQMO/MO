@@ -9,6 +9,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 ## Core Surfaces
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).
 - `core/agent/` — agent hub, turn loop, slash commands, PRT, utils.
+- `core/behavior_gates.py` / `core/final_gates.py` / `core/claim_verification.py` — declarative enforcement registries the turn loop routes through: input-phase (threat scan + malicious-code refusal, before any provider call) and final-phase answer enforcement (contract, self-protocol truth, done-claim, verify-edits, and the verify-before-claiming claim gates). Owner-protocol terminal stop gates stay a separate mechanism in the turn loop.
 - `core/work_patterns.py`, `core/agent/agent_dna.py` — compact internal work guidance, including the lean-build ladder that checks reuse/deletion/stdlib/native options before adding code.
 - `core/tasking/` — `core/tasking/task_board.py`, contract gate, task manager, evidence, and procedure rows seeded from work patterns.
 - `core/review/` — diff review pipeline, scorer, iteration, finding patterns; PRT can flag proven overengineering as maintainability risk.
