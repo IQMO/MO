@@ -374,7 +374,7 @@ def test_capability_matrix_missing_paths_helper():
 
 def test_closeout_blocks_stale_capability_matrix(tmp_path):
     """A capability-matrix.md marking a deleted source path EXISTING/ACTIVE blocks the
-    clean closeout (the T2206 stale-baseline failure: self_capability_preflight.py)."""
+    clean closeout (the T2206 stale-baseline failure: core/self_maintenance/preflight.py)."""
     import core.self_maintenance.devmode_closeout as scp
     text = "[OWNER_MAINTENANCE COMPLETE] HEALTHY. 0 tool errors."
     sd = tmp_path / "2026-01-11T0000"
