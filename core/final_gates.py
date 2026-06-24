@@ -104,3 +104,28 @@ def run_claim_gates(
             on_activity(gate.activity(label))
         return getattr(agent, gate.instruction_method)(label)
     return None
+
+
+def run_done_claim_gate(
+    agent: Any,
+    boundary_report: Any,
+    *,
+    fired: set,
+    on_activity: Callable[[str], None] | None = None,
+) -> str | None:
+    """Return a corrective re-prompt when the answer claims "done" while board rows
+    are still open (a consistency-boundary conflict), else None.
+
+    Move 3 increment 2: the boundary-driven twin of the claim gates, migrated out of
+    ``run_turn``'s inline block. Once-per-turn via the shared ``fired`` set (key
+    ``"done_claim"``). It runs at its original position — before the verify-edits and
+    claim gates — so ordering is unchanged; only the logic moved here.
+    """
+    if "done_claim" in fired:
+        return None
+    if not agent._boundary_has_done_claim_conflict(boundary_report):
+        return None
+    fired.add("done_claim")
+    if on_activity:
+        on_activity("done-claim conflicts with open tasks - continuing to resolve...")
+    return agent._done_claim_task_truth_instruction()

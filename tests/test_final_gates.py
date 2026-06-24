@@ -1,7 +1,7 @@
 """Final-phase claim-gate registry: dispatch order, once-per-turn, payloads."""
 from types import SimpleNamespace
 
-from core.final_gates import CLAIM_GATES, run_claim_gates
+from core.final_gates import CLAIM_GATES, run_claim_gates, run_done_claim_gate
 
 
 class _Monitor:
@@ -77,3 +77,36 @@ def test_one_gate_per_call_even_when_multiple_match():
     assert second == "current:latest-version claim"
     third = run_claim_gates(_agent(), text, {}, fired=fired)
     assert third is None
+
+
+# ── done-claim gate (Move 3 increment 2: boundary-driven) ──
+def _done_claim_agent(conflict: bool):
+    return SimpleNamespace(
+        _boundary_has_done_claim_conflict=lambda report: conflict,
+        _done_claim_task_truth_instruction=lambda: "DONE-CLAIM-INSTRUCTION",
+    )
+
+
+def test_done_claim_gate_fires_on_boundary_conflict():
+    fired = set()
+    out = run_done_claim_gate(_done_claim_agent(True), {"any": "report"}, fired=fired)
+    assert out == "DONE-CLAIM-INSTRUCTION"
+    assert "done_claim" in fired
+
+
+def test_done_claim_gate_silent_without_conflict():
+    assert run_done_claim_gate(_done_claim_agent(False), {}, fired=set()) is None
+
+
+def test_done_claim_gate_once_per_turn():
+    # Already fired this turn -> skip even if the conflict still holds.
+    assert run_done_claim_gate(_done_claim_agent(True), {}, fired={"done_claim"}) is None
+
+
+def test_done_claim_shares_fired_set_with_claim_gates_without_collision():
+    # done-claim and claim gates share one turn-level `fired` set; keys never collide.
+    fired = set()
+    run_done_claim_gate(_done_claim_agent(True), {}, fired=fired)
+    out = run_claim_gates(_agent(), "All tests pass.", {}, fired=fired)
+    assert out == "completion:tests-pass claim"
+    assert fired == {"done_claim", "completion_claim"}

@@ -28,7 +28,7 @@ from ..backend_monitor import (
 )
 from ..session.handoff import context_pressure
 from ..tool_compress import compress as tool_compress
-from ..final_gates import run_claim_gates
+from ..final_gates import run_claim_gates, run_done_claim_gate
 from ..learning.proactive_learning import build_learning_context
 from ..learning.workflow_learning import build_workflow_learning_context
 from ..learning.feedback_learning import record_feedback_learning
@@ -135,8 +135,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         raw_tool_payload_fallback_attempted = False
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
-        done_claim_continued = False  # once-per-turn guard for the done-claim/open-board gate
-        claim_gates_fired: set = set()  # once-per-turn guards for the final-phase claim-gate registry (completion / current-state / unsourced)
+        final_gates_fired: set = set()  # once-per-turn guards for the final-phase gate registry (done-claim / completion / current-state / unsourced)
         verify_edits_continued = False  # A2: once-per-turn guard for the changed-file verify-and-self-heal gate
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
@@ -801,13 +800,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 self.session.add_assistant(self._self_protocol_task_truth_continuation_instruction(user_input))
                 continue
             # Ordinary turns: a "done" claim while board rows are still open is fake
-            # progress. Force one continuation to make the model close rows with
-            # evidence or block them — bounded to once per turn to avoid loops.
-            if not done_claim_continued and self._boundary_has_done_claim_conflict(boundary_report):
-                done_claim_continued = True
-                if on_activity:
-                    on_activity("done-claim conflicts with open tasks - continuing to resolve...")
-                self.session.add_assistant(self._done_claim_task_truth_instruction())
+            # progress. The registry forces one bounded continuation to close rows with
+            # evidence or block them (once-per-turn via final_gates_fired). Runs at its
+            # original position — before verify-edits and the claim gates.
+            _done_claim_instruction = run_done_claim_gate(
+                self, boundary_report, fired=final_gates_fired, on_activity=on_activity,
+            )
+            if _done_claim_instruction:
+                self.session.add_assistant(_done_claim_instruction)
                 continue
             # Before finishing a code-editing turn, run the changed files'
             # affected tests; if they fail, self-heal — force one bounded
@@ -827,11 +827,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # claim-gate registry forces ONE bounded continuation when the answer
             # makes an unverified completion/cleanliness claim, an unverified
             # current-state/version claim, or an unsourced external claim. Each gate
-            # is once-per-turn (claim_gates_fired), high-precision (ordinary prose
+            # is once-per-turn (final_gates_fired), high-precision (ordinary prose
             # never fires), and bounded by max_provider_requests overall.
             _claim_instruction = run_claim_gates(
                 self, final_text, tool_call_counts,
-                fired=claim_gates_fired, monitor=monitor, on_activity=on_activity,
+                fired=final_gates_fired, monitor=monitor, on_activity=on_activity,
             )
             if _claim_instruction:
                 self.session.add_assistant(_claim_instruction)
