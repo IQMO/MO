@@ -30,7 +30,13 @@ from .runtime_work_signals import (
     looks_like_interrupted_resume_request,
     tool_is_runtime_work_signal,
 )
-from .tasking.task_board import TaskBoard, board_update_event, record_snapshot, resume_last_board
+from .tasking.task_board import (
+    TaskBoard,
+    board_update_event,
+    clear_current_board_if_foreign_session,
+    record_snapshot,
+    resume_last_board,
+)
 from .tasking.task_board_registry import TaskBoardRegistry
 from .owner_protocols import (
     is_devmode05_activation,
@@ -176,6 +182,20 @@ class Gateway:
         self.previous_task_board = self.last_task_board
         self.last_task_board = None
         self.task_board_registry.clear_board(board_slot)
+        # A new session must not inherit a PRIOR session's board — neither in-memory (a
+        # persistent gateway carries last_task_board across sessions) nor in the persisted
+        # current.json (watchers / status / resume fast-path read it). Same-session state
+        # is preserved and the ledger stays authoritative (live mo-1782304565: an IAM05
+        # turn showed mo-1782300201's stale DEVMODE05 board). Primary turns only —
+        # secondary surfaces keep their own slot and restore Main in the finally.
+        if not secondary and session_id:
+            prev = self.previous_task_board
+            if prev is not None and str(getattr(prev, "session_id", "") or "") not in ("", session_id):
+                self.previous_task_board = None
+            try:
+                clear_current_board_if_foreign_session(session_id)
+            except Exception:
+                traceback.print_exc()
         resume_intent = _has_pending_resume_intent(self.agent, user_input)
         board_objective = _board_objective_text(self.agent, user_input, resume_intent=resume_intent)
 

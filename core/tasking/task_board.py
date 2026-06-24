@@ -757,6 +757,35 @@ def record_snapshot(
         return None
 
 
+def clear_current_board_if_foreign_session(active_session_id: str, *, path: str | Path | None = None) -> bool:
+    """Clear the fast-access ``current.json`` when it holds a board from a DIFFERENT
+    session than the active one.
+
+    A new session with no board of its own must never show (to watchers, ``/status``, or
+    the resume fast-path) a stale board left by a prior session — live mo-1782304565: an
+    IAM05 turn kept mo-1782300201's DEVMODE05 board in current.json. Same-session state is
+    preserved (the session ids match, so nothing is cleared), and the append-only ledger
+    stays the authority, so a legitimate same-session resume is unaffected (it falls back
+    to the ledger). Returns True if it cleared. Best-effort: never raises into the turn."""
+    sid = str(active_session_id or "").strip()
+    if not sid:
+        return False
+    try:
+        ledger_path = _resolve_ledger_path(path)
+        if ledger_path is None:
+            return False
+        from .task_manager import TaskManager
+        tm = TaskManager(Path.cwd(), tasks_dir=ledger_path.parent)
+        data = tm._data or {}
+        existing = str(data.get("session_id") or "").strip()
+        if existing and existing != sid and data.get("tasks"):
+            tm.clear()  # archives, then removes current.json (ledger keeps full history)
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def read_recent_snapshots(
     *,
     limit: int = 5,
