@@ -123,6 +123,87 @@ def _command_text_for_hard_boundary(command: str) -> str:
     return "ssh " + " ".join(remote_parts)
 
 
+# ── Read-only git inspection: allow source pathspecs, still block secret-bearing ones ──
+# A credential keyword in the NAME of a tracked SOURCE file (e.g. `core/secrets.py`) must
+# not trip the hard-boundary credential scan — the model can already read that file with
+# read_file. But git can also surface tracked SECRET content (e.g. `git show HEAD:.env`),
+# so secret-bearing pathspecs stay blocked.
+_GIT_READONLY_SUBCMDS = frozenset({
+    "diff", "show", "log", "status", "blame", "shortlog",
+    "ls-files", "ls-tree", "cat-file", "describe", "whatchanged",
+})
+
+# Pathspec shapes that bear ACTUAL secret material — never unmasked, always blockable.
+_SECRET_BEARING_PATH = re.compile(
+    r"(?:^|[\\/])\.env(?:\.[\w-]+)?$"                       # .env, .env.local
+    r"|\.(?:pem|key|p12|pfx|ppk|jks|keystore|asc|gpg)$"     # key / cert material
+    r"|(?:^|[\\/])\.(?:ssh|aws|gnupg)(?:[\\/]|$)"           # secret directories
+    r"|(?:^|[\\/])(?:credentials?|id_rsa|id_dsa|id_ecdsa|id_ed25519|\.netrc|\.htpasswd)(?:[\\/.]|$)",
+    re.IGNORECASE,
+)
+
+# Source / text file extensions: a credential keyword in such a NAME is a module/doc
+# name, not exposed secret material.
+_SOURCE_FILE_EXT = re.compile(
+    r"\.(?:py|pyi|js|jsx|mjs|cjs|ts|tsx|go|rs|java|kt|c|h|cc|cpp|hpp|cs|rb|php|swift|"
+    r"scala|md|rst|txt|json|ya?ml|toml|ini|cfg|conf|xml|html?|css|scss|less|sql|sh|"
+    r"ps1|bat|cmd|lock|gradle|properties)$",
+    re.IGNORECASE,
+)
+
+
+def _git_readonly_segments(command: str):
+    """Yield the word-lists of each `git <readonly-subcmd> …` segment in a (possibly
+    compound) command, so `cd x && git diff y` is handled."""
+    for segment in re.split(r"[|;&]+", str(command or "")):
+        parts = _split_shell_words(segment)
+        if len(parts) < 2:
+            continue
+        exe = Path(str(parts[0]).strip("'\"")).name.lower()
+        if exe.endswith(".exe"):
+            exe = exe[:-4]
+        if exe == "git" and str(parts[1]).strip("'\"").lower() in _GIT_READONLY_SUBCMDS:
+            yield parts
+
+
+def _git_pathspec_targets(parts: list[str]):
+    """Path-looking, non-option args of a git read-only segment (the `rev:path` form is
+    reduced to its path). Bare refs without a separator/extension are ignored."""
+    for raw in parts[2:]:
+        w = str(raw).strip().strip("'\"")
+        if not w or w == "--" or w.startswith("-"):
+            continue
+        path = w
+        # `git show HEAD:path` — strip the rev, but not a Windows drive (`C:\…`).
+        if ":" in w and not re.match(r"^[a-zA-Z]:[\\/]", w):
+            path = w.split(":", 1)[1]
+        if "/" in path or "\\" in path or "." in Path(path).name:
+            yield w, path
+
+
+def _read_only_git_secret_path_reason(command: str) -> str | None:
+    """Block reason when a read-only git inspection targets a secret-bearing path
+    (.env/.pem/.key/.ssh/credentials/…); else None."""
+    for parts in _git_readonly_segments(command):
+        for raw, path in _git_pathspec_targets(parts):
+            if _SECRET_BEARING_PATH.search(path):
+                return ("[HARD BOUNDARY] git command targets a secret-bearing path "
+                        f"({raw}). Secret files are not inspectable via shell; this stays blocked.")
+    return None
+
+
+def _mask_git_readonly_source_pathspecs(command: str) -> str:
+    """Replace SOURCE-file pathspecs of read-only git inspection commands with a neutral
+    token for the hard-boundary scan, so a credential keyword in a tracked source FILENAME
+    (e.g. `core/secrets.py`) is not blocked. Secret-bearing pathspecs are never masked."""
+    masked = str(command or "")
+    for parts in _git_readonly_segments(command):
+        for raw, path in _git_pathspec_targets(parts):
+            if not _SECRET_BEARING_PATH.search(path) and _SOURCE_FILE_EXT.search(path):
+                masked = masked.replace(raw, "_srcpath_")
+    return masked
+
+
 # ── Shell safety patterns ──────────────────────────────────────────
 
 SHELL_MUTATION_PATTERNS = [
@@ -782,7 +863,15 @@ def _guard_shell_tool(
     if name != "shell":
         return None
     command = str(arguments.get("command", ""))
+    # git can surface tracked SECRET content (e.g. `git show HEAD:.env`), so read-only
+    # git inspection of a secret-bearing path stays blocked even though it is git.
+    if not operator_override:
+        if reason := _read_only_git_secret_path_reason(command):
+            return reason
     boundary_text = _command_text_for_hard_boundary(command)
+    # ...but a credential keyword in a tracked SOURCE pathspec NAME (e.g.
+    # `git diff core/secrets.py`) must not false-positive the hard-boundary scan.
+    boundary_text = _mask_git_readonly_source_pathspecs(boundary_text)
     if not operator_override and _touches_hard_boundary(boundary_text):
         return (
             "[HARD BOUNDARY] shell command touches deployment, credentials, "
