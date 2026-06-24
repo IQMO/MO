@@ -225,11 +225,12 @@ paths:
   memory_file: memory/mo.db
   critique_file: critique/ANSWER.md
 
-# Optional on-screen Companion — a small MO-branded desktop window summoned with
+# Optional Desktop Ghost — a small MO-branded desktop window summoned with
 # Win+Alt+M (+ system tray). OFF by default: it needs a desktop session plus the
-# Companion deps from requirements-computer-use.txt. Voice stays off unless
+# desktop extras from requirements-computer-use.txt. Voice stays off unless
 # enabled below; mic capture and speech transcription are separate checks.
-desktop_companion:
+# Legacy `desktop_companion.*` keys are still honored for existing installs.
+ghost:
   enabled: false
   tray_enabled: true               # when enabled, show the resident tray icon; set false to hide it
   voice:

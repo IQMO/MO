@@ -794,18 +794,18 @@ class CompanionSurface:
             import keyboard
         except ImportError:
             # Don't fail silently — tell the operator why Win+Alt+M is dead and
-            # how to reach the companion meanwhile.
+            # how to reach Desktop Ghost meanwhile.
             sys.stderr.write(
-                "[companion] Win+Alt+M hotkey unavailable: `pip install keyboard`. "
-                "Summon the companion with the /companion command in the meantime.\n")
+                "[ghost-desktop] Win+Alt+M hotkey unavailable: `pip install keyboard`. "
+                "Summon Ghost with `/ghost window` in the meantime.\n")
             return
         try:
             self._hotkey_listener = keyboard.add_hotkey("win+alt+m", lambda: self.toggle())
             sys.stderr.write("[companion] ready: Win+Alt+M registered.\n")
         except Exception:
             sys.stderr.write(
-                "[companion] could not register Win+Alt+M (global hotkeys may need "
-                "elevation). Use the /companion command to summon it.\n")
+                "[ghost-desktop] could not register Win+Alt+M (global hotkeys may need "
+                "elevation). Use `/ghost window` to summon it.\n")
             traceback.print_exc()
 
     def _unregister_hotkey(self) -> None:

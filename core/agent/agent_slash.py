@@ -797,12 +797,12 @@ class AgentSlashCommands:
         action = (action or "").strip().lower()
         if action == "show":
             window.show()
-            return "[COMPANION SHOWN]"
+            return "[GHOST WINDOW SHOWN]"
         if action == "hide":
             window.hide()
-            return "[COMPANION HIDDEN]"
+            return "[GHOST WINDOW HIDDEN]"
         window.toggle()
-        return "[COMPANION TOGGLED]"
+        return "[GHOST WINDOW TOGGLED]"
 
     def _cmd_companion(self, rest: str) -> str:
         """Back-compat alias for `/ghost window` — toggle the desktop Ghost window."""

@@ -53,9 +53,9 @@ def test_ghost_window_subcommand_and_companion_alias_route_to_window():
         def toggle(self): calls.append("toggle")
 
     obj._companion = FakeWindow()
-    assert obj._cmd_ghost("window") == "[COMPANION TOGGLED]"
-    assert obj._cmd_ghost("window show") == "[COMPANION SHOWN]"
-    assert obj._cmd_companion("hide") == "[COMPANION HIDDEN]"   # alias still works
+    assert obj._cmd_ghost("window") == "[GHOST WINDOW TOGGLED]"
+    assert obj._cmd_ghost("window show") == "[GHOST WINDOW SHOWN]"
+    assert obj._cmd_companion("hide") == "[GHOST WINDOW HIDDEN]"   # alias still works
     assert calls == ["toggle", "show", "hide"]
 
 

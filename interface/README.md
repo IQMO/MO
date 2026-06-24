@@ -89,8 +89,9 @@ Do not split further just to chase line count unless the state initialization or
 
 ## UX audit 2026-06-10 (operator-approved, completed)
 
-Verified clean by sweep: zero hardcoded colors outside `theme.py`; keyboard
-layering (palette > completion > ghost > transcript scroll > cursor) sound;
+Verified clean by sweep: prompt-toolkit TUI colors centralized in `theme.py`
+(desktop Ghost/Tk surfaces keep local visual tokens); keyboard layering
+(palette > completion > ghost > transcript scroll > cursor) sound;
 transcript/ghost/board scrolling bounded with clip indicators; `activity.py`
 display helpers well-factored; "legacy" markers in palette/registry are
 legitimate guards, not leftovers.
