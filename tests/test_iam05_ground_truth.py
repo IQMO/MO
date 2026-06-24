@@ -85,7 +85,8 @@ def test_explicit_target_block_shape(tree):
 
 def test_bare_run_iam05_autoscopes_from_tree(tree):
     block = build_iam05_ground_truth("Run IAM05", cwd=str(tree))
-    assert "No explicit target named — auto-scoped from the live tree:" in block
+    assert "AUDIT QUEUE, not a menu" in block          # work order, not a "pick one" prompt
+    assert "Do NOT ask the operator which to pick" in block
     assert "Largest files" in block
     assert "Largest functions" in block
     assert "Churn hotspots" in block          # present even when git is absent

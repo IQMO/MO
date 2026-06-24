@@ -66,7 +66,13 @@ def build_iam05_ground_truth(user_input: str, *, cwd: str | None = None) -> str:
         for sym in symbols:
             out.extend(_measure_symbol(root, sym))
     else:
-        out.append("No explicit target named — auto-scoped from the live tree:")
+        out.append(
+            "No explicit target named — this is your AUDIT QUEUE, not a menu. Audit the full "
+            "set below as one comprehensive sweep, deepest/highest-churn first. Do NOT ask the "
+            "operator which to pick — proceed and report findings per hotspot. Only pause for "
+            "approval before *implementing* a behavior-changing fix (a finished assessment needs "
+            "no approval)."
+        )
         out.extend(_largest_files(root))
         out.extend(_largest_functions(root))
         out.extend(_churn_hotspots(root))
