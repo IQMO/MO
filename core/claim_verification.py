@@ -1,14 +1,17 @@
-"""Verify-before-claiming detector.
+"""Verify-before-claiming detectors.
 
 MO's system prompt requires checking before asserting current-state/version
-facts. This module gives MO a *runtime, observable* signal:
-when a turn asserts a stale-prone fact (a version, "the latest", or a
-knowledge-cutoff hedge) while using NO verifying tools, emit a signal so the
-behavior is visible to traces and self-diagnosis.
+facts or completion/cleanliness facts. This module gives MO runtime-observable
+signals for both claim classes:
+
+- stale-prone current-state/version assertions such as "latest version";
+- completion/cleanliness assertions such as "all tests pass" or "no issues".
+
+When either class appears while the turn used no verifying tools, the agent turn
+loop can force a bounded verify-or-soften continuation.
 
 Deliberately conservative — high-precision patterns only — so ordinary coding
-answers are never flagged. This is an observability signal, not a hard gate; a
-visible note or a forced verify-continuation is a separate, opt-in escalation.
+answers are never flagged.
 """
 from __future__ import annotations
 
@@ -122,3 +125,39 @@ def unverified_claim_signal(text: str, tool_call_counts: dict | None) -> str | N
     if used_verifying_tools(tool_call_counts):
         return None
     return detect_unverified_current_state_claim(text)
+
+
+# Tools that PULL external content (vs a local read/search). Kept distinct from
+# VERIFYING_TOOLS so the source-naming kernel stays complementary to
+# unverified_claim_signal: that gate fires when NOTHING was read this turn; this one
+# fires when the turn DID fetch a page but the answer names no source.
+EXTERNAL_PULL_TOOLS = frozenset({"web_fetch", "web_snapshot"})
+
+# A plainly-named source: any URL or www host in the answer text counts as "cited".
+_URL_RE = re.compile(r"https?://|\bwww\.", re.IGNORECASE)
+
+
+def used_external_pull_tools(tool_call_counts: dict | None) -> bool:
+    """True if the turn fetched external content (web_fetch/web_snapshot)."""
+    if not tool_call_counts:
+        return False
+    return any(tool_call_counts.get(name) for name in EXTERNAL_PULL_TOOLS)
+
+
+def unsourced_external_claim_signal(text: str, tool_call_counts: dict | None) -> str | None:
+    """Return a claim label when the turn fetched external content AND the answer
+    asserts a current-state fact but names no source (no URL); else None.
+
+    The MO-native source-naming kernel: if MO pulled a page and then states a
+    current/latest fact, the wording should name the source it used. Conservative by
+    design — requires an actual external pull, a stale-prone claim, and zero URL token
+    in the answer — so ordinary synthesis that already links its source never fires.
+    """
+    if not used_external_pull_tools(tool_call_counts):
+        return None
+    label = detect_unverified_current_state_claim(text)
+    if not label:
+        return None
+    if _URL_RE.search(str(text or "")):
+        return None
+    return label

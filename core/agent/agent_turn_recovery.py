@@ -705,6 +705,19 @@ class AgentTurnRecoveryMixin:
         )
 
     @staticmethod
+    def _unsourced_external_claim_instruction(label: str) -> str:
+        """Fed back once when the turn fetched external content but the answer states a
+        current-state fact without naming the source. MO-native source-naming kernel —
+        name the page used or say the fetch did not establish it (no citation markup)."""
+        return (
+            f"[NAME YOUR SOURCE] You fetched external content this turn and your answer "
+            f"asserts a current-state fact ({label}) without naming where it came from. "
+            "Name the source plainly — the URL or site you used — or, if the fetch did not "
+            "actually establish the claim, say so and soften it. Plain references only; no "
+            "citation markup. Then give your final answer."
+        )
+
+    @staticmethod
     def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
         if is_vs05_activation(user_input):
             return vs05_task_truth_continuation_instruction()

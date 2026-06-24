@@ -5,9 +5,11 @@ Conservative: real stale-prone claims fire; ordinary coding prose never does.
 from core.claim_verification import (
     detect_completion_claim,
     detect_unverified_current_state_claim,
+    unsourced_external_claim_signal,
     unverified_claim_signal,
     unverified_completion_claim_signal,
     used_completion_verifying_tools,
+    used_external_pull_tools,
     used_verifying_tools,
 )
 
@@ -144,3 +146,41 @@ def test_completion_claim_instruction_unchanged():
     assert "[VERIFY BEFORE CLAIMING]" in instr
     assert "tests-pass claim" in instr
     assert "test_runner/shell/git_status" in instr
+
+
+# ── Move 2: source-naming kernel (fetched external content, unsourced claim) ──
+def test_external_pull_tool_detection():
+    assert used_external_pull_tools({"web_fetch": 1}) is True
+    assert used_external_pull_tools({"web_snapshot": 1}) is True
+    assert used_external_pull_tools({"web_search": 1}) is False  # search != a page pull
+    assert used_external_pull_tools({"read_file": 1}) is False   # local, not external
+    assert used_external_pull_tools({}) is False
+
+
+def test_unsourced_external_claim_fires_when_fetched_without_url():
+    assert unsourced_external_claim_signal("The latest version is 8.2.", {"web_fetch": 1}) == "latest-version claim"
+
+
+def test_unsourced_external_claim_suppressed_when_url_present():
+    # The answer already names its source -> not flagged.
+    assert unsourced_external_claim_signal(
+        "The latest version is 8.2 (see https://pytest.org).", {"web_fetch": 1}
+    ) is None
+
+
+def test_unsourced_external_claim_none_without_external_pull():
+    # Complementary to unverified_claim_signal: no external pull -> this gate is silent.
+    assert unsourced_external_claim_signal("The latest version is 8.2.", {"grep": 1}) is None
+    assert unsourced_external_claim_signal("The latest version is 8.2.", {}) is None
+
+
+def test_unsourced_external_claim_none_on_ordinary_answer():
+    assert unsourced_external_claim_signal("I refactored the parser.", {"web_fetch": 1}) is None
+
+
+def test_unsourced_external_claim_instruction():
+    from core.agent.agent import Agent
+    instr = Agent._unsourced_external_claim_instruction("latest-version claim")
+    assert "[NAME YOUR SOURCE]" in instr
+    assert "latest-version claim" in instr
+    assert "citation markup" in instr
