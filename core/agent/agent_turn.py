@@ -137,6 +137,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         context_overflow_retry_attempted = False
         done_claim_continued = False  # once-per-turn guard for the done-claim/open-board gate
         completion_claim_continued = False  # once-per-turn guard for the verify-before-claiming-clean gate
+        current_state_claim_continued = False  # once-per-turn guard for the verify-before-claiming current-state/version gate
         verify_edits_continued = False  # A2: once-per-turn guard for the changed-file verify-and-self-heal gate
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
@@ -751,17 +752,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             critique_result = self._review_final_answer(content, monitor=monitor)
             final_text = critique_result.text
 
-            # Observable verify-before-claiming signal: flag a stale-prone
-            # current-state/version claim shipped with zero verifying tools this
-            # turn. Observability only; no answer change, no forced continuation.
-            if monitor:
-                _claim_label = unverified_claim_signal(final_text, tool_call_counts)
-                if _claim_label:
-                    monitor.emit("unverified_claim", {
-                        "label": _claim_label,
-                        "tool_calls": sum(tool_call_counts.values()),
-                    })
-
             reasoning = getattr(response, "reasoning_content", None) or getattr(response, "reasoning", None)
             notes = self._record_turn_memory_and_learning(user_input, final_text)
             final_text = self._append_after_turn_notes(final_text, notes)
@@ -849,6 +839,26 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     if on_activity:
                         on_activity(f"{_completion_label} made without a check - verifying before finishing...")
                     self.session.add_assistant(self._unverified_completion_claim_instruction(_completion_label))
+                    continue
+            # Verify-before-claiming — current-state/version twin of the completion
+            # gate above. A confident stale-prone current-state/version claim shipped
+            # with zero verifying tools this turn is the same "asserted from assumption"
+            # failure (recall goes stale on latest/current versions). Force ONE bounded
+            # continuation to verify or soften. High-precision detector; once-per-turn
+            # so it can never loop. Combined with the gates above, total continuations
+            # stay bounded by the per-turn flags and the max_provider_requests turn cap.
+            if not current_state_claim_continued:
+                _claim_label = unverified_claim_signal(final_text, tool_call_counts)
+                if _claim_label:
+                    current_state_claim_continued = True
+                    if monitor:
+                        monitor.emit("unverified_claim", {
+                            "label": _claim_label,
+                            "tool_calls": sum(tool_call_counts.values()),
+                        })
+                    if on_activity:
+                        on_activity(f"{_claim_label} made without a check - verifying before finishing...")
+                    self.session.add_assistant(self._unverified_current_state_claim_instruction(_claim_label))
                     continue
             self.session.add_assistant(final_text, reasoning_content=str(reasoning) if reasoning else None)
             # Turn-end security check on modified files and response text

@@ -689,6 +689,22 @@ class AgentTurnRecoveryMixin:
         )
 
     @staticmethod
+    def _unverified_current_state_claim_instruction(label: str) -> str:
+        """Fed back once when an answer asserts a stale-prone current-state/version fact
+        (latest/current version, knowledge-cutoff hedge) but the turn ran no verifying
+        tool. The current-state twin of `_unverified_completion_claim_instruction` —
+        driven enforcement of verify-before-claiming for world-truth, not just task-truth."""
+        return (
+            f"[VERIFY BEFORE CLAIMING] Your answer asserts a current-state/version fact "
+            f"({label}) but this turn ran no verifying tool (no read/search/web). Recall "
+            "goes stale and is often wrong about latest/current versions and releases. "
+            "Either check it now with a read/search/web tool and cite what you found, or "
+            "rewrite the claim to state only what you can stand behind without checking "
+            "(drop 'latest/current', or attribute it as 'as of my training, which may be "
+            "outdated'). Then give your final answer."
+        )
+
+    @staticmethod
     def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
         if is_vs05_activation(user_input):
             return vs05_task_truth_continuation_instruction()

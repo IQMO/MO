@@ -124,3 +124,23 @@ def test_completion_signal_suppressed_when_checked():
 
 def test_completion_signal_none_on_ordinary_answer():
     assert unverified_completion_claim_signal("I refactored the parser.", {}) is None
+
+
+# ── forcing-gate instructions (current-state twin of the completion gate) ──
+def test_current_state_claim_instruction_demands_verify_or_soften():
+    from core.agent.agent import Agent
+    instr = Agent._unverified_current_state_claim_instruction("latest-version claim")
+    assert "[VERIFY BEFORE CLAIMING]" in instr
+    assert "latest-version claim" in instr
+    assert "read/search/web" in instr
+    # must offer BOTH paths: verify now, or soften the claim
+    assert "cite" in instr and "rewrite" in instr
+
+
+def test_completion_claim_instruction_unchanged():
+    """The current-state gate must not alter the existing completion-claim twin."""
+    from core.agent.agent import Agent
+    instr = Agent._unverified_completion_claim_instruction("tests-pass claim")
+    assert "[VERIFY BEFORE CLAIMING]" in instr
+    assert "tests-pass claim" in instr
+    assert "test_runner/shell/git_status" in instr
