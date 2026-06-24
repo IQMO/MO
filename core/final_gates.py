@@ -207,3 +207,34 @@ def run_contract_gate(
     if on_activity:
         on_activity("contract gate disagreement — allowing close after cap")
     return None, count
+
+
+def run_self_protocol_truth_gate(
+    agent: Any,
+    user_input: str,
+    final_text: str,
+    boundary_report: Any,
+    *,
+    count: int,
+    max_continuations: int,
+    on_activity: Callable[[str], None] | None = None,
+) -> tuple[str | None, int]:
+    """Return ``(instruction, updated_count)`` for the self-protocol completion-truth gate.
+
+    Forces a continuation when an owner-protocol turn (DEVMODE05/VS05/IFDEV05) emits its
+    ``[…COMPLETE]`` marker while the consistency boundary still reports a task-truth
+    conflict. Migrated verbatim from ``run_turn``'s inline block, same position (after the
+    contract gate, before done-claim). Counter-bounded by ``max_continuations``; the count
+    check **short-circuits** the boundary check exactly as the original
+    ``count < MAX and requires(...)`` — when capped, the boundary predicate is NOT called
+    and the gate falls through (returns ``(None, count)``). The instruction comes from the
+    agent's protocol-specific dispatcher; the counter is threaded through, decoupled from
+    the contract gate's counter.
+    """
+    if count >= max_continuations:
+        return None, count
+    if not agent._self_protocol_completion_boundary_requires_continuation(user_input, final_text, boundary_report):
+        return None, count
+    if on_activity:
+        on_activity("self protocol: completion conflicted with open work - continuing...")
+    return agent._self_protocol_task_truth_continuation_instruction(user_input), count + 1

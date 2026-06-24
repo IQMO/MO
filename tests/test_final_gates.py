@@ -7,6 +7,7 @@ from core.final_gates import (
     run_claim_gates,
     run_contract_gate,
     run_done_claim_gate,
+    run_self_protocol_truth_gate,
     run_verify_edits_gate,
 )
 
@@ -244,3 +245,67 @@ def test_contract_gate_devmode_enforces_whole_board(monkeypatch):
     board = _Board([_Task("1", "completed"), _Task("2", "completed")], open_count=0)
     run_contract_gate(object(), board, "start devmode05", {"2"}, count=0, max_continuations=2)
     assert capture["task_ids"] is None  # whole board, not turn-scoped
+
+
+# ── self-protocol truth gate (Move 3 increment 5: counter, short-circuit) ──
+def _sp_agent(requires, instruction="SP-INSTRUCTION", *, calls=None):
+    """Agent stub: boundary predicate -> `requires`, dispatcher -> `instruction`."""
+    def _requires(user_input, final_text, boundary_report):
+        if calls is not None:
+            calls.append((user_input, final_text, boundary_report))
+        return requires
+    return SimpleNamespace(
+        _self_protocol_completion_boundary_requires_continuation=_requires,
+        _self_protocol_task_truth_continuation_instruction=lambda ui: instruction,
+    )
+
+
+def test_self_protocol_gate_silent_when_no_conflict():
+    out, count = run_self_protocol_truth_gate(_sp_agent(False), "u", "t", object(), count=0, max_continuations=2)
+    assert (out, count) == (None, 0)
+
+
+def test_self_protocol_gate_fires_and_increments():
+    out, count = run_self_protocol_truth_gate(_sp_agent(True, "DO-TASK-TRUTH"), "u", "t", object(), count=0, max_continuations=2)
+    assert out == "DO-TASK-TRUTH"
+    assert count == 1
+
+
+def test_self_protocol_gate_caps_and_short_circuits_boundary_check():
+    # At the cap, the boundary predicate must NOT be called (mirrors the original
+    # `count < MAX and requires(...)` short-circuit) and the gate falls through.
+    calls = []
+    out, count = run_self_protocol_truth_gate(_sp_agent(True, calls=calls), "u", "t", object(), count=2, max_continuations=2)
+    assert (out, count) == (None, 2)
+    assert calls == []
+
+
+def test_self_protocol_gate_counter_bounds_no_loop():
+    agent = _sp_agent(True, "FIX")
+    count = 0
+    out, count = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
+    assert (out, count) == ("FIX", 1)
+    out, count = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
+    assert (out, count) == ("FIX", 2)
+    out, count = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
+    assert (out, count) == (None, 2)  # capped -> no further fire -> no loop
+
+
+def test_self_protocol_gate_instruction_comes_from_dispatcher():
+    # The returned text is exactly what the agent's protocol dispatcher produced.
+    agent = _sp_agent(True, "PROTOCOL-SPECIFIC-TEXT")
+    out, _ = run_self_protocol_truth_gate(agent, "start devmode05", "t", object(), count=0, max_continuations=2)
+    assert out == "PROTOCOL-SPECIFIC-TEXT"
+
+
+def test_self_protocol_gate_is_counter_based_independent_of_fired_set():
+    # No interaction with the other registry gates: the self-protocol gate is
+    # counter-threaded and never touches the shared `fired` set used by the
+    # done-claim / claim gates.
+    fired = set()
+    _, c = run_self_protocol_truth_gate(_sp_agent(True), "u", "t", object(), count=0, max_continuations=2)
+    _, c = run_self_protocol_truth_gate(_sp_agent(True), "u", "t", object(), count=c, max_continuations=2)
+    assert fired == set()  # untouched by the counter-based gate
+    # fired-based gates still operate independently afterward:
+    assert run_done_claim_gate(_done_claim_agent(True), {}, fired=fired) == "DONE-CLAIM-INSTRUCTION"
+    assert fired == {"done_claim"}

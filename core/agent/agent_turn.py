@@ -28,7 +28,13 @@ from ..backend_monitor import (
 )
 from ..session.handoff import context_pressure
 from ..tool_compress import compress as tool_compress
-from ..final_gates import run_claim_gates, run_contract_gate, run_done_claim_gate, run_verify_edits_gate
+from ..final_gates import (
+    run_claim_gates,
+    run_contract_gate,
+    run_done_claim_gate,
+    run_self_protocol_truth_gate,
+    run_verify_edits_gate,
+)
 from ..learning.proactive_learning import build_learning_context
 from ..learning.workflow_learning import build_workflow_learning_context
 from ..learning.feedback_learning import record_feedback_learning
@@ -777,14 +783,18 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 self.session.add_assistant(_contract_instr)
                 continue
             boundary_report = self._run_consistency_boundary("turn_final", user_text=user_input, final_text=final_text, learning_notes=notes, task_board=task_board)
-            if (
-                self_protocol_truth_continuations < PROTOCOL_STOP_GATE_MAX
-                and self._self_protocol_completion_boundary_requires_continuation(user_input, final_text, boundary_report)
-            ):
-                self_protocol_truth_continuations += 1
-                if on_activity:
-                    on_activity("self protocol: completion conflicted with open work - continuing...")
-                self.session.add_assistant(self._self_protocol_task_truth_continuation_instruction(user_input))
+            # Self-protocol completion-truth gate — migrated to the registry. Same
+            # position (after contract, before done-claim), same counter bound, same
+            # short-circuit (counter checked before the boundary predicate), same
+            # activity message and protocol-specific continuation instruction. Counter
+            # stays a run_turn local, threaded through and reassigned.
+            _sp_instr, self_protocol_truth_continuations = run_self_protocol_truth_gate(
+                self, user_input, final_text, boundary_report,
+                count=self_protocol_truth_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
+                on_activity=on_activity,
+            )
+            if _sp_instr:
+                self.session.add_assistant(_sp_instr)
                 continue
             # Ordinary turns: a "done" claim while board rows are still open is fake
             # progress. The registry forces one bounded continuation to close rows with
