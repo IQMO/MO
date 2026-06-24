@@ -26,6 +26,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from ..owner_protocols import is_iam05_activation
+from ..path_defaults import mo_home
 
 # Source roots an audit cares about. Anything outside these is noise for ground truth.
 _SOURCE_DIRS = ("core", "interface", "tools", "tests")
@@ -81,7 +82,30 @@ def build_iam05_ground_truth(user_input: str, *, cwd: str | None = None) -> str:
         "Rule: every count / `only` / `duplicate` claim in your report must match a number "
         "above or be re-measured with a tool (Gate 7). Do not hand-estimate."
     )
+    out.extend(_reporting_contract(root))
     return "\n".join(out)
+
+
+def _reporting_contract(root: Path) -> list[str]:
+    """The report is judged against the run's instrumented truth, not the model's
+    impression. Pins the three self-claim honesty rules that this pass exposed MO
+    breaking: scope overclaim ('Full Codebase' on a 12-file sample), self-report
+    drift ('~22 tool calls' when the monitor showed 56, unowned tool errors), and
+    state-boundary leak (ledger written to repo-local memory/ instead of ~/.mo)."""
+    corpus = len(_iter_py_files(root))
+    ledger_dir = (mo_home() / "memory" / "iam05").as_posix()
+    return [
+        "",
+        "### IAM05 Reporting Contract (your report is checked against this run's instrumented truth)",
+        f"- Scope honesty: the source corpus is {corpus} files. Do NOT title or describe the audit "
+        f"\"Full Codebase\" / \"entire\" / \"complete\" unless you actually read all {corpus}. State "
+        f"coverage as \"sampled N of {corpus}\" and list ONLY files you genuinely read this run.",
+        "- Self-report truth: report your EXACT tool-call count and tool-error count from your real "
+        "tool history this run — never estimate (\"~N\") and never omit a recovered/retried error "
+        "(it still counts and must be named). \"No tool errors\" is allowed only if there were none.",
+        f"- Ledger location: write the evidence ledger under `{ledger_dir}/` (private runtime home), "
+        "NEVER repo-local `memory/` — that pollutes the product checkout and violates MO's state rule.",
+    ]
 
 
 # --- target extraction -------------------------------------------------------

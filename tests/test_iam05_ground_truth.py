@@ -105,3 +105,26 @@ def test_unparseable_file_does_not_crash(tree):
     (tree / "core" / "broken.py").write_text("def (((:\n  not python", encoding="utf-8")
     block = build_iam05_ground_truth("Run IAM05", cwd=str(tree))
     assert block  # still produced; the broken file is skipped, not fatal
+
+
+def test_reporting_contract_present_in_both_modes(tree):
+    # The honesty contract rides on every IAM05 turn — bare and targeted.
+    for prompt in ("start IAM05", "Run IAM05 on core/thing.py"):
+        block = build_iam05_ground_truth(prompt, cwd=str(tree))
+        assert "IAM05 Reporting Contract" in block
+        assert "Scope honesty" in block and "sampled N of" in block
+        assert "Self-report truth" in block and "tool-error count" in block
+        assert "Ledger location" in block
+
+
+def test_contract_scope_denominator_is_real_corpus_count(tree):
+    # 'sampled N of <count>' must use the actual file count, not a guess.
+    block = build_iam05_ground_truth("start IAM05", cwd=str(tree))
+    # tree has core/thing.py, core/other.py, tests/test_thing.py = 3 source files
+    assert "sampled N of 3" in block
+
+
+def test_contract_ledger_path_is_private_home_not_repo(tree):
+    block = build_iam05_ground_truth("start IAM05", cwd=str(tree))
+    assert "memory/iam05" in block               # canonical ~/.mo private location
+    assert "NEVER repo-local `memory/`" in block  # the exact violation this run made
