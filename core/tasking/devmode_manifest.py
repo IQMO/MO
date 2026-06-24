@@ -110,6 +110,22 @@ def build_devmode_manifest(
         except Exception:
             return 0
 
+    taskboard = _taskboard_projection(task_board)
+    # Reconcile the top-level status with the authoritative taskboard so the manifest can
+    # never contradict itself. A completed board with no open rows is a complete run, not
+    # "active". Two things used to leave a finalized manifest at "active": late
+    # economy-ledger writes (which pass status="active") landing after closeout, and the
+    # turn-health critical-budget path that force-emits [DEVMODE05 COMPLETE] WITHOUT going
+    # through the normal finalize that sets status="complete" (observed live in the
+    # 2026-06-24T0404 run: top-level status "active" with taskboard "completed"/open 0).
+    # Clamping here covers every completion path. Only the default "active" is clamped; an
+    # explicit non-default status (e.g. "blocked") is preserved.
+    effective_status = status
+    if (status == "active"
+            and str(taskboard.get("state") or "") == "completed"
+            and int(taskboard.get("open_count") or 0) == 0):
+        effective_status = "complete"
+
     return {
         "schema_version": SCHEMA_VERSION,
         "protocol": "devmode",
@@ -117,7 +133,7 @@ def build_devmode_manifest(
         "run_session_ids": sorted(str(s) for s in (run_session_ids or [])),
         "instance_ids": sorted(str(s) for s in (instance_ids or [])),
         "surface": surface,
-        "status": status,
+        "status": effective_status,
         "accepted_as_baseline": bool(accepted_as_baseline),
         "monitor": {
             "path": str(monitor_path) if monitor_path else None,
@@ -141,7 +157,7 @@ def build_devmode_manifest(
             "frozen_tool_errors": (int(frozen_tool_errors)
                                    if frozen_tool_errors is not None else _i("tool_errors")),
         },
-        "taskboard": _taskboard_projection(task_board),
+        "taskboard": taskboard,
         "artifacts": [artifact_entry(session_dir / name) for name in _ARTIFACT_NAMES],
         "reconciliations": dict(reconciliations or {}),
         "warnings": list(warnings or []),

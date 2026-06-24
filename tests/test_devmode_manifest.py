@@ -82,6 +82,35 @@ def test_manifest_status_complete_vs_blocked(tmp_path):
     assert build_devmode_manifest(tmp_path, status="blocked")["status"] != "complete"
 
 
+def test_manifest_status_clamped_complete_when_board_completed(tmp_path):
+    # A completed board (no open rows) must never carry top-level status "active": the
+    # manifest cannot contradict its own taskboard projection. Live 2026-06-24T0404 the
+    # budget-forced [DEVMODE05 COMPLETE] path bypassed the finalize that sets
+    # status="complete", and a late status="active" economy write left a completed board
+    # reading "active".
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Gather", "completed", ["read_file:x"]),
+        TaskItem("2", "Report", "completed", ["shell:y"]),
+    ])
+    m = build_devmode_manifest(tmp_path, task_board=board)  # default status="active"
+    assert m["taskboard"]["state"] == "completed" and m["taskboard"]["open_count"] == 0
+    assert m["status"] == "complete"  # clamped, never "active"
+
+
+def test_manifest_status_stays_active_with_open_rows(tmp_path):
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Gather", "completed", ["read_file:x"]),
+        TaskItem("2", "Verify", "pending"),
+    ])
+    assert build_devmode_manifest(tmp_path, task_board=board)["status"] == "active"
+
+
+def test_manifest_explicit_blocked_preserved_over_clamp(tmp_path):
+    # An explicit non-default status is never silently upgraded by the clamp.
+    board = TaskBoard(tasks=[TaskItem("1", "X", "completed", ["read_file:x"])])
+    assert build_devmode_manifest(tmp_path, task_board=board, status="blocked")["status"] == "blocked"
+
+
 def test_manifest_write_and_load_roundtrip(tmp_path):
     m = build_devmode_manifest(tmp_path, economy={"tool_errors": 2}, status="complete",
                                run_session_ids={"mo-2", "mo-1"})
