@@ -310,9 +310,11 @@ class AgentTaskBoard:
                     task.evidence = [*(task.evidence or []), *carried]
                     changed = True
         # This finalize runs only after the protocol stop gate passed → the run is
-        # closing out. For DEVMODE, mark the manifest status="complete".
+        # closing out. For DEVMODE, mark the manifest status="complete" and stamp the
+        # runtime-owned workflow closeout (the model never returns to tick phase rows).
         if is_devmode05_activation(user_input):
             self._write_devmode_manifest_record(status="complete")
+            self._reconcile_devmode_workflow_closeout(task_board)
         return changed
 
     def _bind_active_devmode_dir_from_write(self, arguments: dict) -> None:
@@ -483,30 +485,87 @@ class AgentTaskBoard:
 
     @staticmethod
     def _reconcile_summary_economy_counts(summary_path, summary: dict) -> None:
-        """Overwrite stale provider/tool/error/compression counts on the economy
-        line of a DEVMODE05 summary.md with the authoritative monitor figures."""
+        """Overwrite stale provider/tool-call/tool-error/sandbox-blocked/compression
+        counts ANYWHERE in a DEVMODE05 summary.md with the authoritative monitor figures,
+        so the header line, the Economy section, AND the Closeout can never disagree.
+
+        The model restates these counts in several places and phrasings; the old version
+        only reconciled the "N provider requests" header form, so the Economy section's
+        "Provider requests: N" colon form drifted (live 2026-06-24T0404: header 90/119 vs
+        Economy section 74/106). This reconciles BOTH "N <metric>" and "<metric>: N" for
+        every named metric. Surgical: only a number directly adjacent to a NAMED metric is
+        rewritten — model narration and unnamed numbers (a bare "errors: 0", "responses:
+        74", "350 tests") are left untouched."""
         try:
             import re
             if not summary_path.exists():
                 return
             text = summary_path.read_text(encoding="utf-8", errors="replace")
-            def fix_line(line: str) -> str:
-                # The tool-error count is reconciled on ANY line that mentions it — the
-                # economy line, the Tool Error Ledger, AND the closeout marker — so the
-                # summary can never disagree with economy.md (watcher T0450: economy line
-                # said 4 while the ledger/closeout/catalog still said 3).
-                if "tool error" in line:
-                    line = re.sub(r"\d+(?=\s+tool error)", str(summary.get("tool_errors", 0)), line)
-                # Provider/tool-call/compression counts are unique to the economy line.
-                if "provider request" in line:
-                    line = re.sub(r"\d+(?=\s+provider request)", str(summary.get("provider_requests", 0)), line)
-                    line = re.sub(r"\d+(?=\s+tool calls)", str(summary.get("tool_calls", 0)), line)
-                    line = re.sub(r"\d+(?=\s+compression)", str(summary.get("compression_events", 0)), line)
-                return line
-
-            new_text = "\n".join(fix_line(ln) for ln in text.split("\n"))
+            # (authoritative value, metric-name regex). Each metric phrase is specific
+            # enough that order does not matter and the metrics never overlap.
+            metrics = (
+                (summary.get("provider_requests", 0), r"provider\s+requests?"),
+                (summary.get("tool_calls", 0),        r"tool\s+calls?"),
+                (summary.get("tool_errors", 0),       r"tool\s+errors?"),
+                (summary.get("sandbox_blocked", 0),   r"sandbox[-\s]*blocked"),
+                (summary.get("compression_events", 0), r"compression\s+events?"),
+            )
+            new_text = text
+            for value, phrase in metrics:
+                v = str(int(value or 0))
+                # "N <metric>"  e.g. "90 provider requests". Adjacency uses [ \t] (NOT
+                # \s) so a number ending the PREVIOUS line is never matched as the count
+                # "before" a metric on the next line across a newline.
+                new_text = re.sub(rf"\b\d+(?=[ \t]+(?:{phrase})\b)", v, new_text, flags=re.IGNORECASE)
+                # "<metric>: N" / "<metric> N"  e.g. "Provider requests: 74"
+                new_text = re.sub(rf"((?:{phrase})\b[: \t]+)\d+", rf"\g<1>{v}", new_text, flags=re.IGNORECASE)
             if new_text != text:
                 atomic_write_text(summary_path, new_text, encoding="utf-8")
+        except Exception:
+            pass
+
+    def _reconcile_devmode_workflow_closeout(self, task_board) -> None:
+        """At DEVMODE closeout, stamp a runtime-owned authoritative section onto
+        workflow.md so a model checklist that left phase rows unticked (it never returns
+        to tick them) cannot read as incomplete against a completed board. Tied to the
+        live taskboard projection; the model's own checklist rows are never rewritten."""
+        try:
+            from .devmode_manifest import _taskboard_projection
+            target = getattr(self, "_active_devmode_session_dir", None)
+            if target is None or not Path(target).is_dir():
+                return
+            AgentTaskBoard._append_workflow_runtime_closeout(
+                Path(target) / "workflow.md", _taskboard_projection(task_board))
+        except Exception:
+            pass
+
+    @staticmethod
+    def _append_workflow_runtime_closeout(workflow_path, taskboard_projection: dict) -> None:
+        """Append ONE bounded, runtime-owned closeout section to workflow.md stating the
+        authoritative taskboard truth (live 2026-06-24T0404: matrix/rotation/diff/catalog
+        left `[ ]` while the board was completed/open 0). Deterministic + idempotent;
+        stamps only a genuinely complete board; NEVER edits the model's checklist rows."""
+        try:
+            if not workflow_path.exists():
+                return
+            if str(taskboard_projection.get("state") or "") != "completed":
+                return
+            if int(taskboard_projection.get("open_count") or 0) != 0:
+                return
+            text = workflow_path.read_text(encoding="utf-8", errors="replace")
+            marker = "## Runtime Closeout (authoritative)"
+            if marker in text:
+                return  # idempotent — never stamp twice
+            tasks = taskboard_projection.get("tasks") or []
+            done = sum(1 for t in tasks if str(t.get("status")) == "completed")
+            section = (
+                f"\n\n{marker}\n"
+                f"- Taskboard: **completed**, open=0, {done}/{len(tasks)} phase rows done "
+                "(runtime-owned truth; manifest.json is authoritative).\n"
+                "- Any unticked `[ ]` rows above are the model's working checklist and are "
+                "superseded by this section — the run completed all phases.\n"
+            )
+            atomic_write_text(workflow_path, text.rstrip() + section, encoding="utf-8")
         except Exception:
             pass
 
