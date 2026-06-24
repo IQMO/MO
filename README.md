@@ -50,11 +50,11 @@ needed for normal use.
 
 ### Provider-first, provider-agnostic
 
-MO is not a wrapper that only works with one model brand. The default config is
-OpenCode-first, with DeepSeek v4 Pro for main work, Flash for Ghost, and
-OpenAI/Codex-compatible fallback paths when configured. Under the hood, normal
-providers use OpenAI-compatible chat completions; Codex can use the local
-`~/.codex/auth.json` OAuth path. The model is the engine; MO is the local
+MO is not a wrapper that only works with one model brand. The default config uses
+the official DeepSeek API — v4 Pro for main work, Flash for Ghost — with OpenCode
+as the automatic fallback and OpenAI/Codex-compatible paths when configured. Under
+the hood, normal providers use OpenAI-compatible chat completions; Codex can use
+the local `~/.codex/auth.json` OAuth path. The model is the engine; MO is the local
 runtime that keeps behavior, tools, memory, and reporting consistent.
 
 ### Install once, use anywhere
