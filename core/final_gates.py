@@ -2,10 +2,11 @@
 
 The turn-FINAL counterpart to ``behavior_gates`` (which owns the INPUT phase). Where
 input gates BLOCK a turn before any provider call, these gates run on the finished
-answer and may force ONE bounded *continuation*: a corrective re-prompt that makes the
-model satisfy task truth, verify/soften a claim, own failing affected tests, or reconcile
-the self-protocol closeout. The final answer-enforcement sequence that used to live inline
-before ``session.add_assistant(final_text)`` now routes through this module:
+answer and may force a bounded *continuation*: a corrective re-prompt that makes
+the model satisfy task truth, verify/soften a claim, own failing affected tests,
+or reconcile the self-protocol closeout. The final answer-enforcement sequence
+that used to live inline before ``session.add_assistant(final_text)`` now routes
+through this module:
 
 - contract gate;
 - self-protocol completion-truth gate;
@@ -192,6 +193,8 @@ def run_iam05_reporting_gate(
     tool_error_counts: "dict | None",
     *,
     fired: set,
+    continuations: int = 0,
+    max_continuations: int = 3,
     monitor: Any = None,
     on_activity: Callable[[str], None] | None = None,
 ) -> str | None:
@@ -201,7 +204,9 @@ def run_iam05_reporting_gate(
     closes the hole observed live: the model can still *say* "18 tool calls" after running
     54 tools unless the runtime checks the final answer before accepting it.
     """
-    if "iam05_reporting_truth" in fired or not is_iam05_activation(user_input):
+    if not is_iam05_activation(user_input):
+        return None
+    if continuations >= max_continuations:
         return None
     root = repo_root()
     actual_tool_calls = sum((tool_call_counts or {}).values())
@@ -225,6 +230,8 @@ def run_iam05_reporting_gate(
                 "tool_calls": actual_tool_calls,
                 "tool_errors": actual_tool_errors,
                 "corpus": corpus,
+                "continuation": continuations + 1,
+                "max_continuations": max_continuations,
             },
         )
     if on_activity:
@@ -235,8 +242,9 @@ def run_iam05_reporting_gate(
         f"exact tool calls = {actual_tool_calls}; exact tool errors = {actual_tool_errors}; "
         f"coverage must use 'sampled N of {corpus}'; the evidence ledger must be under "
         "~/.mo/memory/iam05/ with a session-unique filename, not repo-local memory/ and not "
-        "date-only; any function/file line-count claim must be re-measured from the current "
-        "tree or removed."
+        "date-only. If you use another tool, these counts change; recount from the updated "
+        "runtime history before the next final answer. Any function/file line-count claim "
+        "must be re-measured from the current tree or removed."
     )
 
 

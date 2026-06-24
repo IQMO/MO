@@ -53,6 +53,7 @@ SAFE_EVENT_TYPES = {
     "slash_command",
     "context_handoff",
     "consistency_boundary",
+    "iam05_reporting_truth",
     "ghost_event",
     "board_advance",
     "prt_event",

@@ -127,6 +127,37 @@ def compile_board_context_from_snapshot(snapshot: dict[str, Any] | None, *, max_
     }
 
 
+def task_row_value(task: Any, key: str, default: Any = "") -> Any:
+    if isinstance(task, dict):
+        return task.get(key, default)
+    return getattr(task, key, default)
+
+
+def task_row_status(task: Any) -> str:
+    return str(task_row_value(task, "status", "pending") or "pending")
+
+
+def task_row_title(task: Any) -> str:
+    return str(task_row_value(task, "title", "task") or "task").strip()
+
+
+def task_row_blocker(task: Any) -> str:
+    return str(task_row_value(task, "blocker", "") or "").strip()
+
+
+def task_row_evidence(task: Any) -> list[Any]:
+    return list(task_row_value(task, "evidence", []) or [])
+
+
+def task_row_counts(tasks: list[Any]) -> dict[str, int]:
+    return {
+        "total": len(tasks),
+        "completed": sum(1 for task in tasks if task_row_status(task) == "completed"),
+        "open": sum(1 for task in tasks if task_row_status(task) in OPEN),
+        "blocked": sum(1 for task in tasks if task_row_status(task) == "blocked"),
+    }
+
+
 def _task_row_line(row: TaskItem) -> str:
     status = row.status
     marker = status_marker(status)

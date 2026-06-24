@@ -23,7 +23,15 @@ from .handoff import context_pressure
 from ..number_utils import as_non_negative_int as _as_int
 from ..path_defaults import resolve_state_path
 from ..tasking.task_board import read_recent_snapshots
-from ..tasking.task_board_context import compile_board_context, compile_board_context_from_snapshot
+from ..tasking.task_board_context import (
+    compile_board_context,
+    compile_board_context_from_snapshot,
+    task_row_blocker,
+    task_row_counts,
+    task_row_evidence,
+    task_row_status,
+    task_row_title,
+)
 
 DEFAULT_MAX_CLOSEOUTS = 50
 
@@ -501,24 +509,24 @@ def _taskboard_state(agent: Any) -> dict[str, Any]:
         return {"total": 0, "completed": 0, "open": 0, "blocked": 0, "unresolved": [], "evidence": [], "context": ""}
     context = compile_board_context(board, max_tasks=10, max_evidence=4, max_chars=1800) if board else compile_board_context_from_snapshot(snapshot, max_tasks=10, max_evidence=4, max_chars=1800)
     tasks = list(getattr(board, "tasks", []) or []) if board else list(snapshot.get("tasks") or [])
+    counts = task_row_counts(tasks)
     unresolved: list[str] = []
     evidence: list[str] = []
     for task in tasks:
-        title = str((getattr(task, "title", "") if board else task.get("title", "")) or "task").strip()
-        status = str((getattr(task, "status", "") if board else task.get("status", "")) or "pending")
+        title = task_row_title(task)
+        status = task_row_status(task)
         if status in {"pending", "active", "blocked"}:
-            blocker = str((getattr(task, "blocker", "") if board else task.get("blocker", "")) or "").strip()
+            blocker = task_row_blocker(task)
             unresolved.append(f"task {status}: {title}" + (f" — {blocker}" if blocker else ""))
-        evidence_items = getattr(task, "evidence", []) if board else task.get("evidence", [])
-        for item in list(evidence_items or [])[:4]:
+        for item in task_row_evidence(task)[:4]:
             clean = str(item or "").strip()
             if clean and clean not in evidence:
                 evidence.append(clean[:240])
     return {
-        "total": len(tasks),
-        "completed": sum(1 for task in tasks if (getattr(task, "status", "") if board else task.get("status", "")) == "completed"),
-        "open": sum(1 for task in tasks if (getattr(task, "status", "") if board else task.get("status", "")) in {"pending", "active", "blocked"}),
-        "blocked": sum(1 for task in tasks if (getattr(task, "status", "") if board else task.get("status", "")) == "blocked"),
+        "total": counts["total"],
+        "completed": counts["completed"],
+        "open": counts["open"],
+        "blocked": counts["blocked"],
         "unresolved": unresolved,
         "evidence": evidence,
         "context": context.get("text", ""),

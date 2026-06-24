@@ -187,6 +187,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         final_gates_fired: set = set()  # once-per-turn guards for final-phase gates
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
+        iam05_reporting_truth_continuations = 0  # IAM05 reports may need recounting after corrective artifact edits.
         # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
         # few times to push for a clean closeout, but must not loop to
         # max_provider_requests when a near-terminal completion keeps tripping the
@@ -858,10 +859,13 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 tool_call_counts,
                 tool_error_counts,
                 fired=final_gates_fired,
+                continuations=iam05_reporting_truth_continuations,
+                max_continuations=3,
                 monitor=monitor,
                 on_activity=on_activity,
             )
             if _iam05_reporting_instruction:
+                iam05_reporting_truth_continuations += 1
                 self.session.add_assistant(_iam05_reporting_instruction)
                 continue
             # Verify-before-claiming (driven, not prompt-hoped): the declarative

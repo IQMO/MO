@@ -197,6 +197,23 @@ def test_iam05_reporting_gate_blocks_tool_count_mismatch(monkeypatch):
     assert "exact tool calls = 54" in out
 
 
+def test_iam05_reporting_gate_rechecks_after_corrective_tool_changes_count(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 369)
+    out = run_iam05_reporting_gate(
+        "start IAM05",
+        _iam05_text(calls=49, errors=0, corpus=369),
+        {"read_file": 49, "edit_file": 1},
+        {},
+        fired={"iam05_reporting_truth"},
+        continuations=1,
+        max_continuations=3,
+    )
+    assert out is not None
+    assert "tool-call count mismatch" in out
+    assert "exact tool calls = 50" in out
+
+
 def test_iam05_reporting_gate_blocks_error_count_mismatch(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)

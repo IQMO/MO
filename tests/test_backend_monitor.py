@@ -3,7 +3,7 @@ import os
 
 from pathlib import Path
 
-from core.backend_monitor import BackendMonitor, get_monitor, monitor_context, preview_provider_messages, preview_provider_response, redact_monitor_text, set_monitor
+from core.backend_monitor import BackendMonitor, SAFE_EVENT_TYPES, get_monitor, monitor_context, preview_provider_messages, preview_provider_response, redact_monitor_text, set_monitor
 from interface.monitor_terminal import has_live_backend_work, read_events, render, resolve_log_path
 
 
@@ -23,6 +23,18 @@ def test_backend_monitor_writes_safe_jsonl(tmp_path):
     text = path.read_text(encoding="utf-8")
     assert '"type": "backend_status"' in text
     assert "provider request running" in text
+
+
+def test_backend_monitor_allows_iam05_reporting_truth_event(tmp_path):
+    path = tmp_path / "backend_monitor.jsonl"
+    monitor = BackendMonitor(path)
+
+    assert "iam05_reporting_truth" in SAFE_EVENT_TYPES
+    monitor.emit("iam05_reporting_truth", {"tool_calls": 50})
+
+    text = path.read_text(encoding="utf-8")
+    assert '"type": "iam05_reporting_truth"' in text
+    assert '"tool_calls": 50' in text
 
 
 def test_backend_monitor_singleton_for_cross_subsystem_events(tmp_path):

@@ -353,19 +353,20 @@ def _taskboard_state(board: Any, *, session_id: str = "") -> dict[str, Any]:
     if board is None:
         try:
             from .tasking.task_board import read_recent_snapshots
-            from .tasking.task_board_context import compile_board_context_from_snapshot
+            from .tasking.task_board_context import compile_board_context_from_snapshot, task_row_counts
             recent = read_recent_snapshots(limit=1, session_id=session_id) if session_id else []
             if recent:
                 item = recent[-1]
                 tasks = list(item.get("tasks") or [])
+                counts = task_row_counts(tasks)
                 context = compile_board_context_from_snapshot(item, max_tasks=3, max_evidence=1, max_chars=500)
                 return {
                     "source": str(item.get("source") or "ledger"),
                     "title": redact_monitor_text(item.get("title", ""), 160),
                     "state": str(item.get("state") or ""),
-                    "total": len(tasks),
-                    "completed": sum(1 for task in tasks if task.get("status") == "completed"),
-                    "open": sum(1 for task in tasks if task.get("status") in {"pending", "active", "blocked"}),
+                    "total": counts["total"],
+                    "completed": counts["completed"],
+                    "open": counts["open"],
                     "active_task_id": context.get("active_task_id", ""),
                     "ready_task_id": context.get("ready_task_id", ""),
                 }
@@ -373,18 +374,24 @@ def _taskboard_state(board: Any, *, session_id: str = "") -> dict[str, Any]:
             traceback.print_exc()
         return {"source": "none", "total": 0, "completed": 0, "open": 0, "state": ""}
     tasks = list(getattr(board, "tasks", []) or [])
+    counts = {
+        "total": len(tasks),
+        "completed": sum(1 for task in tasks if getattr(task, "status", "") == "completed"),
+        "open": sum(1 for task in tasks if getattr(task, "status", "") in {"pending", "active", "blocked"}),
+    }
     try:
-        from .tasking.task_board_context import compile_board_context
+        from .tasking.task_board_context import compile_board_context, task_row_counts
         context = compile_board_context(board, max_tasks=3, max_evidence=1, max_chars=500)
+        counts = task_row_counts(tasks)
     except Exception:
         context = {"active_task_id": "", "ready_task_id": "", "graph": {"valid": True}}
     return {
         "source": str(getattr(board, "source", "live") or "live"),
         "title": redact_monitor_text(str(getattr(board, "title", "") or ""), 160),
         "state": str(getattr(board, "state", "") or ""),
-        "total": len(tasks),
-        "completed": sum(1 for task in tasks if getattr(task, "status", "") == "completed"),
-        "open": sum(1 for task in tasks if getattr(task, "status", "") in {"pending", "active", "blocked"}),
+        "total": counts["total"],
+        "completed": counts["completed"],
+        "open": counts["open"],
         "active_task_id": context.get("active_task_id", ""),
         "ready_task_id": context.get("ready_task_id", ""),
         "graph_valid": bool((context.get("graph") or {}).get("valid", True)),
