@@ -758,19 +758,27 @@ def _new_gateway_board(
     """Create board from Ghost's planned rows, or a single-row fallback."""
     board = TaskBoard(turn_id=turn_id, session_id=session_id, source="gateway")
     target = str(title or "").strip() or user_input[:80]
+    proto = is_owner_protocol_activation(user_input)
     if is_devmode05_activation(user_input):
         rows = _devmode05_gateway_phase_rows()
-    if is_vs05_activation(user_input):
+    elif is_vs05_activation(user_input):
         rows = _vs05_gateway_phase_rows()
-    if not rows:
-        # No Ghost plan: seed the matching build/reasoning work procedure so the
-        # board carries the proven evidence-gated phases instead of one generic
-        # row. Falls through to the single-row fallback for chat/unmatched turns.
+    elif not rows and not proto:
+        # No Ghost plan and NOT an owner protocol: seed the matching build/reasoning
+        # work procedure so the board carries the proven evidence-gated phases instead
+        # of one generic row. Owner protocols are EXCLUDED here — DEVMODE05/VS05 use the
+        # explicit phase rows above, IFDEV05 drives its own board, and IAM05 is boardless.
+        # None may inherit a generic work-procedure board (build_verify/project_audit/…),
+        # which has no protocol closeout and would trip the done-claim gate. Live
+        # mo-1782307665: "Run IAM05 on …" got a build_verify board through THIS fallback
+        # even though the ghost proposal was already skipped (9555983 closed only ghost).
         rows = _work_procedure_rows(user_input, target)
     if rows:
         board.set_rows(f"{target}", rows, objective=user_input[:200])
-    else:
-        # Ghost unavailable and no matching procedure — single-row fallback
+    elif not proto:
+        # Ghost unavailable and no matching procedure — single-row fallback, non-protocol
+        # turns only. An owner protocol with no explicit rows stays an EMPTY board: the
+        # protocol/model owns its task truth and an empty board can't trip done-claim.
         board.set_rows(
             f"{target}",
             [{"id": "1", "text": f"Work on {target}", "status": "active", "kind": "edit", "completion_gate": "tool", "depends_on": []}],

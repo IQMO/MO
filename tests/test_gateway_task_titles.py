@@ -65,3 +65,27 @@ def test_new_gateway_board_devmode05_no_rows_uses_protocol_phases():
     assert "baseline-plus-delta capability matrix" in board.task("2").title
     assert board.task("6").kind == "report"
     assert board.task("6").completion_gate == "final"
+
+
+def test_new_gateway_board_iam05_is_boardless(monkeypatch):
+    """IAM05 (an owner protocol that is NOT DEVMODE05/VS05) must never inherit a generic
+    work-procedure board — it stays EMPTY so the done-claim gate can't trip on an open
+    board it never advances. Live mo-1782307665: 'Run IAM05 on …' got a build_verify
+    board through the work-procedure fallback even after the ghost proposal was skipped."""
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    board = _new_gateway_board(
+        "t1", "s1",
+        "Run IAM05 on the stop-gate cluster. Verify whether it should stay inline or move",
+        rows=None,
+    )
+    assert board is not None
+    assert len(board.tasks) == 0  # boardless — NOT a build_verify procedure board
+
+
+def test_new_gateway_board_normal_turn_unaffected_by_protocol_exclusion(monkeypatch):
+    """The owner-protocol exclusion must not change normal-turn board seeding."""
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    fix_board = _new_gateway_board("t1", "s1", "fix the login bug", rows=None)
+    assert len(fix_board.tasks) >= 1  # normal work turn still gets a procedure/fallback board
+    chat_board = _new_gateway_board("t1", "s1", "hi mo", rows=None)
+    assert len(chat_board.tasks) == 1 and chat_board.task("1").title == "Work on hi mo"
