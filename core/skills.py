@@ -76,7 +76,7 @@ def _parse_skill(path: Path) -> Skill | None:
 
 
 def default_skill_roots(project_cwd: str | None = None, runtime_home: str | None = None) -> list[str]:
-    """Shipped packs (repo skills/) + operator packs (~/.mo/skills) + project-local."""
+    """Shipped skills, profile-owned skills, and project-local skills."""
     roots: list[str] = [str(Path(__file__).resolve().parent.parent / "skills")]
     if runtime_home:
         roots.append(str(Path(runtime_home).expanduser() / "skills"))
@@ -86,7 +86,7 @@ def default_skill_roots(project_cwd: str | None = None, runtime_home: str | None
 
 
 def load_skills(roots: list[str | os.PathLike]) -> list[Skill]:
-    """Load all skill packs from the given roots (project skills dir, ~/.mo/skills)."""
+    """Load all skill files from the given roots (project skills dir, ~/.mo/skills)."""
     skills: list[Skill] = []
     seen: set[str] = set()
     for root in roots:

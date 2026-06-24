@@ -151,7 +151,7 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     return False
 
 def _load_owner_preflight_rules() -> list[str]:
-    """Load the owner-only protocol preflight rules from the operator pack.
+    """Load owner-only protocol preflight rules from profile-owned state.
 
     The detailed OWNER_MAINTENANCE/OWNER_COMPARISON protocol prose lives untracked in
     ``~/.mo/operator/devmode/preflight-rules.json`` (never shipped). A user clone has no
@@ -172,9 +172,9 @@ def _load_owner_preflight_rules() -> list[str]:
 def build_self_capability_preflight_context(user_input: str, *, cwd: str | None = None) -> str:
     """Build the mandatory preflight context for MO self/OWNER_MAINTENANCE work.
 
-    The detailed owner protocol rules are loaded from the operator pack when
-    present; absent the pack (a user clone), only a generic self-review reminder
-    plus live capability orientation is emitted.
+    The detailed owner protocol rules are loaded from profile-owned state when
+    present; absent that state (a user clone), only a generic self-review
+    reminder plus live capability orientation is emitted.
     """
     if not should_include_self_capability_preflight(user_input):
         return ""
