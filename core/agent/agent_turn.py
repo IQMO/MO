@@ -97,6 +97,49 @@ def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
         return ""
 
 
+def _no_tool_evidence_continuation(
+    *,
+    devmode05_active: bool,
+    vs05_active: bool,
+    ifdev05_active: bool,
+    total_tool_calls: int,
+    devmode_taskboard_completed: bool,
+) -> tuple[str, str] | None:
+    """Owner-protocol no-tool-evidence gate.
+
+    When an owner protocol is active and the turn produced ZERO tool calls, even a
+    correctly-prefixed completion is fabrication — there is no real evidence behind it.
+    Returns ``(on_activity label, continuation message)`` to inject before re-looping,
+    or ``None`` to proceed. DEVMODE05 is exempt once its taskboard is already completed
+    (a clean closeout turn legitimately needs no new tools). Precedence matches the
+    original inline order: DEVMODE05, then VS05, then IFDEV05.
+    """
+    if total_tool_calls != 0:
+        return None
+    if devmode05_active and not devmode_taskboard_completed:
+        return (
+            "DEVMODE05: no tool evidence — continuing...",
+            "[DEVMODE05 AUTONOMY] No tool evidence gathered this turn. "
+            "You must call tools (read_file, shell, grep, etc.) to produce real evidence before claiming completion. "
+            "Do not fabricate reports. Run the protocol steps with actual tools.",
+        )
+    if vs05_active:
+        return (
+            "VS05: no tool evidence - continuing...",
+            "[VS05 CONTINUATION] No tool evidence gathered this turn. "
+            "Read the VS05 protocol, capture source roles, inspect structured evidence surfaces, "
+            "and build the comparison matrix from actual files/traces before any closeout.",
+        )
+    if ifdev05_active:
+        return (
+            "IFDEV05: no tool evidence - continuing...",
+            "[IFDEV05 CONTINUATION] No tool evidence gathered this turn. "
+            "Read the IFDEV05 protocol and inspect the real interface code (read_file on "
+            "interface/*.py) and live UX behavior before any UX-audit closeout.",
+        )
+    return None
+
+
 class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
     """Turn-execution mixin: run loop, provider dispatch, tool handling."""
 
@@ -652,34 +695,17 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             vs05_active = is_vs05_activation(user_input)
             ifdev05_active = is_ifdev05_activation(user_input)
             total_tool_calls = sum(tool_call_counts.values())
-            if devmode05_active and total_tool_calls == 0 and not self._devmode05_taskboard_completed(task_board):
+            no_evidence = _no_tool_evidence_continuation(
+                devmode05_active=devmode05_active,
+                vs05_active=vs05_active,
+                ifdev05_active=ifdev05_active,
+                total_tool_calls=total_tool_calls,
+                devmode_taskboard_completed=self._devmode05_taskboard_completed(task_board),
+            )
+            if no_evidence is not None:
                 if on_activity:
-                    on_activity("DEVMODE05: no tool evidence — continuing...")
-                self.session.add_assistant(
-                    "[DEVMODE05 AUTONOMY] No tool evidence gathered this turn. "
-                    "You must call tools (read_file, shell, grep, etc.) to produce real evidence before claiming completion. "
-                    "Do not fabricate reports. Run the protocol steps with actual tools."
-                )
-                continue
-
-            if vs05_active and total_tool_calls == 0:
-                if on_activity:
-                    on_activity("VS05: no tool evidence - continuing...")
-                self.session.add_assistant(
-                    "[VS05 CONTINUATION] No tool evidence gathered this turn. "
-                    "Read the VS05 protocol, capture source roles, inspect structured evidence surfaces, "
-                    "and build the comparison matrix from actual files/traces before any closeout."
-                )
-                continue
-
-            if ifdev05_active and total_tool_calls == 0:
-                if on_activity:
-                    on_activity("IFDEV05: no tool evidence - continuing...")
-                self.session.add_assistant(
-                    "[IFDEV05 CONTINUATION] No tool evidence gathered this turn. "
-                    "Read the IFDEV05 protocol and inspect the real interface code (read_file on "
-                    "interface/*.py) and live UX behavior before any UX-audit closeout."
-                )
+                    on_activity(no_evidence[0])
+                self.session.add_assistant(no_evidence[1])
                 continue
 
             if not ifdev05_final_allows_stop(user_input, content):
