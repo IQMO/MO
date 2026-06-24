@@ -593,6 +593,58 @@ def test_profile_dir_read_allowed_but_env_and_writes_blocked(tmp_path, monkeypat
     assert guard_tool_call("read_file", {"path": env}, lane=None, allowed_roots=roots) is not None
 
 
+def test_read_secret_path_blocks_project_env_and_keys(tmp_path):
+    env = tmp_path / ".env"
+    pem = tmp_path / "deploy.pem"
+    normal = tmp_path / "app.py"
+
+    assert guard_tool_call("read_file", {"path": str(env)}, allowed_roots=[str(tmp_path)]) is not None
+    assert guard_tool_call("read_file", {"path": str(pem)}, allowed_roots=[str(tmp_path)]) is not None
+    assert guard_tool_call("read_file", {"path": str(normal)}, allowed_roots=[str(tmp_path)]) is None
+
+
+def test_read_secret_path_operator_override_allows_explicit_read(tmp_path):
+    env = tmp_path / ".env"
+
+    assert guard_tool_call(
+        "read_file",
+        {"path": str(env)},
+        allowed_roots=[str(tmp_path)],
+        operator_override=True,
+    ) is None
+
+
+def test_read_secret_path_blocks_secret_grep_root_but_not_normal_project_search(tmp_path):
+    env = tmp_path / ".env"
+
+    reason = guard_tool_call("grep", {"pattern": "TOKEN", "root": str(env)}, allowed_roots=[str(tmp_path)])
+    assert reason is not None
+    assert "Ask the operator" in reason
+    assert guard_tool_call("find_files", {"root": str(env)}, allowed_roots=[str(tmp_path)]) is not None
+
+    assert guard_tool_call("grep", {"pattern": ".env", "root": str(tmp_path)}, allowed_roots=[str(tmp_path)]) is None
+
+
+def test_read_secret_path_blocks_shell_file_reads(tmp_path):
+    pem = tmp_path / "deploy.pem"
+
+    assert guard_tool_call(
+        "shell",
+        {"command": "type .env", "workdir": str(tmp_path)},
+        allowed_roots=[str(tmp_path)],
+    ) is not None
+    assert guard_tool_call(
+        "shell",
+        {"command": f"Get-Content -Path {pem}", "workdir": str(tmp_path)},
+        allowed_roots=[str(tmp_path)],
+    ) is not None
+    assert guard_tool_call(
+        "shell",
+        {"command": "rg .env README.md", "workdir": str(tmp_path)},
+        allowed_roots=[str(tmp_path)],
+    ) is None
+
+
 def test_provider_tokens_redacted_from_tool_results_not_code():
     from core.sandbox import redact_provider_tokens
     assert "[redacted-token]" in redact_provider_tokens("leaked ghp_abcd1234efgh5678ijkl here")

@@ -14,7 +14,17 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from .tool_constants import ACTUATION_BLOCKED_LANES, ACTUATION_TOOLS, MUTATING_TOOLS, READ_ONLY_LANES
+from .tool_constants import (
+    ACTUATION_BLOCKED_LANES,
+    ACTUATION_TOOLS,
+    MUTATING_TOOLS,
+    READ_ONLY_LANES,
+    SECRET_READ_BASENAMES,
+    SECRET_READ_DIR_NAMES,
+    SECRET_READ_PATH_SUFFIXES,
+    SECRET_READ_PREFIXES,
+    SECRET_READ_SUFFIXES,
+)
 from .text_safety import SECRET_NAME_PATTERN, PROVIDER_TOKEN_PATTERN, contains_hardcoded_secret_literal
 
 
@@ -830,6 +840,80 @@ def _readable_under_profile(path: str | None) -> bool:
     return bool(root) and path_allowed(str(path), [root])
 
 
+def _secret_read_path_kind(path: str | None) -> str | None:
+    """Return a secret-path label for raw file reads that should require approval."""
+    if not path:
+        return None
+    try:
+        target = Path(str(path)).expanduser()
+    except Exception:
+        target = Path(str(path))
+    parts = tuple(part.lower() for part in target.parts if part not in {"", ".", ".."})
+    name = target.name.lower()
+    suffix = target.suffix.lower()
+    if name in SECRET_READ_BASENAMES:
+        return name
+    if any(name.startswith(prefix) for prefix in SECRET_READ_PREFIXES):
+        return "secret filename"
+    if suffix in SECRET_READ_SUFFIXES:
+        return suffix
+    if any(part in SECRET_READ_DIR_NAMES for part in parts):
+        return "secret directory"
+    for secret_suffix in SECRET_READ_PATH_SUFFIXES:
+        if len(parts) >= len(secret_suffix) and parts[-len(secret_suffix):] == secret_suffix:
+            return "/".join(secret_suffix)
+    return None
+
+
+_SHELL_READ_PATH_COMMANDS = frozenset({"type", "cat", "gc", "get-content", "more", "head", "tail", "less"})
+_SHELL_SEARCH_PATH_COMMANDS = frozenset({"grep", "rg", "ripgrep", "findstr", "select-string", "sls"})
+_SHELL_PATH_OPTION_NAMES = frozenset({"-path", "-literalpath", "--path"})
+
+
+def _shell_command_secret_read_candidates(command: str, workdir: str | None = None) -> list[str]:
+    """Extract likely file-read targets from shell commands without treating grep patterns as paths."""
+    candidates: list[str] = []
+    base_dir = Path(workdir).expanduser() if workdir else Path.cwd()
+    for segment in re.split(r"[|;&]", _path_scan_command_text(command or "")):
+        parts = _split_shell_words(segment)
+        if not parts:
+            continue
+        executable = Path(str(parts[0]).strip("'\"")).name.lower()
+        if executable.endswith(".exe"):
+            executable = executable[:-4]
+        if executable not in _SHELL_READ_PATH_COMMANDS and executable not in _SHELL_SEARCH_PATH_COMMANDS:
+            continue
+        path_candidates: list[str] = []
+        saw_search_pattern = False
+        idx = 1
+        while idx < len(parts):
+            raw = str(parts[idx]).strip().strip("'\"")
+            lower = raw.lower()
+            if not raw:
+                idx += 1
+                continue
+            if lower in _SHELL_PATH_OPTION_NAMES and idx + 1 < len(parts):
+                path_candidates.append(str(parts[idx + 1]).strip().strip("'\""))
+                idx += 2
+                continue
+            if raw.startswith("-") or (executable in {"findstr"} and raw.startswith("/")):
+                idx += 1
+                continue
+            if executable in _SHELL_SEARCH_PATH_COMMANDS:
+                if not saw_search_pattern:
+                    saw_search_pattern = True
+                    idx += 1
+                    continue
+                path_candidates.append(raw)
+            else:
+                path_candidates.append(raw)
+            idx += 1
+        for candidate in path_candidates:
+            path = Path(candidate).expanduser()
+            candidates.append(str(path if path.is_absolute() else base_dir / path))
+    return candidates
+
+
 def _guard_path_scope(
     name: str,
     arguments: dict[str, Any],
@@ -857,6 +941,28 @@ def _guard_path_scope(
         readable_profile = name in {"find_files", "grep"} and _readable_under_profile(str(path_value) if path_value else None)
         if path_value and not readable_profile and not path_allowed(str(path_value), allowed_roots):
             return f"[PATH BLOCKED] {name} path outside allowed roots: {path_value}"
+    return None
+
+
+def _guard_read_secret(name: str, arguments: dict[str, Any], operator_override: bool) -> str | None:
+    """Block raw reads of secret-shaped paths; sanctioned helpers handle secrets."""
+    if operator_override:
+        return None
+    candidates: list[str] = []
+    if name == "read_file" and arguments.get("path"):
+        candidates.append(str(arguments.get("path")))
+    elif name in {"find_files", "grep"}:
+        root = arguments.get("root")
+        if root:
+            candidates.append(str(root))
+    elif name == "shell":
+        candidates.extend(_shell_command_secret_read_candidates(str(arguments.get("command") or ""), str(arguments.get("workdir") or "") or None))
+    for candidate in candidates:
+        if kind := _secret_read_path_kind(candidate):
+            return (
+                f"[TOOL BLOCKED] raw read of secret-looking path blocked ({kind}): {candidate}. "
+                "Ask the operator for explicit approval, or use sanctioned config/profile helpers that do not expose credential values."
+            )
     return None
 
 
@@ -970,6 +1076,11 @@ def guard_tool_call(
 
     # Path scope (file tools, shell workdir, find/grep/git/project_bridge)
     if reason := _guard_path_scope(name, arguments, allowed_roots):
+        return block(reason)
+
+    # Read-time secret path guard: content redaction is intentionally conservative,
+    # so block raw reads of credential-shaped files before they reach the provider.
+    if reason := _guard_read_secret(name, arguments, operator_override):
         return block(reason)
 
     # MCP tools are dynamic; enforce generic path and read-only lane rules.
