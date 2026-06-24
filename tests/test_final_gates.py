@@ -1,4 +1,4 @@
-"""Final-phase claim-gate registry: dispatch order, once-per-turn, payloads."""
+"""Final-phase answer-enforcement gates: ordering, counters, once-per-turn guards."""
 from types import SimpleNamespace
 
 import core.final_gates as fg

@@ -1,19 +1,21 @@
-"""Final-phase claim gates — declarative verify-before-claiming registry.
+"""Final-phase answer enforcement gates.
 
 The turn-FINAL counterpart to ``behavior_gates`` (which owns the INPUT phase). Where
 input gates BLOCK a turn before any provider call, these gates run on the finished
-answer and force ONE bounded *continuation*: a corrective re-prompt that makes the model
-verify or soften a claim, then answer again. Each gate is once-per-turn (tracked by the
-caller's ``fired`` set), so the loop can never spin on them; combined with the other
-inline final gates and the ``max_provider_requests`` turn cap, total continuations stay
-bounded.
+answer and may force ONE bounded *continuation*: a corrective re-prompt that makes the
+model satisfy task truth, verify/soften a claim, own failing affected tests, or reconcile
+the self-protocol closeout. The final answer-enforcement sequence that used to live inline
+before ``session.add_assistant(final_text)`` now routes through this module:
 
-This is the first increment of folding ``run_turn``'s scattered inline final gates into a
-single declarative registry. It starts with the three structurally-identical claim gates
-(completion/cleanliness, current-state/version, unsourced-external) because they share one
-exact shape: ``signal(final_text, tool_call_counts) -> label`` → emit → re-prompt. The
-remaining final gates (contract, self-protocol truth, done-claim, verify-edits) carry
-per-gate counters and board/test logic and fold in as later increments.
+- contract gate;
+- self-protocol completion-truth gate;
+- done-claim task-truth gate;
+- verify-edits affected-test gate;
+- completion/cleanliness, current-state/version, and unsourced-external claim gates.
+
+Some gates are once-per-turn via the caller's shared ``fired`` set; counter-bearing gates
+thread their counters through explicit return values. The owner-protocol terminal stop
+gates that run earlier on raw ``content`` remain a separate mechanism in ``run_turn``.
 """
 from __future__ import annotations
 

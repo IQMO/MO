@@ -5,12 +5,11 @@ declarative registry. This module owns the INPUT phase: deterministic checks tha
 block a turn BEFORE any provider call (prompt-injection threat scan, malicious-code
 refusal). Adding a new pre-provider rule is now one entry here, not an ad-hoc branch.
 
-Scope note (tracked next step): the turn-FINAL enforcement gates — taskboard contract,
-done-claim continuation, and the owner-only protocol stop-gates — still live inline in
-``run_turn``. Folding those into this registry is a behavior-preserving refactor of
-MO's most-tested, highest-risk path (the loop whose past misfires caused gate loops),
-so it is done as its own carefully-regressed change rather than bundled here. This
-module is the shape that fold-in targets.
+Scope note: turn-FINAL answer enforcement now lives in ``core.final_gates``. That module
+owns the contract, self-protocol truth, done-claim, verify-edits, and claim/source gates
+that run immediately before the final answer is accepted. The owner-protocol terminal
+stop gates that run earlier on raw model ``content`` remain deliberately separate because
+they validate DEVMODE05/VS05/IFDEV05 terminal markers before the final-answer critique.
 """
 from __future__ import annotations
 
