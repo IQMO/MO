@@ -32,6 +32,7 @@ from ..final_gates import (
     run_claim_gates,
     run_contract_gate,
     run_done_claim_gate,
+    run_iam05_reporting_gate,
     run_self_protocol_truth_gate,
     run_verify_edits_gate,
 )
@@ -183,7 +184,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         raw_tool_payload_fallback_attempted = False
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
-        final_gates_fired: set = set()  # once-per-turn guards for the final-phase gate registry (done-claim / verify-edits / completion / current-state / unsourced)
+        final_gates_fired: set = set()  # once-per-turn guards for final-phase gates
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
         # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
@@ -203,6 +204,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         provider_limit_grace = False
         tool_limit_grace_used = False
         tool_call_counts: dict[str, int] = {}
+        tool_error_counts: dict[str, int] = {}
         turn_provider_errors = 0
         turn_provider_fallbacks = 0
         turn_files_modified = False
@@ -584,6 +586,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     # Prepend abuse warning so the model sees it in the tool result
                     if _abuse_warning and not block_reason:
                         result = _abuse_warning + "\n" + result
+                    tool_is_error = self._tool_result_is_error(result)
+                    if tool_is_error:
+                        tool_error_counts[name] = tool_error_counts.get(name, 0) + 1
                     self._write_tool_audit(name, arguments, result, block_reason)
 
                     # Per-action hook: surfaces (e.g. the desktop Companion action
@@ -596,14 +601,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                                 "tool": name,
                                 "summary": self._safe_tool_summary(name, arguments),
                                 "blocked": bool(block_reason),
-                                "error": self._tool_result_is_error(result),
+                                "error": tool_is_error,
                             })
                         except Exception:
                             pass
 
                     if monitor:
-                        monitor.emit("tool_result", {"request": provider_requests, "surface": self._provider_surface(), "worker_id": self._provider_worker_id(), "tool": name, "blocked": bool(block_reason), "error": self._tool_result_is_error(result), "chars": len(result)})
-                    if not block_reason and not self._tool_result_is_error(result) and name in {"write_file", "edit_file"}:
+                        monitor.emit("tool_result", {"request": provider_requests, "surface": self._provider_surface(), "worker_id": self._provider_worker_id(), "tool": name, "blocked": bool(block_reason), "error": tool_is_error, "chars": len(result)})
+                    if not block_reason and not tool_is_error and name in {"write_file", "edit_file"}:
                         turn_files_modified = True
                         file_path = arguments.get("path", "")
                         file_content = arguments.get("new_text" if name == "edit_file" else "content", "")
@@ -614,7 +619,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     # free old resolved tool chains proactively. Runtime still
                     # decides (old completed chains only, never recent/prefix, and
                     # only when freed bytes justify the cache miss).
-                    if not block_reason and not self._tool_result_is_error(result) and name == "complete_task":
+                    if not block_reason and not tool_is_error and name == "complete_task":
                         self._work_resolved_hint = True
 
                     # Compress tool output (MO Agent native: lossless structural compression)
@@ -844,6 +849,20 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             )
             if _verify_instr:
                 self.session.add_assistant(_verify_instr)
+                continue
+            # IAM05 reports are quantitative by design. The preflight tells the model
+            # the contract; this runtime gate enforces it against the actual turn.
+            _iam05_reporting_instruction = run_iam05_reporting_gate(
+                user_input,
+                final_text,
+                tool_call_counts,
+                tool_error_counts,
+                fired=final_gates_fired,
+                monitor=monitor,
+                on_activity=on_activity,
+            )
+            if _iam05_reporting_instruction:
+                self.session.add_assistant(_iam05_reporting_instruction)
                 continue
             # Verify-before-claiming (driven, not prompt-hoped): the declarative
             # claim-gate registry forces ONE bounded continuation when the answer

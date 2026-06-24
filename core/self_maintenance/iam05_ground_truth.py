@@ -103,9 +103,47 @@ def _reporting_contract(root: Path) -> list[str]:
         "- Self-report truth: report your EXACT tool-call count and tool-error count from your real "
         "tool history this run — never estimate (\"~N\") and never omit a recovered/retried error "
         "(it still counts and must be named). \"No tool errors\" is allowed only if there were none.",
-        f"- Ledger location: write the evidence ledger under `{ledger_dir}/` (private runtime home), "
-        "NEVER repo-local `memory/` — that pollutes the product checkout and violates MO's state rule.",
+        f"- Ledger location: write the evidence ledger under `{ledger_dir}/` (private runtime home) "
+        "with a session-unique filename (include the session id or HHMMSS timestamp), NEVER repo-local "
+        "`memory/` and never a date-only `evidence_ledger_YYYYMMDD.md` path.",
     ]
+
+
+def iam05_source_corpus_count(*, cwd: str | None = None) -> int:
+    """Return the live source corpus denominator used by IAM05 reporting."""
+    root = Path(cwd or ".").resolve()
+    return len(_iter_py_files(root))
+
+
+def iam05_function_span_index(*, cwd: str | None = None) -> dict[str, set[int]]:
+    """Return production function/class-method spans keyed by safe names.
+
+    Test fixtures routinely define tiny same-named functions (``run_turn`` stubs,
+    ``__init__`` helpers), so answer-time line-count checks must not pool tests with
+    production code. Qualified names are always kept; bare names are kept only when
+    they resolve to one production span. Ambiguous bare names are present with an empty
+    span set so answer-time gates can reject the claim without inventing a bad hint.
+    """
+    root = Path(cwd or ".").resolve()
+    qualified: dict[str, set[int]] = defaultdict(set)
+    bare_candidates: dict[str, set[int]] = defaultdict(set)
+    for rel in _iter_py_files(root):
+        if rel.startswith("tests/"):
+            continue
+        tree = _parse(root / rel)
+        if tree is None:
+            continue
+        for qualname, start, end in _qualified_functions(tree):
+            span = end - start + 1
+            qualified[qualname].add(span)
+            bare_candidates[qualname.rsplit(".", 1)[-1]].add(span)
+    result: dict[str, set[int]] = dict(qualified)
+    for bare, values in bare_candidates.items():
+        if len(values) == 1:
+            result[bare] = set(values)
+        else:
+            result[bare] = set()
+    return result
 
 
 # --- target extraction -------------------------------------------------------
@@ -186,6 +224,36 @@ def _functions(tree: ast.AST) -> list[tuple[str, int, int]]:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             end = getattr(node, "end_lineno", node.lineno) or node.lineno
             out.append((node.name, node.lineno, end))
+    return out
+
+
+def _qualified_functions(tree: ast.AST) -> list[tuple[str, int, int]]:
+    """(qualified_name, start_line, end_line) for defs, including class methods."""
+    out: list[tuple[str, int, int]] = []
+
+    class Visitor(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.class_stack: list[str] = []
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802 - ast visitor API
+            self.class_stack.append(node.name)
+            self.generic_visit(node)
+            self.class_stack.pop()
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802 - ast visitor API
+            self._record(node)
+            self.generic_visit(node)
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802
+            self._record(node)
+            self.generic_visit(node)
+
+        def _record(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+            end = getattr(node, "end_lineno", node.lineno) or node.lineno
+            qualname = ".".join([*self.class_stack, node.name]) if self.class_stack else node.name
+            out.append((qualname, node.lineno, end))
+
+    Visitor().visit(tree)
     return out
 
 

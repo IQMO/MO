@@ -5,12 +5,13 @@ exhaustiveness / duplication claims start from disk instead of memory (the trust
 session 5361b54d). These tests pin: non-IAM05 turns get nothing; explicit targets are
 measured exactly (real line count, ast function spans, symbol reference split); a bare
 'Run IAM05' auto-scopes from the live tree; and everything degrades gracefully."""
-import os
 
 import pytest
 
 from core.self_maintenance.iam05_ground_truth import (
     build_iam05_ground_truth,
+    iam05_function_span_index,
+    iam05_source_corpus_count,
     _named_paths,
     _named_symbols,
     _measure_file,
@@ -122,9 +123,34 @@ def test_contract_scope_denominator_is_real_corpus_count(tree):
     block = build_iam05_ground_truth("start IAM05", cwd=str(tree))
     # tree has core/thing.py, core/other.py, tests/test_thing.py = 3 source files
     assert "sampled N of 3" in block
+    assert iam05_source_corpus_count(cwd=str(tree)) == 3
 
 
 def test_contract_ledger_path_is_private_home_not_repo(tree):
     block = build_iam05_ground_truth("start IAM05", cwd=str(tree))
     assert "memory/iam05" in block               # canonical ~/.mo private location
     assert "NEVER repo-local `memory/`" in block  # the exact violation this run made
+    assert "session-unique filename" in block
+    assert "never a date-only `evidence_ledger_YYYYMMDD.md`" in block
+
+
+def test_function_span_index_includes_qualified_methods(tree):
+    (tree / "core" / "agent.py").write_text(
+        "class Agent:\n"
+        "    def __init__(self):\n"
+        "        self.x = 1\n"
+        "        self.y = 2\n",
+        encoding="utf-8",
+    )
+    (tree / "tests" / "test_agent.py").write_text(
+        "class Agent:\n"
+        "    def __init__(self):\n"
+        "        pass\n"
+        "\ndef run_turn():\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+    spans = iam05_function_span_index(cwd=str(tree))
+    assert spans["Agent.__init__"] == {3}
+    assert spans["__init__"] == {3}
+    assert spans["run_turn"] == set()  # ambiguous bare name: core/thing.py + core/other.py

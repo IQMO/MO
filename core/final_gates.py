@@ -11,6 +11,7 @@ before ``session.add_assistant(final_text)`` now routes through this module:
 - self-protocol completion-truth gate;
 - done-claim task-truth gate;
 - verify-edits affected-test gate;
+- IAM05 report truth gate;
 - completion/cleanliness, current-state/version, and unsourced-external claim gates.
 
 Some gates are once-per-turn via the caller's shared ``fired`` set; counter-bearing gates
@@ -19,6 +20,7 @@ gates that run earlier on raw ``content`` remain a separate mechanism in ``run_t
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -27,8 +29,27 @@ from .claim_verification import (
     unverified_claim_signal,
     unverified_completion_claim_signal,
 )
-from .owner_protocols import is_devmode05_activation, is_ifdev05_activation
+from .owner_protocols import is_devmode05_activation, is_iam05_activation, is_ifdev05_activation
+from .path_defaults import repo_root
+from .self_maintenance.iam05_ground_truth import iam05_function_span_index, iam05_source_corpus_count
 from .tasking.contract import enforce_contract_gate, load_persisted_tasks_for_contract
+
+
+_TOOL_CALL_CLAIM_RE = re.compile(
+    r"\b(?:tool[- ]?calls?(?:\s+count)?\s*[:=]\s*(\d+)|(\d+)\s+tool calls?)\b",
+    re.IGNORECASE,
+)
+_TOOL_ERROR_CLAIM_RE = re.compile(
+    r"\b(?:tool[- ]?errors?(?:\s+count)?\s*[:=]\s*(\d+)|(\d+)\s+tool errors?|(\d+)\s+errors?)\b",
+    re.IGNORECASE,
+)
+_SAMPLED_DENOMINATOR_RE = re.compile(r"\bsampled\s+\d+\s+of\s+(\d+)\b", re.IGNORECASE)
+_DATE_ONLY_LEDGER_RE = re.compile(r"\bevidence[_-]ledger[_-]\d{8}\.md\b", re.IGNORECASE)
+_LINE_SPAN_CLAIM_RE = re.compile(
+    r"`?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`?"
+    r"(?:\s*\([^)]*\))?\s*(?:is|spans|at|=|:)?\s*~?(\d{2,5})\s*(?:L|lines?)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -162,6 +183,129 @@ def run_verify_edits_gate(
     if on_activity:
         on_activity("changed-file tests failing - fixing before finishing...")
     return instruction
+
+
+def run_iam05_reporting_gate(
+    user_input: str,
+    final_text: str,
+    tool_call_counts: "dict | None",
+    tool_error_counts: "dict | None",
+    *,
+    fired: set,
+    monitor: Any = None,
+    on_activity: Callable[[str], None] | None = None,
+) -> str | None:
+    """Force IAM05 reports to reconcile with runtime/code truth before finishing.
+
+    The IAM05 preflight gives the model the contract at turn start. This answer-time gate
+    closes the hole observed live: the model can still *say* "18 tool calls" after running
+    54 tools unless the runtime checks the final answer before accepting it.
+    """
+    if "iam05_reporting_truth" in fired or not is_iam05_activation(user_input):
+        return None
+    root = repo_root()
+    actual_tool_calls = sum((tool_call_counts or {}).values())
+    actual_tool_errors = sum((tool_error_counts or {}).values())
+    corpus = iam05_source_corpus_count(cwd=root)
+    violation = _iam05_reporting_violation(
+        final_text,
+        actual_tool_calls=actual_tool_calls,
+        actual_tool_errors=actual_tool_errors,
+        corpus=corpus,
+        root=root,
+    )
+    if not violation:
+        return None
+    fired.add("iam05_reporting_truth")
+    if monitor:
+        monitor.emit(
+            "iam05_reporting_truth",
+            {
+                "violation": violation,
+                "tool_calls": actual_tool_calls,
+                "tool_errors": actual_tool_errors,
+                "corpus": corpus,
+            },
+        )
+    if on_activity:
+        on_activity("IAM05 report conflicts with runtime truth - reconciling before finishing...")
+    return (
+        "[IAM05 REPORTING TRUTH] Your final IAM05 report conflicts with runtime/code truth: "
+        f"{violation}. Continue now and correct the report before finishing. Required facts: "
+        f"exact tool calls = {actual_tool_calls}; exact tool errors = {actual_tool_errors}; "
+        f"coverage must use 'sampled N of {corpus}'; the evidence ledger must be under "
+        "~/.mo/memory/iam05/ with a session-unique filename, not repo-local memory/ and not "
+        "date-only; any function/file line-count claim must be re-measured from the current "
+        "tree or removed."
+    )
+
+
+def _iam05_reporting_violation(
+    text: str,
+    *,
+    actual_tool_calls: int,
+    actual_tool_errors: int,
+    corpus: int,
+    root: str,
+) -> str | None:
+    tool_claims = _claimed_ints(_TOOL_CALL_CLAIM_RE, text)
+    if not tool_claims:
+        return f"missing exact tool-call count (actual {actual_tool_calls})"
+    if any(value != actual_tool_calls for value in tool_claims):
+        return f"tool-call count mismatch (claimed {tool_claims}, actual {actual_tool_calls})"
+
+    error_claims = _claimed_ints(_TOOL_ERROR_CLAIM_RE, text)
+    if not error_claims:
+        return f"missing exact tool-error count (actual {actual_tool_errors})"
+    if any(value != actual_tool_errors for value in error_claims):
+        return f"tool-error count mismatch (claimed {error_claims}, actual {actual_tool_errors})"
+
+    denominators = {int(match.group(1)) for match in _SAMPLED_DENOMINATOR_RE.finditer(text or "")}
+    if corpus not in denominators:
+        return f"coverage denominator missing or wrong (must say sampled N of {corpus})"
+
+    lowered = (text or "").replace("\\", "/").lower()
+    if ".mo/memory/iam05" not in lowered and "~/.mo/memory/iam05" not in lowered:
+        return "missing canonical ~/.mo/memory/iam05 evidence ledger path"
+    if _DATE_ONLY_LEDGER_RE.search(text or ""):
+        return "evidence ledger path is date-only; use a session-unique filename"
+
+    span_violation = _line_span_claim_violation(text, root=root)
+    if span_violation:
+        return span_violation
+    return None
+
+
+def _claimed_ints(pattern: re.Pattern[str], text: str) -> list[int]:
+    values: list[int] = []
+    for match in pattern.finditer(text or ""):
+        raw = next((group for group in match.groups() if group), None)
+        if raw is None:
+            continue
+        try:
+            values.append(int(raw))
+        except ValueError:
+            continue
+    return values
+
+
+def _line_span_claim_violation(text: str, *, root: str) -> str | None:
+    matches = list(_LINE_SPAN_CLAIM_RE.finditer(text or ""))
+    if not matches:
+        return None
+    spans = iam05_function_span_index(cwd=root)
+    for match in matches:
+        name, raw_count = match.groups()
+        known = spans.get(name)
+        if known is None:
+            continue
+        if not known:
+            return f"ambiguous line-count claim for {name}; use a qualified function name"
+        claimed = int(raw_count)
+        if claimed not in known:
+            choices = ", ".join(str(v) for v in sorted(known)[:5])
+            return f"line-count mismatch for {name} (claimed {claimed}, current span {choices})"
+    return None
 
 
 def run_contract_gate(

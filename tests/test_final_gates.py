@@ -7,6 +7,7 @@ from core.final_gates import (
     run_claim_gates,
     run_contract_gate,
     run_done_claim_gate,
+    run_iam05_reporting_gate,
     run_self_protocol_truth_gate,
     run_verify_edits_gate,
 )
@@ -160,6 +161,113 @@ def test_verify_edits_runner_invoked_when_not_yet_fired():
     calls = []
     run_verify_edits_gate(_verify_agent("", calls=calls), ["a.py"], fired=set())
     assert calls == [["a.py"]]
+
+
+# ── IAM05 reporting truth gate (answer-time reconciliation) ──
+def _iam05_text(*, calls=4, errors=0, corpus=10, ledger="~/.mo/memory/iam05/evidence_ledger_T123456.md"):
+    return (
+        f"IAM05 report. {calls} tool calls, {errors} tool errors. "
+        f"Coverage: sampled 3 of {corpus}. Evidence ledger: {ledger}."
+    )
+
+
+def test_iam05_reporting_gate_silent_for_non_iam05(monkeypatch):
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
+    out = run_iam05_reporting_gate(
+        "fix parser",
+        _iam05_text(corpus=10),
+        {"read_file": 4},
+        {},
+        fired=set(),
+    )
+    assert out is None
+
+
+def test_iam05_reporting_gate_blocks_tool_count_mismatch(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 369)
+    out = run_iam05_reporting_gate(
+        "start IAM05",
+        _iam05_text(calls=18, errors=0, corpus=369),
+        {"read_file": 33, "shell": 9, "grep": 6, "write_file": 1, "edit_file": 1, "test_runner": 4},
+        {},
+        fired=set(),
+    )
+    assert out is not None
+    assert "exact tool calls = 54" in out
+
+
+def test_iam05_reporting_gate_blocks_error_count_mismatch(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
+    out = run_iam05_reporting_gate(
+        "start IAM05",
+        _iam05_text(calls=4, errors=0, corpus=10),
+        {"read_file": 4},
+        {"shell": 2},
+        fired=set(),
+    )
+    assert out is not None
+    assert "exact tool errors = 2" in out
+
+
+def test_iam05_reporting_gate_blocks_wrong_scope_denominator(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 369)
+    out = run_iam05_reporting_gate(
+        "start IAM05",
+        _iam05_text(calls=4, errors=0, corpus=30),
+        {"read_file": 4},
+        {},
+        fired=set(),
+    )
+    assert out is not None
+    assert "sampled N of 369" in out
+
+
+def test_iam05_reporting_gate_blocks_date_only_ledger(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
+    out = run_iam05_reporting_gate(
+        "start IAM05",
+        _iam05_text(calls=4, errors=0, corpus=10, ledger="~/.mo/memory/iam05/evidence_ledger_20260624.md"),
+        {"read_file": 4},
+        {},
+        fired=set(),
+    )
+    assert out is not None
+    assert "session-unique" in out
+
+
+def test_iam05_reporting_gate_blocks_stale_function_span(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
+    monkeypatch.setattr(fg, "iam05_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
+    text = _iam05_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 812 lines."
+    out = run_iam05_reporting_gate("start IAM05", text, {"read_file": 4}, {}, fired=set())
+    assert out is not None
+    assert "line-count mismatch" in out
+
+
+def test_iam05_reporting_gate_blocks_ambiguous_bare_span(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
+    monkeypatch.setattr(fg, "iam05_function_span_index", lambda cwd=None: {"run_turn": set()})
+    text = _iam05_text(calls=4, errors=0, corpus=10) + " run_turn is 746 lines."
+    out = run_iam05_reporting_gate("start IAM05", text, {"read_file": 4}, {}, fired=set())
+    assert out is not None
+    assert "ambiguous line-count claim" in out
+
+
+def test_iam05_reporting_gate_accepts_exact_report(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
+    monkeypatch.setattr(fg, "iam05_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
+    text = _iam05_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 239 lines."
+    fired = set()
+    out = run_iam05_reporting_gate("start IAM05", text, {"read_file": 4}, {}, fired=fired)
+    assert out is None
+    assert fired == set()
 
 
 # ── contract gate (Move 3 increment 4: closing-board, counter, devmode branch) ──
