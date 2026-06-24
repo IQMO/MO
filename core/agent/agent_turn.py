@@ -28,7 +28,7 @@ from ..backend_monitor import (
 )
 from ..session.handoff import context_pressure
 from ..tool_compress import compress as tool_compress
-from ..final_gates import run_claim_gates, run_done_claim_gate
+from ..final_gates import run_claim_gates, run_done_claim_gate, run_verify_edits_gate
 from ..learning.proactive_learning import build_learning_context
 from ..learning.workflow_learning import build_workflow_learning_context
 from ..learning.feedback_learning import record_feedback_learning
@@ -135,8 +135,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         raw_tool_payload_fallback_attempted = False
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
-        final_gates_fired: set = set()  # once-per-turn guards for the final-phase gate registry (done-claim / completion / current-state / unsourced)
-        verify_edits_continued = False  # A2: once-per-turn guard for the changed-file verify-and-self-heal gate
+        final_gates_fired: set = set()  # once-per-turn guards for the final-phase gate registry (done-claim / verify-edits / completion / current-state / unsourced)
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
         # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
@@ -809,20 +808,19 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             if _done_claim_instruction:
                 self.session.add_assistant(_done_claim_instruction)
                 continue
-            # Before finishing a code-editing turn, run the changed files'
-            # affected tests; if they fail, self-heal — force one bounded
-            # continuation with the failure so the model fixes it before claiming
-            # done. Fail-open and gated (prt.run_affected_tests); reuses PRT's
-            # bounded/recursion-guarded affected-test runner. No-op for doc-only
-            # turns or when no affected tests exist.
-            if not verify_edits_continued:
-                _verify_instr = self._affected_test_failure_instruction(turn_modified_files)
-                if _verify_instr:
-                    verify_edits_continued = True
-                    if on_activity:
-                        on_activity("changed-file tests failing - fixing before finishing...")
-                    self.session.add_assistant(_verify_instr)
-                    continue
+            # Before finishing a code-editing turn, the registry runs the changed
+            # files' affected tests; if they fail, force one bounded continuation so
+            # the model fixes them before claiming done. The affected-test side effect
+            # and its fail-open/bounded behavior live in
+            # _affected_test_failure_instruction. Same position (after done-claim,
+            # before the claim gates); the guard is set only after a failure fires, so
+            # a passing check can re-run later this turn (semantics unchanged).
+            _verify_instr = run_verify_edits_gate(
+                self, turn_modified_files, fired=final_gates_fired, on_activity=on_activity,
+            )
+            if _verify_instr:
+                self.session.add_assistant(_verify_instr)
+                continue
             # Verify-before-claiming (driven, not prompt-hoped): the declarative
             # claim-gate registry forces ONE bounded continuation when the answer
             # makes an unverified completion/cleanliness claim, an unverified

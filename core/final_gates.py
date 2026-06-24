@@ -129,3 +129,32 @@ def run_done_claim_gate(
     if on_activity:
         on_activity("done-claim conflicts with open tasks - continuing to resolve...")
     return agent._done_claim_task_truth_instruction()
+
+
+def run_verify_edits_gate(
+    agent: Any,
+    turn_modified_files: Any,
+    *,
+    fired: set,
+    on_activity: Callable[[str], None] | None = None,
+) -> str | None:
+    """Return a corrective re-prompt when a code-editing turn's affected tests fail,
+    so the model fixes them before claiming done, else None.
+
+    Move 3 increment 3: migrated from ``run_turn``'s inline block, same position (after
+    done-claim, before the claim gates). The instruction is produced by
+    ``agent._affected_test_failure_instruction``, which RUNS the affected tests — that
+    side effect and its fail-open/bounded behavior are preserved exactly. Once-per-turn
+    semantics match the original precisely: the ``"verify_edits"`` guard is set ONLY
+    after a failure fires, so a passing check does NOT mark the gate and can re-run later
+    this turn (e.g. after a claim-gate continuation).
+    """
+    if "verify_edits" in fired:
+        return None
+    instruction = agent._affected_test_failure_instruction(turn_modified_files)
+    if not instruction:
+        return None
+    fired.add("verify_edits")
+    if on_activity:
+        on_activity("changed-file tests failing - fixing before finishing...")
+    return instruction

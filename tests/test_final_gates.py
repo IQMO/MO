@@ -1,7 +1,12 @@
 """Final-phase claim-gate registry: dispatch order, once-per-turn, payloads."""
 from types import SimpleNamespace
 
-from core.final_gates import CLAIM_GATES, run_claim_gates, run_done_claim_gate
+from core.final_gates import (
+    CLAIM_GATES,
+    run_claim_gates,
+    run_done_claim_gate,
+    run_verify_edits_gate,
+)
 
 
 class _Monitor:
@@ -110,3 +115,45 @@ def test_done_claim_shares_fired_set_with_claim_gates_without_collision():
     out = run_claim_gates(_agent(), "All tests pass.", {}, fired=fired)
     assert out == "completion:tests-pass claim"
     assert fired == {"done_claim", "completion_claim"}
+
+
+# ── verify-edits gate (Move 3 increment 3: side-effecting affected-test runner) ──
+def _verify_agent(instruction, *, calls=None):
+    """Agent whose affected-test runner returns `instruction` and records its calls."""
+    def _run(modified):
+        if calls is not None:
+            calls.append(modified)
+        return instruction
+    return SimpleNamespace(_affected_test_failure_instruction=_run)
+
+
+def test_verify_edits_gate_fires_when_tests_fail():
+    fired = set()
+    out = run_verify_edits_gate(_verify_agent("FIX-THE-TESTS"), ["a.py"], fired=fired)
+    assert out == "FIX-THE-TESTS"
+    assert "verify_edits" in fired
+
+
+def test_verify_edits_passing_check_does_not_mark_fired():
+    # Behavior-preserving subtlety: a passing check (falsy instruction) must NOT set the
+    # guard, so the affected-test runner can run again later this turn.
+    fired = set()
+    out = run_verify_edits_gate(_verify_agent(""), ["a.py"], fired=fired)
+    assert out is None
+    assert "verify_edits" not in fired
+
+
+def test_verify_edits_skips_and_does_not_rerun_after_a_failure_fired():
+    # Once a failure fired this turn, the gate is skipped — the side-effecting runner is
+    # NOT invoked again (matches the old `if not verify_edits_continued` guard).
+    calls = []
+    out = run_verify_edits_gate(_verify_agent("FIX", calls=calls), ["a.py"], fired={"verify_edits"})
+    assert out is None
+    assert calls == []
+
+
+def test_verify_edits_runner_invoked_when_not_yet_fired():
+    # A prior passing check left the guard unset; a later call re-runs the affected tests.
+    calls = []
+    run_verify_edits_gate(_verify_agent("", calls=calls), ["a.py"], fired=set())
+    assert calls == [["a.py"]]
