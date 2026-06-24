@@ -33,6 +33,7 @@ from .runtime_work_signals import (
 from .tasking.task_board import (
     TaskBoard,
     board_update_event,
+    clear_current_board_if_empty,
     clear_current_board_if_foreign_session,
     record_snapshot,
     resume_last_board,
@@ -42,6 +43,7 @@ from .owner_protocols import (
     is_owner_maintenance_activation,
     is_owner_protocol_activation,
     is_owner_comparison_activation,
+    is_owner_integrity_audit_activation,
     owner_protocol_name,
 )
 from .work_patterns import is_research_method_question
@@ -194,6 +196,8 @@ class Gateway:
                 self.previous_task_board = None
             try:
                 clear_current_board_if_foreign_session(session_id)
+                if is_owner_integrity_audit_activation(user_input):
+                    clear_current_board_if_empty()
             except Exception:
                 traceback.print_exc()
         resume_intent = _has_pending_resume_intent(self.agent, user_input)
@@ -268,6 +272,8 @@ class Gateway:
                 def _lazy_create_board(tool_name: str = "", arguments: dict | None = None):
                     if board_holder[0]:
                         return board_holder[0]
+                    if is_owner_integrity_audit_activation(user_input):
+                        return None
                     if not _runtime_should_create_board(self.agent, user_input, route_source, tool_name, arguments, resume_intent=resume_intent):
                         return None
                     
@@ -626,6 +632,8 @@ def _runtime_should_create_board(
     _ = agent, route_source
     text = str(user_input or "")
     if is_research_method_question(text):
+        return False
+    if is_owner_integrity_audit_activation(text):
         return False
     if is_owner_maintenance_activation(text):
         return True

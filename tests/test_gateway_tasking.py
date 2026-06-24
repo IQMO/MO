@@ -245,6 +245,18 @@ def test_gateway_does_not_create_board_for_simple_tool_backed_chat(tmp_path):
     assert updates == []
 
 
+def test_gateway_owner_integrity_audit_stays_boardless_on_tool_use(tmp_path, monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    agent = _RuntimeSignalAgent("read_file", {"path": "README.md"})
+    gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
+
+    result = gateway.run_turn("start owner integrity audit")
+
+    assert result == "used runtime signal"
+    assert agent.first_board is None
+    assert gateway.last_task_board is None
+
+
 def test_gateway_runtime_mutating_signal_can_create_board_for_ambiguous_work(tmp_path):
     """Board is created for runtime work signals; rows come from fallback."""
     agent = _RuntimeSignalAgent("edit_file", {"path": "app.py"})

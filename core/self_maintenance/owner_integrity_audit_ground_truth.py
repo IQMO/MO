@@ -21,20 +21,40 @@ measured against the current working tree, so it can never be stale or hand-fake
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 from collections import defaultdict
 from pathlib import Path
 
 from ..owner_protocols import is_owner_integrity_audit_activation
-from ..path_defaults import mo_home
+from ..path_defaults import mo_home, resolve_state_path
 
 # Source roots an audit cares about. Anything outside these is noise for ground truth.
 _SOURCE_DIRS = ("core", "interface", "tools", "tests")
-_PATH_RE = __import__("re").compile(r"(?:core|interface|tools|tests)/[\w./-]+\.py")
+_PATH_RE = re.compile(r"(?:core|interface|tools|tests)/[\w./-]+\.py")
 # snake_case / CamelCase identifiers a request might name as audit symbols. Length >=4 and
 # either an underscore (snake_case fn) or an interior capital (CamelCase) keeps out ordinary
 # English words ("audit", "cluster") while catching real symbols ("run_turn", "TaskBoard").
-_SYMBOL_RE = __import__("re").compile(r"\b(?=\w*[_A-Z])[A-Za-z_][A-Za-z0-9_]{3,}\b")
+_SYMBOL_RE = re.compile(r"\b(?=\w*[_A-Z])[A-Za-z_][A-Za-z0-9_]{3,}\b")
+_RUNTIME_TRUTH_HEADING = "### Runtime Truth (authoritative)"
+_RUNTIME_TRUTH_RE = re.compile(
+    r"\n?### Runtime Truth \(authoritative\)\n.*?(?=\n### |\Z)",
+    re.DOTALL,
+)
+_TOOL_CALL_LINE_RE = re.compile(
+    r"(?im)^([ \t>*_-]*(?:\*\*)?Tool calls[ \t]*[:=](?:\*\*)?[ \t]*)\d+"
+)
+_TOOL_ERROR_LINE_RE = re.compile(
+    r"(?im)^([ \t>*_-]*(?:\*\*)?(?:Tool errors|Errors)[ \t]*[:=](?:\*\*)?[ \t]*)\d+"
+)
+_INLINE_TOOL_ERROR_RE = re.compile(r"(?i)(\b(?:Tool errors|Errors)[ \t]*[:=][ \t]*)\d+")
+_TOOL_CALL_PAREN_ERROR_RE = re.compile(
+    r"(?im)^([^\n]*\bTool calls\b[^\n]*\()\d+\s+errors?\)"
+)
+_REPORT_ARTIFACT_PATH_RE = re.compile(
+    r"owner_integrity_audit[/\\]([A-Za-z0-9_.-]+\.md)\b",
+    re.IGNORECASE,
+)
 _STOPWORDS = frozenset({
     "OWNER_INTEGRITY_AUDIT", "OWNER_MAINTENANCE", "OWNER_COMPARISON", "OWNER_INTERFACE_AUDIT", "audit", "cluster", "module", "inline",
     "should", "stay", "move", "alongside", "context", "evidence", "justify",
@@ -103,6 +123,10 @@ def _reporting_contract(root: Path) -> list[str]:
         "- Self-report truth: report your EXACT tool-call count and tool-error count from your real "
         "tool history this run — never estimate (\"~N\") and never omit a recovered/retried error "
         "(it still counts and must be named). \"No tool errors\" is allowed only if there were none.",
+        "- Evidence wording: distinguish files you fully read from files you searched or measured. "
+        "Do not say \"every file read\" or \"all selected files read\" unless the report lists the "
+        "read-file evidence. A TODO/FIXME marker scan only supports \"no stale marker comments\", "
+        "not \"zero dead code\"; reserve \"zero dead code\" for a real dead-code analyzer result.",
         f"- Ledger location: write the evidence ledger under `{ledger_dir}/` (private runtime home) "
         "with a session-unique filename (include the session id or HHMMSS timestamp), NEVER repo-local "
         "`memory/` and never a date-only `evidence_ledger_YYYYMMDD.md` path.",
@@ -396,3 +420,96 @@ def _duplication_candidates(root: Path) -> list[str]:
     for name, files in multi[:_TOP_DUP]:
         out.append(f"    - {name}: {len(files)} files ({', '.join(sorted(files)[:4])}{'…' if len(files) > 4 else ''})")
     return out
+
+
+def owner_integrity_audit_runtime_truth_block(*, tool_calls: int, tool_errors: int, corpus: int) -> str:
+    """Return the runtime-owned truth footer for an integrity-audit report."""
+    return "\n".join(
+        [
+            _RUNTIME_TRUTH_HEADING,
+            f"- Tool calls: {max(0, int(tool_calls or 0))}",
+            f"- Tool errors: {max(0, int(tool_errors or 0))}",
+            f"- Source corpus: {max(0, int(corpus or 0))}",
+            "- Source: runtime after final model tool use; this supersedes model-authored counts above.",
+        ]
+    )
+
+
+def normalize_owner_integrity_audit_report_text(
+    text: str,
+    *,
+    tool_calls: int,
+    tool_errors: int,
+    corpus: int,
+) -> str:
+    """Normalize model-authored IAM report text with runtime-owned terminal counts."""
+    body = str(text or "").strip()
+    body = _RUNTIME_TRUTH_RE.sub("", body).strip()
+    body = _TOOL_CALL_LINE_RE.sub(lambda m: f"{m.group(1)}{max(0, int(tool_calls or 0))}", body)
+    body = _TOOL_ERROR_LINE_RE.sub(lambda m: f"{m.group(1)}{max(0, int(tool_errors or 0))}", body)
+    body = _INLINE_TOOL_ERROR_RE.sub(lambda m: f"{m.group(1)}{max(0, int(tool_errors or 0))}", body)
+    error_word = "error" if max(0, int(tool_errors or 0)) == 1 else "errors"
+    body = _TOOL_CALL_PAREN_ERROR_RE.sub(
+        lambda m: f"{m.group(1)}{max(0, int(tool_errors or 0))} {error_word})",
+        body,
+    )
+    footer = owner_integrity_audit_runtime_truth_block(
+        tool_calls=tool_calls,
+        tool_errors=tool_errors,
+        corpus=corpus,
+    )
+    return f"{body}\n\n{footer}".strip()
+
+
+def reconcile_latest_owner_integrity_audit_report(
+    *,
+    tool_calls: int,
+    tool_errors: int,
+    corpus: int,
+    report_text: str | None = None,
+) -> Path | None:
+    """Normalize the newest owner-integrity report artifact, if one was written.
+
+    Corrective report-edit tools change the final tool count after the artifact
+    was edited. This runtime pass runs after model tool use has settled, so the
+    persisted report cannot trail the accepted answer by one or two correction tools.
+    """
+    report_dir = Path(resolve_state_path("memory/owner_integrity_audit"))
+    candidates: list[Path]
+    cited = _cited_owner_integrity_report_path(report_text, report_dir)
+    if cited is not None:
+        candidates = [cited] if cited.is_file() else []
+    else:
+        try:
+            candidates = [p for p in report_dir.glob("*.md") if p.is_file()]
+        except OSError:
+            return None
+    if not candidates:
+        return None
+    try:
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return None
+    try:
+        raw = latest.read_text(encoding="utf-8")
+        normalized = normalize_owner_integrity_audit_report_text(
+            raw,
+            tool_calls=tool_calls,
+            tool_errors=tool_errors,
+            corpus=corpus,
+        )
+        if normalized != raw:
+            latest.write_text(normalized + "\n", encoding="utf-8")
+        return latest
+    except OSError:
+        return None
+
+
+def _cited_owner_integrity_report_path(text: str | None, report_dir: Path) -> Path | None:
+    match = _REPORT_ARTIFACT_PATH_RE.search(str(text or "").replace("\\", "/"))
+    if not match:
+        return None
+    filename = Path(match.group(1)).name
+    if not filename.endswith(".md"):
+        return None
+    return report_dir / filename

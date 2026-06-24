@@ -616,6 +616,7 @@ def execute_shell(arguments: dict[str, Any]) -> str:
     try:
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
         env = safe_env() if bool(arguments.get("_clean_env", True)) else os.environ.copy()
+        env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
         popen_kwargs: dict[str, Any] = {
             "shell": use_shell,
             "cwd": cwd,

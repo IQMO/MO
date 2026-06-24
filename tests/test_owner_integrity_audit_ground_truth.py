@@ -10,7 +10,9 @@ import pytest
 
 from core.self_maintenance.owner_integrity_audit_ground_truth import (
     build_owner_integrity_audit_ground_truth,
+    normalize_owner_integrity_audit_report_text,
     owner_integrity_audit_function_span_index,
+    reconcile_latest_owner_integrity_audit_report,
     owner_integrity_audit_source_corpus_count,
     _named_paths,
     _named_symbols,
@@ -132,6 +134,65 @@ def test_contract_ledger_path_is_private_home_not_repo(tree):
     assert "NEVER repo-local `memory/`" in block  # the exact violation this run made
     assert "session-unique filename" in block
     assert "never a date-only `evidence_ledger_YYYYMMDD.md`" in block
+
+
+def test_runtime_truth_normalizes_model_authored_counts():
+    text = (
+        "# Report\n"
+        "- **Tool calls:** 77 (0 errors)\n"
+        "_Tool calls: 77. Tool errors: 0. Sampled 38 of 370._\n"
+    )
+
+    out = normalize_owner_integrity_audit_report_text(text, tool_calls=79, tool_errors=1, corpus=370)
+
+    assert "**Tool calls:** 79" in out
+    assert "(1 error)" in out
+    assert "_Tool calls: 79. Tool errors: 1." in out
+    assert "### Runtime Truth (authoritative)" in out
+    assert "- Tool calls: 79" in out
+    assert "- Tool errors: 1" in out
+
+
+def test_runtime_truth_reconciles_latest_owner_integrity_artifact(tmp_path, monkeypatch):
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    report_dir = tmp_path / "memory" / "owner_integrity_audit"
+    report_dir.mkdir(parents=True)
+    old = report_dir / "old.md"
+    latest = report_dir / "latest.md"
+    old.write_text("Tool calls: 1\n", encoding="utf-8")
+    latest.write_text("Tool calls: 77\nTool errors: 0\n", encoding="utf-8")
+
+    reconciled = reconcile_latest_owner_integrity_audit_report(tool_calls=79, tool_errors=0, corpus=370)
+
+    assert reconciled == latest
+    assert "Tool calls: 79" in latest.read_text(encoding="utf-8")
+    assert "Source corpus: 370" in latest.read_text(encoding="utf-8")
+
+
+def test_runtime_truth_reconciles_cited_artifact_not_newest(tmp_path, monkeypatch):
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    report_dir = tmp_path / "memory" / "owner_integrity_audit"
+    report_dir.mkdir(parents=True)
+    cited = report_dir / "evidence_ledger_20260624T213000.md"
+    newest = report_dir / "newer.md"
+    cited.write_text("Tool calls: 77\nTool errors: 0\n", encoding="utf-8")
+    newest.write_text("Tool calls: 1\n", encoding="utf-8")
+    cited_time = 100
+    newest_time = 200
+    import os
+    os.utime(cited, (cited_time, cited_time))
+    os.utime(newest, (newest_time, newest_time))
+
+    reconciled = reconcile_latest_owner_integrity_audit_report(
+        tool_calls=79,
+        tool_errors=0,
+        corpus=370,
+        report_text="Ledger: ~/.mo/memory/owner_integrity_audit/evidence_ledger_20260624T213000.md",
+    )
+
+    assert reconciled == cited
+    assert "Tool calls: 79" in cited.read_text(encoding="utf-8")
+    assert newest.read_text(encoding="utf-8") == "Tool calls: 1\n"
 
 
 def test_function_span_index_includes_qualified_methods(tree):

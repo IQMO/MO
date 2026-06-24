@@ -10,6 +10,12 @@ def test_execute_shell_clean_env_drops_secret_env(monkeypatch):
     assert "missing" in output
 
 
+def test_execute_shell_sets_python_no_bytecode_env():
+    output = execute_shell({"command": "python -c \"import os; print(os.getenv('PYTHONDONTWRITEBYTECODE', 'missing'))\"", "timeout": 20})
+
+    assert "1" in output
+
+
 def test_execute_shell_unclean_env_keeps_env_when_explicit(monkeypatch):
     monkeypatch.setenv("MO_TEST_SECRET_TOKEN", "visible-secret")
 

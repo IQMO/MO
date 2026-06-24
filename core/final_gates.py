@@ -46,6 +46,18 @@ _TOOL_ERROR_CLAIM_RE = re.compile(
 )
 _SAMPLED_DENOMINATOR_RE = re.compile(r"\bsampled\s+\d+\s+of\s+(\d+)\b", re.IGNORECASE)
 _DATE_ONLY_LEDGER_RE = re.compile(r"\bevidence[_-]ledger[_-]\d{8}\.md\b", re.IGNORECASE)
+_ZERO_DEAD_CODE_CLAIM_RE = re.compile(r"\b(?:zero|0|no)\s+dead\s+code\b", re.IGNORECASE)
+_DEAD_CODE_ANALYZER_EVIDENCE_RE = re.compile(
+    r"\b(?:vulture|dead[- ]code analyzer|unused[- ]symbol analyzer|unused code analyzer|pyflakes|"
+    r"ruff[^\n]{0,80}(?:unused|F401|F841))\b",
+    re.IGNORECASE,
+)
+_BROAD_READ_COVERAGE_RE = re.compile(
+    r"\b(?:every|all)\s+(?:selected\s+|sampled\s+|large\s+|largest\s+|top\s+\d+\s+)?"
+    r"(?:source\s+)?files?\s+(?:was\s+|were\s+)?(?:read|fully read)\b"
+    r"|\ball\s+\d+\s+largest\s+(?:core|interface|source)\s+files\b",
+    re.IGNORECASE,
+)
 _LINE_SPAN_CLAIM_RE = re.compile(
     r"`?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)`?"
     r"(?:\s*\([^)]*\))?\s*(?:is|spans|at|=|:)?\s*~?(\d{2,5})\s*(?:L|lines?)\b",
@@ -256,32 +268,39 @@ def _owner_integrity_audit_reporting_violation(
     corpus: int,
     root: str,
 ) -> str | None:
+    violations: list[str] = []
     tool_claims = _claimed_ints(_TOOL_CALL_CLAIM_RE, text)
     if not tool_claims:
-        return f"missing exact tool-call count (actual {actual_tool_calls})"
-    if any(value != actual_tool_calls for value in tool_claims):
-        return f"tool-call count mismatch (claimed {tool_claims}, actual {actual_tool_calls})"
+        violations.append(f"missing exact tool-call count (actual {actual_tool_calls})")
+    elif any(value != actual_tool_calls for value in tool_claims):
+        violations.append(f"tool-call count mismatch (claimed {tool_claims}, actual {actual_tool_calls})")
 
     error_claims = _claimed_ints(_TOOL_ERROR_CLAIM_RE, text)
     if not error_claims:
-        return f"missing exact tool-error count (actual {actual_tool_errors})"
-    if any(value != actual_tool_errors for value in error_claims):
-        return f"tool-error count mismatch (claimed {error_claims}, actual {actual_tool_errors})"
+        violations.append(f"missing exact tool-error count (actual {actual_tool_errors})")
+    elif any(value != actual_tool_errors for value in error_claims):
+        violations.append(f"tool-error count mismatch (claimed {error_claims}, actual {actual_tool_errors})")
 
     denominators = {int(match.group(1)) for match in _SAMPLED_DENOMINATOR_RE.finditer(text or "")}
     if corpus not in denominators:
-        return f"coverage denominator missing or wrong (must say sampled N of {corpus})"
+        violations.append(f"coverage denominator missing or wrong (must say sampled N of {corpus})")
 
     lowered = (text or "").replace("\\", "/").lower()
     if ".mo/memory/owner_integrity_audit" not in lowered and "~/.mo/memory/owner_integrity_audit" not in lowered:
-        return "missing canonical ~/.mo/memory/owner_integrity_audit evidence ledger path"
+        violations.append("missing canonical ~/.mo/memory/owner_integrity_audit evidence ledger path")
     if _DATE_ONLY_LEDGER_RE.search(text or ""):
-        return "evidence ledger path is date-only; use a session-unique filename"
+        violations.append("evidence ledger path is date-only; use a session-unique filename")
+
+    if _ZERO_DEAD_CODE_CLAIM_RE.search(text or "") and not _DEAD_CODE_ANALYZER_EVIDENCE_RE.search(text or ""):
+        violations.append('"zero dead code" claim lacks dead-code analyzer evidence; say "no marker comments found" or cite the analyzer')
+
+    if _BROAD_READ_COVERAGE_RE.search(text or ""):
+        violations.append("broad file-read coverage claim requires an explicit read-file evidence list; say searched/measured instead")
 
     span_violation = _line_span_claim_violation(text, root=root)
     if span_violation:
-        return span_violation
-    return None
+        violations.append(span_violation)
+    return "; ".join(violations) if violations else None
 
 
 def _claimed_ints(pattern: re.Pattern[str], text: str) -> list[int]:

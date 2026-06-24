@@ -214,6 +214,28 @@ def test_owner_integrity_audit_reporting_gate_rechecks_after_corrective_tool_cha
     assert "exact tool calls = 50" in out
 
 
+def test_owner_integrity_audit_reporting_gate_reports_all_violations_at_once(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
+    text = (
+        _owner_integrity_audit_text(calls=18, errors=0, corpus=30)
+        + " Every large file read. Zero dead code."
+    )
+    out = run_owner_integrity_audit_reporting_gate(
+        "start OWNER_INTEGRITY_AUDIT",
+        text,
+        {"read_file": 33, "shell": 9},
+        {"shell": 1},
+        fired=set(),
+    )
+    assert out is not None
+    assert "tool-call count mismatch" in out
+    assert "tool-error count mismatch" in out
+    assert "sampled N of 369" in out
+    assert '"zero dead code" claim lacks dead-code analyzer evidence' in out
+    assert "broad file-read coverage claim" in out
+
+
 def test_owner_integrity_audit_reporting_gate_blocks_error_count_mismatch(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
@@ -254,6 +276,32 @@ def test_owner_integrity_audit_reporting_gate_blocks_date_only_ledger(monkeypatc
     )
     assert out is not None
     assert "session-unique" in out
+
+
+def test_owner_integrity_audit_reporting_gate_blocks_unsupported_zero_dead_code(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " Zero dead code."
+    out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
+    assert out is not None
+    assert '"zero dead code" claim lacks dead-code analyzer evidence' in out
+
+
+def test_owner_integrity_audit_reporting_gate_allows_zero_dead_code_with_analyzer(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " Vulture reported zero dead code."
+    out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
+    assert out is None
+
+
+def test_owner_integrity_audit_reporting_gate_blocks_broad_read_coverage(monkeypatch):
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " Every selected file was read."
+    out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
+    assert out is not None
+    assert "broad file-read coverage claim" in out
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_stale_function_span(monkeypatch):

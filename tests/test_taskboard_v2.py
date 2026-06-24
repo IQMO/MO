@@ -2,7 +2,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from core.agent.agent import Agent
-from core.tasking.task_board import TaskBoard, TaskItem, read_recent_snapshots, record_snapshot
+from core.tasking.task_board import TaskBoard, TaskItem, clear_current_board_if_empty, read_recent_snapshots, record_snapshot
+from core.tasking.task_manager import TaskManager
 from core.session.session_closeout import _taskboard_state
 from core.session.handoff import _task_board_summary
 from core.ghost.ghost_context import _task_board_text
@@ -33,6 +34,16 @@ def test_taskboard_explicit_ledger_keeps_current_json_beside_ledger(tmp_path, mo
     assert record_snapshot(board, "updated", path=ledger) is not None
     assert (ledger.parent / "current.json").exists()
     assert not Path("memory/taskboards/current.json").exists()
+
+
+def test_clear_current_board_if_empty_removes_boardless_working_copy(tmp_path):
+    ledger = tmp_path / "isolated" / "taskboards.jsonl"
+    tm = TaskManager(tmp_path, tasks_dir=ledger.parent)
+    tm.save({"session_id": "s1", "state": "active", "tasks": []})
+
+    assert (ledger.parent / "current.json").exists()
+    assert clear_current_board_if_empty(path=ledger) is True
+    assert not (ledger.parent / "current.json").exists()
 
 
 def test_taskboard_snapshot_ledger_round_trip(tmp_path):

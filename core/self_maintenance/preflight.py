@@ -216,7 +216,6 @@ def build_self_capability_preflight_context(user_input: str, *, cwd: str | None 
 def _runtime_evidence_lines(root: Path) -> list[str]:
     """Return sandbox-friendly runtime evidence locations to inspect."""
     home = mo_home()
-    repo_memory = root / "memory"
     trace_dir = home / "memory" / "traces"
     trace_tool = "~/.mo/operator/mo_trace.py"
     lines = [
@@ -225,8 +224,7 @@ def _runtime_evidence_lines(root: Path) -> list[str]:
         f"- live trace: {trace_dir}/trace_* (directory-based from {trace_tool} serve or .trace files; replay with `python {trace_tool} replay <path>`; list with `python {trace_tool} list`)",
         f"- backend monitor fallback: {home}/logs/monitor/backend_monitor-*.jsonl (when running mo.py directly)",
         f"- mo_trace.py: `python {trace_tool} serve <args>` (launches mo.py wrapped with auto-tracing; traces saved to {trace_dir}/)",
-        f"- repo-local fallback: {repo_memory} (legacy/dev checkout memory when private home is unavailable)",
-        "- if private paths are sandbox-blocked, state that explicitly and inspect repo-local memory plus source hooks instead of claiming trace coverage.",
+        "- if private profile-state paths are sandbox-blocked, state that explicitly and inspect source hooks instead of claiming trace coverage.",
     ]
     return lines
 

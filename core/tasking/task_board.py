@@ -786,6 +786,28 @@ def clear_current_board_if_foreign_session(active_session_id: str, *, path: str 
     return False
 
 
+def clear_current_board_if_empty(*, path: str | Path | None = None) -> bool:
+    """Clear ``current.json`` when it only contains a boardless/empty working copy.
+
+    Boardless owner-protocol turns intentionally have no task rows. They should not
+    leave ``current.json`` looking like an active taskboard with zero rows, because
+    status/watchers interpret that as live work. The append-only ledger remains the
+    durable audit trail; this only removes the fast-access working copy.
+    """
+    try:
+        ledger_path = _resolve_ledger_path(path)
+        if ledger_path is None:
+            return False
+        from .task_manager import TaskManager
+        tm = TaskManager(Path.cwd(), tasks_dir=ledger_path.parent)
+        if not tm.load_tasks() and tm.current_file.exists():
+            tm.clear()
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def read_recent_snapshots(
     *,
     limit: int = 5,

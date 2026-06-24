@@ -58,6 +58,12 @@ from ..owner_protocols import (
     is_owner_maintenance_activation,
     is_owner_interface_audit_activation,
     is_owner_comparison_activation,
+    is_owner_integrity_audit_activation,
+)
+from ..self_maintenance.owner_integrity_audit_ground_truth import (
+    normalize_owner_integrity_audit_report_text,
+    owner_integrity_audit_source_corpus_count,
+    reconcile_latest_owner_integrity_audit_report,
 )
 from ..self_maintenance.devmode_closeout import (
     owner_maintenance_continuation_instruction,
@@ -881,6 +887,25 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             if _claim_instruction:
                 self.session.add_assistant(_claim_instruction)
                 continue
+            if is_owner_integrity_audit_activation(user_input):
+                _iam_tool_calls = sum((tool_call_counts or {}).values())
+                _iam_tool_errors = sum((tool_error_counts or {}).values())
+                _iam_corpus = owner_integrity_audit_source_corpus_count()
+                final_text = normalize_owner_integrity_audit_report_text(
+                    final_text,
+                    tool_calls=_iam_tool_calls,
+                    tool_errors=_iam_tool_errors,
+                    corpus=_iam_corpus,
+                )
+                try:
+                    reconcile_latest_owner_integrity_audit_report(
+                        tool_calls=_iam_tool_calls,
+                        tool_errors=_iam_tool_errors,
+                        corpus=_iam_corpus,
+                        report_text=final_text,
+                    )
+                except Exception:
+                    traceback.print_exc()
             self.session.add_assistant(final_text, reasoning_content=str(reasoning) if reasoning else None)
             # Turn-end security check on modified files and response text
             if turn_modified_files:

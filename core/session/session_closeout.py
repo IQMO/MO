@@ -82,7 +82,7 @@ def build_session_closeout(agent: Any, *, reason: str = "session boundary") -> S
     total_tokens = sum(_as_int(entry.get("total_tokens", 0)) for entry in token_log) or _as_int(getattr(session, "total_tokens", 0)) or input_tokens + output_tokens
 
     pressure = _pressure(agent)
-    task = _taskboard_state(agent)
+    task = _session_taskboard_state(agent)
     workers = _worker_state(agent)
     goal = _goal_state(agent)
     learning_delta = _learning_delta(agent)
@@ -496,7 +496,7 @@ def _learning_delta(agent: Any) -> list[str]:
     return rows
 
 
-def _taskboard_state(agent: Any) -> dict[str, Any]:
+def _session_taskboard_state(agent: Any) -> dict[str, Any]:
     gateway = getattr(agent, "gateway", None)
     board = getattr(gateway, "last_task_board", None) or getattr(agent, "_active_task_board", None)
     snapshot = None
@@ -523,14 +523,19 @@ def _taskboard_state(agent: Any) -> dict[str, Any]:
             if clean and clean not in evidence:
                 evidence.append(clean[:240])
     return {
-        "total": counts["total"],
-        "completed": counts["completed"],
-        "open": counts["open"],
+        "total": int(context.get("total", counts["total"]) or 0),
+        "completed": int(context.get("completed", counts["completed"]) or 0),
+        "open": int(context.get("open", counts["open"]) or 0),
         "blocked": counts["blocked"],
         "unresolved": unresolved,
         "evidence": evidence,
         "context": context.get("text", ""),
     }
+
+
+# Back-compat for tests and narrow internal imports. The implementation name is
+# session-specific so heartbeat.py remains the only generic `_taskboard_state`.
+_taskboard_state = _session_taskboard_state
 
 
 def _worker_state(agent: Any) -> list[str]:
