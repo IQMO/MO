@@ -89,9 +89,9 @@ def test_render_lists_signals():
     ev = {
         "window": 20,
         "repeat_patched": [{"path": "core/final_gates.py", "commits": 4}],
-        "recurring_scopes": [{"scope": "iam05", "count": 3}],
+        "recurring_scopes": [{"scope": "sandbox", "count": 3}],
     }
     out = render_recurrence_evidence(ev)
     assert "core/final_gates.py: 4 commits" in out
-    assert "iam05: 3 commits" in out
+    assert "sandbox: 3 commits" in out
     assert "not WHY" in out  # the facts-not-diagnosis guardrail rides along
