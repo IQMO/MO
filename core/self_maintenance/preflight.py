@@ -201,6 +201,15 @@ def build_self_capability_preflight_context(user_input: str, *, cwd: str | None 
     lines.extend(_capability_file_lines(root))
     if owner_rules:
         lines.extend(_runtime_evidence_lines(root))
+    # IAM05 audits arbitrary code, so it needs live-measured ground truth about the audit
+    # target (line counts, function spans, symbol references) — not MO's self-capability
+    # list. Append it so quantitative/exhaustiveness claims start from disk, not memory.
+    if is_iam05_activation(user_input):
+        from .iam05_ground_truth import build_iam05_ground_truth
+        ground_truth = build_iam05_ground_truth(user_input, cwd=str(root))
+        if ground_truth:
+            lines.append("")
+            lines.append(ground_truth)
     return "\n".join(lines)
 
 
