@@ -282,6 +282,11 @@ This public repo is the product code. It does not include anyone's private MO
 home, provider keys, personal profile, project/server knowledge, learned terms,
 or session memory. Those belong in each user's `~/.mo` runtime state.
 
+Ignored local docs may exist in a maintainer checkout, but they are not product
+authority and are not shipped. Owner run records, comparison artifacts, and
+self-maintenance history belong in `~/.mo/memory/...`; the public repo should
+carry only product-safe source and tracked docs.
+
 MO's personalization is part of the product idea, but the personal data is not
 part of the product defaults. A new user gets the same machinery empty, then MO
 adapts through their own approved profile and learning surfaces.

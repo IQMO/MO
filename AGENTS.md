@@ -34,9 +34,9 @@ These are hard rules. They exist because the opposite behavior has repeatedly wa
 - `core/` — agent logic, providers, gateway
 - `interface/` — TUI (prompt_toolkit)
 - `tests/` — pytest suite
-- `docs/` — design docs, proposals
+- `docs/` — ignored local maintainer docs/proposals unless explicitly tracked; product authority lives in tracked source plus tracked docs such as this file and `README.md`
 - `tmp/` — temporary artifacts only
-- Planning artifacts must use MO-native locations: durable maintainer plans go under `docs/proposals/`, scratch goes under `tmp/`, and runtime/private session state goes through `core.path_defaults.resolve_state_path()`. Do not create third-party orchestration folders in this checkout just because an external Codex skill suggests them.
+- Planning artifacts must use MO-native locations: product-safe maintainer plans may go under local `docs/proposals/`, scratch goes under `tmp/`, and runtime/private session state goes through `core.path_defaults.resolve_state_path()`. Owner-history/self-maintenance artifacts belong under `~/.mo/memory/...`, not ignored checkout docs. Do not create third-party orchestration folders in this checkout just because an external Codex skill suggests them.
 - **Light startup is a standing rule.** Every terminal MO instance is its own process, so keep the agent import path lean: do not import a heavy SDK (e.g. `openai`, `httpx`) at module top in `core/provider/` or anything on the `core.agent.agent` import chain. Defer them to first use behind a small loader (`provider._ensure_openai()` / `provider._httpx()`); the cost is then amortized into the first network call. Importing `core.agent.agent` should stay near ~0.3s / ~300 modules — re-check with `python -X importtime` before adding a top-level dependency import.
 
 ## MO Runtime Truth
@@ -52,6 +52,7 @@ These are hard rules. They exist because the opposite behavior has repeatedly wa
 ## Boundary (what never ships)
 - Owner-only material — the owner's `~/.mo` profile, self-maintenance protocol files (`~/.mo/operator`, resolved via `MO_OPERATOR_PACK`), and owner-only tooling/docs — lives under profile state or ignored local-only paths. It is never tracked, so a plain `git push` cannot carry it.
 - **Owner-only protocol/state files are profile-owned at `~/.mo/operator`; they are NOT a nested repo or submodule inside this product checkout.** There is exactly one product repo (`IQMO/MO`) and it is the repo deployed on the owner's VPS. The resolver (`core/path_defaults.py`) never treats a repo-local `operator/` as a source, and `tests/test_path_defaults.py` enforces it. Call this "owner profile state" or "owner-only protocol state", never a repo.
+- Ignored local docs are not product authority. If an ignored doc is an owner run record, comparison artifact, or self-maintenance history, move it to `~/.mo/memory/...` before relying on it; do not let ignored checkout docs steer product claims.
 - A `pre-push` guard (`~/.mo/operator/privacy_guard.py`, installed at `.git/hooks/pre-push`) scans every tracked file and **blocks the push** on any operator identity, secret, or private path. The repo *is* the public product — push == publish.
 - **Hide-from-users, don't block.** Operator-only commands stay fully dispatchable but are hidden from user-facing help/palette/completion when the pack is absent — mark them `operator_only=True` in `interface/command_registry.py`. Never advertise operator-only machinery to users.
 
