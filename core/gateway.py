@@ -39,9 +39,9 @@ from .tasking.task_board import (
 )
 from .tasking.task_board_registry import TaskBoardRegistry
 from .owner_protocols import (
-    is_devmode05_activation,
+    is_owner_maintenance_activation,
     is_owner_protocol_activation,
-    is_vs05_activation,
+    is_owner_comparison_activation,
     owner_protocol_name,
 )
 from .work_patterns import is_research_method_question
@@ -87,7 +87,7 @@ class Gateway:
         text = str(user_input or "").lower().strip()
         if text.startswith("/"):
             return False
-        if is_vs05_activation(text):
+        if is_owner_comparison_activation(text):
             return True
         if is_research_method_question(text):
             return False
@@ -117,7 +117,7 @@ class Gateway:
 
         A secondary surface (Ghost/desktop) turn is REJECTED outright while any turn is
         already in flight, so it can never clear the Main board or append into the Main
-        conversation mid-run (e.g. during a DEVMODE05 run). Primary turns block until the
+        conversation mid-run (e.g. during a OWNER_MAINTENANCE run). Primary turns block until the
         in-flight turn releases. The lock is always released, even on error.
         """
         secondary = route_source in _SECONDARY_SURFACES
@@ -185,8 +185,8 @@ class Gateway:
         # A new session must not inherit a PRIOR session's board — neither in-memory (a
         # persistent gateway carries last_task_board across sessions) nor in the persisted
         # current.json (watchers / status / resume fast-path read it). Same-session state
-        # is preserved and the ledger stays authoritative (live mo-1782304565: an IAM05
-        # turn showed mo-1782300201's stale DEVMODE05 board). Primary turns only —
+        # is preserved and the ledger stays authoritative (live mo-1782304565: an OWNER_INTEGRITY_AUDIT
+        # turn showed mo-1782300201's stale OWNER_MAINTENANCE board). Primary turns only —
         # secondary surfaces keep their own slot and restore Main in the finally.
         if not secondary and session_id:
             prev = self.previous_task_board
@@ -237,9 +237,9 @@ class Gateway:
                 # Ghost generates intent guardrails AND structured taskboard rows.
                 ghost_plan_text = ""
                 ghost_plan_rows: list[dict[str, object]] = []
-                # ALL owner protocols (DEVMODE05/VS05/IFDEV05/IAM05) skip the generic
-                # ghost board-seeding. Previously only DEVMODE05/VS05 did, so IAM05/IFDEV05
-                # fell through and inherited a DEVMODE05-flavored ghost board their own
+                # ALL owner protocols (OWNER_MAINTENANCE/OWNER_COMPARISON/OWNER_INTERFACE_AUDIT/OWNER_INTEGRITY_AUDIT) skip the generic
+                # ghost board-seeding. Previously only OWNER_MAINTENANCE/OWNER_COMPARISON did, so OWNER_INTEGRITY_AUDIT/OWNER_INTERFACE_AUDIT
+                # fell through and inherited a OWNER_MAINTENANCE-flavored ghost board their own
                 # closeout never advances — a stale open board tripping the generic
                 # done-claim gate (live mo-1782300201). A protocol drives its own task
                 # truth (or none); it must never get a contaminated cross-protocol board.
@@ -307,7 +307,7 @@ class Gateway:
                     monitor=self.monitor,
                     **kwargs,
                 )
-                result_text = _continue_devmode05_after_runtime_boundary(
+                result_text = _continue_owner_maintenance_after_runtime_boundary(
                     self.agent,
                     user_input,
                     result_text,
@@ -390,7 +390,7 @@ class Gateway:
             return result_text
 
 
-def _continue_devmode05_after_runtime_boundary(
+def _continue_owner_maintenance_after_runtime_boundary(
     agent: object,
     user_input: str,
     result_text: str,
@@ -400,25 +400,25 @@ def _continue_devmode05_after_runtime_boundary(
     cancel_event: object = None,
     on_activity: object = None,
 ) -> str:
-    """Resume DEVMODE05 in fresh turns after recoverable runtime budgets.
+    """Resume OWNER_MAINTENANCE in fresh turns after recoverable runtime budgets.
 
     This is intentionally narrower than the reverted autonomous runner: it does
-    not take over DEVMODE05 generally, and it does not auto-resume sandbox,
+    not take over OWNER_MAINTENANCE generally, and it does not auto-resume sandbox,
     permission, provider-error, or safety boundaries.
     """
-    if not is_devmode05_activation(user_input):
+    if not is_owner_maintenance_activation(user_input):
         return result_text
 
     cfg = getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {}
     agent_cfg = cfg.get("agent", {}) if isinstance(cfg.get("agent", {}), dict) else {}
-    max_continuations = _safe_positive_int(agent_cfg.get("devmode05_auto_continuation_max_turns"), 20)
+    max_continuations = _safe_positive_int(agent_cfg.get("owner_maintenance_auto_continuation_max_turns"), 20)
     continuation_count = 0
     current = str(result_text or "")
 
-    while _devmode05_runtime_boundary_needs_continuation(current):
+    while _owner_maintenance_runtime_boundary_needs_continuation(current):
         if continuation_count >= max_continuations:
             monitor.emit("session_event", {
-                "kind": "devmode05_auto_continuation_limit",
+                "kind": "owner_maintenance_auto_continuation_limit",
                 "continuations": continuation_count,
                 "result_preview": current[:300],
             })
@@ -428,14 +428,14 @@ def _continue_devmode05_after_runtime_boundary(
 
         continuation_count += 1
         if callable(on_activity):
-            on_activity("DEVMODE05: continuing after runtime boundary...")
+            on_activity("OWNER_MAINTENANCE: continuing after runtime boundary...")
         monitor.emit("session_event", {
-            "kind": "devmode05_auto_continuation",
+            "kind": "owner_maintenance_auto_continuation",
             "continuation": continuation_count,
             "boundary_preview": current[:300],
         })
         current = str(agent.run_turn(
-            _devmode05_continuation_prompt(current, continuation_count),
+            _owner_maintenance_continuation_prompt(current, continuation_count),
             monitor=monitor,
             **callbacks,
         ) or "")
@@ -456,11 +456,11 @@ def _continue_work_after_runtime_boundary(
 ) -> str:
     """Resume ordinary authorized work after recoverable runtime budgets.
 
-    Goal mode already owns its loop, and DEVMODE05 has a stricter protocol
+    Goal mode already owns its loop, and OWNER_MAINTENANCE has a stricter protocol
     loop. This only bridges plain work turns that already produced an open
     taskboard and hit a local budget boundary.
     """
-    if is_devmode05_activation(user_input):
+    if is_owner_maintenance_activation(user_input):
         return result_text
     if not _callable_bool(has_open_board):
         return result_text
@@ -499,15 +499,15 @@ def _continue_work_after_runtime_boundary(
     return current
 
 
-def _devmode05_runtime_boundary_needs_continuation(result_text: str) -> bool:
+def _owner_maintenance_runtime_boundary_needs_continuation(result_text: str) -> bool:
     text = _terminal_marker_text(result_text)
     if not text:
         return False
     if text.startswith(("[max provider requests]", "[max tool rounds]")):
         return True
-    if text.startswith(("[devmode05 continuation capsule]", "[devmode05 continuation]")):
+    if text.startswith(("[owner_maintenance continuation capsule]", "[owner_maintenance continuation]")):
         return True
-    if not text.startswith("[devmode05 blocked]"):
+    if not text.startswith("[owner_maintenance blocked]"):
         return False
     recoverable_markers = (
         "budget exhaustion",
@@ -564,15 +564,15 @@ def _terminal_marker_text(result_text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def _devmode05_continuation_prompt(previous_boundary: str, continuation_count: int) -> str:
+def _owner_maintenance_continuation_prompt(previous_boundary: str, continuation_count: int) -> str:
     boundary = " ".join(str(previous_boundary or "").split())[:1200]
     return (
-        f"DEVMODE05 CONTINUATION {continuation_count}. "
-        "Continue the active DEVMODE05 protocol from the preserved handoff/capsule and current repo evidence. "
+        f"OWNER_MAINTENANCE CONTINUATION {continuation_count}. "
+        "Continue the active OWNER_MAINTENANCE protocol from the preserved handoff/capsule and current repo evidence. "
         "Any 'do not call tools' or 'no more tools this turn' instruction in the previous capsule applied only to the exhausted prior turn; this is the fresh continuation turn and tools are available again. "
         "Do not ask the operator to re-explain scope, do not redo completed discovery, and do not stop at a progress report. "
         "Resume from the exact next unresolved action. "
-        "Stop only with [DEVMODE05 COMPLETE] when complete, or [DEVMODE05 BLOCKED] for a real non-recoverable tool/provider/timeout/sandbox/permission/safety boundary. "
+        "Stop only with [OWNER_MAINTENANCE COMPLETE] when complete, or [OWNER_MAINTENANCE BLOCKED] for a real non-recoverable tool/provider/timeout/sandbox/permission/safety boundary. "
         f"Previous runtime boundary/capsule: {boundary}"
     )
 
@@ -627,9 +627,9 @@ def _runtime_should_create_board(
     text = str(user_input or "")
     if is_research_method_question(text):
         return False
-    if is_devmode05_activation(text):
+    if is_owner_maintenance_activation(text):
         return True
-    if is_vs05_activation(text):
+    if is_owner_comparison_activation(text):
         return True
     if resume_intent:
         return True
@@ -698,10 +698,10 @@ def _block_open_protocol_board_at_turn_end(
     if not board or not board.tasks or board.open_count() <= 0:
         return result_text
     protocol = ""
-    if is_devmode05_activation(user_input):
-        protocol = "DEVMODE05"
-    elif is_vs05_activation(user_input):
-        protocol = "VS05"
+    if is_owner_maintenance_activation(user_input):
+        protocol = "OWNER_MAINTENANCE"
+    elif is_owner_comparison_activation(user_input):
+        protocol = "OWNER_COMPARISON"
     if not protocol:
         return result_text
     normalized = str(result_text or "").upper()
@@ -759,18 +759,18 @@ def _new_gateway_board(
     board = TaskBoard(turn_id=turn_id, session_id=session_id, source="gateway")
     target = str(title or "").strip() or user_input[:80]
     proto = is_owner_protocol_activation(user_input)
-    if is_devmode05_activation(user_input):
-        rows = _devmode05_gateway_phase_rows()
-    elif is_vs05_activation(user_input):
-        rows = _vs05_gateway_phase_rows()
+    if is_owner_maintenance_activation(user_input):
+        rows = _owner_maintenance_gateway_phase_rows()
+    elif is_owner_comparison_activation(user_input):
+        rows = _owner_comparison_gateway_phase_rows()
     elif not rows and not proto:
         # No Ghost plan and NOT an owner protocol: seed the matching build/reasoning
         # work procedure so the board carries the proven evidence-gated phases instead
-        # of one generic row. Owner protocols are EXCLUDED here — DEVMODE05/VS05 use the
-        # explicit phase rows above, IFDEV05 drives its own board, and IAM05 is boardless.
+        # of one generic row. Owner protocols are EXCLUDED here — OWNER_MAINTENANCE/OWNER_COMPARISON use the
+        # explicit phase rows above, OWNER_INTERFACE_AUDIT drives its own board, and OWNER_INTEGRITY_AUDIT is boardless.
         # None may inherit a generic work-procedure board (build_verify/project_audit/…),
         # which has no protocol closeout and would trip the done-claim gate. Live
-        # mo-1782307665: "Run IAM05 on …" got a build_verify board through THIS fallback
+        # mo-1782307665: "Run OWNER_INTEGRITY_AUDIT on …" got a build_verify board through THIS fallback
         # even though the ghost proposal was already skipped (9555983 closed only ghost).
         rows = _work_procedure_rows(user_input, target)
     if rows:
@@ -805,8 +805,8 @@ def _work_procedure_rows(user_input: str, target: str = "") -> list[dict[str, ob
         return None
 
 
-def _devmode05_gateway_phase_rows() -> list[dict[str, object]]:
-    """Fallback DEVMODE05 rows when Ghost does not provide a structured plan."""
+def _owner_maintenance_gateway_phase_rows() -> list[dict[str, object]]:
+    """Fallback OWNER_MAINTENANCE rows when Ghost does not provide a structured plan."""
     return [
         {
             "id": "1",
@@ -834,7 +834,7 @@ def _devmode05_gateway_phase_rows() -> list[dict[str, object]]:
         },
         {
             "id": "4",
-            "text": "Fix validated DEVMODE05 findings without duplicating existing features",
+            "text": "Fix validated OWNER_MAINTENANCE findings without duplicating existing features",
             "status": "pending",
             "kind": "edit",
             "completion_gate": "tool",
@@ -850,7 +850,7 @@ def _devmode05_gateway_phase_rows() -> list[dict[str, object]]:
         },
         {
             "id": "6",
-            "text": "Write summary, close task truth, and produce final DEVMODE05 report",
+            "text": "Write summary, close task truth, and produce final OWNER_MAINTENANCE report",
             "status": "pending",
             "kind": "report",
             "completion_gate": "final",
@@ -859,8 +859,8 @@ def _devmode05_gateway_phase_rows() -> list[dict[str, object]]:
     ]
 
 
-def _vs05_gateway_phase_rows() -> list[dict[str, object]]:
-    """Fallback VS05 rows when Ghost does not provide a structured plan."""
+def _owner_comparison_gateway_phase_rows() -> list[dict[str, object]]:
+    """Fallback OWNER_COMPARISON rows when Ghost does not provide a structured plan."""
     return [
         {
             "id": "1",
@@ -896,7 +896,7 @@ def _vs05_gateway_phase_rows() -> list[dict[str, object]]:
         },
         {
             "id": "5",
-            "text": "Write VS05 artifacts and approval-ready closeout",
+            "text": "Write OWNER_COMPARISON artifacts and approval-ready closeout",
             "status": "pending",
             "kind": "report",
             "completion_gate": "final",

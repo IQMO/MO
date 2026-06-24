@@ -7,7 +7,7 @@ from core.final_gates import (
     run_claim_gates,
     run_contract_gate,
     run_done_claim_gate,
-    run_iam05_reporting_gate,
+    run_owner_integrity_audit_reporting_gate,
     run_self_protocol_truth_gate,
     run_verify_edits_gate,
 )
@@ -163,19 +163,19 @@ def test_verify_edits_runner_invoked_when_not_yet_fired():
     assert calls == [["a.py"]]
 
 
-# ── IAM05 reporting truth gate (answer-time reconciliation) ──
-def _iam05_text(*, calls=4, errors=0, corpus=10, ledger="~/.mo/memory/iam05/evidence_ledger_T123456.md"):
+# ── OWNER_INTEGRITY_AUDIT reporting truth gate (answer-time reconciliation) ──
+def _owner_integrity_audit_text(*, calls=4, errors=0, corpus=10, ledger="~/.mo/memory/owner_integrity_audit/evidence_ledger_T123456.md"):
     return (
-        f"IAM05 report. {calls} tool calls, {errors} tool errors. "
+        f"OWNER_INTEGRITY_AUDIT report. {calls} tool calls, {errors} tool errors. "
         f"Coverage: sampled 3 of {corpus}. Evidence ledger: {ledger}."
     )
 
 
-def test_iam05_reporting_gate_silent_for_non_iam05(monkeypatch):
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
-    out = run_iam05_reporting_gate(
+def test_owner_integrity_audit_reporting_gate_silent_for_non_owner_integrity_audit(monkeypatch):
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    out = run_owner_integrity_audit_reporting_gate(
         "fix parser",
-        _iam05_text(corpus=10),
+        _owner_integrity_audit_text(corpus=10),
         {"read_file": 4},
         {},
         fired=set(),
@@ -183,12 +183,12 @@ def test_iam05_reporting_gate_silent_for_non_iam05(monkeypatch):
     assert out is None
 
 
-def test_iam05_reporting_gate_blocks_tool_count_mismatch(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_blocks_tool_count_mismatch(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 369)
-    out = run_iam05_reporting_gate(
-        "start IAM05",
-        _iam05_text(calls=18, errors=0, corpus=369),
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
+    out = run_owner_integrity_audit_reporting_gate(
+        "start OWNER_INTEGRITY_AUDIT",
+        _owner_integrity_audit_text(calls=18, errors=0, corpus=369),
         {"read_file": 33, "shell": 9, "grep": 6, "write_file": 1, "edit_file": 1, "test_runner": 4},
         {},
         fired=set(),
@@ -197,15 +197,15 @@ def test_iam05_reporting_gate_blocks_tool_count_mismatch(monkeypatch):
     assert "exact tool calls = 54" in out
 
 
-def test_iam05_reporting_gate_rechecks_after_corrective_tool_changes_count(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_rechecks_after_corrective_tool_changes_count(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 369)
-    out = run_iam05_reporting_gate(
-        "start IAM05",
-        _iam05_text(calls=49, errors=0, corpus=369),
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
+    out = run_owner_integrity_audit_reporting_gate(
+        "start OWNER_INTEGRITY_AUDIT",
+        _owner_integrity_audit_text(calls=49, errors=0, corpus=369),
         {"read_file": 49, "edit_file": 1},
         {},
-        fired={"iam05_reporting_truth"},
+        fired={"owner_integrity_audit_reporting_truth"},
         continuations=1,
         max_continuations=3,
     )
@@ -214,12 +214,12 @@ def test_iam05_reporting_gate_rechecks_after_corrective_tool_changes_count(monke
     assert "exact tool calls = 50" in out
 
 
-def test_iam05_reporting_gate_blocks_error_count_mismatch(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_blocks_error_count_mismatch(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
-    out = run_iam05_reporting_gate(
-        "start IAM05",
-        _iam05_text(calls=4, errors=0, corpus=10),
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    out = run_owner_integrity_audit_reporting_gate(
+        "start OWNER_INTEGRITY_AUDIT",
+        _owner_integrity_audit_text(calls=4, errors=0, corpus=10),
         {"read_file": 4},
         {"shell": 2},
         fired=set(),
@@ -228,12 +228,12 @@ def test_iam05_reporting_gate_blocks_error_count_mismatch(monkeypatch):
     assert "exact tool errors = 2" in out
 
 
-def test_iam05_reporting_gate_blocks_wrong_scope_denominator(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_blocks_wrong_scope_denominator(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 369)
-    out = run_iam05_reporting_gate(
-        "start IAM05",
-        _iam05_text(calls=4, errors=0, corpus=30),
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
+    out = run_owner_integrity_audit_reporting_gate(
+        "start OWNER_INTEGRITY_AUDIT",
+        _owner_integrity_audit_text(calls=4, errors=0, corpus=30),
         {"read_file": 4},
         {},
         fired=set(),
@@ -242,12 +242,12 @@ def test_iam05_reporting_gate_blocks_wrong_scope_denominator(monkeypatch):
     assert "sampled N of 369" in out
 
 
-def test_iam05_reporting_gate_blocks_date_only_ledger(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_blocks_date_only_ledger(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
-    out = run_iam05_reporting_gate(
-        "start IAM05",
-        _iam05_text(calls=4, errors=0, corpus=10, ledger="~/.mo/memory/iam05/evidence_ledger_20260624.md"),
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    out = run_owner_integrity_audit_reporting_gate(
+        "start OWNER_INTEGRITY_AUDIT",
+        _owner_integrity_audit_text(calls=4, errors=0, corpus=10, ledger="~/.mo/memory/owner_integrity_audit/evidence_ledger_20260624.md"),
         {"read_file": 4},
         {},
         fired=set(),
@@ -256,33 +256,33 @@ def test_iam05_reporting_gate_blocks_date_only_ledger(monkeypatch):
     assert "session-unique" in out
 
 
-def test_iam05_reporting_gate_blocks_stale_function_span(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_blocks_stale_function_span(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
-    monkeypatch.setattr(fg, "iam05_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
-    text = _iam05_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 812 lines."
-    out = run_iam05_reporting_gate("start IAM05", text, {"read_file": 4}, {}, fired=set())
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    monkeypatch.setattr(fg, "owner_integrity_audit_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
+    text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 812 lines."
+    out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
     assert out is not None
     assert "line-count mismatch" in out
 
 
-def test_iam05_reporting_gate_blocks_ambiguous_bare_span(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_blocks_ambiguous_bare_span(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
-    monkeypatch.setattr(fg, "iam05_function_span_index", lambda cwd=None: {"run_turn": set()})
-    text = _iam05_text(calls=4, errors=0, corpus=10) + " run_turn is 746 lines."
-    out = run_iam05_reporting_gate("start IAM05", text, {"read_file": 4}, {}, fired=set())
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    monkeypatch.setattr(fg, "owner_integrity_audit_function_span_index", lambda cwd=None: {"run_turn": set()})
+    text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " run_turn is 746 lines."
+    out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
     assert out is not None
     assert "ambiguous line-count claim" in out
 
 
-def test_iam05_reporting_gate_accepts_exact_report(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_accepts_exact_report(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
-    monkeypatch.setattr(fg, "iam05_source_corpus_count", lambda cwd=None: 10)
-    monkeypatch.setattr(fg, "iam05_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
-    text = _iam05_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 239 lines."
+    monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
+    monkeypatch.setattr(fg, "owner_integrity_audit_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
+    text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 239 lines."
     fired = set()
-    out = run_iam05_reporting_gate("start IAM05", text, {"read_file": 4}, {}, fired=fired)
+    out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=fired)
     assert out is None
     assert fired == set()
 
@@ -368,7 +368,7 @@ def test_contract_gate_devmode_enforces_whole_board(monkeypatch):
     capture = {}
     _patch_contract(monkeypatch, (True, [], ""), capture=capture)
     board = _Board([_Task("1", "completed"), _Task("2", "completed")], open_count=0)
-    run_contract_gate(object(), board, "start devmode05", {"2"}, count=0, max_continuations=2)
+    run_contract_gate(object(), board, "start owner_maintenance", {"2"}, count=0, max_continuations=2)
     assert capture["task_ids"] is None  # whole board, not turn-scoped
 
 
@@ -419,7 +419,7 @@ def test_self_protocol_gate_counter_bounds_no_loop():
 def test_self_protocol_gate_instruction_comes_from_dispatcher():
     # The returned text is exactly what the agent's protocol dispatcher produced.
     agent = _sp_agent(True, "PROTOCOL-SPECIFIC-TEXT")
-    out, _ = run_self_protocol_truth_gate(agent, "start devmode05", "t", object(), count=0, max_continuations=2)
+    out, _ = run_self_protocol_truth_gate(agent, "start owner_maintenance", "t", object(), count=0, max_continuations=2)
     assert out == "PROTOCOL-SPECIFIC-TEXT"
 
 

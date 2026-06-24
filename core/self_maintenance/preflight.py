@@ -5,10 +5,10 @@ from pathlib import Path
 import re
 
 from ..owner_protocols import (
-    is_devmode05_activation,
-    is_iam05_activation,
-    is_ifdev05_activation,
-    is_vs05_activation,
+    is_owner_maintenance_activation,
+    is_owner_integrity_audit_activation,
+    is_owner_interface_audit_activation,
+    is_owner_comparison_activation,
 )
 from ..path_defaults import mo_home, operator_pack_root
 
@@ -52,10 +52,10 @@ _SELF_ACTION_WORDS = {
 
 _SELF_SCOPE_MARKERS = {
     "devmode",
-    "devmode05",
+    "owner_maintenance",
     "mo",
-    "vs05",
-    "iam05",
+    "owner_comparison",
+    "owner_integrity_audit",
     "expert audit",
     "versus mode",
     "versus-mode",
@@ -78,7 +78,7 @@ _SELF_SCOPE_MARKERS = {
 _RELEVANT_COMMANDS = {"/structural-graph", "/learning", "/profile", "/status", "/prt"}
 
 # Keep this list small, explicit, and non-overlapping. It is the operator-auditable
-# discovery contract for MO self/DEVMODE05 preflight.
+# discovery contract for MO self/OWNER_MAINTENANCE preflight.
 REQUIRED_DISCOVERY_AREAS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("slash commands", ("interface/command_registry.py", "/structural-graph", "/learning", "/profile")),
     ("turn/runtime hooks", ("core/agent/agent_turn.py", "core/agent/agent.py", "_record_turn_memory_and_learning", "_maybe_handle_workflow_control_turn")),
@@ -86,7 +86,7 @@ REQUIRED_DISCOVERY_AREAS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("learning/profile/workflow", ("core/learning/proactive_learning.py", "core/learning/workflow_learning.py", "learning_suggestions.jsonl", "workflow_candidates.jsonl")),
     ("trace/session logs", ("memory/sessions", "session_closeouts", "heartbeats.jsonl", "tool_audit.jsonl", "provider_audit.jsonl", "logs/monitor/backend_monitor-*.jsonl", "~/.mo/operator/mo_trace.py")),
     ("taskboard/evidence", ("core/tasking/agent_taskboard.py", "complete_task", "core/tasking/task_evidence.py")),
-    ("tests/docs", ("tests/", "~/.mo/memory/devmode", "~/.mo/operator/devmode/DEVMODE05.md", "~/.mo/operator/devmode/DEVMODE05/")),
+    ("tests/docs", ("tests/", "~/.mo/memory/devmode", "~/.mo/operator/devmode/OWNER_MAINTENANCE.md", "~/.mo/operator/devmode/OWNER_MAINTENANCE/")),
     ("duplication/stale/legacy", ("git grep", "rg", "dead code", "duplicate paths", "retention proof")),
 )
 
@@ -130,7 +130,7 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     text = " ".join(str(user_input or "").strip().lower().split())
     if not text:
         return False
-    if is_devmode05_activation(text) or is_vs05_activation(text) or is_ifdev05_activation(text) or is_iam05_activation(text):
+    if is_owner_maintenance_activation(text) or is_owner_comparison_activation(text) or is_owner_interface_audit_activation(text) or is_owner_integrity_audit_activation(text):
         return True
     scope_hit = any(_marker_in_text(marker, text) for marker in _SELF_SCOPE_MARKERS)
     action_hit = any(_marker_in_text(word, text) for word in _SELF_ACTION_WORDS)
@@ -153,7 +153,7 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
 def _load_owner_preflight_rules() -> list[str]:
     """Load the owner-only protocol preflight rules from the operator pack.
 
-    The detailed DEVMODE05/VS05 protocol prose lives untracked in
+    The detailed OWNER_MAINTENANCE/OWNER_COMPARISON protocol prose lives untracked in
     ``~/.mo/operator/devmode/preflight-rules.json`` (never shipped). A user clone has no
     such file, so the public code carries no protocol description — only a generic
     self-review reminder is emitted there.
@@ -170,7 +170,7 @@ def _load_owner_preflight_rules() -> list[str]:
 
 
 def build_self_capability_preflight_context(user_input: str, *, cwd: str | None = None) -> str:
-    """Build the mandatory preflight context for MO self/DEVMODE05 work.
+    """Build the mandatory preflight context for MO self/OWNER_MAINTENANCE work.
 
     The detailed owner protocol rules are loaded from the operator pack when
     present; absent the pack (a user clone), only a generic self-review reminder
@@ -201,12 +201,12 @@ def build_self_capability_preflight_context(user_input: str, *, cwd: str | None 
     lines.extend(_capability_file_lines(root))
     if owner_rules:
         lines.extend(_runtime_evidence_lines(root))
-    # IAM05 audits arbitrary code, so it needs live-measured ground truth about the audit
+    # OWNER_INTEGRITY_AUDIT audits arbitrary code, so it needs live-measured ground truth about the audit
     # target (line counts, function spans, symbol references) — not MO's self-capability
     # list. Append it so quantitative/exhaustiveness claims start from disk, not memory.
-    if is_iam05_activation(user_input):
-        from .iam05_ground_truth import build_iam05_ground_truth
-        ground_truth = build_iam05_ground_truth(user_input, cwd=str(root))
+    if is_owner_integrity_audit_activation(user_input):
+        from .owner_integrity_audit_ground_truth import build_owner_integrity_audit_ground_truth
+        ground_truth = build_owner_integrity_audit_ground_truth(user_input, cwd=str(root))
         if ground_truth:
             lines.append("")
             lines.append(ground_truth)

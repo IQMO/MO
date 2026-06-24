@@ -80,10 +80,10 @@ def test_full_access_mode_stays_unrestricted_despite_control_workspace(tmp_path,
     agent.allowed_roots = []  # access.mode: full
     agent.config = {"mo_control": {"workspace_path": str(workspace)}}
 
-    roots = agent._effective_allowed_roots_for_tool("start DEVMODE05", "read_file", {"path": r"E:\anything\file.md"})
+    roots = agent._effective_allowed_roots_for_tool("start OWNER_MAINTENANCE", "read_file", {"path": r"E:\anything\file.md"})
     assert roots == []
     assert guard_tool_call("read_file", {"path": str(tmp_path / "any.md")}, allowed_roots=roots) is None
-    shell_roots = agent._effective_allowed_roots_for_tool("start DEVMODE05", "shell", {"command": "git status"})
+    shell_roots = agent._effective_allowed_roots_for_tool("start OWNER_MAINTENANCE", "shell", {"command": "git status"})
     assert shell_roots == []
 
 
@@ -118,7 +118,7 @@ def test_control_workspace_is_readable_but_not_writable_by_tools(tmp_path, monke
 
 
 def test_devmode_effective_roots_include_operator_pack_and_records(tmp_path, monkeypatch):
-    """DEVMODE05 tools must reach owner profile protocol files and session records."""
+    """OWNER_MAINTENANCE tools must reach owner profile protocol files and session records."""
     from core.agent.agent import Agent
     import core.agent.agent_turn_dispatch as dispatch
     from core.sandbox import guard_tool_call
@@ -132,9 +132,9 @@ def test_devmode_effective_roots_include_operator_pack_and_records(tmp_path, mon
     records = home / "memory" / "devmode"
     records.mkdir(parents=True)
 
-    monkeypatch.setattr(dispatch, "is_devmode05_activation", lambda _text: True)
-    monkeypatch.setattr(dispatch, "is_ifdev05_activation", lambda _text: False)
-    monkeypatch.setattr(dispatch, "is_vs05_activation", lambda _text: False)
+    monkeypatch.setattr(dispatch, "is_owner_maintenance_activation", lambda _text: True)
+    monkeypatch.setattr(dispatch, "is_owner_interface_audit_activation", lambda _text: False)
+    monkeypatch.setattr(dispatch, "is_owner_comparison_activation", lambda _text: False)
     monkeypatch.setattr(dispatch, "operator_pack_root", lambda: pack)
     monkeypatch.setattr(dispatch, "mo_home", lambda: home)
 
@@ -143,7 +143,7 @@ def test_devmode_effective_roots_include_operator_pack_and_records(tmp_path, mon
     agent.config = {}
 
     command = f"python {pack / 'mo_trace.py'} list"
-    roots = agent._effective_allowed_roots_for_tool("start DEVMODE05", "shell", {"command": command})
+    roots = agent._effective_allowed_roots_for_tool("start OWNER_MAINTENANCE", "shell", {"command": command})
 
     assert str(pack.resolve()) in roots
     assert str(records.resolve()) in roots

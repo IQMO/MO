@@ -124,10 +124,10 @@ def _loop_mock_agent(max_provider_requests=20):
 
 
 def test_protocol_stop_gate_does_not_loop_to_budget(tmp_path, monkeypatch):
-    """A devmode05 final gate that always rejects must NOT burn the whole
+    """A owner_maintenance final gate that always rejects must NOT burn the whole
     provider budget — it is capped at a few corrective rounds then allowed to stop.
     """
-    monkeypatch.setattr("core.agent.agent_turn.devmode05_final_allows_stop", lambda *a, **k: False)
+    monkeypatch.setattr("core.agent.agent_turn.owner_maintenance_final_allows_stop", lambda *a, **k: False)
 
     calls = {"n": 0}
 

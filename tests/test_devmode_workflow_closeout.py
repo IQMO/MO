@@ -1,12 +1,12 @@
-"""DEVMODE05 workflow.md runtime closeout: a completed board stamps ONE authoritative
+"""OWNER_MAINTENANCE workflow.md runtime closeout: a completed board stamps ONE authoritative
 section so an unticked model checklist can't read as incomplete (live 2026-06-24T0404:
 matrix/rotation/diff/catalog left `[ ]` while the board was completed/open 0). The
 model's own checklist rows are NEVER rewritten; non-complete boards are not stamped."""
 from core.tasking.agent_taskboard import AgentTaskBoard
 
 WORKFLOW = (
-    "# DEVMODE05 Workflow\n\n## Phase Boot\n"
-    "- [x] Read DEVMODE05.md\n"
+    "# OWNER_MAINTENANCE Workflow\n\n## Phase Boot\n"
+    "- [x] Read OWNER_MAINTENANCE.md\n"
     "- [ ] Build Capability Coverage Matrix\n"
     "- [ ] Diff audit\n"
     "- [ ] Catalog written\n"
@@ -29,7 +29,7 @@ def test_completed_board_appends_authoritative_section(tmp_path):
     # the model's own checklist rows are UNCHANGED — never blindly ticked
     assert "- [ ] Build Capability Coverage Matrix" in out
     assert "- [ ] Diff audit" in out
-    assert "- [x] Read DEVMODE05.md" in out
+    assert "- [x] Read OWNER_MAINTENANCE.md" in out
 
 
 def test_idempotent_stamps_once(tmp_path):

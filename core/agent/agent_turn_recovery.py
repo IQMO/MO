@@ -12,14 +12,14 @@ from ..session.session_momentum import maybe_compact_session
 from ..path_defaults import operator_pack_root
 from .agent_utils import _emit_task_board_update
 from ..owner_protocols import (
-    is_devmode05_activation,
-    is_ifdev05_activation,
-    is_vs05_activation,
+    is_owner_maintenance_activation,
+    is_owner_interface_audit_activation,
+    is_owner_comparison_activation,
 )
 from ..self_maintenance.devmode_closeout import (
-    devmode05_task_truth_continuation_instruction,
-    ifdev05_task_truth_continuation_instruction,
-    vs05_task_truth_continuation_instruction,
+    owner_maintenance_task_truth_continuation_instruction,
+    owner_interface_audit_task_truth_continuation_instruction,
+    owner_comparison_task_truth_continuation_instruction,
 )
 
 
@@ -209,9 +209,9 @@ class AgentTurnRecoveryMixin:
             if message.get("role") == "user":
                 latest_user = str(message.get("content") or "")
                 break
-        devmode05_active = is_devmode05_activation(latest_user)
-        devmode05_completed = devmode05_active and self._devmode05_taskboard_completed()
-        work_continuation_active = (not devmode05_active) and self._has_open_runtime_work()
+        owner_maintenance_active = is_owner_maintenance_activation(latest_user)
+        owner_maintenance_completed = owner_maintenance_active and self._owner_maintenance_taskboard_completed()
+        work_continuation_active = (not owner_maintenance_active) and self._has_open_runtime_work()
 
         # One-shot flags per turn (reset each turn via reset below)
         if not hasattr(self, "_turn_health_compacted"):
@@ -239,11 +239,11 @@ class AgentTurnRecoveryMixin:
                         f"[TURN HEALTH HANDOFF] {tool_rounds}/{max_tools} tool rounds used. "
                         "Context handed off with continuation mandate. "
                         + (
-                            "DEVMODE05 taskboard is already complete/open=0. Produce [DEVMODE05 COMPLETE] now — do NOT call more tools."
-                            if devmode05_completed
+                            "OWNER_MAINTENANCE taskboard is already complete/open=0. Produce [OWNER_MAINTENANCE COMPLETE] now — do NOT call more tools."
+                            if owner_maintenance_completed
                             else
-                            "Return a DEVMODE05 continuation capsule now — do NOT call more tools."
-                            if devmode05_active
+                            "Return a OWNER_MAINTENANCE continuation capsule now — do NOT call more tools."
+                            if owner_maintenance_active
                             else "Return a work continuation capsule now — do NOT call more tools."
                             if work_continuation_active
                             else "Produce your final answer now — do NOT call more tools."
@@ -330,11 +330,11 @@ class AgentTurnRecoveryMixin:
                 f"[TURN HEALTH CRITICAL] {tool_rounds}/{max_tools} tool rounds used — "
                 f"only {remaining} remain. "
                 + (
-                    "Produce [DEVMODE05 COMPLETE] NOW; taskboard is already complete/open=0."
-                    if devmode05_completed
+                    "Produce [OWNER_MAINTENANCE COMPLETE] NOW; taskboard is already complete/open=0."
+                    if owner_maintenance_completed
                     else
-                    "Return a DEVMODE05 continuation capsule NOW."
-                    if devmode05_active
+                    "Return a OWNER_MAINTENANCE continuation capsule NOW."
+                    if owner_maintenance_active
                     else "Return a work continuation capsule NOW."
                     if work_continuation_active
                     else "Produce your final answer NOW."
@@ -363,11 +363,11 @@ class AgentTurnRecoveryMixin:
 
         return extra_context
 
-    def _devmode05_completed_taskboard_should_stop_tools(self, user_input: str, task_board: TaskBoard | None = None) -> bool:
-        """Return True when completed DEVMODE05 task truth must close instead of probing."""
-        return is_devmode05_activation(user_input) and self._devmode05_taskboard_completed(task_board)
+    def _owner_maintenance_completed_taskboard_should_stop_tools(self, user_input: str, task_board: TaskBoard | None = None) -> bool:
+        """Return True when completed OWNER_MAINTENANCE task truth must close instead of probing."""
+        return is_owner_maintenance_activation(user_input) and self._owner_maintenance_taskboard_completed(task_board)
 
-    def _devmode05_taskboard_completed(self, task_board: TaskBoard | None = None) -> bool:
+    def _owner_maintenance_taskboard_completed(self, task_board: TaskBoard | None = None) -> bool:
         """Check known live board references for completed, non-goal task truth."""
         gateway = getattr(self, "gateway", None)
         candidates = (
@@ -394,34 +394,34 @@ class AgentTurnRecoveryMixin:
         return False
 
     @staticmethod
-    def _devmode05_completed_taskboard_tool_instruction() -> str:
+    def _owner_maintenance_completed_taskboard_tool_instruction() -> str:
         return (
-            "[DEVMODE05 CLOSEOUT] The live taskboard is already complete (open=0). "
+            "[OWNER_MAINTENANCE CLOSEOUT] The live taskboard is already complete (open=0). "
             "Do not call more tools or reopen broad discovery inside this completed turn. "
-            "Produce the terminal [DEVMODE05 COMPLETE] report from existing evidence now. "
+            "Produce the terminal [OWNER_MAINTENANCE COMPLETE] report from existing evidence now. "
             "If a genuinely new issue exists, it must be tracked as a new finding before completion in a fresh continuation, "
             "not by silent post-completion probing."
         )
 
     @staticmethod
-    def _devmode05_completed_taskboard_persistent_tool_text() -> str:
+    def _owner_maintenance_completed_taskboard_persistent_tool_text() -> str:
         return (
-            "[DEVMODE05 BLOCKED]\n\n"
-            "Provider kept requesting tools after the DEVMODE05 taskboard was complete/open=0. "
-            "This is a provider tool-use boundary after completed task truth, not unfinished DEVMODE05 work. "
+            "[OWNER_MAINTENANCE BLOCKED]\n\n"
+            "Provider kept requesting tools after the OWNER_MAINTENANCE taskboard was complete/open=0. "
+            "This is a provider tool-use boundary after completed task truth, not unfinished OWNER_MAINTENANCE work. "
             "Existing evidence was preserved; restart only to investigate this provider noncompliance."
         )
 
     @staticmethod
-    def _devmode05_tool_calls_are_closeout_only(tool_calls) -> bool:
+    def _owner_maintenance_tool_calls_are_closeout_only(tool_calls) -> bool:
         """True when every requested tool call is closeout work — writing/reading the
-        DEVMODE05 session artifacts, owning the economy ledger, or running the final
+        OWNER_MAINTENANCE session artifacts, owning the economy ledger, or running the final
         pytest — rather than reopening broad discovery.
 
         The completed-board tool guard must NOT block these. The error-ownership gate
         REQUIRES reading economy.md and the terminal report REQUIRES writing the session
         artifacts, but both happen AFTER the board reaches open=0 — so hard-blocking all
-        post-completion tools deadlocked the closeout to [DEVMODE05 BLOCKED] even though
+        post-completion tools deadlocked the closeout to [OWNER_MAINTENANCE BLOCKED] even though
         the model was doing exactly what the truth gate demanded (observed live
         mo-1782077188: owned 5 errors, wrote artifacts, still blocked → BLOCKED). Broad
         re-discovery (grep/find_files/code_search/source reads/arbitrary shell) is still
@@ -488,34 +488,34 @@ class AgentTurnRecoveryMixin:
             if message.get("role") == "user":
                 latest_user = str(message.get("content") or "")
                 break
-        if is_devmode05_activation(latest_user):
-            # Critical budget: do NOT re-seed a fresh session for a DEVMODE05 run. A fresh
-            # context handoff makes the model re-orient ("I'll start DEVMODE05 by first
+        if is_owner_maintenance_activation(latest_user):
+            # Critical budget: do NOT re-seed a fresh session for a OWNER_MAINTENANCE run. A fresh
+            # context handoff makes the model re-orient ("I'll start OWNER_MAINTENANCE by first
             # reading...") and burn the last rounds, hitting the hard stop (observed live
             # mo-1782179985: 75/80 reseed -> restart -> BLOCKED). Force the conclusion IN
             # PLACE in the current session — tools are already blocked by the caller, and
             # there is no budget left to use a relieved context anyway.
-            if self._devmode05_taskboard_completed():
+            if self._owner_maintenance_taskboard_completed():
                 self.session.add_assistant(
-                    f"[DEVMODE05 TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
-                    "The taskboard is complete (open=0). Produce [DEVMODE05 COMPLETE] NOW from the "
+                    f"[OWNER_MAINTENANCE TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
+                    "The taskboard is complete (open=0). Produce [OWNER_MAINTENANCE COMPLETE] NOW from the "
                     "evidence already gathered. Do NOT call any tools. Do NOT re-read state. Do NOT "
                     "restart the protocol."
                 )
                 action = "force_complete_in_place"
             else:
                 self.session.add_assistant(
-                    f"[DEVMODE05 TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
-                    "STOP. Emit [DEVMODE05 BLOCKED] with a continuation capsule NOW, from the current "
+                    f"[OWNER_MAINTENANCE TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
+                    "STOP. Emit [OWNER_MAINTENANCE BLOCKED] with a continuation capsule NOW, from the current "
                     "context only: completed work, unresolved finding IDs, dirty files, tests run, and "
                     "the exact next action. Do NOT call any tools. Do NOT re-read state. Do NOT restart "
-                    "DEVMODE05. The next fresh/resume turn continues from this capsule."
+                    "OWNER_MAINTENANCE. The next fresh/resume turn continues from this capsule."
                 )
                 action = "force_blocked_in_place"
             if monitor:
                 monitor.emit("turn_health", {
                     "tool_rounds": tool_rounds, "max_tool_rounds": max_tools,
-                    "action": action, "protocol": "devmode05", "reseed": False,
+                    "action": action, "protocol": "owner_maintenance", "reseed": False,
                 })
             return
         if self._has_open_runtime_work():
@@ -555,23 +555,23 @@ class AgentTurnRecoveryMixin:
 
     def _turn_health_tool_blocked_instruction(self, user_input: str | None = None) -> str:
         active_work = False
-        devmode05_completed = False
+        owner_maintenance_completed = False
         if user_input is None:
             user_input = str(self or "")
         else:
             active_work = self._has_open_runtime_work()
-            devmode05_completed = self._devmode05_taskboard_completed()
-        if is_devmode05_activation(user_input):
-            if devmode05_completed:
+            owner_maintenance_completed = self._owner_maintenance_taskboard_completed()
+        if is_owner_maintenance_activation(user_input):
+            if owner_maintenance_completed:
                 return (
-                    "[TURN HEALTH] Tool calls blocked because DEVMODE05 taskboard is already complete/open=0. "
-                    "Do not call more tools. Your next response must start exactly with `[DEVMODE05 COMPLETE]` "
+                    "[TURN HEALTH] Tool calls blocked because OWNER_MAINTENANCE taskboard is already complete/open=0. "
+                    "Do not call more tools. Your next response must start exactly with `[OWNER_MAINTENANCE COMPLETE]` "
                     "and summarize the existing evidence."
                 )
             return (
                 "[TURN HEALTH] Tool calls blocked — turn budget exhausted. "
                 "Do not call more tools. Your next response must start exactly with "
-                "`[DEVMODE05 BLOCKED]` and contain a continuation capsule: completed work, "
+                "`[OWNER_MAINTENANCE BLOCKED]` and contain a continuation capsule: completed work, "
                 "unresolved finding IDs, dirty files, tests run, and the exact next action."
             )
         if active_work:
@@ -589,17 +589,17 @@ class AgentTurnRecoveryMixin:
 
     def _turn_health_persistent_block_text(self, user_input: str | None = None) -> str:
         active_work = False
-        devmode05_completed = False
+        owner_maintenance_completed = False
         if user_input is None:
             user_input = str(self or "")
         else:
             active_work = self._has_open_runtime_work()
-            devmode05_completed = self._devmode05_taskboard_completed()
-        if is_devmode05_activation(user_input):
-            if devmode05_completed:
-                return self._devmode05_completed_taskboard_persistent_tool_text()
+            owner_maintenance_completed = self._owner_maintenance_taskboard_completed()
+        if is_owner_maintenance_activation(user_input):
+            if owner_maintenance_completed:
+                return self._owner_maintenance_completed_taskboard_persistent_tool_text()
             return (
-                "[DEVMODE05 BLOCKED]\n\n"
+                "[OWNER_MAINTENANCE BLOCKED]\n\n"
                 "Tool calls persistently blocked after budget exhaustion. "
                 "Continuation required in the next fresh turn from the preserved handoff capsule."
             )
@@ -633,18 +633,18 @@ class AgentTurnRecoveryMixin:
     @staticmethod
     def _self_protocol_completion_boundary_requires_continuation(user_input: str, final_text: str, boundary_report: object | None) -> bool:
         """Force self-protocol modes to continue when completion conflicts with task truth."""
-        devmode05 = is_devmode05_activation(user_input)
-        vs05 = is_vs05_activation(user_input)
-        ifdev05 = is_ifdev05_activation(user_input)
-        if not (devmode05 or vs05 or ifdev05):
+        owner_maintenance = is_owner_maintenance_activation(user_input)
+        owner_comparison = is_owner_comparison_activation(user_input)
+        owner_interface_audit = is_owner_interface_audit_activation(user_input)
+        if not (owner_maintenance or owner_comparison or owner_interface_audit):
             return False
         prefix = str(final_text or "").lstrip()[:240].lower()
-        if devmode05:
-            expected_marker = "[devmode05 complete]"
-        elif vs05:
-            expected_marker = "[vs05 complete]"
+        if owner_maintenance:
+            expected_marker = "[owner_maintenance complete]"
+        elif owner_comparison:
+            expected_marker = "[owner_comparison complete]"
         else:
-            expected_marker = "[ifdev05 complete]"
+            expected_marker = "[owner_interface_audit complete]"
         if expected_marker not in prefix:
             return False
         findings = list(getattr(boundary_report, "findings", ()) or ())
@@ -654,7 +654,7 @@ class AgentTurnRecoveryMixin:
         )
 
     # Backward-compatible name used by older tests/callers.
-    _devmode05_completion_boundary_requires_continuation = _self_protocol_completion_boundary_requires_continuation
+    _owner_maintenance_completion_boundary_requires_continuation = _self_protocol_completion_boundary_requires_continuation
 
     @staticmethod
     def _boundary_has_done_claim_conflict(boundary_report: object | None) -> bool:
@@ -719,8 +719,8 @@ class AgentTurnRecoveryMixin:
 
     @staticmethod
     def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
-        if is_vs05_activation(user_input):
-            return vs05_task_truth_continuation_instruction()
-        if is_ifdev05_activation(user_input):
-            return ifdev05_task_truth_continuation_instruction()
-        return devmode05_task_truth_continuation_instruction()
+        if is_owner_comparison_activation(user_input):
+            return owner_comparison_task_truth_continuation_instruction()
+        if is_owner_interface_audit_activation(user_input):
+            return owner_interface_audit_task_truth_continuation_instruction()
+        return owner_maintenance_task_truth_continuation_instruction()

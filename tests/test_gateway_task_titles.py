@@ -55,9 +55,9 @@ def test_new_gateway_board_no_rows_uses_fallback():
     assert board.task("1").kind == "edit"
 
 
-def test_new_gateway_board_devmode05_no_rows_uses_protocol_phases():
-    """DEVMODE05 fallback rows reflect real protocol phases, not one generic wrapper."""
-    board = _new_gateway_board("t1", "s1", "Start DEVMODE05", rows=None)
+def test_new_gateway_board_owner_maintenance_no_rows_uses_protocol_phases():
+    """OWNER_MAINTENANCE fallback rows reflect real protocol phases, not one generic wrapper."""
+    board = _new_gateway_board("t1", "s1", "Start OWNER_MAINTENANCE", rows=None)
 
     assert board is not None
     assert len(board.tasks) == 6
@@ -67,15 +67,15 @@ def test_new_gateway_board_devmode05_no_rows_uses_protocol_phases():
     assert board.task("6").completion_gate == "final"
 
 
-def test_new_gateway_board_iam05_is_boardless(monkeypatch):
-    """IAM05 (an owner protocol that is NOT DEVMODE05/VS05) must never inherit a generic
+def test_new_gateway_board_owner_integrity_audit_is_boardless(monkeypatch):
+    """OWNER_INTEGRITY_AUDIT (an owner protocol that is NOT OWNER_MAINTENANCE/OWNER_COMPARISON) must never inherit a generic
     work-procedure board — it stays EMPTY so the done-claim gate can't trip on an open
-    board it never advances. Live mo-1782307665: 'Run IAM05 on …' got a build_verify
+    board it never advances. Live mo-1782307665: 'Run OWNER_INTEGRITY_AUDIT on …' got a build_verify
     board through the work-procedure fallback even after the ghost proposal was skipped."""
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     board = _new_gateway_board(
         "t1", "s1",
-        "Run IAM05 on the stop-gate cluster. Verify whether it should stay inline or move",
+        "Run OWNER_INTEGRITY_AUDIT on the stop-gate cluster. Verify whether it should stay inline or move",
         rows=None,
     )
     assert board is not None

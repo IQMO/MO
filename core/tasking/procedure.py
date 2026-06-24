@@ -8,7 +8,7 @@ before it completes — the procedure makes the *structure* cheap to replay, nev
 the *verification* optional.
 
 This module owns no task truth. It only produces seed rows in the exact dict shape
-``TaskBoard.set_rows`` already consumes (the same shape the DEVMODE05/VS05 phase
+``TaskBoard.set_rows`` already consumes (the same shape the OWNER_MAINTENANCE/OWNER_COMPARISON phase
 fallbacks use); Gateway/Agent and the TaskBoard evidence gates stay the single
 source of truth. Step text is distilled from the matching ``work_patterns`` prose
 so no guidance is lost — only structured and gated.
@@ -69,7 +69,7 @@ def procedure_rows(procedure: WorkProcedure, objective: str = "") -> list[dict[s
 
 
 # One procedure per build/reasoning WorkPattern. Conventions mirror the proven
-# DEVMODE05/VS05 gateway phase rows: kind ∈ inspect/verify/edit/report, gate
+# OWNER_MAINTENANCE/OWNER_COMPARISON gateway phase rows: kind ∈ inspect/verify/edit/report, gate
 # "tool" for work steps and "final" for the closing report.
 _PROCEDURES: dict[str, WorkProcedure] = {
     "build_verify": WorkProcedure(

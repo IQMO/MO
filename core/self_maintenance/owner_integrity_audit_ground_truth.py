@@ -1,9 +1,9 @@
-"""IAM05 audit ground truth — live-measured, never estimated.
+"""OWNER_INTEGRITY_AUDIT audit ground truth — live-measured, never estimated.
 
-An IAM05 audit is only as honest as the numbers it starts from. The failure mode this
+An OWNER_INTEGRITY_AUDIT audit is only as honest as the numbers it starts from. The failure mode this
 module exists to kill: the model *guesses* a line count ("run_turn is 1214 lines" — wrong,
 that was the file), a coverage claim ("tested only in X" — wrong, three files), or a
-duplication claim, and the operator becomes the verifier. The fix mirrors DEVMODE05's
+duplication claim, and the operator becomes the verifier. The fix mirrors OWNER_MAINTENANCE's
 capability preflight: the runtime hands the model measured ground truth *before* it writes
 a word, so quantitative / exhaustiveness / duplication claims start from disk, not memory.
 
@@ -11,8 +11,8 @@ Two modes, chosen by the request:
 - **Explicit targets** — the request names repo paths and/or symbols. Measure exactly those:
   real file line counts, per-function spans (via ``ast``), and where each symbol is defined
   and referenced (split test vs non-test).
-- **Bare ``Run IAM05``** — no target named. Auto-scope from the *live tree* (never from a
-  prior DEVMODE05 run's stale per-run snapshot): largest files, largest functions, git churn
+- **Bare ``Run OWNER_INTEGRITY_AUDIT``** — no target named. Auto-scope from the *live tree* (never from a
+  prior OWNER_MAINTENANCE run's stale per-run snapshot): largest files, largest functions, git churn
   hotspots, and duplication candidates (symbols defined in >1 module).
 
 Everything is bounded (top-N), degrades gracefully (missing git, unparseable file), and is
@@ -25,7 +25,7 @@ import subprocess
 from collections import defaultdict
 from pathlib import Path
 
-from ..owner_protocols import is_iam05_activation
+from ..owner_protocols import is_owner_integrity_audit_activation
 from ..path_defaults import mo_home
 
 # Source roots an audit cares about. Anything outside these is noise for ground truth.
@@ -36,7 +36,7 @@ _PATH_RE = __import__("re").compile(r"(?:core|interface|tools|tests)/[\w./-]+\.p
 # English words ("audit", "cluster") while catching real symbols ("run_turn", "TaskBoard").
 _SYMBOL_RE = __import__("re").compile(r"\b(?=\w*[_A-Z])[A-Za-z_][A-Za-z0-9_]{3,}\b")
 _STOPWORDS = frozenset({
-    "IAM05", "DEVMODE05", "VS05", "IFDEV05", "audit", "cluster", "module", "inline",
+    "OWNER_INTEGRITY_AUDIT", "OWNER_MAINTENANCE", "OWNER_COMPARISON", "OWNER_INTERFACE_AUDIT", "audit", "cluster", "module", "inline",
     "should", "stay", "move", "alongside", "context", "evidence", "justify",
 })
 
@@ -49,16 +49,16 @@ _MAX_TARGET_PATHS = 6
 _MAX_TARGET_SYMBOLS = 6
 
 
-def build_iam05_ground_truth(user_input: str, *, cwd: str | None = None) -> str:
-    """Return the live-measured IAM05 ground-truth block, or '' if not an IAM05 turn."""
-    if not is_iam05_activation(user_input):
+def build_owner_integrity_audit_ground_truth(user_input: str, *, cwd: str | None = None) -> str:
+    """Return the live-measured OWNER_INTEGRITY_AUDIT ground-truth block, or '' if not an OWNER_INTEGRITY_AUDIT turn."""
+    if not is_owner_integrity_audit_activation(user_input):
         return ""
     root = Path(cwd or ".").resolve()
     paths = _named_paths(user_input, root)
     symbols = _named_symbols(user_input, root)
 
     out: list[str] = [
-        "### IAM05 Audit Ground Truth (live-measured this turn — start from THESE numbers, never estimate)",
+        "### OWNER_INTEGRITY_AUDIT Audit Ground Truth (live-measured this turn — start from THESE numbers, never estimate)",
     ]
     if paths or symbols:
         out.append("Targets named in the request:")
@@ -93,10 +93,10 @@ def _reporting_contract(root: Path) -> list[str]:
     drift ('~22 tool calls' when the monitor showed 56, unowned tool errors), and
     state-boundary leak (ledger written to repo-local memory/ instead of ~/.mo)."""
     corpus = len(_iter_py_files(root))
-    ledger_dir = (mo_home() / "memory" / "iam05").as_posix()
+    ledger_dir = (mo_home() / "memory" / "owner_integrity_audit").as_posix()
     return [
         "",
-        "### IAM05 Reporting Contract (your report is checked against this run's instrumented truth)",
+        "### OWNER_INTEGRITY_AUDIT Reporting Contract (your report is checked against this run's instrumented truth)",
         f"- Scope honesty: the source corpus is {corpus} files. Do NOT title or describe the audit "
         f"\"Full Codebase\" / \"entire\" / \"complete\" unless you actually read all {corpus}. State "
         f"coverage as \"sampled N of {corpus}\" and list ONLY files you genuinely read this run.",
@@ -109,13 +109,13 @@ def _reporting_contract(root: Path) -> list[str]:
     ]
 
 
-def iam05_source_corpus_count(*, cwd: str | None = None) -> int:
-    """Return the live source corpus denominator used by IAM05 reporting."""
+def owner_integrity_audit_source_corpus_count(*, cwd: str | None = None) -> int:
+    """Return the live source corpus denominator used by OWNER_INTEGRITY_AUDIT reporting."""
     root = Path(cwd or ".").resolve()
     return len(_iter_py_files(root))
 
 
-def iam05_function_span_index(*, cwd: str | None = None) -> dict[str, set[int]]:
+def owner_integrity_audit_function_span_index(*, cwd: str | None = None) -> dict[str, set[int]]:
     """Return production function/class-method spans keyed by safe names.
 
     Test fixtures routinely define tiny same-named functions (``run_turn`` stubs,

@@ -128,17 +128,17 @@ class AgentTaskBoard:
             return None
 
     def _devmode_runtime_output_context(self, user_input: str) -> str:
-        """Context block that tells DEVMODE05 the one allowed output directory."""
+        """Context block that tells OWNER_MAINTENANCE the one allowed output directory."""
         try:
-            from ..owner_protocols import is_devmode05_activation
-            if not is_devmode05_activation(user_input):
+            from ..owner_protocols import is_owner_maintenance_activation
+            if not is_owner_maintenance_activation(user_input):
                 return ""
             target = self._ensure_devmode_session_dir()
             if target is None:
                 return ""
             return (
-                "### DEVMODE05 Runtime Output Directory\n"
-                "The runtime already created and owns this DEVMODE05 session directory. "
+                "### OWNER_MAINTENANCE Runtime Output Directory\n"
+                "The runtime already created and owns this OWNER_MAINTENANCE session directory. "
                 "Write all session artifacts here and do not create another "
                 "`memory/devmode/<stamp>` folder.\n"
                 f"- active_session_dir: `{target}`\n"
@@ -163,8 +163,8 @@ class AgentTaskBoard:
         try:
             if name not in {"write_file", "edit_file"}:
                 return None
-            from ..owner_protocols import is_devmode05_activation
-            if not is_devmode05_activation(user_input):
+            from ..owner_protocols import is_owner_maintenance_activation
+            if not is_owner_maintenance_activation(user_input):
                 return None
             args = arguments or {}
             raw_path = str(args.get("path") or args.get("file_path") or "").strip()
@@ -201,7 +201,7 @@ class AgentTaskBoard:
                     return None
 
             return (
-                "[DEVMODE05 OUTPUT BLOCKED] Runtime owns this run's artifact directory: "
+                "[OWNER_MAINTENANCE OUTPUT BLOCKED] Runtime owns this run's artifact directory: "
                 f"{active}. Do not write DEVMODE session artifacts to {candidate}. "
                 "Use the active_session_dir path from context exactly."
             )
@@ -231,32 +231,32 @@ class AgentTaskBoard:
     def _finalize_self_protocol_task_board_for_answer(self, user_input: str, final_text: str, task_board: TaskBoard) -> bool:
         """Close self-protocol phase rows only after their terminal report gate passes.
 
-        DEVMODE05 and VS05 own deterministic phase boards. Their phases are
+        OWNER_MAINTENANCE and OWNER_COMPARISON own deterministic phase boards. Their phases are
         protocol checkpoints, not ordinary implementation rows, so a valid
         terminal report can close the remaining phase rows before the final
         consistency boundary reads task truth.
         """
         from ..owner_protocols import (
-            is_devmode05_activation,
-            is_ifdev05_activation,
-            is_vs05_activation,
+            is_owner_maintenance_activation,
+            is_owner_interface_audit_activation,
+            is_owner_comparison_activation,
         )
         from ..self_maintenance.devmode_closeout import (
-            devmode05_final_allows_stop,
-            ifdev05_final_allows_stop,
-            vs05_final_allows_stop,
+            owner_maintenance_final_allows_stop,
+            owner_interface_audit_final_allows_stop,
+            owner_comparison_final_allows_stop,
         )
 
-        if is_vs05_activation(user_input):
-            if not vs05_final_allows_stop(user_input, final_text):
+        if is_owner_comparison_activation(user_input):
+            if not owner_comparison_final_allows_stop(user_input, final_text):
                 return False
-            evidence = "final:vs05_protocol_closeout"
-        elif is_devmode05_activation(user_input):
+            evidence = "final:owner_comparison_protocol_closeout"
+        elif is_owner_maintenance_activation(user_input):
             from ..backend_monitor import active_monitor_path
             self._track_devmode_run_session_id()
             monitor_path = active_monitor_path()
             run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
-            if not devmode05_final_allows_stop(
+            if not owner_maintenance_final_allows_stop(
                 user_input,
                 final_text,
                 monitor_path=monitor_path,
@@ -265,11 +265,11 @@ class AgentTaskBoard:
                 session_dir=getattr(self, "_active_devmode_session_dir", None),
             ):
                 return False
-            evidence = "final:devmode05_protocol_closeout"
-        elif is_ifdev05_activation(user_input):
-            if not ifdev05_final_allows_stop(user_input, final_text):
+            evidence = "final:owner_maintenance_protocol_closeout"
+        elif is_owner_interface_audit_activation(user_input):
+            if not owner_interface_audit_final_allows_stop(user_input, final_text):
                 return False
-            evidence = "final:ifdev05_protocol_closeout"
+            evidence = "final:owner_interface_audit_protocol_closeout"
         else:
             return False
 
@@ -312,7 +312,7 @@ class AgentTaskBoard:
         # This finalize runs only after the protocol stop gate passed → the run is
         # closing out. For DEVMODE, mark the manifest status="complete" and stamp the
         # runtime-owned workflow closeout (the model never returns to tick phase rows).
-        if is_devmode05_activation(user_input):
+        if is_owner_maintenance_activation(user_input):
             self._write_devmode_manifest_record(status="complete")
             self._reconcile_devmode_workflow_closeout(task_board)
         return changed
@@ -486,7 +486,7 @@ class AgentTaskBoard:
     @staticmethod
     def _reconcile_summary_economy_counts(summary_path, summary: dict) -> None:
         """Overwrite stale provider/tool-call/tool-error/sandbox-blocked/compression
-        counts ANYWHERE in a DEVMODE05 summary.md with the authoritative monitor figures,
+        counts ANYWHERE in a OWNER_MAINTENANCE summary.md with the authoritative monitor figures,
         so the header line, the Economy section, AND the Closeout can never disagree.
 
         The model restates these counts in several places and phrasings; the old version
@@ -571,19 +571,19 @@ class AgentTaskBoard:
 
     @staticmethod
     def _reconcile_summary_terminal_marker(summary_path, *, blocked: bool) -> bool:
-        """When the run ends BLOCKED, a summary.md that still claims [DEVMODE05 COMPLETE]
+        """When the run ends BLOCKED, a summary.md that still claims [OWNER_MAINTENANCE COMPLETE]
         is a lie (observed T0403: COMPLETE in summary while the run hit the budget and
         emitted a continuation capsule). Deterministically rewrite the marker to
-        [DEVMODE05 BLOCKED]. Returns True if it changed anything."""
+        [OWNER_MAINTENANCE BLOCKED]. Returns True if it changed anything."""
         try:
             if not blocked or not summary_path.exists():
                 return False
             text = summary_path.read_text(encoding="utf-8", errors="replace")
-            if "[DEVMODE05 COMPLETE]" not in text:
+            if "[OWNER_MAINTENANCE COMPLETE]" not in text:
                 return False
             new_text = text.replace(
-                "[DEVMODE05 COMPLETE]",
-                "[DEVMODE05 BLOCKED] (reconciled: run ended blocked, not complete)",
+                "[OWNER_MAINTENANCE COMPLETE]",
+                "[OWNER_MAINTENANCE BLOCKED] (reconciled: run ended blocked, not complete)",
             )
             atomic_write_text(summary_path, new_text, encoding="utf-8")
             return True
@@ -591,12 +591,12 @@ class AgentTaskBoard:
             return False
 
     def _reconcile_devmode_summary_marker(self, final_text: str) -> None:
-        """If the model's terminal answer is [DEVMODE05 BLOCKED], make summary.md agree —
-        a blocked run must never leave a [DEVMODE05 COMPLETE] in its summary."""
+        """If the model's terminal answer is [OWNER_MAINTENANCE BLOCKED], make summary.md agree —
+        a blocked run must never leave a [OWNER_MAINTENANCE COMPLETE] in its summary."""
         try:
-            from ..self_maintenance.devmode_closeout import _devmode05_terminal_prefix_text
-            text = _devmode05_terminal_prefix_text(final_text) or ""
-            if not text.startswith("[DEVMODE05 BLOCKED]"):
+            from ..self_maintenance.devmode_closeout import _owner_maintenance_terminal_prefix_text
+            text = _owner_maintenance_terminal_prefix_text(final_text) or ""
+            if not text.startswith("[OWNER_MAINTENANCE BLOCKED]"):
                 return
             target = getattr(self, "_active_devmode_session_dir", None)
             if target is None:

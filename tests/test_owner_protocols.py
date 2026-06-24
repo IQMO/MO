@@ -1,12 +1,15 @@
-"""Owner-protocol activation helpers. The gateway uses is_owner_protocol_activation to
-skip generic ghost board-seeding for ALL four owner protocols — so IAM05/IFDEV05 no
-longer inherit a DEVMODE05-flavored board (live mo-1782300201 cross-protocol contamination)."""
+"""Owner-protocol activation helpers.
+
+The gateway uses is_owner_protocol_activation to skip generic ghost board-seeding
+for all owner protocol slots, so one owner protocol cannot inherit another
+protocol's board.
+"""
 import pytest
 
 from core.owner_protocols import (
     is_owner_protocol_activation,
-    is_devmode05_activation,
-    is_iam05_activation,
+    is_owner_maintenance_activation,
+    is_owner_integrity_audit_activation,
     owner_protocol_name,
 )
 
@@ -17,11 +20,11 @@ def installed(monkeypatch):
 
 
 CASES = {
-    "start DEVMODE05": "DEVMODE05",
-    "start vs05": "VS05",
-    "start ifdev05": "IFDEV05",
-    "start iam05": "IAM05",
-    "expert audit": "IAM05",
+    "start owner maintenance": "maintenance",
+    "start owner comparison": "comparison",
+    "start owner interface audit": "interface_audit",
+    "start owner integrity audit": "integrity_audit",
+    "expert audit": "integrity_audit",
 }
 
 
@@ -31,10 +34,10 @@ def test_recognizes_all_four_protocols(installed):
         assert owner_protocol_name(text) == name, text
 
 
-def test_iam05_and_ifdev05_now_count_as_protocol_activation(installed):
+def test_owner_integrity_audit_and_owner_interface_audit_now_count_as_protocol_activation(installed):
     # The exact gap that caused the contamination: these used to fall through.
-    assert is_owner_protocol_activation("start iam05") is True
-    assert is_owner_protocol_activation("start ifdev05") is True
+    assert is_owner_protocol_activation("start owner integrity audit") is True
+    assert is_owner_protocol_activation("start owner interface audit") is True
 
 
 def test_normal_input_is_not_a_protocol(installed):
@@ -47,10 +50,10 @@ def test_inert_without_operator_protocols(monkeypatch):
     # No env override and a clone with no pack -> activations are inert. (On the operator
     # box the pack is present, so only assert the env-gated path is off here.)
     monkeypatch.delenv("MO_OPERATOR_PROTOCOLS", raising=False)
-    # is_iam05_activation's regex matches but operator_protocols_installed gates it;
+    # Activation matches only when operator_protocols_installed gates it on.
     # with the env override removed, a non-operator environment returns False.
     import core.owner_protocols as op
     monkeypatch.setattr(op, "operator_protocols_installed", lambda: False)
-    assert is_owner_protocol_activation("start iam05") is False
-    assert is_iam05_activation("start iam05") is False
-    assert is_devmode05_activation("start devmode05") is False
+    assert is_owner_protocol_activation("start owner integrity audit") is False
+    assert is_owner_integrity_audit_activation("start owner integrity audit") is False
+    assert is_owner_maintenance_activation("start owner maintenance") is False

@@ -19,8 +19,8 @@ class DummyAgent:
             return "status ok"
         if text == "/prt":
             return "[PRT STARTED] Reviewing HEAD in background..."
-        if text.startswith("/vs05"):
-            self._slash_pending_input = "start VS05" + text[len("/vs05"):]
+        if text.startswith("/owner_comparison"):
+            self._slash_pending_input = "start OWNER_COMPARISON" + text[len("/owner_comparison"):]
             return "[RUN_TURN]"
         if text == "/exit":
             return "[EXIT]"
@@ -109,8 +109,8 @@ def test_native_terminal_handles_known_slash_commands_as_control_actions(monkeyp
     assert agent.autosaved == 1
 
 
-def test_native_terminal_routes_vs05_slash_to_normal_turn(monkeypatch, capsys):
-    inputs = iter(["/vs05 E:\\ref-a E:\\ref-b", "/exit"])
+def test_native_terminal_routes_owner_comparison_slash_to_normal_turn(monkeypatch, capsys):
+    inputs = iter(["/owner_comparison E:\\ref-a E:\\ref-b", "/exit"])
     agent = DummyAgent()
     gateway = SimpleNamespace(calls=[], last_task_board=None)
 
@@ -119,7 +119,7 @@ def test_native_terminal_routes_vs05_slash_to_normal_turn(monkeypatch, capsys):
 
     def fake_run_turn(text):
         gateway.calls.append(text)
-        return "vs05 started"
+        return "owner_comparison started"
 
     gateway.run_turn = fake_run_turn
     monkeypatch.setattr(native_terminal, "read_native_user_input", fake_read)
@@ -127,6 +127,6 @@ def test_native_terminal_routes_vs05_slash_to_normal_turn(monkeypatch, capsys):
     native_terminal.run_native_terminal_loop(agent, gateway, console=None)
 
     output = capsys.readouterr().out
-    assert "vs05 started" in output
-    assert gateway.calls == ["start VS05 E:\\ref-a E:\\ref-b"]
+    assert "owner_comparison started" in output
+    assert gateway.calls == ["start OWNER_COMPARISON E:\\ref-a E:\\ref-b"]
     assert agent.autosaved == 1

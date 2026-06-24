@@ -5,12 +5,12 @@ from pathlib import Path
 import re
 
 from ..owner_protocols import (
-    is_devmode05_activation,
-    is_ifdev05_activation,
-    is_vs05_activation,
+    is_owner_maintenance_activation,
+    is_owner_interface_audit_activation,
+    is_owner_comparison_activation,
 )
 
-def _devmode05_future_stamp_violation() -> str | None:
+def _owner_maintenance_future_stamp_violation() -> str | None:
     """Block when the active session dir's stamp is implausibly far from the real session
     time — a hand-typed/skewed stamp from skipping session_stamp.py. Catches BOTH skews:
     FUTURE (e.g. the T1930 dir created at 18:56) and PAST relative to the actual session
@@ -82,7 +82,7 @@ def _capability_matrix_missing_paths(text: str) -> list[str]:
     return missing
 
 
-def _devmode05_closeout_evidence_violation(
+def _owner_maintenance_closeout_evidence_violation(
     final_text: str,
     *,
     monitor_path: str | Path | None = None,
@@ -90,7 +90,7 @@ def _devmode05_closeout_evidence_violation(
     frozen_error_count: int | None = None,
     session_dir: "str | Path | None" = None,
 ) -> str | None:
-    """Deterministic contradiction between a clean DEVMODE05 closeout and runtime
+    """Deterministic contradiction between a clean OWNER_MAINTENANCE closeout and runtime
     truth — the internalized watcher. Returns a one-line block reason, or None.
     Fail-open: any error returns None so it can never wedge a legitimate closeout.
 
@@ -98,8 +98,8 @@ def _devmode05_closeout_evidence_violation(
     the gate owns THAT number instead of re-reading the live monitor, so post-freeze
     closeout-edit errors cannot move the target and loop the gate forever."""
     try:
-        text = _devmode05_terminal_marker_text(final_text) or ""
-        if not text.startswith("[DEVMODE05 COMPLETE]"):
+        text = _owner_maintenance_terminal_marker_text(final_text) or ""
+        if not text.startswith("[OWNER_MAINTENANCE COMPLETE]"):
             return None
         # 1. real tool errors must be explicitly owned — not denied, not merely
         #    adjacent to a stray "economy.md" mention or a loose digit. Use the FROZEN
@@ -147,7 +147,7 @@ def _devmode05_closeout_evidence_violation(
                     t for t in (_es(_mp, session_ids=session_ids, exclude_surfaces=_GS).get("error_tools") or [])
                     if t
                 ]
-                ownership_text = _devmode05_tool_error_ownership_text(final_text)
+                ownership_text = _owner_maintenance_tool_error_ownership_text(final_text)
                 missing_tools = [
                     tool for tool in _error_tools
                     if tool.lower() not in ownership_text.lower()
@@ -162,7 +162,7 @@ def _devmode05_closeout_evidence_violation(
             except Exception:
                 pass
         # 2. the closeout artifacts must actually EXIST in the bound session dir. A
-        #    [DEVMODE05 COMPLETE] with no summary.md/economy.md/manifest.json is an
+        #    [OWNER_MAINTENANCE COMPLETE] with no summary.md/economy.md/manifest.json is an
         #    incomplete closeout — observed live mo-1782208099, where the completed-board
         #    tool guard ended the turn before they were written. Only enforced when a dir
         #    is bound (early states with no dir yet are not blocked here).
@@ -174,7 +174,7 @@ def _devmode05_closeout_evidence_violation(
                 if missing:
                     return (
                         "the session dir is missing required closeout artifact(s): "
-                        f"{', '.join(missing)} — write them before [DEVMODE05 COMPLETE]."
+                        f"{', '.join(missing)} — write them before [OWNER_MAINTENANCE COMPLETE]."
                     )
                 # capability-matrix.md must not mark a deleted/relocated source path as
                 # EXISTING/ACTIVE (the stale-baseline blind spot). A missing path means the
@@ -186,17 +186,17 @@ def _devmode05_closeout_evidence_violation(
                         return (
                             "capability-matrix.md marks deleted/nonexistent source path(s) as "
                             f"EXISTING/ACTIVE: {', '.join(stale[:3])} — rebuild the matrix from live "
-                            "source before [DEVMODE05 COMPLETE]."
+                            "source before [OWNER_MAINTENANCE COMPLETE]."
                         )
             except Exception:
                 pass
         # 3. the session dir must carry a local-time stamp, not a future/skewed one.
-        return _devmode05_future_stamp_violation()
+        return _owner_maintenance_future_stamp_violation()
     except Exception:
         return None
 
 
-def devmode05_final_allows_stop(
+def owner_maintenance_final_allows_stop(
     user_input: str,
     final_text: str,
     *,
@@ -205,21 +205,21 @@ def devmode05_final_allows_stop(
     frozen_error_count: int | None = None,
     session_dir: "str | Path | None" = None,
 ) -> bool:
-    """Return True only when a DEVMODE05 final answer is a real stop boundary."""
-    if not is_devmode05_activation(user_input):
+    """Return True only when a OWNER_MAINTENANCE final answer is a real stop boundary."""
+    if not is_owner_maintenance_activation(user_input):
         return True
-    text = _devmode05_terminal_prefix_text(final_text)
+    text = _owner_maintenance_terminal_prefix_text(final_text)
     if not text:
         return False
-    # Don't block the other protocol's completions — VS05 gate is responsible for those
-    if text.startswith("[VS05 COMPLETE]") or text.startswith("[VS05 BLOCKED]"):
+    # Don't block the other protocol's completions — OWNER_COMPARISON gate is responsible for those
+    if text.startswith("[OWNER_COMPARISON COMPLETE]") or text.startswith("[OWNER_COMPARISON BLOCKED]"):
         return True
-    if text.startswith("[DEVMODE05 BLOCKED]"):
-        return _devmode05_blocked_has_hard_boundary(text)
-    if text.startswith("[DEVMODE05 COMPLETE]"):
-        if _devmode05_completion_reports_open_work(text):
+    if text.startswith("[OWNER_MAINTENANCE BLOCKED]"):
+        return _owner_maintenance_blocked_has_hard_boundary(text)
+    if text.startswith("[OWNER_MAINTENANCE COMPLETE]"):
+        if _owner_maintenance_completion_reports_open_work(text):
             return False
-        if _devmode05_closeout_evidence_violation(
+        if _owner_maintenance_closeout_evidence_violation(
             final_text, monitor_path=monitor_path, session_ids=session_ids,
             frozen_error_count=frozen_error_count, session_dir=session_dir,
         ):
@@ -236,24 +236,24 @@ def devmode05_final_allows_stop(
     return text.startswith(allowed_prefixes)
 
 
-def vs05_final_allows_stop(user_input: str, final_text: str) -> bool:
-    """Return True only when a VS05 answer is a terminal comparison boundary."""
-    if not is_vs05_activation(user_input):
+def owner_comparison_final_allows_stop(user_input: str, final_text: str) -> bool:
+    """Return True only when a OWNER_COMPARISON answer is a terminal comparison boundary."""
+    if not is_owner_comparison_activation(user_input):
         return True
-    text = _devmode05_terminal_prefix_text(final_text)
+    text = _owner_maintenance_terminal_prefix_text(final_text)
     if not text:
         return False
-    # Don't block the other protocol's completions — DEVMODE05 gate is responsible for those
-    if text.startswith("[DEVMODE05 COMPLETE]") or text.startswith("[DEVMODE05 BLOCKED]"):
+    # Don't block the other protocol's completions — OWNER_MAINTENANCE gate is responsible for those
+    if text.startswith("[OWNER_MAINTENANCE COMPLETE]") or text.startswith("[OWNER_MAINTENANCE BLOCKED]"):
         return True
-    if text.startswith("[VS05 BLOCKED]"):
-        return _devmode05_blocked_has_hard_boundary(text)
-    if text.startswith("[VS05 COMPLETE]"):
-        if _devmode05_completion_reports_open_work(text):
+    if text.startswith("[OWNER_COMPARISON BLOCKED]"):
+        return _owner_maintenance_blocked_has_hard_boundary(text)
+    if text.startswith("[OWNER_COMPARISON COMPLETE]"):
+        if _owner_maintenance_completion_reports_open_work(text):
             return False
-        if _vs05_reports_default_target_drift(user_input, text):
+        if _owner_comparison_reports_default_target_drift(user_input, text):
             return False
-        if _vs05_missing_closeout_terms(text):
+        if _owner_comparison_missing_closeout_terms(text):
             return False
         return True
     allowed_prefixes = (
@@ -267,7 +267,7 @@ def vs05_final_allows_stop(user_input: str, final_text: str) -> bool:
     return text.startswith(allowed_prefixes)
 
 
-def devmode05_continuation_instruction(
+def owner_maintenance_continuation_instruction(
     user_input: str,
     final_text: str,
     *,
@@ -276,19 +276,19 @@ def devmode05_continuation_instruction(
     frozen_error_count: int | None = None,
     session_dir: "str | Path | None" = None,
 ) -> str:
-    """Explain why a DEVMODE05 stop claim was rejected and what must happen next."""
+    """Explain why a OWNER_MAINTENANCE stop claim was rejected and what must happen next."""
     base = (
-        "[DEVMODE05 AUTONOMY] Do not stop at a checkpoint, report, or approval question. "
-        "Continue with the next evidence-backed action. Finalize only with [DEVMODE05 COMPLETE] "
-        "when the protocol is complete or [DEVMODE05 BLOCKED] for a real "
+        "[OWNER_MAINTENANCE AUTONOMY] Do not stop at a checkpoint, report, or approval question. "
+        "Continue with the next evidence-backed action. Finalize only with [OWNER_MAINTENANCE COMPLETE] "
+        "when the protocol is complete or [OWNER_MAINTENANCE BLOCKED] for a real "
         "tool/provider/timeout/sandbox/permission/safety boundary."
     )
-    if not is_devmode05_activation(user_input):
+    if not is_owner_maintenance_activation(user_input):
         return base
-    text = _devmode05_terminal_prefix_text(final_text)
-    if text.startswith("[DEVMODE05 COMPLETE]") and _devmode05_completion_reports_open_work(text):
+    text = _owner_maintenance_terminal_prefix_text(final_text)
+    if text.startswith("[OWNER_MAINTENANCE COMPLETE]") and _owner_maintenance_completion_reports_open_work(text):
         return (
-            "[DEVMODE05 AUTONOMY] Your last answer claimed [DEVMODE05 COMPLETE] while still "
+            "[OWNER_MAINTENANCE AUTONOMY] Your last answer claimed [OWNER_MAINTENANCE COMPLETE] while still "
             "reporting actionable open work (unresolved/open/carried-forward findings, failed "
             "checks, or a next target). That is not a terminal state. Do not repeat the same "
             "completion report. Continue from the named items now: RESOLVE the actionable ones "
@@ -298,116 +298,116 @@ def devmode05_continuation_instruction(
             "item as RESOLVED, and do NOT claim 'Remaining: none' when such items exist). Finalize "
             "with: 'No actionable product work remains; operator-decision items remain: <list, or none>.'"
         )
-    _violation = _devmode05_closeout_evidence_violation(
+    _violation = _owner_maintenance_closeout_evidence_violation(
         final_text, monitor_path=monitor_path, session_ids=session_ids,
         frozen_error_count=frozen_error_count, session_dir=session_dir,
     )
-    if text.startswith("[DEVMODE05 COMPLETE]") and _violation:
+    if text.startswith("[OWNER_MAINTENANCE COMPLETE]") and _violation:
         return (
-            "[DEVMODE05 AUTONOMY] Your [DEVMODE05 COMPLETE] contradicts runtime evidence: "
+            "[OWNER_MAINTENANCE AUTONOMY] Your [OWNER_MAINTENANCE COMPLETE] contradicts runtime evidence: "
             f"{_violation} Do not repeat the same completion — read economy.md, correct the "
             "tool-error ledger and report from it, then finalize."
         )
-    if text.startswith("[DEVMODE05 BLOCKED]") and not _devmode05_blocked_has_hard_boundary(text):
+    if text.startswith("[OWNER_MAINTENANCE BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
         return (
-            "[DEVMODE05 AUTONOMY] Your last answer used [DEVMODE05 BLOCKED] without a current hard "
+            "[OWNER_MAINTENANCE AUTONOMY] Your last answer used [OWNER_MAINTENANCE BLOCKED] without a current hard "
             "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a "
             "blocker. Continue from the continuation capsule or next unresolved action now."
         )
     return base
 
 
-def vs05_continuation_instruction(user_input: str, final_text: str) -> str:
-    """Explain why a VS05 stop claim was rejected and what must happen next."""
+def owner_comparison_continuation_instruction(user_input: str, final_text: str) -> str:
+    """Explain why a OWNER_COMPARISON stop claim was rejected and what must happen next."""
     base = (
-        "[VS05 CONTINUATION] Do not stop at initial capture or preliminary comparison. "
-        "Continue the read-only VS05 protocol until source roles, structured evidence usage, "
+        "[OWNER_COMPARISON CONTINUATION] Do not stop at initial capture or preliminary comparison. "
+        "Continue the read-only OWNER_COMPARISON protocol until source roles, structured evidence usage, "
         "comparison matrix, adoption/reject/defer dispositions, artifact path, and exact next "
-        "approval decision are complete. Finalize only with [VS05 COMPLETE] or [VS05 BLOCKED] "
+        "approval decision are complete. Finalize only with [OWNER_COMPARISON COMPLETE] or [OWNER_COMPARISON BLOCKED] "
         "for a real tool/provider/timeout/sandbox/permission/safety boundary. Preferred final "
         "labels: Target, Matrix, Adoption, Reject, Defer/Recheck, Artifacts, Approval."
     )
-    if not is_vs05_activation(user_input):
+    if not is_owner_comparison_activation(user_input):
         return base
-    text = _devmode05_terminal_prefix_text(final_text)
-    if text.startswith("[VS05 COMPLETE]") and _devmode05_completion_reports_open_work(text):
+    text = _owner_maintenance_terminal_prefix_text(final_text)
+    if text.startswith("[OWNER_COMPARISON COMPLETE]") and _owner_maintenance_completion_reports_open_work(text):
         return (
-            "[VS05 CONTINUATION] Your last answer claimed [VS05 COMPLETE] while still reporting "
+            "[OWNER_COMPARISON CONTINUATION] Your last answer claimed [OWNER_COMPARISON COMPLETE] while still reporting "
             "remaining, deferred, open, failed, or carried-forward work. Continue from those named "
             "items now, or close them as reject/defer/no-action with evidence before completing."
         )
-    if text.startswith("[VS05 COMPLETE]") and _vs05_reports_default_target_drift(user_input, text):
+    if text.startswith("[OWNER_COMPARISON COMPLETE]") and _owner_comparison_reports_default_target_drift(user_input, text):
         return (
-            "[VS05 CONTINUATION] Your VS05 closeout drifted from the default target. Current MO "
+            "[OWNER_COMPARISON CONTINUATION] Your OWNER_COMPARISON closeout drifted from the default target. Current MO "
             "workspace is the adoption target; operator-supplied paths are read-only references "
             "unless the operator explicitly named another target. Rewrite/continue the matrix and "
             "adoption plan for current MO, not for a reference path. The closeout must include "
             "Target: current MO workspace."
         )
-    if text.startswith("[VS05 COMPLETE]"):
-        missing = _vs05_missing_closeout_terms(text)
+    if text.startswith("[OWNER_COMPARISON COMPLETE]"):
+        missing = _owner_comparison_missing_closeout_terms(text)
         if missing:
             return (
-                "[VS05 CONTINUATION] Your [VS05 COMPLETE] report is missing required closeout "
+                "[OWNER_COMPARISON CONTINUATION] Your [OWNER_COMPARISON COMPLETE] report is missing required closeout "
                 f"terms: {', '.join(missing)}. Continue and produce the final report with these "
                 "literal labels before final closeout: Target, Matrix, Adoption, Reject, Defer/Recheck, "
                 "Artifacts, Approval. Do not repeat a summary-only closeout."
             )
-    if text.startswith("[VS05 BLOCKED]") and not _devmode05_blocked_has_hard_boundary(text):
+    if text.startswith("[OWNER_COMPARISON BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
         return (
-            "[VS05 CONTINUATION] Your last answer used [VS05 BLOCKED] without a current hard "
+            "[OWNER_COMPARISON CONTINUATION] Your last answer used [OWNER_COMPARISON BLOCKED] without a current hard "
             "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a "
             "blocker. Continue the comparison from the next evidence-backed action."
         )
     return base
 
 
-def devmode05_task_truth_continuation_instruction() -> str:
-    """Tell DEVMODE05 how to recover from a terminal claim with open task truth."""
+def owner_maintenance_task_truth_continuation_instruction() -> str:
+    """Tell OWNER_MAINTENANCE how to recover from a terminal claim with open task truth."""
     return (
-        "[DEVMODE05 AUTONOMY] Completion is not allowed while MO's task/protocol truth still "
+        "[OWNER_MAINTENANCE AUTONOMY] Completion is not allowed while MO's task/protocol truth still "
         "has open work. Do not repeat the same completion report. Continue from the active "
         "taskboard/protocol row: run the next evidence-backed action, or if the active row is "
         "genuinely done, call `complete_task` and verify open task count is zero before the final "
-        "[DEVMODE05 COMPLETE]. If the only rejection was `taskboard_done_claim_conflict`, do not "
+        "[OWNER_MAINTENANCE COMPLETE]. If the only rejection was `taskboard_done_claim_conflict`, do not "
         "inspect taskboard source, storage, or trace paths before that `complete_task` call; inspect "
-        "implementation only if `complete_task` is unavailable or fails. Use [DEVMODE05 BLOCKED] "
+        "implementation only if `complete_task` is unavailable or fails. Use [OWNER_MAINTENANCE BLOCKED] "
         "only for a real hard runtime/tool/provider/safety boundary."
     )
 
 
-def vs05_task_truth_continuation_instruction() -> str:
-    """Tell VS05 how to recover from a terminal claim with open task truth."""
+def owner_comparison_task_truth_continuation_instruction() -> str:
+    """Tell OWNER_COMPARISON how to recover from a terminal claim with open task truth."""
     return (
-        "[VS05 CONTINUATION] Completion is not allowed while MO's task/protocol truth still "
+        "[OWNER_COMPARISON CONTINUATION] Completion is not allowed while MO's task/protocol truth still "
         "has open work. Do not repeat the same completion report. Continue from the active "
-        "VS05 taskboard row: run the next evidence-backed action, or if the active row is "
+        "OWNER_COMPARISON taskboard row: run the next evidence-backed action, or if the active row is "
         "genuinely done, call `complete_task` and verify open task count is zero before the final "
-        "[VS05 COMPLETE]. If the only rejection was `taskboard_done_claim_conflict`, do not "
+        "[OWNER_COMPARISON COMPLETE]. If the only rejection was `taskboard_done_claim_conflict`, do not "
         "inspect taskboard source, storage, or trace paths before that `complete_task` call; inspect "
-        "implementation only if `complete_task` is unavailable or fails. Use [VS05 BLOCKED] "
+        "implementation only if `complete_task` is unavailable or fails. Use [OWNER_COMPARISON BLOCKED] "
         "only for a real hard runtime/tool/provider/safety boundary."
     )
 
 
-def ifdev05_final_allows_stop(user_input: str, final_text: str) -> bool:
-    """Return True only when an IFDEV05 final answer is a real stop boundary.
+def owner_interface_audit_final_allows_stop(user_input: str, final_text: str) -> bool:
+    """Return True only when an OWNER_INTERFACE_AUDIT final answer is a real stop boundary.
 
-    Mirrors the DEVMODE05 gate (IFDEV05's improve lane is DEVMODE05-shaped):
+    Mirrors the OWNER_MAINTENANCE gate (OWNER_INTERFACE_AUDIT's improve lane is OWNER_MAINTENANCE-shaped):
     completion is rejected while open work is reported; BLOCKED requires a real
     hard boundary. Other protocols' markers are deferred to their own gates.
     """
-    if not is_ifdev05_activation(user_input):
+    if not is_owner_interface_audit_activation(user_input):
         return True
-    text = _devmode05_terminal_prefix_text(final_text)
+    text = _owner_maintenance_terminal_prefix_text(final_text)
     if not text:
         return False
-    if text.startswith(("[DEVMODE05 COMPLETE]", "[DEVMODE05 BLOCKED]", "[VS05 COMPLETE]", "[VS05 BLOCKED]")):
+    if text.startswith(("[OWNER_MAINTENANCE COMPLETE]", "[OWNER_MAINTENANCE BLOCKED]", "[OWNER_COMPARISON COMPLETE]", "[OWNER_COMPARISON BLOCKED]")):
         return True
-    if text.startswith("[IFDEV05 BLOCKED]"):
-        return _devmode05_blocked_has_hard_boundary(text)
-    if text.startswith("[IFDEV05 COMPLETE]"):
-        if _devmode05_completion_reports_open_work(text):
+    if text.startswith("[OWNER_INTERFACE_AUDIT BLOCKED]"):
+        return _owner_maintenance_blocked_has_hard_boundary(text)
+    if text.startswith("[OWNER_INTERFACE_AUDIT COMPLETE]"):
+        if _owner_maintenance_completion_reports_open_work(text):
             return False
         return True
     allowed_prefixes = (
@@ -421,21 +421,21 @@ def ifdev05_final_allows_stop(user_input: str, final_text: str) -> bool:
     return text.startswith(allowed_prefixes)
 
 
-def ifdev05_continuation_instruction(user_input: str, final_text: str) -> str:
-    """Explain why an IFDEV05 stop claim was rejected and what must happen next."""
+def owner_interface_audit_continuation_instruction(user_input: str, final_text: str) -> str:
+    """Explain why an OWNER_INTERFACE_AUDIT stop claim was rejected and what must happen next."""
     base = (
-        "[IFDEV05 CONTINUATION] Do not stop at a checkpoint, partial UX audit, or approval "
+        "[OWNER_INTERFACE_AUDIT CONTINUATION] Do not stop at a checkpoint, partial UX audit, or approval "
         "question. Continue the interface diagnosis/adoption protocol with the next "
-        "evidence-backed action. Finalize only with [IFDEV05 COMPLETE] when the protocol is "
-        "complete or [IFDEV05 BLOCKED] for a real tool/provider/timeout/sandbox/permission/safety "
+        "evidence-backed action. Finalize only with [OWNER_INTERFACE_AUDIT COMPLETE] when the protocol is "
+        "complete or [OWNER_INTERFACE_AUDIT BLOCKED] for a real tool/provider/timeout/sandbox/permission/safety "
         "boundary."
     )
-    if not is_ifdev05_activation(user_input):
+    if not is_owner_interface_audit_activation(user_input):
         return base
-    text = _devmode05_terminal_prefix_text(final_text)
-    if text.startswith("[IFDEV05 COMPLETE]") and _devmode05_completion_reports_open_work(text):
+    text = _owner_maintenance_terminal_prefix_text(final_text)
+    if text.startswith("[OWNER_INTERFACE_AUDIT COMPLETE]") and _owner_maintenance_completion_reports_open_work(text):
         return (
-            "[IFDEV05 CONTINUATION] Your last answer claimed [IFDEV05 COMPLETE] while also "
+            "[OWNER_INTERFACE_AUDIT CONTINUATION] Your last answer claimed [OWNER_INTERFACE_AUDIT COMPLETE] while also "
             "reporting actionable open/failed UX work. That is not a terminal state. "
             "Continue from the named open findings now: fix the actionable ones with verification, "
             "adopt/reject the comparison candidates. Items that are genuinely the operator's call "
@@ -444,34 +444,34 @@ def ifdev05_continuation_instruction(user_input: str, final_text: str) -> str:
             "RESOLVED). Finalize with: 'No actionable UX work remains; operator-decision items "
             "remain: <list, or none>.'"
         )
-    if text.startswith("[IFDEV05 BLOCKED]") and not _devmode05_blocked_has_hard_boundary(text):
+    if text.startswith("[OWNER_INTERFACE_AUDIT BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
         return (
-            "[IFDEV05 CONTINUATION] Your last answer used [IFDEV05 BLOCKED] without a current hard "
+            "[OWNER_INTERFACE_AUDIT CONTINUATION] Your last answer used [OWNER_INTERFACE_AUDIT BLOCKED] without a current hard "
             "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a "
             "blocker. Continue from the next unresolved UX finding now."
         )
     return base
 
 
-def ifdev05_task_truth_continuation_instruction() -> str:
-    """Tell IFDEV05 how to recover from a terminal claim with open task truth."""
+def owner_interface_audit_task_truth_continuation_instruction() -> str:
+    """Tell OWNER_INTERFACE_AUDIT how to recover from a terminal claim with open task truth."""
     return (
-        "[IFDEV05 CONTINUATION] Completion is not allowed while MO's task/protocol truth still "
+        "[OWNER_INTERFACE_AUDIT CONTINUATION] Completion is not allowed while MO's task/protocol truth still "
         "has open work. Do not repeat the same completion report. Continue from the active "
-        "IFDEV05 taskboard row: run the next evidence-backed action, or if the active row is "
+        "OWNER_INTERFACE_AUDIT taskboard row: run the next evidence-backed action, or if the active row is "
         "genuinely done, call `complete_task` and verify open task count is zero before the final "
-        "[IFDEV05 COMPLETE]. Use [IFDEV05 BLOCKED] only for a real hard "
+        "[OWNER_INTERFACE_AUDIT COMPLETE]. Use [OWNER_INTERFACE_AUDIT BLOCKED] only for a real hard "
         "runtime/tool/provider/safety boundary."
     )
 
 
-def _vs05_missing_closeout_terms(text: str) -> list[str]:
-    """Return missing VS05 terminal closeout concepts.
+def _owner_comparison_missing_closeout_terms(text: str) -> list[str]:
+    """Return missing OWNER_COMPARISON terminal closeout concepts.
 
     The gate accepts the preferred literal label ``Matrix`` and the common
     semantic form ``Status: 7 MO-STRONGER ...`` because both are matrix-count
     evidence. It still requires explicit adoption and rejection disposition
-    language before VS05 may stop.
+    language before OWNER_COMPARISON may stop.
     """
     lowered = str(text or "").lower()
     has_matrix = "matrix" in lowered or (
@@ -497,9 +497,9 @@ def _vs05_missing_closeout_terms(text: str) -> list[str]:
     return [name for name, present in checks if not present]
 
 
-def _vs05_reports_default_target_drift(user_input: str, text: str) -> bool:
-    """Detect VS05 closeouts that improve references instead of current MO."""
-    if _vs05_user_named_non_current_target(user_input):
+def _owner_comparison_reports_default_target_drift(user_input: str, text: str) -> bool:
+    """Detect OWNER_COMPARISON closeouts that improve references instead of current MO."""
+    if _owner_comparison_user_named_non_current_target(user_input):
         return False
     lowered = str(text or "").lower()
     if "not a comparison target" in lowered and ("running mo" in lowered or "current mo" in lowered):
@@ -512,7 +512,7 @@ def _vs05_reports_default_target_drift(user_input: str, text: str) -> bool:
     return False
 
 
-def _vs05_user_named_non_current_target(user_input: str) -> bool:
+def _owner_comparison_user_named_non_current_target(user_input: str) -> bool:
     """Return True only for explicit operator target override wording."""
     lowered = str(user_input or "").lower()
     return bool(
@@ -533,8 +533,8 @@ _OPERATOR_OWNED_REMAINDER = re.compile(
 )
 
 
-def _devmode05_completion_reports_open_work(text: str) -> bool:
-    """Detect ACTIONABLE DEVMODE05 leftovers that must continue, not close.
+def _owner_maintenance_completion_reports_open_work(text: str) -> bool:
+    """Detect ACTIONABLE OWNER_MAINTENANCE leftovers that must continue, not close.
 
     A terminal report may legitimately carry **operator-owned** remainders — items
     explicitly classified as operator-decision pending, supervised fix-lane, recorded
@@ -582,8 +582,8 @@ def _devmode05_completion_reports_open_work(text: str) -> bool:
     return False
 
 
-def _devmode05_blocked_has_hard_boundary(text: str) -> bool:
-    """Accept DEVMODE05 BLOCKED only for real external or deterministic limits."""
+def _owner_maintenance_blocked_has_hard_boundary(text: str) -> bool:
+    """Accept OWNER_MAINTENANCE BLOCKED only for real external or deterministic limits."""
     body = str(text or "").lower()
     hard_markers = (
         "max provider",
@@ -609,8 +609,8 @@ def _devmode05_blocked_has_hard_boundary(text: str) -> bool:
     return any(marker in body for marker in hard_markers)
 
 
-def _devmode05_terminal_prefix_text(final_text: str) -> str:
-    """Normalize harmless formatting before a DEVMODE05 terminal marker."""
+def _owner_maintenance_terminal_prefix_text(final_text: str) -> str:
+    """Normalize harmless formatting before a OWNER_MAINTENANCE terminal marker."""
     text = str(final_text or "").lstrip()
     if not text:
         return ""
@@ -621,7 +621,7 @@ def _devmode05_terminal_prefix_text(final_text: str) -> str:
         text = _strip_leading_markdown_prefix(text[status.end():])
     heading = re.search(
         r"(?im)^\s*(?:[-*_]{3,}\s*)?(?:#{1,6}\s*)?(?:[*_`]+\s*)?"
-        r"(\[(?:DEVMODE05|VS05)\s+(?:COMPLETE|BLOCKED)\])",
+        r"(\[(?:OWNER_MAINTENANCE|OWNER_COMPARISON)\s+(?:COMPLETE|BLOCKED)\])",
         text[:480],
     )
     if heading:
@@ -629,24 +629,24 @@ def _devmode05_terminal_prefix_text(final_text: str) -> str:
     return text
 
 
-def _devmode05_terminal_marker_text(final_text: str) -> str:
-    """Return text starting at a DEVMODE05/VS05 marker even in persisted summaries.
+def _owner_maintenance_terminal_marker_text(final_text: str) -> str:
+    """Return text starting at a OWNER_MAINTENANCE/OWNER_COMPARISON marker even in persisted summaries.
 
     Provider final answers normally start with the marker. Session summaries often place
     the marker near the closeout section after headings and evidence, so prefix-only
     normalization would skip the closeout evidence checks when validating artifacts.
     """
-    text = _devmode05_terminal_prefix_text(final_text)
-    if text.startswith(("[DEVMODE05 COMPLETE]", "[DEVMODE05 BLOCKED]", "[VS05 COMPLETE]", "[VS05 BLOCKED]")):
+    text = _owner_maintenance_terminal_prefix_text(final_text)
+    if text.startswith(("[OWNER_MAINTENANCE COMPLETE]", "[OWNER_MAINTENANCE BLOCKED]", "[OWNER_COMPARISON COMPLETE]", "[OWNER_COMPARISON BLOCKED]")):
         return text
     raw = str(final_text or "")
-    marker = re.search(r"(?is)\[(?:DEVMODE05|VS05)\s+(?:COMPLETE|BLOCKED)\]", raw)
+    marker = re.search(r"(?is)\[(?:OWNER_MAINTENANCE|OWNER_COMPARISON)\s+(?:COMPLETE|BLOCKED)\]", raw)
     if not marker:
         return text
     return raw[marker.start():]
 
 
-def _devmode05_tool_error_ownership_text(final_text: str) -> str:
+def _owner_maintenance_tool_error_ownership_text(final_text: str) -> str:
     """Extract the text that is allowed to satisfy tool-error attribution.
 
     A real tool name appearing elsewhere in a long report (for example in a passing test
@@ -666,7 +666,7 @@ def _devmode05_tool_error_ownership_text(final_text: str) -> str:
     # section). Scope to the marker's OWN paragraph only — not a broad window, which
     # would let an incidental tool name elsewhere (e.g. a passing-tests list) satisfy
     # the ledger without owning the error.
-    marker_text = _devmode05_terminal_marker_text(raw)
+    marker_text = _owner_maintenance_terminal_marker_text(raw)
     if marker_text:
         sections.append(re.split(r"\n\s*\n", marker_text, maxsplit=1)[0])
     if not sections:

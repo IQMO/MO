@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 from core.agent.agent import Agent
-from core.self_maintenance.devmode_closeout import devmode05_final_allows_stop
+from core.self_maintenance.devmode_closeout import owner_maintenance_final_allows_stop
 from core.session.session import Session
 from core.tasking.task_board import TaskBoard, TaskItem
 
@@ -39,7 +39,7 @@ def _tc(name, args):
 def test_closeout_only_allows_economy_and_artifact_tools(monkeypatch):
     """After open=0 the model must still own economy.md and write the session
     artifacts — those are closeout, not re-discovery, and must NOT be blocked
-    (else the closeout deadlocks to [DEVMODE05 BLOCKED], live mo-1782077188)."""
+    (else the closeout deadlocks to [OWNER_MAINTENANCE BLOCKED], live mo-1782077188)."""
     monkeypatch.setenv("MO_HOME", r"C:\Users\x\.mo")
     calls = [
         _tc("read_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\economy.md"}),
@@ -49,18 +49,18 @@ def test_closeout_only_allows_economy_and_artifact_tools(monkeypatch):
         # completed-board guard block the closeout batch and end the turn before
         # economy.md/manifest were written (live mo-1782208099).
         _tc("edit_file", {"path": r"C:\Users\x\.mo\memory\devmode\2026-06-21T2328\workflow.md"}),
-        _tc("edit_file", {"path": r"C:\Users\x\.mo\operator\devmode\DEVMODE05\adversarial-rotation.json"}),
+        _tc("edit_file", {"path": r"C:\Users\x\.mo\operator\devmode\OWNER_MAINTENANCE\adversarial-rotation.json"}),
         _tc("edit_file", {"file_path": r"C:\Users\x\.mo\memory\devmode\longitudinal.md"}),
         _tc("shell", {"command": "python -m pytest -q"}),
         _tc("complete_task", {"task_id": "6"}),
     ]
-    assert Agent._devmode05_tool_calls_are_closeout_only(calls) is True
+    assert Agent._owner_maintenance_tool_calls_are_closeout_only(calls) is True
 
 
 def test_closeout_only_rejects_edit_to_non_artifact():
     """edit_file is exempt only for artifact/devmode paths — editing product source after
     completion is still post-completion probing and stays blocked."""
-    assert Agent._devmode05_tool_calls_are_closeout_only(
+    assert Agent._owner_maintenance_tool_calls_are_closeout_only(
         [_tc("edit_file", {"path": r"E:\MO-clean\core\agent\agent_turn.py"})]
     ) is False
 
@@ -68,17 +68,17 @@ def test_closeout_only_rejects_edit_to_non_artifact():
 def test_closeout_only_rejects_broad_discovery():
     """A grep / find_files / source read after completion is post-completion probing
     and stays blocked."""
-    assert Agent._devmode05_tool_calls_are_closeout_only([_tc("grep", {"pattern": "x"})]) is False
-    assert Agent._devmode05_tool_calls_are_closeout_only([_tc("find_files", {"q": "x"})]) is False
-    assert Agent._devmode05_tool_calls_are_closeout_only(
+    assert Agent._owner_maintenance_tool_calls_are_closeout_only([_tc("grep", {"pattern": "x"})]) is False
+    assert Agent._owner_maintenance_tool_calls_are_closeout_only([_tc("find_files", {"q": "x"})]) is False
+    assert Agent._owner_maintenance_tool_calls_are_closeout_only(
         [_tc("read_file", {"path": r"E:\MO-clean\core\agent\agent_turn.py"})]
     ) is False
     # a mixed round (one closeout + one discovery) is treated as discovery
-    assert Agent._devmode05_tool_calls_are_closeout_only([
+    assert Agent._owner_maintenance_tool_calls_are_closeout_only([
         _tc("write_file", {"path": r"~/.mo/memory/devmode/x/summary.md", "content": "x"}),
         _tc("grep", {"pattern": "x"}),
     ]) is False
-    assert Agent._devmode05_tool_calls_are_closeout_only([]) is False
+    assert Agent._owner_maintenance_tool_calls_are_closeout_only([]) is False
 
 
 def test_no_warning_at_low_usage():
@@ -200,14 +200,14 @@ def _assistant_text(agent):
     return " ".join(m.get("content", "") for m in agent.session.messages if m.get("role") == "assistant")
 
 
-def test_devmode05_critical_budget_forces_blocked_in_place_no_reseed():
-    """At remaining<=5 for an INCOMPLETE DEVMODE05 run, the runtime must NOT re-seed a
-    fresh session — a reseed made the model re-orient ("I'll start DEVMODE05 by first
+def test_owner_maintenance_critical_budget_forces_blocked_in_place_no_reseed():
+    """At remaining<=5 for an INCOMPLETE OWNER_MAINTENANCE run, the runtime must NOT re-seed a
+    fresh session — a reseed made the model re-orient ("I'll start OWNER_MAINTENANCE by first
     reading...") and burn the last rounds → hard BLOCKED (live mo-1782179985). It forces
-    the [DEVMODE05 BLOCKED] continuation capsule IN PLACE in the current session."""
+    the [OWNER_MAINTENANCE BLOCKED] continuation capsule IN PLACE in the current session."""
     agent = _agent(max_tool_rounds=80)
     agent._session = Session("sys")
-    agent.session.add_user("start DEVMODE05")
+    agent.session.add_user("start OWNER_MAINTENANCE")
     agent._provider_surface = lambda: "main"
     handoff_calls = []
     agent._perform_context_handoff = lambda **kw: handoff_calls.append(kw)
@@ -218,15 +218,15 @@ def test_devmode05_critical_budget_forces_blocked_in_place_no_reseed():
 
     assert handoff_calls == []  # NO fresh context handoff / reseed
     mandate = _assistant_text(agent)
-    assert "[DEVMODE05 BLOCKED]" in mandate
+    assert "[OWNER_MAINTENANCE BLOCKED]" in mandate
     assert "continuation capsule" in mandate
-    assert "Do NOT restart" in mandate  # no "start DEVMODE05 again" path
+    assert "Do NOT restart" in mandate  # no "start OWNER_MAINTENANCE again" path
 
 
-def test_devmode05_completed_board_critical_budget_forces_complete_in_place_no_reseed():
+def test_owner_maintenance_completed_board_critical_budget_forces_complete_in_place_no_reseed():
     agent = _agent(max_tool_rounds=80)
     agent._session = Session("sys")
-    agent.session.add_user("start DEVMODE05")
+    agent.session.add_user("start OWNER_MAINTENANCE")
     agent.gateway = SimpleNamespace(last_task_board=TaskBoard(tasks=[TaskItem("1", "Closeout", "completed")]))
     agent._provider_surface = lambda: "main"
     handoff_calls = []
@@ -237,23 +237,23 @@ def test_devmode05_completed_board_critical_budget_forces_complete_in_place_no_r
 
     assert handoff_calls == []  # NO reseed
     mandate = _assistant_text(agent)
-    assert "[DEVMODE05 COMPLETE]" in mandate
+    assert "[OWNER_MAINTENANCE COMPLETE]" in mandate
     assert "Do NOT restart" in mandate
 
 
-def test_devmode05_tool_blocked_instruction_requires_terminal_marker():
-    instruction = Agent._turn_health_tool_blocked_instruction("start DEVMODE05")
+def test_owner_maintenance_tool_blocked_instruction_requires_terminal_marker():
+    instruction = Agent._turn_health_tool_blocked_instruction("start OWNER_MAINTENANCE")
 
     assert "must start exactly" in instruction
-    assert "[DEVMODE05 BLOCKED]" in instruction
+    assert "[OWNER_MAINTENANCE BLOCKED]" in instruction
     assert "Produce your final answer now" not in instruction
 
 
-def test_devmode05_persistent_tool_block_text_is_terminal_blocked():
-    text = Agent._turn_health_persistent_block_text("start DEVMODE05")
+def test_owner_maintenance_persistent_tool_block_text_is_terminal_blocked():
+    text = Agent._turn_health_persistent_block_text("start OWNER_MAINTENANCE")
 
-    assert text.startswith("[DEVMODE05 BLOCKED]")
-    assert devmode05_final_allows_stop("start DEVMODE05", text)
+    assert text.startswith("[OWNER_MAINTENANCE BLOCKED]")
+    assert owner_maintenance_final_allows_stop("start OWNER_MAINTENANCE", text)
 
 
 def test_open_work_handoff_requests_work_continuation_capsule_not_final_answer():

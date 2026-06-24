@@ -73,13 +73,13 @@ def test_slash_mixin_unknown_command_falls_through():
     assert _agent().process_slash_command("/definitely-not-real") is None
 
 
-def test_vs05_slash_routes_to_normal_turn_prompt():
+def test_owner_comparison_slash_routes_to_normal_turn_prompt():
     agent = _agent()
 
-    result = agent.process_slash_command("/VS05 E:\\ref-a E:\\ref-b")
+    result = agent.process_slash_command("/OWNER_COMPARISON E:\\ref-a E:\\ref-b")
 
     assert result == "[RUN_TURN]"
-    assert agent._slash_pending_input == "start VS05 E:\\ref-a E:\\ref-b"
+    assert agent._slash_pending_input == "start OWNER_COMPARISON E:\\ref-a E:\\ref-b"
 
 
 def test_turn_mixin_identity_answer_uses_runtime_provider_and_model():

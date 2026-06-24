@@ -285,13 +285,13 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         ),
     ),
     SlashCommandSpec(
-        name="/vs05",
-        description="VS05 comparison/adoption mode",
+        name="/owner_comparison",
+        description="OWNER_COMPARISON comparison/adoption mode",
         category="Tasks",
         palette_description="compare MO against a reference system",
         help_lines=(
-            "/vs05             VS05 comparison/adoption mode",
-            "                  /vs05 <current-path> <reference-path>",
+            "/owner_comparison             OWNER_COMPARISON comparison/adoption mode",
+            "                  /owner_comparison <current-path> <reference-path>",
         ),
         # Operator-only protocol: dispatchable for all, but hidden from
         # user-facing help/palette/completion unless the protocol pack is installed.
@@ -433,7 +433,7 @@ SLASH_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
 
 
 HELP_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Work", ("/status", "/goal", "/ghost", "/gp", "/prt", "/vs05", "/structural-graph", "/learning", "/usage", "/companion")),
+    ("Work", ("/status", "/goal", "/ghost", "/gp", "/prt", "/owner_comparison", "/structural-graph", "/learning", "/usage", "/companion")),
     ("Sessions", ("/projects", "/sessions", "/session", "/new", "/resume", "/clear", "/undo", "/retry")),
     ("Settings", ("/help", "/init", "/doctor", "/migrate", "/model", "/profile", "/moon", "/hints", "/reload", "/think", "/settings")),
     ("Remote", ("/heartbeat", "/telegram")),
@@ -463,7 +463,7 @@ SLASH_COMMAND_HELP = build_help_text()
 
 PALETTE_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Recent", ()),
-    ("Tasks", ("/goal", "/ghost", "/gp", "/prt", "/vs05", "/structural-graph", "/status", "/usage", "/heartbeat", "/companion")),
+    ("Tasks", ("/goal", "/ghost", "/gp", "/prt", "/owner_comparison", "/structural-graph", "/status", "/usage", "/heartbeat", "/companion")),
     ("Sessions", ("/projects", "/session", "/session save", "/resume", "/new", "/clear", "/undo", "/retry")),
     ("Settings", ("/settings", "/init", "/migrate", "/model", "/think", "/reload", "/profile", "/telegram", "/help")),
     ("Exit", ("/exit",)),

@@ -35,7 +35,7 @@ def test_manifest_artifact_entries_hash_present_and_record_missing(tmp_path):
 def test_manifest_records_taskboard_evidence_and_token_only_rows(tmp_path):
     board = TaskBoard(tasks=[
         TaskItem("1", "Gather", "completed", ["read_file:x", "shell:y"]),
-        TaskItem("2", "Report", "completed", ["final:devmode05_protocol_closeout"]),
+        TaskItem("2", "Report", "completed", ["final:owner_maintenance_protocol_closeout"]),
         TaskItem("3", "Verify", "pending"),
     ])
     m = build_devmode_manifest(tmp_path, task_board=board)
@@ -85,7 +85,7 @@ def test_manifest_status_complete_vs_blocked(tmp_path):
 def test_manifest_status_clamped_complete_when_board_completed(tmp_path):
     # A completed board (no open rows) must never carry top-level status "active": the
     # manifest cannot contradict its own taskboard projection. Live 2026-06-24T0404 the
-    # budget-forced [DEVMODE05 COMPLETE] path bypassed the finalize that sets
+    # budget-forced [OWNER_MAINTENANCE COMPLETE] path bypassed the finalize that sets
     # status="complete", and a late status="active" economy write left a completed board
     # reading "active".
     board = TaskBoard(tasks=[

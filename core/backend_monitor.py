@@ -53,7 +53,7 @@ SAFE_EVENT_TYPES = {
     "slash_command",
     "context_handoff",
     "consistency_boundary",
-    "iam05_reporting_truth",
+    "owner_integrity_audit_reporting_truth",
     "ghost_event",
     "board_advance",
     "prt_event",
@@ -326,7 +326,7 @@ def latest_monitor_path() -> Path | None:
     return files[-1] if files else None
 
 
-# Surfaces whose turns are NOT part of a Main-MO logical run (DEVMODE/VS05/etc.) and
+# Surfaces whose turns are NOT part of a Main-MO logical run (DEVMODE/OWNER_COMPARISON/etc.) and
 # must be excluded from its economy record — Ghost/desktop activity shares the same
 # per-process monitor file but is a separate entity (see the multi-instance proposal).
 GHOST_SURFACES = frozenset({"desktop", "ghost", "companion"})
@@ -341,7 +341,7 @@ def economy_summary(
 ) -> dict[str, Any]:
     """Deterministic provider/tool/error/compression counts from a backend monitor.
 
-    The authoritative source of session economy — used by the DEVMODE05 closeout
+    The authoritative source of session economy — used by the OWNER_MAINTENANCE closeout
     and the operator economy helper so the record can never be estimated or stale.
     Tool errors are counted from ``tool_result.error``/``is_error`` and blocks from
     ``tool_result.blocked`` (NOT only the rarer ``tool_error``/``sandbox_blocked``

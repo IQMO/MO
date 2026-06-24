@@ -15,7 +15,7 @@ def _agent(base="high"):
 
 def test_trivial_turns_drop_to_low():
     a = _agent("high")
-    for t in ("hi", "who are you?", "what does VS05 mean?"):
+    for t in ("hi", "who are you?", "what does OWNER_COMPARISON mean?"):
         assert a._adaptive_reasoning_level(t) == "low", t
 
 

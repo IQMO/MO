@@ -150,16 +150,16 @@ def test_ghost_is_a_public_slash_command_with_help_and_palette():
     assert found_in_palette, "/ghost must appear in PALETTE_ORDER"
 
 
-def test_vs05_is_operator_only_dispatchable_but_hidden_from_users(monkeypatch):
-    # /vs05 is an operator-only protocol command: always dispatchable, but
+def test_owner_comparison_is_operator_only_dispatchable_but_hidden_from_users(monkeypatch):
+    # /owner_comparison is an operator-only protocol command: always dispatchable, but
     # advertised only when the operator protocol pack is installed. A public
     # user (no pack) must not see it in help / palette / completion.
-    assert "/vs05" in SLASH_COMMANDS  # still resolvable/dispatchable for everyone
-    assert COMMAND_BY_NAME["/vs05"].operator_only is True
+    assert "/owner_comparison" in SLASH_COMMANDS  # still resolvable/dispatchable for everyone
+    assert COMMAND_BY_NAME["/owner_comparison"].operator_only is True
 
-    def _palette_has_vs05() -> bool:
+    def _palette_has_owner_comparison() -> bool:
         return any(
-            cmd.split()[0] == "/vs05"
+            cmd.split()[0] == "/owner_comparison"
             for _cat, entries in build_palette_categories()
             for cmd, _desc in entries
         )
@@ -168,17 +168,17 @@ def test_vs05_is_operator_only_dispatchable_but_hidden_from_users(monkeypatch):
     monkeypatch.setattr(
         "core.owner_protocols.operator_protocols_installed", lambda: True
     )
-    assert "/vs05" in slash_command_names()
-    assert "VS05 comparison/adoption mode" in build_help_text()
-    assert _palette_has_vs05()
+    assert "/owner_comparison" in slash_command_names()
+    assert "OWNER_COMPARISON comparison/adoption mode" in build_help_text()
+    assert _palette_has_owner_comparison()
 
     # Public build (no pack) — hidden from all user-facing surfaces.
     monkeypatch.setattr(
         "core.owner_protocols.operator_protocols_installed", lambda: False
     )
-    assert "/vs05" not in slash_command_names()
-    assert "/vs05" not in build_help_text()
-    assert not _palette_has_vs05()
+    assert "/owner_comparison" not in slash_command_names()
+    assert "/owner_comparison" not in build_help_text()
+    assert not _palette_has_owner_comparison()
 
 
 def test_projects_is_preferred_project_history_and_sessions_is_legacy_alias():

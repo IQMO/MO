@@ -88,7 +88,7 @@ class _GhostRowsToolAgent(_ToolAgent):
         return """intent guidance
 ---
 [
-  {"id": "1", "text": "Generic VS05 wrapper", "status": "active", "kind": "inspect", "completion_gate": "tool"},
+  {"id": "1", "text": "Generic OWNER_COMPARISON wrapper", "status": "active", "kind": "inspect", "completion_gate": "tool"},
   {"id": "2", "text": "Verify folders loaded", "status": "pending", "kind": "verify", "completion_gate": "final", "depends_on": ["1"]}
 ]"""
 
@@ -105,7 +105,7 @@ class _ProtocolCompleteWithOpenBoardAgent(_NoToolAgent):
     def run_turn(self, user_input, monitor=None, on_first_tool=None, on_board_update=None, **_kwargs):
         if on_first_tool:
             on_first_tool("read_file", {"path": "README.md"})
-        return "[DEVMODE05 COMPLETE] done"
+        return "[OWNER_MAINTENANCE COMPLETE] done"
 
 
 class _ExplodingAfterBoardAgent(_NoToolAgent):
@@ -123,7 +123,7 @@ class _ScriptedAgent(_NoToolAgent):
     def run_turn(self, user_input, monitor=None, on_first_tool=None, on_board_update=None, **_kwargs):
         self.calls.append(user_input)
         if not self.results:
-            return "[DEVMODE05 COMPLETE] done"
+            return "[OWNER_MAINTENANCE COMPLETE] done"
         return self.results.pop(0)
 
 
@@ -151,14 +151,14 @@ def test_gateway_taskboard_visibility_gate_by_request_type(tmp_path):
     # After simplification: simple_chat only is the gate
     assert gateway.should_show_task_board("find all test files and run them") is True
     assert gateway.should_show_task_board("scan for bugs") is True
-    assert gateway.should_show_task_board("start VS05 E:\\ref-a E:\\ref-b") is True
+    assert gateway.should_show_task_board("start OWNER_COMPARISON E:\\ref-a E:\\ref-b") is True
 
 
-def test_gateway_uses_vs05_phase_rows_when_ghost_has_no_plan(tmp_path):
-    agent = _ToolAgent(session_id="session-vs05")
+def test_gateway_uses_owner_comparison_phase_rows_when_ghost_has_no_plan(tmp_path):
+    agent = _ToolAgent(session_id="session-owner_comparison")
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start VS05 E:\\ref-a E:\\ref-b")
+    result = gateway.run_turn("start OWNER_COMPARISON E:\\ref-a E:\\ref-b")
 
     assert result == "used tools"
     assert gateway.last_task_board is not None
@@ -167,12 +167,12 @@ def test_gateway_uses_vs05_phase_rows_when_ghost_has_no_plan(tmp_path):
     assert "comparison matrix" in titles[2]
 
 
-def test_gateway_uses_vs05_phase_rows_even_when_ghost_has_generic_rows(tmp_path):
-    agent = _GhostRowsToolAgent(session_id="session-vs05-ghost")
+def test_gateway_uses_owner_comparison_phase_rows_even_when_ghost_has_generic_rows(tmp_path):
+    agent = _GhostRowsToolAgent(session_id="session-owner_comparison-ghost")
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
     proposals: list[str] = []
 
-    result = gateway.run_turn("start VS05 E:\\ref-a E:\\ref-b", on_proposal=proposals.append)
+    result = gateway.run_turn("start OWNER_COMPARISON E:\\ref-a E:\\ref-b", on_proposal=proposals.append)
 
     assert result == "used tools"
     assert agent.proposal_calls == 0
@@ -180,9 +180,9 @@ def test_gateway_uses_vs05_phase_rows_even_when_ghost_has_generic_rows(tmp_path)
     assert gateway.last_task_board is not None
     titles = [task.title for task in gateway.last_task_board.tasks]
     assert len(titles) == 5
-    assert "Generic VS05 wrapper" not in titles
+    assert "Generic OWNER_COMPARISON wrapper" not in titles
     assert titles[0] == "Capture current-MO target, reference roles, scope, and read-only boundary"
-    assert titles[-1] == "Write VS05 artifacts and approval-ready closeout"
+    assert titles[-1] == "Write OWNER_COMPARISON artifacts and approval-ready closeout"
 
 
 def test_gateway_creates_one_owned_board_lazily_on_first_tool_signal(tmp_path):
@@ -341,15 +341,15 @@ def test_gateway_terminal_snapshot_records_blocked_board_state(tmp_path, monkeyp
     assert recent[-1]["tasks"][0]["blocker"] == "needs approval"
 
 
-def test_gateway_blocks_devmode05_turn_that_exits_with_open_taskboard(tmp_path, monkeypatch):
+def test_gateway_blocks_owner_maintenance_turn_that_exits_with_open_taskboard(tmp_path, monkeypatch):
     ledger = tmp_path / "taskboards.jsonl"
     monkeypatch.setenv(ENV_TASKBOARD_LEDGER_PATH, str(ledger))
     agent = _ProtocolCompleteWithOpenBoardAgent()
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start DEVMODE05", on_board_update=lambda _board: None)
+    result = gateway.run_turn("start OWNER_MAINTENANCE", on_board_update=lambda _board: None)
 
-    assert result.startswith("[DEVMODE05 BLOCKED]")
+    assert result.startswith("[OWNER_MAINTENANCE BLOCKED]")
     assert gateway.last_task_board is not None
     assert gateway.last_task_board.state == "blocked"
     assert gateway.last_task_board.open_count() > 0
@@ -375,90 +375,90 @@ def test_gateway_terminal_snapshot_records_abandoned_board_on_error(tmp_path, mo
     assert gateway.last_task_board is not None
 
 
-def test_gateway_auto_continues_devmode05_after_tool_budget_boundary(tmp_path):
+def test_gateway_auto_continues_owner_maintenance_after_tool_budget_boundary(tmp_path):
     agent = _ScriptedAgent([
-        "[DEVMODE05 BLOCKED]\n\nTool budget exhausted. Continuation required in the next fresh turn.",
-        "[DEVMODE05 COMPLETE] done",
+        "[OWNER_MAINTENANCE BLOCKED]\n\nTool budget exhausted. Continuation required in the next fresh turn.",
+        "[OWNER_MAINTENANCE COMPLETE] done",
     ])
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start DEVMODE05")
+    result = gateway.run_turn("start OWNER_MAINTENANCE")
 
-    assert result == "[DEVMODE05 COMPLETE] done"
+    assert result == "[OWNER_MAINTENANCE COMPLETE] done"
     assert len(agent.calls) == 2
-    assert agent.calls[0] == "start DEVMODE05"
-    assert agent.calls[1].startswith("DEVMODE05 CONTINUATION 1.")
+    assert agent.calls[0] == "start OWNER_MAINTENANCE"
+    assert agent.calls[1].startswith("OWNER_MAINTENANCE CONTINUATION 1.")
     assert "Tool budget exhausted" in agent.calls[1]
 
 
-def test_gateway_auto_continues_devmode05_after_provider_request_limit(tmp_path):
+def test_gateway_auto_continues_owner_maintenance_after_provider_request_limit(tmp_path):
     agent = _ScriptedAgent([
         "[MAX PROVIDER REQUESTS] Turn limit reached.",
-        "[DEVMODE05 COMPLETE] done",
+        "[OWNER_MAINTENANCE COMPLETE] done",
     ])
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start DEVMODE05")
+    result = gateway.run_turn("start OWNER_MAINTENANCE")
 
-    assert result == "[DEVMODE05 COMPLETE] done"
+    assert result == "[OWNER_MAINTENANCE COMPLETE] done"
     assert len(agent.calls) == 2
-    assert agent.calls[1].startswith("DEVMODE05 CONTINUATION 1.")
+    assert agent.calls[1].startswith("OWNER_MAINTENANCE CONTINUATION 1.")
 
 
-def test_gateway_auto_continues_devmode05_after_continuation_capsule(tmp_path):
+def test_gateway_auto_continues_owner_maintenance_after_continuation_capsule(tmp_path):
     agent = _ScriptedAgent([
-        "[DEVMODE05 CONTINUATION CAPSULE]\n\nStatus: not complete. No more tools allowed this turn.",
-        "[DEVMODE05 COMPLETE] done",
+        "[OWNER_MAINTENANCE CONTINUATION CAPSULE]\n\nStatus: not complete. No more tools allowed this turn.",
+        "[OWNER_MAINTENANCE COMPLETE] done",
     ])
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start DEVMODE05")
+    result = gateway.run_turn("start OWNER_MAINTENANCE")
 
-    assert result == "[DEVMODE05 COMPLETE] done"
+    assert result == "[OWNER_MAINTENANCE COMPLETE] done"
     assert len(agent.calls) == 2
-    assert agent.calls[1].startswith("DEVMODE05 CONTINUATION 1.")
+    assert agent.calls[1].startswith("OWNER_MAINTENANCE CONTINUATION 1.")
     assert "fresh continuation turn and tools are available again" in agent.calls[1]
 
 
-def test_gateway_auto_continues_devmode05_after_stale_no_tool_block(tmp_path):
+def test_gateway_auto_continues_owner_maintenance_after_stale_no_tool_block(tmp_path):
     agent = _ScriptedAgent([
-        "[DEVMODE05 BLOCKED]\n\nHard boundary: current runtime instruction explicitly forbids further tool calls.",
-        "[DEVMODE05 COMPLETE] done",
+        "[OWNER_MAINTENANCE BLOCKED]\n\nHard boundary: current runtime instruction explicitly forbids further tool calls.",
+        "[OWNER_MAINTENANCE COMPLETE] done",
     ])
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start DEVMODE05")
+    result = gateway.run_turn("start OWNER_MAINTENANCE")
 
-    assert result == "[DEVMODE05 COMPLETE] done"
+    assert result == "[OWNER_MAINTENANCE COMPLETE] done"
     assert len(agent.calls) == 2
-    assert agent.calls[1].startswith("DEVMODE05 CONTINUATION 1.")
+    assert agent.calls[1].startswith("OWNER_MAINTENANCE CONTINUATION 1.")
     assert "fresh continuation turn and tools are available again" in agent.calls[1]
 
 
-def test_gateway_auto_continues_devmode05_after_markdown_tool_budget_boundary(tmp_path):
+def test_gateway_auto_continues_owner_maintenance_after_markdown_tool_budget_boundary(tmp_path):
     agent = _ScriptedAgent([
-        "# [DEVMODE05 BLOCKED] - Tool Budget Exhaustion\n\n75/80 tool rounds consumed.",
-        "[DEVMODE05 COMPLETE] done",
+        "# [OWNER_MAINTENANCE BLOCKED] - Tool Budget Exhaustion\n\n75/80 tool rounds consumed.",
+        "[OWNER_MAINTENANCE COMPLETE] done",
     ])
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start DEVMODE05")
+    result = gateway.run_turn("start OWNER_MAINTENANCE")
 
-    assert result == "[DEVMODE05 COMPLETE] done"
+    assert result == "[OWNER_MAINTENANCE COMPLETE] done"
     assert len(agent.calls) == 2
-    assert agent.calls[1].startswith("DEVMODE05 CONTINUATION 1.")
+    assert agent.calls[1].startswith("OWNER_MAINTENANCE CONTINUATION 1.")
     assert "75/80 tool rounds consumed" in agent.calls[1]
 
 
-def test_gateway_does_not_auto_continue_devmode05_nonrecoverable_boundary(tmp_path):
-    boundary = "[DEVMODE05 BLOCKED] sandbox block: command requires approval."
-    agent = _ScriptedAgent([boundary, "[DEVMODE05 COMPLETE] should not run"])
+def test_gateway_does_not_auto_continue_owner_maintenance_nonrecoverable_boundary(tmp_path):
+    boundary = "[OWNER_MAINTENANCE BLOCKED] sandbox block: command requires approval."
+    agent = _ScriptedAgent([boundary, "[OWNER_MAINTENANCE COMPLETE] should not run"])
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 
-    result = gateway.run_turn("start DEVMODE05")
+    result = gateway.run_turn("start OWNER_MAINTENANCE")
 
     assert result == boundary
-    assert agent.calls == ["start DEVMODE05"]
+    assert agent.calls == ["start OWNER_MAINTENANCE"]
 
 
 def test_gateway_auto_continues_open_work_after_tool_budget_boundary(tmp_path):

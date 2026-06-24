@@ -1,4 +1,4 @@
-"""DEVMODE05 summary economy reconciliation: ALL named economy counts (header, Economy
+"""OWNER_MAINTENANCE summary economy reconciliation: ALL named economy counts (header, Economy
 section, Closeout; both 'N metric' and 'metric: N' forms) are normalized to the
 authoritative monitor figures, while narration and unnamed numbers are preserved.
 Live 2026-06-24T0404: header read 90/119 while the Economy section still said 74/106."""
@@ -65,7 +65,7 @@ def test_header_and_section_agree_after(tmp_path):
 
 
 def test_closeout_tool_calls_normalized_bare_errors_kept(tmp_path):
-    out = _reconcile(tmp_path, "[DEVMODE05 COMPLETE] Economy: 106 tool calls, 6 errors (shell x4)")
+    out = _reconcile(tmp_path, "[OWNER_MAINTENANCE COMPLETE] Economy: 106 tool calls, 6 errors (shell x4)")
     assert "119 tool calls" in out
     assert "6 errors (shell x4)" in out  # bare 'errors' untouched
 

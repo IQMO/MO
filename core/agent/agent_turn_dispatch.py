@@ -27,10 +27,10 @@ from .agent_utils import (
     _prune_tool_audit_log,
 )
 from ..owner_protocols import (
-    is_devmode05_activation,
-    is_ifdev05_activation,
-    is_vs05_activation,
-    vs05_readonly_source_roots,
+    is_owner_maintenance_activation,
+    is_owner_interface_audit_activation,
+    is_owner_comparison_activation,
+    owner_comparison_readonly_source_roots,
 )
 from ..path_defaults import mo_home, operator_pack_root, repo_root
 
@@ -446,8 +446,8 @@ class AgentTurnDispatchMixin:
         return args
 
     @staticmethod
-    def _vs05_source_read_tool(name: str, arguments: dict | None) -> bool:
-        """Return True when a tool may inspect VS05 source roots read-only."""
+    def _owner_comparison_source_read_tool(name: str, arguments: dict | None) -> bool:
+        """Return True when a tool may inspect OWNER_COMPARISON source roots read-only."""
         if name in {"read_file", "find_files", "grep", "git_status", "project_bridge"}:
             return True
         if name in {"shell", "test_runner"}:
@@ -455,7 +455,7 @@ class AgentTurnDispatchMixin:
         return False
 
     def _effective_allowed_roots_for_tool(self, user_input: str, name: str, arguments: dict | None) -> list[str] | None:
-        """Extend roots for VS05 source intake and the configured MO control
+        """Extend roots for OWNER_COMPARISON source intake and the configured MO control
         workspace without widening write scope.
 
         Empty/None roots mean UNRESTRICTED (access.mode full) — appending
@@ -465,7 +465,7 @@ class AgentTurnDispatchMixin:
         roots = list(getattr(self, "allowed_roots", None) or [])
         if not roots:
             return roots
-        read_like = self._vs05_source_read_tool(name, arguments)
+        read_like = self._owner_comparison_source_read_tool(name, arguments)
         root_keys = {str(root).casefold() for root in roots}
 
         def append_root(path: Path) -> None:
@@ -478,8 +478,8 @@ class AgentTurnDispatchMixin:
         # Owner protocols live outside the public checkout after the layout
         # migration. Add those private roots only when the owner-only activation
         # gates are already true; user clones have neither pack nor owner token.
-        write_protocol = is_devmode05_activation(user_input) or is_ifdev05_activation(user_input)
-        if write_protocol or (is_vs05_activation(user_input) and read_like):
+        write_protocol = is_owner_maintenance_activation(user_input) or is_owner_interface_audit_activation(user_input)
+        if write_protocol or (is_owner_comparison_activation(user_input) and read_like):
             append_root(operator_pack_root())
             append_root(mo_home() / "memory" / "devmode")
 
@@ -490,9 +490,9 @@ class AgentTurnDispatchMixin:
         control_root = self._mo_control_read_root()
         if control_root:
             append_root(Path(control_root))
-        if not is_vs05_activation(user_input):
+        if not is_owner_comparison_activation(user_input):
             return roots
-        for source_root in vs05_readonly_source_roots(user_input):
+        for source_root in owner_comparison_readonly_source_roots(user_input):
             append_root(Path(source_root))
         return roots
 
@@ -549,7 +549,7 @@ class AgentTurnDispatchMixin:
         text = " ".join(str(user_input or "").lower().split())
         if not text:
             return False
-        if is_devmode05_activation(text):
+        if is_owner_maintenance_activation(text):
             return True
         approval = bool(re.search(r"\b(approve|approved|yes|do it|go ahead|allowed|permission)\b", text))
         target = bool(re.search(r"\b(mo|mo agent|yourself|your own files|self[- ]?change|self[- ]?edit)\b", text))

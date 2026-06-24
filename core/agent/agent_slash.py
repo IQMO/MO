@@ -82,7 +82,7 @@ class AgentSlashCommands:
             "/structural-graph": self._cmd_structural_graph,
             "/sg": self._cmd_structural_graph,
             "/prt": self._cmd_prt,
-            "/vs05": self._cmd_vs05,
+            "/owner_comparison": self._cmd_owner_comparison,
             "/moon": self._cmd_moon,
             "/hints": self._cmd_hints,
             "/ghost": self._cmd_ghost,
@@ -106,10 +106,10 @@ class AgentSlashCommands:
             return result
         return None
 
-    def _cmd_vs05(self, rest: str) -> str:
-        """Route VS05 slash syntax into the normal provider/preflight path."""
+    def _cmd_owner_comparison(self, rest: str) -> str:
+        """Route OWNER_COMPARISON slash syntax into the normal provider/preflight path."""
         clean = str(rest or "").strip()
-        self._slash_pending_input = f"start VS05 {clean}".strip()
+        self._slash_pending_input = f"start OWNER_COMPARISON {clean}".strip()
         return "[RUN_TURN]"
 
     def _cmd_moon(self, rest: str) -> str:

@@ -70,9 +70,9 @@ class TestShouldShowTaskBoard:
         gw, _, _ = make_gateway()
         assert not gw.should_show_task_board("/goal build x")
 
-    def test_vs05_request_returns_true(self):
+    def test_owner_comparison_request_returns_true(self):
         gw, _, _ = make_gateway()
-        assert gw.should_show_task_board("start VS05 E:\\ref-a E:\\ref-b")
+        assert gw.should_show_task_board("start OWNER_COMPARISON E:\\ref-a E:\\ref-b")
 
     def test_work_request_returns_true(self):
         gw, _, _ = make_gateway()

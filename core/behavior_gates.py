@@ -9,7 +9,7 @@ Scope note: turn-FINAL answer enforcement now lives in ``core.final_gates``. Tha
 owns the contract, self-protocol truth, done-claim, verify-edits, and claim/source gates
 that run immediately before the final answer is accepted. The owner-protocol terminal
 stop gates that run earlier on raw model ``content`` remain deliberately separate because
-they validate DEVMODE05/VS05/IFDEV05 terminal markers before the final-answer critique.
+they validate OWNER_MAINTENANCE/OWNER_COMPARISON/OWNER_INTERFACE_AUDIT terminal markers before the final-answer critique.
 """
 from __future__ import annotations
 

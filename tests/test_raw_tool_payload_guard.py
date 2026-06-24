@@ -268,12 +268,12 @@ def test_agent_silently_parks_stalled_loaded_session_when_user_returns():
     assert "add rewards to gather" not in [m.get("content") for m in seen_messages]
 
 
-def test_agent_parks_devmode05_blocked_tail_as_interrupted_work():
+def test_agent_parks_owner_maintenance_blocked_tail_as_interrupted_work():
     messages = [
-        {"role": "user", "content": "START DEVMODE05"},
+        {"role": "user", "content": "START OWNER_MAINTENANCE"},
         {"role": "assistant", "content": "Investigating trace", "tool_calls": [{"id": "call-1", "type": "function", "function": {"name": "grep", "arguments": '{"pattern":"turn_limit"}'}}]},
         {"role": "tool", "tool_call_id": "call-1", "content": "turn_limit found"},
-        {"role": "assistant", "content": "[DEVMODE05 BLOCKED] Tool budget exhausted. Next: resume from finding A1."},
+        {"role": "assistant", "content": "[OWNER_MAINTENANCE BLOCKED] Tool budget exhausted. Next: resume from finding A1."},
     ]
     agent = _minimal_agent(messages)
     seen_messages = []
@@ -287,8 +287,8 @@ def test_agent_parks_devmode05_blocked_tail_as_interrupted_work():
     result = agent.run_turn("hi")
 
     assert result == "hi"
-    assert getattr(agent, "_pending_interrupted_work", {}).get("user") == "START DEVMODE05"
-    assert "START DEVMODE05" not in [m.get("content") for m in seen_messages]
+    assert getattr(agent, "_pending_interrupted_work", {}).get("user") == "START OWNER_MAINTENANCE"
+    assert "START OWNER_MAINTENANCE" not in [m.get("content") for m in seen_messages]
 
 
 def test_agent_recovers_original_request_from_live_truncated_resume_session_without_canned_reply():

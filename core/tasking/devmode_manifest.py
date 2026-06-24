@@ -115,7 +115,7 @@ def build_devmode_manifest(
     # never contradict itself. A completed board with no open rows is a complete run, not
     # "active". Two things used to leave a finalized manifest at "active": late
     # economy-ledger writes (which pass status="active") landing after closeout, and the
-    # turn-health critical-budget path that force-emits [DEVMODE05 COMPLETE] WITHOUT going
+    # turn-health critical-budget path that force-emits [OWNER_MAINTENANCE COMPLETE] WITHOUT going
     # through the normal finalize that sets status="complete" (observed live in the
     # 2026-06-24T0404 run: top-level status "active" with taskboard "completed"/open 0).
     # Clamping here covers every completion path. Only the default "active" is clamped; an

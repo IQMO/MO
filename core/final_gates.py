@@ -12,7 +12,7 @@ through this module:
 - self-protocol completion-truth gate;
 - done-claim task-truth gate;
 - verify-edits affected-test gate;
-- IAM05 report truth gate;
+- OWNER_INTEGRITY_AUDIT report truth gate;
 - completion/cleanliness, current-state/version, and unsourced-external claim gates.
 
 Some gates are once-per-turn via the caller's shared ``fired`` set; counter-bearing gates
@@ -30,9 +30,9 @@ from .claim_verification import (
     unverified_claim_signal,
     unverified_completion_claim_signal,
 )
-from .owner_protocols import is_devmode05_activation, is_iam05_activation, is_ifdev05_activation
+from .owner_protocols import is_owner_maintenance_activation, is_owner_integrity_audit_activation, is_owner_interface_audit_activation
 from .path_defaults import repo_root
-from .self_maintenance.iam05_ground_truth import iam05_function_span_index, iam05_source_corpus_count
+from .self_maintenance.owner_integrity_audit_ground_truth import owner_integrity_audit_function_span_index, owner_integrity_audit_source_corpus_count
 from .tasking.contract import enforce_contract_gate, load_persisted_tasks_for_contract
 
 
@@ -186,7 +186,7 @@ def run_verify_edits_gate(
     return instruction
 
 
-def run_iam05_reporting_gate(
+def run_owner_integrity_audit_reporting_gate(
     user_input: str,
     final_text: str,
     tool_call_counts: "dict | None",
@@ -198,21 +198,21 @@ def run_iam05_reporting_gate(
     monitor: Any = None,
     on_activity: Callable[[str], None] | None = None,
 ) -> str | None:
-    """Force IAM05 reports to reconcile with runtime/code truth before finishing.
+    """Force OWNER_INTEGRITY_AUDIT reports to reconcile with runtime/code truth before finishing.
 
-    The IAM05 preflight gives the model the contract at turn start. This answer-time gate
+    The OWNER_INTEGRITY_AUDIT preflight gives the model the contract at turn start. This answer-time gate
     closes the hole observed live: the model can still *say* "18 tool calls" after running
     54 tools unless the runtime checks the final answer before accepting it.
     """
-    if not is_iam05_activation(user_input):
+    if not is_owner_integrity_audit_activation(user_input):
         return None
     if continuations >= max_continuations:
         return None
     root = repo_root()
     actual_tool_calls = sum((tool_call_counts or {}).values())
     actual_tool_errors = sum((tool_error_counts or {}).values())
-    corpus = iam05_source_corpus_count(cwd=root)
-    violation = _iam05_reporting_violation(
+    corpus = owner_integrity_audit_source_corpus_count(cwd=root)
+    violation = _owner_integrity_audit_reporting_violation(
         final_text,
         actual_tool_calls=actual_tool_calls,
         actual_tool_errors=actual_tool_errors,
@@ -221,10 +221,10 @@ def run_iam05_reporting_gate(
     )
     if not violation:
         return None
-    fired.add("iam05_reporting_truth")
+    fired.add("owner_integrity_audit_reporting_truth")
     if monitor:
         monitor.emit(
-            "iam05_reporting_truth",
+            "owner_integrity_audit_reporting_truth",
             {
                 "violation": violation,
                 "tool_calls": actual_tool_calls,
@@ -235,20 +235,20 @@ def run_iam05_reporting_gate(
             },
         )
     if on_activity:
-        on_activity("IAM05 report conflicts with runtime truth - reconciling before finishing...")
+        on_activity("OWNER_INTEGRITY_AUDIT report conflicts with runtime truth - reconciling before finishing...")
     return (
-        "[IAM05 REPORTING TRUTH] Your final IAM05 report conflicts with runtime/code truth: "
+        "[OWNER_INTEGRITY_AUDIT REPORTING TRUTH] Your final OWNER_INTEGRITY_AUDIT report conflicts with runtime/code truth: "
         f"{violation}. Continue now and correct the report before finishing. Required facts: "
         f"exact tool calls = {actual_tool_calls}; exact tool errors = {actual_tool_errors}; "
         f"coverage must use 'sampled N of {corpus}'; the evidence ledger must be under "
-        "~/.mo/memory/iam05/ with a session-unique filename, not repo-local memory/ and not "
+        "~/.mo/memory/owner_integrity_audit/ with a session-unique filename, not repo-local memory/ and not "
         "date-only. If you use another tool, these counts change; recount from the updated "
         "runtime history before the next final answer. Any function/file line-count claim "
         "must be re-measured from the current tree or removed."
     )
 
 
-def _iam05_reporting_violation(
+def _owner_integrity_audit_reporting_violation(
     text: str,
     *,
     actual_tool_calls: int,
@@ -273,8 +273,8 @@ def _iam05_reporting_violation(
         return f"coverage denominator missing or wrong (must say sampled N of {corpus})"
 
     lowered = (text or "").replace("\\", "/").lower()
-    if ".mo/memory/iam05" not in lowered and "~/.mo/memory/iam05" not in lowered:
-        return "missing canonical ~/.mo/memory/iam05 evidence ledger path"
+    if ".mo/memory/owner_integrity_audit" not in lowered and "~/.mo/memory/owner_integrity_audit" not in lowered:
+        return "missing canonical ~/.mo/memory/owner_integrity_audit evidence ledger path"
     if _DATE_ONLY_LEDGER_RE.search(text or ""):
         return "evidence ledger path is date-only; use a session-unique filename"
 
@@ -301,7 +301,7 @@ def _line_span_claim_violation(text: str, *, root: str) -> str | None:
     matches = list(_LINE_SPAN_CLAIM_RE.finditer(text or ""))
     if not matches:
         return None
-    spans = iam05_function_span_index(cwd=root)
+    spans = owner_integrity_audit_function_span_index(cwd=root)
     for match in matches:
         name, raw_count = match.groups()
         known = spans.get(name)
@@ -331,7 +331,7 @@ def run_contract_gate(
     ``instruction`` is a corrective re-prompt when a board with no open rows fails the
     contract gate (closed rows lack evidence), else None. Migrated verbatim from
     ``run_turn``'s inline block, preserving exactly: the board-closing condition
-    (tasks present AND ``open_count() == 0``); the DEVMODE05/IFDEV05 *whole-board*
+    (tasks present AND ``open_count() == 0``); the OWNER_MAINTENANCE/OWNER_INTERFACE_AUDIT *whole-board*
     enforcement vs the normal *turn-scoped* (``task_ids`` = rows completed THIS turn)
     branch; the ``enforce_contract_gate`` call; the counter bounded by
     ``max_continuations``; and the disagreement-after-cap behavior (once the cap is hit
@@ -344,7 +344,7 @@ def run_contract_gate(
     if not (task_board and task_board.tasks and task_board.open_count() == 0):
         return None, count
     persisted = load_persisted_tasks_for_contract(task_board)
-    if is_devmode05_activation(user_input) or is_ifdev05_activation(user_input):
+    if is_owner_maintenance_activation(user_input) or is_owner_interface_audit_activation(user_input):
         contract_task_ids = None  # enforce the whole board
     else:
         completed_now = {t.id for t in task_board.tasks if t.status == "completed"} - turn_initial_completed_ids
@@ -375,7 +375,7 @@ def run_self_protocol_truth_gate(
 ) -> tuple[str | None, int]:
     """Return ``(instruction, updated_count)`` for the self-protocol completion-truth gate.
 
-    Forces a continuation when an owner-protocol turn (DEVMODE05/VS05/IFDEV05) emits its
+    Forces a continuation when an owner-protocol turn (OWNER_MAINTENANCE/OWNER_COMPARISON/OWNER_INTERFACE_AUDIT) emits its
     ``[…COMPLETE]`` marker while the consistency boundary still reports a task-truth
     conflict. Migrated verbatim from ``run_turn``'s inline block, same position (after the
     contract gate, before done-claim). Counter-bounded by ``max_continuations``; the count

@@ -2,7 +2,7 @@
 
 Regression guard: a code read of `token: str` was being mangled to
 `token: [redacted]` on the session/compaction path, which made MO chase a
-phantom `[redacted]` finding during an IFDEV05 run. The `name = value`
+phantom `[redacted]` finding during an OWNER_INTERFACE_AUDIT run. The `name = value`
 redactor must distinguish secret literals (quoted / high-entropy) from code
 (type annotations, function calls, attribute access).
 """

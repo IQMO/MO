@@ -1,5 +1,5 @@
 """current.json is session-scoped: a new session must not inherit a prior session's
-board (live mo-1782304565 — an IAM05 turn showed mo-1782300201's stale DEVMODE05 board).
+board (live mo-1782304565 — an OWNER_INTEGRITY_AUDIT turn showed mo-1782300201's stale OWNER_MAINTENANCE board).
 clear_current_board_if_foreign_session clears it only when the session differs; same-
 session state is preserved and the ledger stays authoritative."""
 from core.tasking.task_board import clear_current_board_if_foreign_session

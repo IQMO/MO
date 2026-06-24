@@ -119,7 +119,7 @@ def test_agent_final_answer_leaves_unfinished_non_final_task_active_before_bound
     assert board.task("3").status == "pending"
 
 
-def test_devmode05_completion_conflict_continues_until_boundary_clean():
+def test_owner_maintenance_completion_conflict_continues_until_boundary_clean():
     captured = {}
     agent = _agent_with_boundary_capture(captured)
     agent.max_provider_requests = 4
@@ -158,22 +158,22 @@ def test_devmode05_completion_conflict_continues_until_boundary_clean():
             usage=None,
             finish_reason="tool_calls",
         ),
-        SimpleNamespace(content="[DEVMODE05 COMPLETE] premature", tool_calls=[], usage=None, finish_reason="stop"),
-        SimpleNamespace(content="[DEVMODE05 COMPLETE] settled", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="[OWNER_MAINTENANCE COMPLETE] premature", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="[OWNER_MAINTENANCE COMPLETE] settled", tool_calls=[], usage=None, finish_reason="stop"),
     ])
     agent._call_provider = lambda **_kwargs: next(responses)
     board = TaskBoard(tasks=[
         TaskItem("1", "Verify unresolved finding", "active", kind="verify", completion_gate="verification"),
     ])
 
-    result = agent.run_turn("start DEVMODE05", task_board=board)
+    result = agent.run_turn("start OWNER_MAINTENANCE", task_board=board)
 
-    assert result == "[DEVMODE05 COMPLETE] settled"
+    assert result == "[OWNER_MAINTENANCE COMPLETE] settled"
     assert len(boundary_calls) == 2
-    assert any("[DEVMODE05 AUTONOMY] Completion is not allowed" in msg for msg in assistant_messages)
+    assert any("[OWNER_MAINTENANCE AUTONOMY] Completion is not allowed" in msg for msg in assistant_messages)
 
 
-def test_vs05_preliminary_answer_continues_until_terminal_closeout():
+def test_owner_comparison_preliminary_answer_continues_until_terminal_closeout():
     captured = {}
     agent = _agent_with_boundary_capture(captured)
     agent.max_provider_requests = 4
@@ -200,8 +200,8 @@ def test_vs05_preliminary_answer_continues_until_terminal_closeout():
             usage=None,
             finish_reason="tool_calls",
         ),
-        SimpleNamespace(content="VS05 activated. Initial capture only.", tool_calls=[], usage=None, finish_reason="stop"),
-        SimpleNamespace(content="[VS05 COMPLETE] Target: current MO workspace. Matrix done; adoption: none; reject: duplicate", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="OWNER_COMPARISON activated. Initial capture only.", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="[OWNER_COMPARISON COMPLETE] Target: current MO workspace. Matrix done; adoption: none; reject: duplicate", tool_calls=[], usage=None, finish_reason="stop"),
     ])
     agent._call_provider = lambda **_kwargs: next(responses)
     board = TaskBoard(tasks=[
@@ -209,39 +209,39 @@ def test_vs05_preliminary_answer_continues_until_terminal_closeout():
         TaskItem("2", "Build current-MO baseline from structured evidence before broad reads", "pending", kind="inspect", completion_gate="tool", depends_on=["1"]),
         TaskItem("3", "Build comparison matrix against current MO with reference evidence", "pending", kind="verify", completion_gate="verification", depends_on=["2"]),
         TaskItem("4", "Classify adopt, reject, defer, by-design, and unknown items", "pending", kind="verify", completion_gate="verification", depends_on=["3"]),
-        TaskItem("5", "Write VS05 artifacts and approval-ready closeout", "pending", kind="report", completion_gate="final", depends_on=["4"]),
+        TaskItem("5", "Write OWNER_COMPARISON artifacts and approval-ready closeout", "pending", kind="report", completion_gate="final", depends_on=["4"]),
     ])
 
-    result = agent.run_turn("start VS05 E:\\ref-a E:\\ref-b", task_board=board)
+    result = agent.run_turn("start OWNER_COMPARISON E:\\ref-a E:\\ref-b", task_board=board)
 
-    assert result == "[VS05 COMPLETE] Target: current MO workspace. Matrix done; adoption: none; reject: duplicate"
-    assert sum("[VS05 CONTINUATION]" in msg for msg in assistant_messages) == 1
+    assert result == "[OWNER_COMPARISON COMPLETE] Target: current MO workspace. Matrix done; adoption: none; reject: duplicate"
+    assert sum("[OWNER_COMPARISON CONTINUATION]" in msg for msg in assistant_messages) == 1
     assert board.open_count() == 0
     assert captured["task_board"] is board
 
 
-def test_devmode05_blocked_handoff_not_forced_to_continue_by_completion_gate():
+def test_owner_maintenance_blocked_handoff_not_forced_to_continue_by_completion_gate():
     report = SimpleNamespace(
         findings=(SimpleNamespace(kind="taskboard_done_claim_conflict", severity="major"),),
         clean=False,
     )
 
-    assert Agent._devmode05_completion_boundary_requires_continuation(
-        "start DEVMODE05",
-        "[DEVMODE05 BLOCKED]\n\nContinuation capsule:\n- Completed work: catalog.\n- Next: resume.",
+    assert Agent._owner_maintenance_completion_boundary_requires_continuation(
+        "start OWNER_MAINTENANCE",
+        "[OWNER_MAINTENANCE BLOCKED]\n\nContinuation capsule:\n- Completed work: catalog.\n- Next: resume.",
         report,
     ) is False
 
 
-def test_vs05_completion_with_open_taskboard_forces_continuation():
+def test_owner_comparison_completion_with_open_taskboard_forces_continuation():
     report = SimpleNamespace(
         findings=(SimpleNamespace(kind="taskboard_done_claim_conflict", severity="major"),),
         clean=False,
     )
 
-    assert Agent._devmode05_completion_boundary_requires_continuation(
-        "start VS05 E:\\ref-a E:\\ref-b",
-        "[VS05 COMPLETE]\n\nTarget: current MO workspace.\nMatrix done; adoption: none; reject: duplicate.",
+    assert Agent._owner_maintenance_completion_boundary_requires_continuation(
+        "start OWNER_COMPARISON E:\\ref-a E:\\ref-b",
+        "[OWNER_COMPARISON COMPLETE]\n\nTarget: current MO workspace.\nMatrix done; adoption: none; reject: duplicate.",
         report,
     ) is True
 
@@ -338,7 +338,7 @@ def test_self_protocol_truth_continuation_is_bounded():
     assert result.startswith("answer")
 
 
-def test_devmode05_completed_taskboard_rejects_post_completion_tool_calls():
+def test_owner_maintenance_completed_taskboard_rejects_post_completion_tool_calls():
     captured = {}
     agent = _agent_with_boundary_capture(captured)
     agent.max_provider_requests = 4
@@ -365,17 +365,17 @@ def test_devmode05_completed_taskboard_rejects_post_completion_tool_calls():
             usage=None,
             finish_reason="tool_calls",
         ),
-        SimpleNamespace(content="[DEVMODE05 COMPLETE] closed from existing evidence", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="[OWNER_MAINTENANCE COMPLETE] closed from existing evidence", tool_calls=[], usage=None, finish_reason="stop"),
     ])
     agent._call_provider = lambda **_kwargs: next(responses)
     board = TaskBoard(tasks=[
-        TaskItem("1", "Close DEVMODE05", "completed", kind="report", completion_gate="final"),
+        TaskItem("1", "Close OWNER_MAINTENANCE", "completed", kind="report", completion_gate="final"),
     ])
 
-    result = agent.run_turn("start DEVMODE05", task_board=board)
+    result = agent.run_turn("start OWNER_MAINTENANCE", task_board=board)
 
-    assert result == "[DEVMODE05 COMPLETE] closed from existing evidence"
-    assert any("[DEVMODE05 CLOSEOUT]" in msg for msg in assistant_messages)
+    assert result == "[OWNER_MAINTENANCE COMPLETE] closed from existing evidence"
+    assert any("[OWNER_MAINTENANCE CLOSEOUT]" in msg for msg in assistant_messages)
 
 
 def test_generic_first_task_does_not_complete_on_read_only_probe():
@@ -423,14 +423,14 @@ def test_terminal_closeout_carries_real_evidence_not_hollow_token(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     board = TaskBoard(tasks=[
         TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool",
-                 evidence=["read_file:DEVMODE05.md", "shell:git rev-parse HEAD"]),
+                 evidence=["read_file:OWNER_MAINTENANCE.md", "shell:git rev-parse HEAD"]),
         TaskItem("2", "Matrix", "active", kind="verify", completion_gate="verification", depends_on=["1"]),
         TaskItem("3", "Catalog", "pending", kind="verify", completion_gate="verification", depends_on=["2"]),
         TaskItem("4", "Report", "pending", kind="report", completion_gate="final", depends_on=["3"]),
     ])
     agent = object.__new__(Agent)
     changed = agent._finalize_self_protocol_task_board_for_answer(
-        "start DEVMODE05", "[DEVMODE05 COMPLETE] catalog written; diagnostic-only", board)
+        "start OWNER_MAINTENANCE", "[OWNER_MAINTENANCE COMPLETE] catalog written; diagnostic-only", board)
     assert changed
     assert board.open_count() == 0
     for tid in ("2", "3"):
@@ -448,18 +448,18 @@ def test_self_completed_empty_phase_row_is_backfilled_at_closeout(monkeypatch):
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     board = TaskBoard(tasks=[
         TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool",
-                 evidence=["read_file:DEVMODE05.md", "shell:git rev-parse HEAD"]),
+                 evidence=["read_file:OWNER_MAINTENANCE.md", "shell:git rev-parse HEAD"]),
         # rows the model self-completed via complete_task with only a final: token / empty
         TaskItem("2", "Catalog findings and choose lane", "completed", kind="verify",
                  completion_gate="verification", evidence=["final:assistant_response"]),
         TaskItem("3", "Verify behavior/cost/handoff", "completed", kind="verify",
                  completion_gate="verification", evidence=[]),
         TaskItem("4", "Report", "completed", kind="report", completion_gate="final",
-                 evidence=["final:devmode05_protocol_closeout"]),
+                 evidence=["final:owner_maintenance_protocol_closeout"]),
     ])
     agent = object.__new__(Agent)
     agent._finalize_self_protocol_task_board_for_answer(
-        "start DEVMODE05", "[DEVMODE05 COMPLETE] HEALTHY; diagnostic-only; 0 tool errors", board)
+        "start OWNER_MAINTENANCE", "[OWNER_MAINTENANCE COMPLETE] HEALTHY; diagnostic-only; 0 tool errors", board)
     for tid in ("2", "3"):
         row = next(t for t in board.tasks if t.id == tid)
         nonfinal = [e for e in row.evidence if not str(e).startswith("final:")]
@@ -471,19 +471,19 @@ def test_self_completed_empty_phase_row_is_backfilled_at_closeout(monkeypatch):
 
 
 def test_blocked_run_reconciles_summary_complete_marker_to_blocked(tmp_path):
-    """A run that ends [DEVMODE05 BLOCKED] must not leave a [DEVMODE05 COMPLETE] in
+    """A run that ends [OWNER_MAINTENANCE BLOCKED] must not leave a [OWNER_MAINTENANCE COMPLETE] in
     summary.md (the T0403 lie). The marker is reconciled deterministically."""
     from core.tasking.agent_taskboard import AgentTaskBoard
     summary = tmp_path / "summary.md"
-    summary.write_text("# Summary\n## Closeout\n- [DEVMODE05 COMPLETE]\n", encoding="utf-8")
+    summary.write_text("# Summary\n## Closeout\n- [OWNER_MAINTENANCE COMPLETE]\n", encoding="utf-8")
     # Not blocked -> untouched.
     assert AgentTaskBoard._reconcile_summary_terminal_marker(summary, blocked=False) is False
-    assert "[DEVMODE05 COMPLETE]" in summary.read_text(encoding="utf-8")
+    assert "[OWNER_MAINTENANCE COMPLETE]" in summary.read_text(encoding="utf-8")
     # Blocked -> rewritten.
     assert AgentTaskBoard._reconcile_summary_terminal_marker(summary, blocked=True) is True
     out = summary.read_text(encoding="utf-8")
-    assert "[DEVMODE05 COMPLETE]" not in out
-    assert "[DEVMODE05 BLOCKED]" in out
+    assert "[OWNER_MAINTENANCE COMPLETE]" not in out
+    assert "[OWNER_MAINTENANCE BLOCKED]" in out
 
 
 def test_reconcile_devmode_summary_marker_fires_only_on_blocked_terminal(tmp_path):
@@ -493,13 +493,13 @@ def test_reconcile_devmode_summary_marker_fires_only_on_blocked_terminal(tmp_pat
     agent = AgentTaskBoard.__new__(AgentTaskBoard)
     active = tmp_path / "2026-01-06T0000"
     active.mkdir()
-    (active / "summary.md").write_text("## Closeout\n- [DEVMODE05 COMPLETE]\n", encoding="utf-8")
+    (active / "summary.md").write_text("## Closeout\n- [OWNER_MAINTENANCE COMPLETE]\n", encoding="utf-8")
     agent._active_devmode_session_dir = active
-    agent._reconcile_devmode_summary_marker("[DEVMODE05 COMPLETE] HEALTHY.")
-    assert "[DEVMODE05 COMPLETE]" in (active / "summary.md").read_text(encoding="utf-8")
-    agent._reconcile_devmode_summary_marker("[DEVMODE05 BLOCKED] turn budget exhausted; continuation capsule")
+    agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE COMPLETE] HEALTHY.")
+    assert "[OWNER_MAINTENANCE COMPLETE]" in (active / "summary.md").read_text(encoding="utf-8")
+    agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE BLOCKED] turn budget exhausted; continuation capsule")
     out = (active / "summary.md").read_text(encoding="utf-8")
-    assert "[DEVMODE05 COMPLETE]" not in out and "[DEVMODE05 BLOCKED]" in out
+    assert "[OWNER_MAINTENANCE COMPLETE]" not in out and "[OWNER_MAINTENANCE BLOCKED]" in out
 
 
 def test_complete_task_never_closes_a_row_with_zero_evidence():

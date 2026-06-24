@@ -32,7 +32,7 @@ from ..final_gates import (
     run_claim_gates,
     run_contract_gate,
     run_done_claim_gate,
-    run_iam05_reporting_gate,
+    run_owner_integrity_audit_reporting_gate,
     run_self_protocol_truth_gate,
     run_verify_edits_gate,
 )
@@ -55,17 +55,17 @@ from ..context_bridge import ContextSource, build_active_context_bridge
 from ..coordination_state import build_main_coordination_context
 from ..mo_control_context import build_mo_control_context, should_include_mo_control_context
 from ..owner_protocols import (
-    is_devmode05_activation,
-    is_ifdev05_activation,
-    is_vs05_activation,
+    is_owner_maintenance_activation,
+    is_owner_interface_audit_activation,
+    is_owner_comparison_activation,
 )
 from ..self_maintenance.devmode_closeout import (
-    devmode05_continuation_instruction,
-    devmode05_final_allows_stop,
-    ifdev05_continuation_instruction,
-    ifdev05_final_allows_stop,
-    vs05_continuation_instruction,
-    vs05_final_allows_stop,
+    owner_maintenance_continuation_instruction,
+    owner_maintenance_final_allows_stop,
+    owner_interface_audit_continuation_instruction,
+    owner_interface_audit_final_allows_stop,
+    owner_comparison_continuation_instruction,
+    owner_comparison_final_allows_stop,
 )
 from ..self_maintenance.preflight import (
     build_self_capability_preflight_context,
@@ -100,9 +100,9 @@ def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
 
 def _no_tool_evidence_continuation(
     *,
-    devmode05_active: bool,
-    vs05_active: bool,
-    ifdev05_active: bool,
+    owner_maintenance_active: bool,
+    owner_comparison_active: bool,
+    owner_interface_audit_active: bool,
     total_tool_calls: int,
     devmode_taskboard_completed: bool,
 ) -> tuple[str, str] | None:
@@ -111,31 +111,31 @@ def _no_tool_evidence_continuation(
     When an owner protocol is active and the turn produced ZERO tool calls, even a
     correctly-prefixed completion is fabrication — there is no real evidence behind it.
     Returns ``(on_activity label, continuation message)`` to inject before re-looping,
-    or ``None`` to proceed. DEVMODE05 is exempt once its taskboard is already completed
+    or ``None`` to proceed. OWNER_MAINTENANCE is exempt once its taskboard is already completed
     (a clean closeout turn legitimately needs no new tools). Precedence matches the
-    original inline order: DEVMODE05, then VS05, then IFDEV05.
+    original inline order: OWNER_MAINTENANCE, then OWNER_COMPARISON, then OWNER_INTERFACE_AUDIT.
     """
     if total_tool_calls != 0:
         return None
-    if devmode05_active and not devmode_taskboard_completed:
+    if owner_maintenance_active and not devmode_taskboard_completed:
         return (
-            "DEVMODE05: no tool evidence — continuing...",
-            "[DEVMODE05 AUTONOMY] No tool evidence gathered this turn. "
+            "OWNER_MAINTENANCE: no tool evidence — continuing...",
+            "[OWNER_MAINTENANCE AUTONOMY] No tool evidence gathered this turn. "
             "You must call tools (read_file, shell, grep, etc.) to produce real evidence before claiming completion. "
             "Do not fabricate reports. Run the protocol steps with actual tools.",
         )
-    if vs05_active:
+    if owner_comparison_active:
         return (
-            "VS05: no tool evidence - continuing...",
-            "[VS05 CONTINUATION] No tool evidence gathered this turn. "
-            "Read the VS05 protocol, capture source roles, inspect structured evidence surfaces, "
+            "OWNER_COMPARISON: no tool evidence - continuing...",
+            "[OWNER_COMPARISON CONTINUATION] No tool evidence gathered this turn. "
+            "Read the OWNER_COMPARISON protocol, capture source roles, inspect structured evidence surfaces, "
             "and build the comparison matrix from actual files/traces before any closeout.",
         )
-    if ifdev05_active:
+    if owner_interface_audit_active:
         return (
-            "IFDEV05: no tool evidence - continuing...",
-            "[IFDEV05 CONTINUATION] No tool evidence gathered this turn. "
-            "Read the IFDEV05 protocol and inspect the real interface code (read_file on "
+            "OWNER_INTERFACE_AUDIT: no tool evidence - continuing...",
+            "[OWNER_INTERFACE_AUDIT CONTINUATION] No tool evidence gathered this turn. "
+            "Read the OWNER_INTERFACE_AUDIT protocol and inspect the real interface code (read_file on "
             "interface/*.py) and live UX behavior before any UX-audit closeout.",
         )
     return None
@@ -187,7 +187,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         final_gates_fired: set = set()  # once-per-turn guards for final-phase gates
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
-        iam05_reporting_truth_continuations = 0  # IAM05 reports may need recounting after corrective artifact edits.
+        owner_integrity_audit_reporting_truth_continuations = 0  # OWNER_INTEGRITY_AUDIT reports may need recounting after corrective artifact edits.
         # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
         # few times to push for a clean closeout, but must not loop to
         # max_provider_requests when a near-terminal completion keeps tripping the
@@ -214,7 +214,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         self._turn_health_handed_off = False
         self._turn_health_tools_blocked = False
         self._turn_health_tools_blocked_count = 0
-        self._devmode05_completed_board_tool_blocked_count = 0
+        self._owner_maintenance_completed_board_tool_blocked_count = 0
         sanitize_meta = self.session.sanitize_for_provider(
             max_chars=None
             if getattr(self, "context_handoff_enabled", True)
@@ -382,25 +382,25 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # === Phase 2c: dispatch tool calls or finalize text ===
             # Check for tool calls
             if response.tool_calls:
-                # A completed DEVMODE05 board must not reopen broad discovery, but it
+                # A completed OWNER_MAINTENANCE board must not reopen broad discovery, but it
                 # STILL needs its closeout tools: owning economy.md, writing the session
                 # artifacts, running the final pytest. Exempt those — blocking them
-                # deadlocked legitimate closeouts to [DEVMODE05 BLOCKED] (mo-1782077188).
-                if (self._devmode05_completed_taskboard_should_stop_tools(user_input, task_board)
-                        and not self._devmode05_tool_calls_are_closeout_only(response.tool_calls)):
-                    self._devmode05_completed_board_tool_blocked_count += 1
+                # deadlocked legitimate closeouts to [OWNER_MAINTENANCE BLOCKED] (mo-1782077188).
+                if (self._owner_maintenance_completed_taskboard_should_stop_tools(user_input, task_board)
+                        and not self._owner_maintenance_tool_calls_are_closeout_only(response.tool_calls)):
+                    self._owner_maintenance_completed_board_tool_blocked_count += 1
                     if monitor:
                         monitor.emit("turn_health", {
                             "tool_rounds": tool_rounds,
                             "max_tool_rounds": self.max_tool_rounds,
                             "level": "blocked",
-                            "action": "devmode05_completed_board_tool_blocked",
-                            "blocked_count": self._devmode05_completed_board_tool_blocked_count,
+                            "action": "owner_maintenance_completed_board_tool_blocked",
+                            "blocked_count": self._owner_maintenance_completed_board_tool_blocked_count,
                         })
-                    if self._devmode05_completed_board_tool_blocked_count <= 2:
-                        self.session.add_assistant(self._devmode05_completed_taskboard_tool_instruction())
+                    if self._owner_maintenance_completed_board_tool_blocked_count <= 2:
+                        self.session.add_assistant(self._owner_maintenance_completed_taskboard_tool_instruction())
                         continue
-                    return self._devmode05_completed_taskboard_persistent_tool_text()
+                    return self._owner_maintenance_completed_taskboard_persistent_tool_text()
                 # Adaptive turn management: block tools after handoff budget exhausted
                 if getattr(self, '_turn_health_tools_blocked', False):
                     self._turn_health_tools_blocked_count += 1
@@ -695,18 +695,18 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 return final_text
 
 
-            # DEVMODE05 evidence gate: completion claims require at least one tool call.
+            # OWNER_MAINTENANCE evidence gate: completion claims require at least one tool call.
             # Without tool evidence, even a correctly-prefixed completion is fabrication.
-            devmode05_active = is_devmode05_activation(user_input)
-            vs05_active = is_vs05_activation(user_input)
-            ifdev05_active = is_ifdev05_activation(user_input)
+            owner_maintenance_active = is_owner_maintenance_activation(user_input)
+            owner_comparison_active = is_owner_comparison_activation(user_input)
+            owner_interface_audit_active = is_owner_interface_audit_activation(user_input)
             total_tool_calls = sum(tool_call_counts.values())
             no_evidence = _no_tool_evidence_continuation(
-                devmode05_active=devmode05_active,
-                vs05_active=vs05_active,
-                ifdev05_active=ifdev05_active,
+                owner_maintenance_active=owner_maintenance_active,
+                owner_comparison_active=owner_comparison_active,
+                owner_interface_audit_active=owner_interface_audit_active,
                 total_tool_calls=total_tool_calls,
-                devmode_taskboard_completed=self._devmode05_taskboard_completed(task_board),
+                devmode_taskboard_completed=self._owner_maintenance_taskboard_completed(task_board),
             )
             if no_evidence is not None:
                 if on_activity:
@@ -714,38 +714,38 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 self.session.add_assistant(no_evidence[1])
                 continue
 
-            if not ifdev05_final_allows_stop(user_input, content):
-                if protocol_stop_gate_continuations.get("ifdev05", 0) < PROTOCOL_STOP_GATE_MAX:
-                    protocol_stop_gate_continuations["ifdev05"] = protocol_stop_gate_continuations.get("ifdev05", 0) + 1
+            if not owner_interface_audit_final_allows_stop(user_input, content):
+                if protocol_stop_gate_continuations.get("owner_interface_audit", 0) < PROTOCOL_STOP_GATE_MAX:
+                    protocol_stop_gate_continuations["owner_interface_audit"] = protocol_stop_gate_continuations.get("owner_interface_audit", 0) + 1
                     if on_activity:
-                        on_activity("continuing IFDEV05...")
-                    self.session.add_assistant(ifdev05_continuation_instruction(user_input, content))
+                        on_activity("continuing OWNER_INTERFACE_AUDIT...")
+                    self.session.add_assistant(owner_interface_audit_continuation_instruction(user_input, content))
                     continue
                 if on_activity:
-                    on_activity("IFDEV05 stop-gate disagreement — allowing stop after cap")
+                    on_activity("OWNER_INTERFACE_AUDIT stop-gate disagreement — allowing stop after cap")
 
-            if not vs05_final_allows_stop(user_input, content):
-                if protocol_stop_gate_continuations.get("vs05", 0) < PROTOCOL_STOP_GATE_MAX:
-                    protocol_stop_gate_continuations["vs05"] = protocol_stop_gate_continuations.get("vs05", 0) + 1
+            if not owner_comparison_final_allows_stop(user_input, content):
+                if protocol_stop_gate_continuations.get("owner_comparison", 0) < PROTOCOL_STOP_GATE_MAX:
+                    protocol_stop_gate_continuations["owner_comparison"] = protocol_stop_gate_continuations.get("owner_comparison", 0) + 1
                     if on_activity:
-                        on_activity("continuing VS05...")
-                    self.session.add_assistant(vs05_continuation_instruction(user_input, content))
+                        on_activity("continuing OWNER_COMPARISON...")
+                    self.session.add_assistant(owner_comparison_continuation_instruction(user_input, content))
                     continue
                 if on_activity:
-                    on_activity("VS05 stop-gate disagreement — allowing stop after cap")
+                    on_activity("OWNER_COMPARISON stop-gate disagreement — allowing stop after cap")
 
             # Write the authoritative economy ledger to the active session dir BEFORE
-            # the DEVMODE05 closeout gate evaluates. The gate's continuation tells the
+            # the OWNER_MAINTENANCE closeout gate evaluates. The gate's continuation tells the
             # model to "read economy.md and own the tool-error ledger"; the record used
             # to be written only on a *passing* closeout (agent_taskboard), so a blocked
             # closeout could never produce the file the model needs to satisfy the gate —
-            # a deadlock that loops every DEVMODE05 with tool errors to [DEVMODE05 BLOCKED]
+            # a deadlock that loops every OWNER_MAINTENANCE with tool errors to [OWNER_MAINTENANCE BLOCKED]
             # (observed live mo-1782065291: 5 recovered errors, economy.md never written,
             # model could not own a ledger it had no file for). Writing it here breaks the
             # cycle: the next continuation turn reads the real counts and can finalize.
-            if devmode05_active:
+            if owner_maintenance_active:
                 self._write_devmode_economy_record()
-                # A [DEVMODE05 BLOCKED] terminal must never leave a [DEVMODE05 COMPLETE]
+                # A [OWNER_MAINTENANCE BLOCKED] terminal must never leave a [OWNER_MAINTENANCE COMPLETE]
                 # in summary.md (observed T0403). Reconcile the marker deterministically.
                 self._reconcile_devmode_summary_marker(content)
 
@@ -756,7 +756,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # count — post-freeze closeout-edit errors can't move the target and loop it.
             devmode_frozen_errs = getattr(self, "_devmode_closeout_frozen_errors", None)
             devmode_session_dir = getattr(self, "_active_devmode_session_dir", None)
-            if not devmode05_final_allows_stop(
+            if not owner_maintenance_final_allows_stop(
                 user_input,
                 content,
                 monitor_path=devmode_monitor_path,
@@ -764,11 +764,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 frozen_error_count=devmode_frozen_errs,
                 session_dir=devmode_session_dir,
             ):
-                if protocol_stop_gate_continuations.get("devmode05", 0) < PROTOCOL_STOP_GATE_MAX:
-                    protocol_stop_gate_continuations["devmode05"] = protocol_stop_gate_continuations.get("devmode05", 0) + 1
+                if protocol_stop_gate_continuations.get("owner_maintenance", 0) < PROTOCOL_STOP_GATE_MAX:
+                    protocol_stop_gate_continuations["owner_maintenance"] = protocol_stop_gate_continuations.get("owner_maintenance", 0) + 1
                     if on_activity:
-                        on_activity("continuing DEVMODE05...")
-                    self.session.add_assistant(devmode05_continuation_instruction(
+                        on_activity("continuing OWNER_MAINTENANCE...")
+                    self.session.add_assistant(owner_maintenance_continuation_instruction(
                         user_input,
                         content,
                         monitor_path=devmode_monitor_path,
@@ -778,7 +778,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     ))
                     continue
                 if on_activity:
-                    on_activity("DEVMODE05 stop-gate disagreement — allowing stop after cap")
+                    on_activity("OWNER_MAINTENANCE stop-gate disagreement — allowing stop after cap")
 
             # 3. Finalize (secrets-only critique)
             if on_activity:
@@ -802,7 +802,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     record_snapshot(task_board, "completed" if task_board.open_count() == 0 else "updated")
                     _emit_task_board_update(task_board, update="completed" if task_board.open_count() == 0 else "updated", on_board_update=on_board_update, on_board_event=on_board_event)
             # Contract gate on closing boards — migrated to the registry. Same
-            # board-closing condition, DEVMODE05/IFDEV05 whole-board vs turn-scoped
+            # board-closing condition, OWNER_MAINTENANCE/OWNER_INTERFACE_AUDIT whole-board vs turn-scoped
             # branching, enforce_contract_gate call, counter bound, and
             # disagreement-after-cap behavior. The counter stays a run_turn local,
             # threaded through and reassigned from the return.
@@ -851,22 +851,22 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             if _verify_instr:
                 self.session.add_assistant(_verify_instr)
                 continue
-            # IAM05 reports are quantitative by design. The preflight tells the model
+            # OWNER_INTEGRITY_AUDIT reports are quantitative by design. The preflight tells the model
             # the contract; this runtime gate enforces it against the actual turn.
-            _iam05_reporting_instruction = run_iam05_reporting_gate(
+            _owner_integrity_audit_reporting_instruction = run_owner_integrity_audit_reporting_gate(
                 user_input,
                 final_text,
                 tool_call_counts,
                 tool_error_counts,
                 fired=final_gates_fired,
-                continuations=iam05_reporting_truth_continuations,
+                continuations=owner_integrity_audit_reporting_truth_continuations,
                 max_continuations=3,
                 monitor=monitor,
                 on_activity=on_activity,
             )
-            if _iam05_reporting_instruction:
-                iam05_reporting_truth_continuations += 1
-                self.session.add_assistant(_iam05_reporting_instruction)
+            if _owner_integrity_audit_reporting_instruction:
+                owner_integrity_audit_reporting_truth_continuations += 1
+                self.session.add_assistant(_owner_integrity_audit_reporting_instruction)
                 continue
             # Verify-before-claiming (driven, not prompt-hoped): the declarative
             # claim-gate registry forces ONE bounded continuation when the answer
@@ -1100,8 +1100,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("workspace", "Workspace / worker awareness", workspace_context, 3, "coordination context only; not proof of code correctness", max_chars=1600),
                 ContextSource("project_context", "Project-local instructions (current working directory)", project_context, 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", max_chars=3200),
                 ContextSource("mo_control", "MO control workspace authority", mo_control_context, 3, "active policy/orientation for cross-repo/server work; live checks still win", max_chars=2600),
-                ContextSource("self_capability", "MO self-capability preflight", self_capability_context, 1, "hard gate for MO self/DEVMODE05 work; inventory existing capabilities before edits/builds", max_chars=7200),
-                ContextSource("devmode_output", "DEVMODE05 runtime-owned output directory", devmode_output_context, 1, "authoritative private artifact directory for this DEVMODE05 run; never hand-roll a memory/devmode timestamp", max_chars=1200),
+                ContextSource("self_capability", "MO self-capability preflight", self_capability_context, 1, "hard gate for MO self/OWNER_MAINTENANCE work; inventory existing capabilities before edits/builds", max_chars=7200),
+                ContextSource("devmode_output", "OWNER_MAINTENANCE runtime-owned output directory", devmode_output_context, 1, "authoritative private artifact directory for this OWNER_MAINTENANCE run; never hand-roll a memory/devmode timestamp", max_chars=1200),
                 ContextSource("pending_interrupted", "Paused interrupted work", pending_interrupted_context, 3, "continuity context only; do not resume unless relevant to current request", max_chars=1100),
                 ContextSource("workflow_learning", "Approved workflow learning", workflow_learning_context, 4, "operator-approved but relevance-gated; lower authority than current scope/evidence", max_chars=1200),
                 ContextSource("proactive_learning", "Confirmed learning suggestions", learning_context, 4, "operator-confirmed learning; lower authority than current scope/evidence", max_chars=1000),

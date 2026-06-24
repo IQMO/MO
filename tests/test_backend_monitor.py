@@ -25,15 +25,15 @@ def test_backend_monitor_writes_safe_jsonl(tmp_path):
     assert "provider request running" in text
 
 
-def test_backend_monitor_allows_iam05_reporting_truth_event(tmp_path):
+def test_backend_monitor_allows_owner_integrity_audit_reporting_truth_event(tmp_path):
     path = tmp_path / "backend_monitor.jsonl"
     monitor = BackendMonitor(path)
 
-    assert "iam05_reporting_truth" in SAFE_EVENT_TYPES
-    monitor.emit("iam05_reporting_truth", {"tool_calls": 50})
+    assert "owner_integrity_audit_reporting_truth" in SAFE_EVENT_TYPES
+    monitor.emit("owner_integrity_audit_reporting_truth", {"tool_calls": 50})
 
     text = path.read_text(encoding="utf-8")
-    assert '"type": "iam05_reporting_truth"' in text
+    assert '"type": "owner_integrity_audit_reporting_truth"' in text
     assert '"tool_calls": 50' in text
 
 
@@ -557,7 +557,7 @@ def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatc
     assert target == tmp_path / "memory" / "devmode" / "2026-01-02T0304"
     assert target.is_dir()
     assert (target / "manifest.json").is_file()
-    ctx = agent._devmode_runtime_output_context("start DEVMODE05")
+    ctx = agent._devmode_runtime_output_context("start OWNER_MAINTENANCE")
     assert str(target) in ctx
     assert "do not create another" in ctx.lower()
 
@@ -579,20 +579,20 @@ def test_devmode_output_blocks_wrong_session_dir(tmp_path, monkeypatch):
     active = agent._ensure_devmode_session_dir()
 
     assert agent._devmode_output_path_block_reason(
-        "start DEVMODE05", "write_file", {"path": str(active / "summary.md")}
+        "start OWNER_MAINTENANCE", "write_file", {"path": str(active / "summary.md")}
     ) is None
     assert agent._devmode_output_path_block_reason(
-        "start DEVMODE05", "edit_file", {"path": str(tmp_path / "memory" / "devmode" / "2026-01-02T0000" / "summary.md")}
+        "start OWNER_MAINTENANCE", "edit_file", {"path": str(tmp_path / "memory" / "devmode" / "2026-01-02T0000" / "summary.md")}
     )
     from core.path_defaults import repo_root
     assert agent._devmode_output_path_block_reason(
-        "start DEVMODE05", "write_file", {"path": str(Path(repo_root()) / "memory" / "devmode" / active.name / "summary.md")}
+        "start OWNER_MAINTENANCE", "write_file", {"path": str(Path(repo_root()) / "memory" / "devmode" / active.name / "summary.md")}
     )
     assert agent._devmode_output_path_block_reason(
-        "start DEVMODE05", "edit_file", {"path": str(tmp_path / "memory" / "devmode" / "longitudinal.md")}
+        "start OWNER_MAINTENANCE", "edit_file", {"path": str(tmp_path / "memory" / "devmode" / "longitudinal.md")}
     ) is None
     assert agent._devmode_output_path_block_reason(
-        "start DEVMODE05", "edit_file", {"path": str(tmp_path / "operator" / "devmode" / "DEVMODE05" / "adversarial-rotation.json")}
+        "start OWNER_MAINTENANCE", "edit_file", {"path": str(tmp_path / "operator" / "devmode" / "OWNER_MAINTENANCE" / "adversarial-rotation.json")}
     ) is None
 
 
@@ -720,7 +720,7 @@ def test_devmode_economy_binder_ignores_operator_pack_paths(tmp_path, monkeypatc
     through a private-home operator/devmode-shaped path."""
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
     agent = _devmode_board_agent()
-    agent._bind_active_devmode_dir_from_write({"path": str(tmp_path / "operator" / "devmode" / "DEVMODE05" / "x.md")})
+    agent._bind_active_devmode_dir_from_write({"path": str(tmp_path / "operator" / "devmode" / "OWNER_MAINTENANCE" / "x.md")})
     assert getattr(agent, "_active_devmode_session_dir", None) is None
 
 
@@ -749,7 +749,7 @@ def test_devmode_economy_reconciles_stale_summary_counts(tmp_path, monkeypatch):
         "- **Economy:** 26 provider requests, 63 tool calls, 0 tool errors "
         "(BENIGN — exploratory probe), 5 compressions\n"
         "## Closeout\n"
-        "- [DEVMODE05 COMPLETE] HEALTHY. 0 tool errors, all recovered.\n"
+        "- [OWNER_MAINTENANCE COMPLETE] HEALTHY. 0 tool errors, all recovered.\n"
         "- **Tests:** 1 targeted test passes\n",
         encoding="utf-8",
     )

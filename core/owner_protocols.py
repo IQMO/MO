@@ -6,21 +6,107 @@ module exposes only the product-side detection seam; it does not ship protocol c
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 import re
 
 from .path_defaults import mo_home, operator_pack_root
 
+OWNER_MAINTENANCE = "maintenance"
+OWNER_COMPARISON = "comparison"
+OWNER_INTERFACE_AUDIT = "interface_audit"
+OWNER_INTEGRITY_AUDIT = "integrity_audit"
+
+_PROTOCOL_KEYS = (
+    OWNER_MAINTENANCE,
+    OWNER_COMPARISON,
+    OWNER_INTERFACE_AUDIT,
+    OWNER_INTEGRITY_AUDIT,
+)
+
+_DEFAULT_ALIASES = {
+    OWNER_MAINTENANCE: ("owner maintenance", "self maintenance", "maintenance audit"),
+    OWNER_COMPARISON: ("owner comparison", "reference comparison", "comparison audit"),
+    OWNER_INTERFACE_AUDIT: ("owner interface audit", "interface audit"),
+    OWNER_INTEGRITY_AUDIT: ("owner integrity audit", "integrity audit", "expert audit"),
+}
+
+_DEFAULT_LABELS = {
+    OWNER_MAINTENANCE: "owner maintenance",
+    OWNER_COMPARISON: "owner comparison",
+    OWNER_INTERFACE_AUDIT: "owner interface audit",
+    OWNER_INTEGRITY_AUDIT: "owner integrity audit",
+}
+
+
+def _protocol_config() -> dict:
+    """Load private owner protocol aliases/labels from the profile pack.
+
+    The public product carries only generic protocol slots. Private aliases, legacy
+    trigger words, and exact operator-facing labels belong in the owner profile under
+    ``operator/devmode/protocols.json`` or ``operator/protocols.json``.
+    """
+    for path in (
+        operator_pack_root() / "devmode" / "protocols.json",
+        operator_pack_root() / "protocols.json",
+    ):
+        try:
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                protocols = data.get("protocols", data)
+                return protocols if isinstance(protocols, dict) else {}
+        except Exception:
+            continue
+    return {}
+
+
+def _protocol_entry(key: str) -> dict:
+    entry = _protocol_config().get(key, {})
+    return entry if isinstance(entry, dict) else {}
+
+
+def _protocol_aliases(key: str) -> tuple[str, ...]:
+    aliases = list(_DEFAULT_ALIASES.get(key, ()))
+    extra = _protocol_entry(key).get("aliases", ())
+    if isinstance(extra, str):
+        extra = (extra,)
+    aliases.extend(str(item) for item in extra if str(item).strip())
+    return tuple(dict.fromkeys(alias.strip() for alias in aliases if alias.strip()))
+
+
+def _normalize_trigger(text: str) -> str:
+    return re.sub(r"[\s_-]+", " ", str(text or "").strip().lower()).lstrip("/")
+
+
+def _alias_matches(text: str, alias: str) -> bool:
+    normalized = _normalize_trigger(text)
+    phrase = _normalize_trigger(alias)
+    if not normalized or not phrase:
+        return False
+    candidates = (phrase, f"start {phrase}", f"run {phrase}")
+    if any(normalized == item or normalized.startswith(item + " ") for item in candidates):
+        return True
+    return re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", normalized) is not None
+
+
+def _is_alias_token(text: str, alias: str) -> bool:
+    """True only when one token is itself a protocol alias.
+
+    Path extraction uses this narrower check so a temp path such as
+    ``test_owner_comparison_readonly`` is not mistaken for the command phrase.
+    """
+    normalized = _normalize_trigger(text)
+    phrase = _normalize_trigger(alias)
+    return bool(normalized and phrase and normalized == phrase)
+
+
 def _pack_present() -> bool:
     """True when the untracked owner protocol files are on disk."""
     try:
         devmode = operator_pack_root() / "devmode"
-        return (
-            (devmode / "DEVMODE05.md").exists()
-            or (devmode / "VS05.md").exists()
-            or (devmode / "IFDEV05.md").exists()
-            or (devmode / "IAM05.md").exists()
-        )
+        return bool(_protocol_config()) or any(devmode.glob("*.md"))
     except Exception:
         return False
 
@@ -44,8 +130,8 @@ def _owner_token_present() -> bool:
 def operator_protocols_installed() -> bool:
     """True only for the real operator: owner protocol files AND the owner token.
 
-    DEVMODE05/VS05 are personal operator protocols, not product features. They
-    require BOTH the untracked ``~/.mo/operator/devmode/`` files AND a private owner
+    Owner protocol aliases are personal operator profile data, not product features. They
+    require BOTH the untracked ``~/.mo/operator/`` files AND a private owner
     token in ``~/.mo`` (``operator.token``) that a user clone never has — so the
     copyable protocol files alone cannot fake operator mode. On a user clone both are
     absent, so the activation terms are inert by absence — no config, nothing to
@@ -56,79 +142,67 @@ def operator_protocols_installed() -> bool:
     return _pack_present() and _owner_token_present()
 
 
-def is_devmode05_activation(user_input: str) -> bool:
-    """Return True when the operator has activated DEVMODE05."""
-    text = " ".join(str(user_input or "").strip().lower().split())
-    if not text:
-        return False
-    if not re.search(r"\b(?:start\s+)?devmode\s*05\b", text):
-        return False
-    return operator_protocols_installed()
+def is_owner_maintenance_activation(user_input: str) -> bool:
+    """Return True when the owner maintenance protocol is active."""
+    return _is_protocol_activation(user_input, OWNER_MAINTENANCE)
 
 
-def is_vs05_activation(user_input: str) -> bool:
-    """Return True when the operator has activated VS05 comparison mode."""
-    text = " ".join(str(user_input or "").strip().lower().split())
-    if not text:
-        return False
-    if not re.search(r"\b(?:start\s+)?vs\s*05\b", text):
-        return False
-    return operator_protocols_installed()
+def is_owner_comparison_activation(user_input: str) -> bool:
+    """Return True when the owner comparison protocol is active."""
+    return _is_protocol_activation(user_input, OWNER_COMPARISON)
 
 
-def is_ifdev05_activation(user_input: str) -> bool:
-    """Return True when the operator has activated IFDEV05 interface-diagnosis mode."""
-    text = " ".join(str(user_input or "").strip().lower().split())
-    if not text:
-        return False
-    if not re.search(r"\b(?:start\s+)?ifdev\s*05\b", text):
-        return False
-    return operator_protocols_installed()
+def is_owner_interface_audit_activation(user_input: str) -> bool:
+    """Return True when the owner interface-audit protocol is active."""
+    return _is_protocol_activation(user_input, OWNER_INTERFACE_AUDIT)
 
 
-def is_iam05_activation(user_input: str) -> bool:
-    """Return True when the operator has activated IAM05 expert-honesty audit mode."""
-    text = " ".join(str(user_input or "").strip().lower().split())
-    if not text:
+def is_owner_integrity_audit_activation(user_input: str) -> bool:
+    """Return True when the owner integrity-audit protocol is active."""
+    return _is_protocol_activation(user_input, OWNER_INTEGRITY_AUDIT)
+
+
+def _is_protocol_activation(user_input: str, key: str) -> bool:
+    if not operator_protocols_installed():
         return False
-    if not re.search(r"\b(?:start\s+)?(?:iam\s*05|expert\s+audit)\b", text):
-        return False
-    return operator_protocols_installed()
+    return any(_alias_matches(user_input, alias) for alias in _protocol_aliases(key))
 
 
 def is_owner_protocol_activation(user_input: str) -> bool:
-    """True when ANY owner-only protocol (DEVMODE05/VS05/IFDEV05/IAM05) is activated.
-
-    Lets the gateway scope protocol turns uniformly. The original gateway check covered
-    only DEVMODE05/VS05, so IFDEV05/IAM05 fell through to the generic ghost board-seeding —
-    and IAM05 then inherited a DEVMODE05-flavored ghost board (context-bled from a prior
-    DEVMODE05 turn in the same session) that its own closeout never advances, leaving a
-    stale open board that tripped the generic done-claim gate (observed live mo-1782300201)."""
-    return (is_devmode05_activation(user_input) or is_vs05_activation(user_input)
-            or is_ifdev05_activation(user_input) or is_iam05_activation(user_input))
+    """True when any owner-only protocol is active."""
+    return (is_owner_maintenance_activation(user_input) or is_owner_comparison_activation(user_input)
+            or is_owner_interface_audit_activation(user_input) or is_owner_integrity_audit_activation(user_input))
 
 
 def owner_protocol_name(user_input: str) -> str:
-    """Return the active owner-protocol name (DEVMODE05/VS05/IFDEV05/IAM05), or ''."""
-    if is_devmode05_activation(user_input):
-        return "DEVMODE05"
-    if is_vs05_activation(user_input):
-        return "VS05"
-    if is_ifdev05_activation(user_input):
-        return "IFDEV05"
-    if is_iam05_activation(user_input):
-        return "IAM05"
+    """Return the active generic owner-protocol key, or an empty string."""
+    for key in _PROTOCOL_KEYS:
+        if _is_protocol_activation(user_input, key):
+            return key
     return ""
 
 
-def vs05_readonly_source_roots(user_input: str) -> list[str]:
-    """Return existing local source roots explicitly supplied to a VS05 turn.
+def owner_protocol_label(key: str) -> str:
+    value = _protocol_entry(key).get("label")
+    return str(value).strip() if value else _DEFAULT_LABELS.get(key, key.replace("_", " "))
 
-    VS05 compares MO against operator-named references. Those references may
+
+def owner_protocol_marker(key: str, state: str) -> str:
+    state_key = "blocked_marker" if str(state).lower() == "blocked" else "complete_marker"
+    value = _protocol_entry(key).get(state_key)
+    if value:
+        return str(value)
+    return f"[{owner_protocol_label(key).upper()} {str(state).upper()}]"
+
+
+def owner_comparison_readonly_source_roots(user_input: str) -> list[str]:
+    """Return existing local source roots explicitly supplied to an owner comparison turn.
+
+    Owner comparison compares MO against operator-named references. Those references may
     live outside the active project root, but they are source-intake roots only:
     callers must still keep mutating tools on the normal project sandbox roots.
     """
-    if not is_vs05_activation(user_input):
+    if not is_owner_comparison_activation(user_input):
         return []
     tokens = re.findall(r'"([^"]+)"|\'([^\']+)\'|([^\s,;]+)', str(user_input or ""))
     roots: list[str] = []
@@ -138,7 +212,7 @@ def vs05_readonly_source_roots(user_input: str) -> list[str]:
         if not raw:
             continue
         lowered = raw.lower().lstrip("/")
-        if lowered in {"start", "vs05", "vs", "05"}:
+        if lowered in {"start", "run"} or any(_is_alias_token(raw, alias) for alias in _protocol_aliases(OWNER_COMPARISON)):
             continue
         windows_abs = bool(re.match(r"^[A-Za-z]:[\\/]", raw)) or raw.startswith("\\\\")
         candidate = Path(raw).expanduser()

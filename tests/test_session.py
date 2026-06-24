@@ -487,7 +487,7 @@ class TestSessionQuarantineUnfinishedTail:
         deleted during active continuation — keep it so it gets answered."""
         session.messages = [
             {"role": "assistant", "content": "Hi"},
-            {"role": "user", "content": "VS05 https://example.com — can MO do X?"},
+            {"role": "user", "content": "OWNER_COMPARISON https://example.com — can MO do X?"},
         ]
         session.turn_count = 1
 
@@ -495,7 +495,7 @@ class TestSessionQuarantineUnfinishedTail:
 
         assert meta["changed"] is False
         assert len(session.messages) == 2  # the question survives
-        assert session.messages[-1]["content"].startswith("VS05")
+        assert session.messages[-1]["content"].startswith("OWNER_COMPARISON")
 
     def test_quarantine_always_drops_dangling_tools_even_when_user_drop_disabled(self, session):
         """Dangling tool chains are always unsafe for providers — dropped

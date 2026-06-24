@@ -229,13 +229,13 @@ def test_prt_started_slash_result_uses_prt_style():
 
 def test_run_turn_slash_marker_routes_to_normal_turn_thread():
     harness = DispatchHarness()
-    harness.agent._slash_pending_input = "start VS05 E:\\ref-a E:\\ref-b"
+    harness.agent._slash_pending_input = "start OWNER_COMPARISON E:\\ref-a E:\\ref-b"
 
     assert harness._dispatch_slash_command_result("[RUN_TURN]", render_result=True) is True
 
-    assert harness.turns == ["start VS05 E:\\ref-a E:\\ref-b"]
+    assert harness.turns == ["start OWNER_COMPARISON E:\\ref-a E:\\ref-b"]
     assert harness.agent._slash_pending_input == ""
-    assert ("class:user-msg", "* start VS05 E:\\ref-a E:\\ref-b") in harness.lines
+    assert ("class:user-msg", "* start OWNER_COMPARISON E:\\ref-a E:\\ref-b") in harness.lines
 
 
 def test_ghost_slash_input_is_removed_from_public_api():

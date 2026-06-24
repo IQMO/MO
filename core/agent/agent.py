@@ -1264,7 +1264,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         # A plain unanswered user message (no dangling tool calls) is only stale
         # when the operator returns with a casual greeting. During active
         # continuation, keep it so a question that failed on a provider hiccup
-        # gets answered instead of silently deleted (observed live: a VS05
+        # gets answered instead of silently deleted (observed live: a OWNER_COMPARISON
         # question vanished after a startup provider-balance error).
         drop_unanswered = self._looks_like_return_greeting(user_input)
         try:
@@ -1430,7 +1430,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         value = str(text or "").strip().lower()
         return (
             value.startswith("[provider empty]")
-            or value.startswith("[devmode05 blocked]")
+            or value.startswith("[owner_maintenance blocked]")
             or value.startswith("[max provider requests]")
             or value.startswith("[max tool rounds]")
             or value.startswith("[tool arguments truncated]")

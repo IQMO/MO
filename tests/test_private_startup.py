@@ -98,7 +98,7 @@ def test_tool_arguments_default_to_project_cwd(tmp_path):
     assert agent._project_scoped_tool_arguments("edit_file", {"path": "src/app.py", "old_text": "a", "new_text": "b"})["path"] == str((project / "src" / "app.py").resolve())
 
 
-def test_vs05_extends_roots_for_external_source_intake_only(tmp_path):
+def test_owner_comparison_extends_roots_for_external_source_intake_only(tmp_path):
     project = tmp_path / "project"
     external = tmp_path / "reference"
     project.mkdir()
@@ -111,12 +111,12 @@ def test_vs05_extends_roots_for_external_source_intake_only(tmp_path):
     agent.allowed_roots = [str(project)]
 
     read_roots = agent._effective_allowed_roots_for_tool(
-        f"start VS05 {external}",
+        f"start OWNER_COMPARISON {external}",
         "read_file",
         {"path": str(external_file)},
     )
     write_roots = agent._effective_allowed_roots_for_tool(
-        f"start VS05 {external}",
+        f"start OWNER_COMPARISON {external}",
         "write_file",
         {"path": str(external_file), "content": "changed"},
     )
@@ -125,7 +125,7 @@ def test_vs05_extends_roots_for_external_source_intake_only(tmp_path):
     assert guard_tool_call("write_file", {"path": str(external_file), "content": "changed"}, allowed_roots=write_roots)
 
 
-def test_vs05_allows_non_mutating_shell_in_external_source_root(tmp_path):
+def test_owner_comparison_allows_non_mutating_shell_in_external_source_root(tmp_path):
     project = tmp_path / "project"
     external = tmp_path / "reference"
     project.mkdir()
@@ -135,12 +135,12 @@ def test_vs05_allows_non_mutating_shell_in_external_source_root(tmp_path):
     agent.allowed_roots = [str(project)]
 
     read_roots = agent._effective_allowed_roots_for_tool(
-        f"start VS05 {external}",
+        f"start OWNER_COMPARISON {external}",
         "shell",
         {"command": "git status --short", "workdir": str(external)},
     )
     write_roots = agent._effective_allowed_roots_for_tool(
-        f"start VS05 {external}",
+        f"start OWNER_COMPARISON {external}",
         "shell",
         {"command": "git commit -m test", "workdir": str(external)},
     )
