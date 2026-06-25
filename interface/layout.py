@@ -59,6 +59,22 @@ def input_window_height(tui: Any) -> Dimension:
     return Dimension(min=1, preferred=rows, max=INPUT_MAX_ROWS)
 
 
+def enhance_hint_fragments(tui: Any) -> list:
+    """Contextual one-line hint shown at the end of the input.
+
+    "Ctrl+E enhance message" while a real message is typed; after Ctrl+E applies,
+    "Esc to revert back". Hidden when busy, empty, or on a slash command.
+    """
+    if getattr(tui, "busy", False):
+        return []
+    if getattr(tui, "_enhance_holder_active", False):
+        return [("class:input-placeholder", "  Esc to revert back")]
+    text = str(getattr(getattr(tui, "_input_buf", None), "text", "") or "").strip()
+    if text and not text.startswith("/") and len(text) >= 8:
+        return [("class:input-placeholder", "  Ctrl+E enhance message")]
+    return []
+
+
 def build_tui_root(tui: Any, input_buffer: Any, prefix: HTML | None = None) -> FloatContainer:
     """Build the protected TUI layout without changing panel order or caps."""
     if prefix is None:
@@ -100,6 +116,10 @@ def build_tui_root(tui: Any, input_buffer: Any, prefix: HTML | None = None) -> F
             filter=Condition(lambda: tui._palette.open),
         ),
         Window(height=lambda: input_window_height(tui), content=BufferControl(buffer=input_buffer, input_processors=[BeforeInput(prefix), PlaceholderProcessor()]), dont_extend_height=True, wrap_lines=True),
+        ConditionalContainer(
+            Window(height=1, content=FormattedTextControl(lambda: enhance_hint_fragments(tui)), dont_extend_height=True),
+            filter=Condition(lambda: bool(enhance_hint_fragments(tui))),
+        ),
         Window(height=1, content=FormattedTextControl(lambda: tui._get_footer_fragments()), dont_extend_height=True),
     ])
 

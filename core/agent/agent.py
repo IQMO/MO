@@ -1554,7 +1554,12 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         return value
 
     def enhance_prompt_for_input(self, rough: str, *, include_marker: bool = False) -> str:
-        """Provider-backed /gp text replacement with local deterministic fallback."""
+        """Provider-backed Ctrl+E prompt enhancement with local deterministic fallback.
+
+        Rewrites the operator's typed message into a sharper prompt, personalized to
+        their language and tone from the profile. The TUI replaces the input row with
+        the result; Esc reverts to the original.
+        """
         from ..prompt_enhancer import enhance_prompt
 
         rough = str(rough or "").strip()
@@ -1566,9 +1571,11 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             "Rewrite the operator's rough text into one complete prompt that will replace the input row.\n"
             "Rules:\n"
             "- Return only the enhanced prompt text; no prefix, bullets, quotes, markdown, or explanation.\n"
-            "- Preserve the operator's actual intent and tone; do not broaden scope or invent files/tests.\n"
-            "- Make it specific enough for MO: objective, scope guardrails, evidence/checks, and desired output when implied.\n"
-            "- Keep it direct and natural for the active operator; avoid generic filler.\n"
+            "- Write in the SAME LANGUAGE as the operator's input; never translate or switch (e.g. do not turn Arabic into English or vice versa).\n"
+            "- Match the operator's tone and register from the profile (direct, informal, brief); mirror their wording. Do NOT add AI-polish, hedging, caution, or evidence-first/verification boilerplate they did not ask for.\n"
+            "- Preserve the operator's exact intent and scope; do not broaden it or invent files/tests.\n"
+            "- Preserve the operator's defined vocabulary and shorthand verbatim; never 'correct', expand, or translate a term the operator uses as-is.\n"
+            "- Make it specific enough for MO: objective and any scope guardrails the operator implied — without imposing structure they did not.\n"
             "- If the rough text is already clear, tighten it instead of expanding it.\n\n"
             f"Operator/profile context:\n{self._profile_context_excerpt(max_chars=1500) or 'none'}\n\n"
             f"Recent visible context:\n{self._recent_prompt_context() or 'fresh session'}"

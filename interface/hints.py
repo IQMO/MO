@@ -59,7 +59,7 @@ DEFAULT_HINTS: tuple[str, ...] = (
     "/projects lists your project history. /telegram manages remote gateway approval.",
     # ── Slash commands: workflow ──
     "/think sets reasoning level (high/medium/low). /reload refreshes config and system prompt.",
-    "/gp enhances your prompt before sending — iterate on ideas before MO acts on them.",
+    "Press Ctrl+E to rewrite your typed message into a sharper prompt in your own language and tone; Esc reverts it.",
     "/undo removes the last exchange. /retry re-runs your last prompt. /clear starts a fresh transcript.",
     # ── Slash commands: tools ──
     "/init checks your private MO home. /migrate dry-runs or applies legacy state migration.",

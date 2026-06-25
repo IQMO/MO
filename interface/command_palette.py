@@ -57,8 +57,6 @@ def palette_children_for_item(item: PaletteItem, agent: Any) -> list[PaletteItem
             PaletteItem("/prt fix", "fix findings", "run review and auto-fix findings"),
             PaletteItem("/prt ", "review files…", "review specific files", "insert"),
         ]
-    if value == "/gp":
-        return [PaletteItem("/gp ", "enhance prompt…", "type rough prompt", "insert")]
     if value == "/profile":
         return [
             PaletteItem("/profile", "show", "show profile"),

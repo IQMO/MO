@@ -264,14 +264,6 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         ),
     ),
     SlashCommandSpec(
-        name="/gp",
-        description="enhance prompt in input before sending",
-        category="Tasks",
-        aliases=("/pg",),
-        palette_description="prompt enhancer preview",
-        help_lines=("/gp <prompt>      enhance prompt in input; press Enter to send",),
-    ),
-    SlashCommandSpec(
         name="/prt",
         description="Project Review Team — deep review & auto-fix",
         category="Tasks",
@@ -433,7 +425,7 @@ SLASH_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
 
 
 HELP_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Work", ("/status", "/goal", "/ghost", "/gp", "/prt", "/owner_comparison", "/structural-graph", "/learning", "/usage", "/companion")),
+    ("Work", ("/status", "/goal", "/ghost", "/prt", "/owner_comparison", "/structural-graph", "/learning", "/usage", "/companion")),
     ("Sessions", ("/projects", "/sessions", "/session", "/new", "/resume", "/clear", "/undo", "/retry")),
     ("Settings", ("/help", "/init", "/doctor", "/migrate", "/model", "/profile", "/moon", "/hints", "/reload", "/think", "/settings")),
     ("Remote", ("/heartbeat", "/telegram")),
@@ -463,7 +455,7 @@ SLASH_COMMAND_HELP = build_help_text()
 
 PALETTE_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Recent", ()),
-    ("Tasks", ("/goal", "/ghost", "/gp", "/prt", "/owner_comparison", "/structural-graph", "/status", "/usage", "/heartbeat", "/companion")),
+    ("Tasks", ("/goal", "/ghost", "/prt", "/owner_comparison", "/structural-graph", "/status", "/usage", "/heartbeat", "/companion")),
     ("Sessions", ("/projects", "/session", "/session save", "/resume", "/new", "/clear", "/undo", "/retry")),
     ("Settings", ("/settings", "/init", "/migrate", "/model", "/think", "/reload", "/profile", "/telegram", "/help")),
     ("Exit", ("/exit",)),

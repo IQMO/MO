@@ -32,8 +32,8 @@ class QueueHarness(QueueingMixin):
 def test_command_allowed_while_working_preserves_control_exceptions():
     assert QueueHarness._command_allowed_while_working("/exit") is True
     assert QueueHarness._command_allowed_while_working("/goal status") is True
-    assert QueueHarness._command_allowed_while_working("/pg rough prompt") is True
-    assert QueueHarness._command_allowed_while_working("/gp rough prompt") is True
+    # /gp and /pg were removed (prompt enhancement is the Ctrl+E keybinding now).
+    assert QueueHarness._command_allowed_while_working("/gp rough prompt") is False
     assert QueueHarness._command_allowed_while_working("/ghost ask") is False
     assert QueueHarness._command_allowed_while_working("/gh ask") is False
     assert QueueHarness._command_allowed_while_working("/ghot ask") is False

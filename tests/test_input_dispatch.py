@@ -160,43 +160,16 @@ def test_dispatch_slash_command_result_handles_ghost_on_without_transcript_when_
     assert harness.lines == []
 
 
-def test_prompt_enhancer_replaces_input_buffer_without_sending_or_echoing():
+def test_gp_pg_are_no_longer_dispatched_as_commands():
+    """Prompt enhancement moved to the Ctrl+E keybinding; /gp and /pg must not be
+    intercepted by input dispatch anymore (they route as normal text)."""
     harness = DispatchHarness()
 
-    harness._handle_input("/gp mo investigate for me in the codebse")
+    harness._handle_input("/gp investigate the codebase")
 
-    assert harness._input_buf.text.startswith("Investigate in the codebase")
-    assert harness._input_buf.cursor_position == len(harness._input_buf.text)
-    assert harness.notices == ["Prompt enhanced; Enter to send"]
-    assert harness.lines == []
-    assert harness.turns == []
-
-
-def test_prompt_enhancer_pg_compat_alias_replaces_input_even_while_busy():
-    harness = DispatchHarness()
-    harness.busy = True
-
-    harness._handle_input("/pg i want to check mo core instuctions")
-
-    assert harness._input_buf.text.startswith("Check mo core instructions")
-    assert harness.notices == ["Prompt enhanced; Enter to send"]
-    assert harness.lines == []
-    assert harness.turns == []
-    assert not hasattr(harness, "queued")
-
-
-def test_prompt_enhancer_uses_agent_profile_in_input_dispatch(tmp_path):
-    harness = DispatchHarness()
-    pdir = tmp_path / "profile"
-    pdir.mkdir()
-    (pdir / "operator.md").write_text("direct concise evidence-first ask only if blocked", encoding="utf-8")
-    harness.agent.profile = SimpleNamespace(_path=str(tmp_path / "mo.db"))
-
-    harness._handle_input("/gp fix Ghost route")
-
-    assert "keep the answer direct and concise" in harness._input_buf.text
-    assert "ask only if blocked or risk changes" in harness._input_buf.text
-    assert harness.notices == ["Prompt enhanced; Enter to send"]
+    # No enhancement-in-buffer side effect; it is treated as ordinary input.
+    assert harness._input_buf.text == ""
+    assert "Prompt enhanced; Enter to send" not in harness.notices
 
 
 def test_handle_input_routes_busy_normal_text_to_queue_without_user_echo():

@@ -45,12 +45,18 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
         tui._paste_holder_text = ""
         tui._pre_paste_buffer_text = ""
 
+    def clear_enhance_holder() -> None:
+        tui._enhance_holder_active = False
+        tui._pre_enhance_text = ""
+
     def submit_input_text() -> str:
         if getattr(tui, "_paste_holder_active", False):
             text = str(getattr(tui, "_paste_holder_text", "") or "").strip()
             clear_paste_holder()
+            clear_enhance_holder()
             return text
         clear_paste_holder()
+        clear_enhance_holder()
         return str(getattr(tui._input_buf, "text", "") or "").strip()
 
     def set_input_text(text: str) -> None:
@@ -153,6 +159,26 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
         if b.complete_state:
             b.complete_previous()
 
+    @kb.add("c-e")
+    def _(event):
+        """Ctrl+E: rewrite the typed message into a sharper prompt (in place).
+
+        Prose only — ignored on empty input or slash commands (so completion/control
+        commands are untouched). Runs off-thread; Esc reverts to the original.
+        """
+        b = event.app.current_buffer
+        if b is not tui._input_buf:
+            return
+        text = str(b.text or "").strip()
+        if not text or text.startswith("/"):
+            return
+        if getattr(tui, "busy", False):
+            set_notice("MO is busy — enhance after the current turn")
+            return
+        starter = getattr(tui, "_start_prompt_enhance", None)
+        if callable(starter):
+            starter(b.text)
+
     @kb.add("c-c")
     def _(event):
         """Ctrl+C: cancel current work when busy (terminal convention); exit when idle.
@@ -205,6 +231,13 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
             tui._input_buf.text = restore
             tui._input_buf.cursor_position = len(restore)
             set_notice("Paste cleared")
+            event.app.invalidate()
+        elif getattr(tui, "_enhance_holder_active", False):
+            restore = str(getattr(tui, "_pre_enhance_text", "") or "")
+            clear_enhance_holder()
+            tui._input_buf.text = restore
+            tui._input_buf.cursor_position = len(restore)
+            set_notice("Reverted to your message")
             event.app.invalidate()
         elif tui.busy:
             tui._handle_busy_escape()

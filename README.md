@@ -202,6 +202,11 @@ find issues in this project
 For non-trivial work, you should see a compact task checklist appear and advance
 only as tools actually run.
 
+While typing a message, press **Ctrl+E** to rewrite it into a sharper prompt in
+place — personalized to your language and tone from your profile (it never
+auto-translates or switches language). Press **Esc** to revert to exactly what you
+typed, or **Enter** to send. It runs locally/off-thread and never sends on its own.
+
 Global command: add `~/.mo/bin` to your `PATH`, then run `mo` from any project
 directory.
 

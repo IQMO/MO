@@ -162,6 +162,7 @@ def test_tui_keybindings_register_protected_control_keys():
         ("Keys.ControlI",),
         ("Keys.BackTab",),
         ("Keys.ControlC",),
+        ("Keys.ControlE",),
         ("Keys.Escape", "g"),
         ("Keys.Escape", "G"),
         ("Keys.ControlO",),

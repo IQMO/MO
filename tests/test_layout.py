@@ -69,14 +69,15 @@ def test_build_tui_root_preserves_panel_order_and_height_caps():
     assert len(root.floats) == 1
 
     children = root.content.children
-    assert len(children) == 11
+    assert len(children) == 12
     assert isinstance(children[0], Window)  # transcript viewport
     assert isinstance(children[1], Window)  # spacer
     assert all(isinstance(children[index], ConditionalContainer) for index in (2, 3, 4, 5, 6))
     assert isinstance(children[7], Window)  # separator
     assert isinstance(children[8], ConditionalContainer)  # palette
     assert isinstance(children[9], Window)  # input
-    assert isinstance(children[10], Window)  # footer
+    assert isinstance(children[10], ConditionalContainer)  # Ctrl+E enhance hint
+    assert isinstance(children[11], Window)  # footer
 
     assert children[2].content.height.max == 14  # Ghost surface
     assert children[3].content.height == 1  # active MO lane stays above task boards

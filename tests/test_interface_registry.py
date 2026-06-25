@@ -49,6 +49,7 @@ def test_goal_is_single_registry_visible_everywhere():
     assert any(command == "/goal" for _category, items in PALETTE_CATEGORIES for command, _description in items)
 
 
-def test_gp_is_canonical_prompt_enhancer_and_pg_remains_compat_alias():
-    assert "/gp" in SLASH_COMMANDS
-    assert SLASH_ALIASES["/pg"] == "/gp"
+def test_gp_pg_removed_prompt_enhancer_moved_to_ctrl_e():
+    # Prompt enhancement is now the Ctrl+E keybinding; the slash commands are gone.
+    assert "/gp" not in SLASH_COMMANDS
+    assert "/pg" not in SLASH_ALIASES

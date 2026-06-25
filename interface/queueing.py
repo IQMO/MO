@@ -23,8 +23,6 @@ class QueueingMixin:
             return True
         if lowered in {"/goal", "/g", "/goal status", "/g status", "/goal info", "/g info"}:
             return True
-        if lowered.startswith(("/pg ", "/gp ")) or lowered in {"/pg", "/gp"}:
-            return True
         return lowered in {"/goal stop", "/g stop", "/goal cancel", "/g cancel", "/goal abort", "/g abort"}
 
     def _run_goal_command_now(self, text: str):

@@ -22,6 +22,19 @@ def test_prompt_enhancer_corrects_observed_operator_typos():
     assert clean_prompt_text(text) == "verify the deploy fixes before i confirm if addressed truly"
 
 
+def test_prompt_enhancer_preserves_non_english_language():
+    """Arabic (non-Latin) input must be preserved verbatim — no English typo/prefix
+    rules and no English MO-structure templates applied."""
+    arabic = "راجع الكود وتأكد من عدم وجود أخطاء"
+
+    assert clean_prompt_text(arabic) == arabic
+    enhanced = enhance_prompt(arabic)
+    assert enhanced == arabic
+    # No English boilerplate leaked in.
+    assert "verify" not in enhanced.lower()
+    assert "scope" not in enhanced.lower()
+
+
 def test_prompt_enhancer_strips_i_want_to_prefix():
     enhanced = enhance_prompt("I want to new game funny and has visuals")
 

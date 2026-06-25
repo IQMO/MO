@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import threading
-import traceback
-
-from core.prompt_enhancer import enhance_prompt
 
 
 class InputDispatchMixin:
@@ -139,37 +136,7 @@ class InputDispatchMixin:
             self._set_notice(first)
         return True
 
-    def _handle_prompt_enhance_input(self, text: str) -> bool:
-        parts = str(text or "").strip().split(maxsplit=1)
-        if not parts or parts[0].lower() not in ("/pg", "/gp"):
-            return False
-        source = parts[1].strip() if len(parts) > 1 else ""
-        # agent.enhance_prompt_for_input already handles the full fallback
-        # chain (provider → deterministic), so the interface just calls it.
-        enhancer = getattr(self.agent, "enhance_prompt_for_input", None)
-        enhanced = ""
-        if callable(enhancer):
-            try:
-                enhanced = str(enhancer(source) or "").strip()
-            except Exception:
-                traceback.print_exc()
-        if not enhanced:
-            # Absolute last resort: deterministic local enhancer
-            enhanced = enhance_prompt(source, getattr(self.agent, "profile", None))
-        if not enhanced:
-            self._set_notice("Use: /gp <prompt to enhance>")
-            return True
-        if self._input_buf:
-            self._input_buf.text = enhanced
-            self._input_buf.cursor_position = len(enhanced)
-        self._set_notice("Prompt enhanced; Enter to send")
-        if self._app:
-            self._app.invalidate()
-        return True
-
     def _handle_input(self, text: str, *, force_main: bool = False):
-        if self._handle_prompt_enhance_input(text):
-            return
         # Ghost mode routing: messages go to Ghost, but slash commands stay control
         # input (so /ghost off, /exit, /status work while ghost is on), and an
         # explicit Ghost->main handoff (force_main) must reach the main agent rather

@@ -5,6 +5,7 @@ import inspect
 import re
 import threading
 import time
+import traceback
 
 from core.provider.provider import clean_provider_error
 from core.workers import ensure_worker_registry
@@ -25,6 +26,52 @@ class TurnRunnerMixin:
         except Exception:
             tasks = list(getattr(board, "tasks", []) or [])
             return bool(tasks) and not any(str(getattr(task, "status", "") or "") in {"pending", "active", "blocked"} for task in tasks)
+
+    def _start_prompt_enhance(self, original: str) -> None:
+        """Kick off Ctrl+E prompt enhancement off the UI thread.
+
+        The enhancer makes a provider call (~1-2s); running it inline would freeze
+        the TUI. We run it on a daemon thread and apply the result back on the
+        event loop. The operator's original is stashed so Esc can revert.
+        """
+        if getattr(self, "_enhance_in_flight", False):
+            return
+        self._enhance_in_flight = True
+        self._set_notice("Enhancing…")
+        if self._app:
+            self._app.invalidate()
+        threading.Thread(target=self._run_enhance_thread, args=(original,), daemon=True).start()
+
+    def _run_enhance_thread(self, original: str) -> None:
+        enhanced = ""
+        try:
+            fn = getattr(self.agent, "enhance_prompt_for_input", None)
+            if callable(fn):
+                enhanced = str(fn(original) or "").strip()
+        except Exception:
+            traceback.print_exc()
+
+        def _apply() -> None:
+            self._enhance_in_flight = False
+            if enhanced and enhanced != str(original or "").strip():
+                self._pre_enhance_text = original
+                self._enhance_holder_active = True
+                self._input_buf.text = enhanced
+                self._input_buf.cursor_position = len(enhanced)
+                self._set_notice("Enhanced — Esc to revert")
+            else:
+                self._set_notice("No change")
+            if self._app:
+                self._app.invalidate()
+
+        loop = getattr(self._app, "loop", None)
+        if loop is not None:
+            try:
+                loop.call_soon_threadsafe(_apply)
+                return
+            except Exception:
+                traceback.print_exc()
+        _apply()
 
     def _run_turn_thread(self, user_input: str):
         cancel_event = threading.Event()

@@ -43,7 +43,7 @@ Any interface cleanup that lets provider prose, callback markup, or display code
 - `layout.py` — prompt-toolkit panel layout construction.
 - `keybindings.py` — prompt-toolkit keybinding construction.
 - `palette_mixin.py` — small command-palette compatibility wrappers.
-- `input_dispatch.py` + `core/prompt_enhancer.py` — `/gp` prompt enhancement loads profile-guided improved text into the input field without sending.
+- `keybindings.py` + `turn_runner.py` + `core/prompt_enhancer.py` — **Ctrl+E** prompt enhancement rewrites the typed message in place (off-thread, profile-personalized language/tone); **Esc** reverts. Never sends.
 - `queueing.py` — pending input queue/steer mixin.
 - `input_dispatch.py` — TUI slash/input dispatch mixin.
 
@@ -72,7 +72,7 @@ Do not guess. Do not call something dead unless imports/tests prove it.
 - Failed verification remains blocked.
 - Native mouse selection/copy contract stays: `full_screen=False`, `mouse_support=False`; full transcript navigation is MO internal viewport scrolling, not guaranteed terminal scrollback.
 - Slash commands are control actions and must not echo raw commands as chat.
-- `/gp` prompt enhancement must replace the input buffer only; it may use local operator-profile guidance, but must not send, create taskboards, or mark progress.
+- Ctrl+E prompt enhancement must replace the input buffer only (Esc reverts to the original); it may use local operator-profile guidance, but must not send, create taskboards, or mark progress.
 - Queue/steer behavior remains: first busy input queues, second Enter steers, third Enter requests stop, Esc cancels queued input; three busy Esc presses stop MO.
 - Ghost can route/queue/work through existing runtime paths, but Ghost text does not own task state.
 

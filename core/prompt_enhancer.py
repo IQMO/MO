@@ -54,9 +54,25 @@ class PromptProfileGuidance:
     anti_overengineering: bool = False
 
 
+def _looks_non_english(text: str) -> bool:
+    """True when the text is mostly non-ASCII letters (e.g. Arabic).
+
+    The English typo/prefix/filler rules and keyword templates would corrupt or
+    ignore non-Latin input, so callers skip them and preserve the language as-is.
+    """
+    letters = [c for c in str(text or "") if c.isalpha()]
+    if not letters:
+        return False
+    non_ascii = sum(1 for c in letters if ord(c) > 127)
+    return non_ascii >= max(1, len(letters) // 2)
+
+
 def clean_prompt_text(text: str) -> str:
     """Return typo-corrected operator text without broadening scope."""
     value = str(text or "").strip()
+    if _looks_non_english(value):
+        # Preserve the operator's language verbatim; only normalize whitespace.
+        return _SPACE_RE.sub(" ", value).strip()
     for pattern, replacement in _TYPO_FIXES:
         value = pattern.sub(replacement, value)
     value = _PREFIX_RE.sub("", value)
@@ -131,6 +147,10 @@ def enhance_prompt(text: str, profile: Any = None) -> str:
     clean = clean_prompt_text(text)
     if not clean:
         return ""
+    if _looks_non_english(clean):
+        # Non-English input: return the cleaned text in the operator's own language
+        # without imposing English MO-structure templates.
+        return clean
     guidance = profile_prompt_guidance(profile)
     lowered = clean.lower()
     leading = clean[0].upper() + clean[1:]

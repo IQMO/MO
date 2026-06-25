@@ -75,6 +75,11 @@ class MoTui(
         self._paste_holder_text = ""
         self._paste_holder_active = False
         self._pre_paste_buffer_text = ""
+        # Ctrl+E prompt-enhance: stash the operator's original message so Esc can
+        # revert the enhanced text back to exactly what they typed.
+        self._pre_enhance_text = ""
+        self._enhance_holder_active = False
+        self._enhance_in_flight = False
         self._busy_escape_count = 0
 
         # Goal UI state

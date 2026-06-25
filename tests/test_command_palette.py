@@ -33,9 +33,8 @@ def test_palette_children_preserve_protected_command_drilldowns():
         "/goal ", "new goal…", "type autonomous goal", "insert"
     )
     assert palette_children_for_item(PaletteItem("/ghost", "/ghost", "removed public command"), agent) == []
-    assert palette_children_for_item(PaletteItem("/gp", "/gp", "prompt enhancer"), agent)[0] == PaletteItem(
-        "/gp ", "enhance prompt…", "type rough prompt", "insert"
-    )
+    # /gp was removed (prompt enhancement moved to the Ctrl+E keybinding).
+    assert palette_children_for_item(PaletteItem("/gp", "/gp", "removed command"), agent) == []
     assert palette_children_for_item(PaletteItem("/handoff", "/handoff", "context handoff"), agent) == []
 
 

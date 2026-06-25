@@ -67,8 +67,6 @@ class AgentSlashCommands:
             "/learning": self._cmd_learning,
             "/goal": self._cmd_goal,
             "/g": self._cmd_goal,
-            "/gp": self._cmd_prompt_enhance,
-            "/pg": self._cmd_prompt_enhance,
             "/undo": self._cmd_undo,
             "/u": self._cmd_undo,
             "/retry": self._cmd_retry,
@@ -417,12 +415,6 @@ class AgentSlashCommands:
             return render_state_migration_report(plan) + "\n\nApply not run: add `--confirm` to copy/move legacy state."
         result = apply_state_migration(plan, confirm=True, remove_source=(action == "move"))
         return render_state_migration_report(plan, result)
-
-    def _cmd_prompt_enhance(self, rest: str) -> str:
-        enhanced = self.enhance_prompt_for_input(rest, include_marker=True)
-        if not enhanced:
-            return "Use: /gp <prompt to enhance>"
-        return enhanced
 
     def _cmd_profile(self, rest: str) -> str:
         """Show or edit profile. Subcommands: name, tools, provider, default (show)."""
