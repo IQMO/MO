@@ -10,6 +10,18 @@ Run the preview:
 python -m UX --once
 ```
 
+Run the Windows launcher in live mode:
+
+```bat
+UX\run_ux.bat
+```
+
+The launcher defaults to `--live`, so this also sends one live message and exits:
+
+```bat
+UX\run_ux.bat --message "who are you?"
+```
+
 Run the local smoke path:
 
 ```bash

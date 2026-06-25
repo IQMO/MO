@@ -47,6 +47,9 @@ def test_production_entrypoint_does_not_import_experimental_ux():
 def test_windows_launcher_targets_isolated_package():
     text = (UX_ROOT / "run_ux.bat").read_text(encoding="utf-8")
     assert "-m UX" in text
+    assert "set \"UX_ARGS=--live\"" in text
+    assert "set \"UX_ARGS=--live %*\"" in text
+    assert "PYTHONUTF8=1" in text
     assert "mo.py" not in text
     assert "interface" not in text
 
