@@ -173,6 +173,6 @@ def read_only_snapshot(handle: object) -> SessionSnapshot:
     """Return a runtime snapshot without creating a runtime backend."""
     snapshot_fn = getattr(handle, "snapshot")
     snapshot = snapshot_fn()
-    rows = snapshot.board or (BoardRow("readonly", "No active runtime task board", "pending", kind="read-only"),)
+    rows = snapshot.board or (BoardRow("readonly", "Idle - no active runtime task board", "pending", kind="read-only"),)
     lanes = snapshot.lanes or (LaneSnapshot("runtime", "ready", "MO runtime loaded", snapshot.model_label),)
     return replace(snapshot, board=rows, lanes=lanes, composer_hint="read-only mode; no messages are sent")

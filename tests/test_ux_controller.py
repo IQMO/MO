@@ -66,5 +66,5 @@ def test_read_only_snapshot_fills_empty_board_and_lanes():
     handle = SimpleNamespace(snapshot=lambda: SessionSnapshot(project="repo"))
     snapshot = read_only_snapshot(handle)
 
-    assert snapshot.board == (BoardRow("readonly", "No active runtime task board", "pending", kind="read-only"),)
+    assert snapshot.board == (BoardRow("readonly", "Idle - no active runtime task board", "pending", kind="read-only"),)
     assert snapshot.lanes[0].name == "runtime"

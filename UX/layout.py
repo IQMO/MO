@@ -95,7 +95,7 @@ def task_board_panel(rows: tuple[BoardRow, ...], theme: UxTheme = DEFAULT_THEME)
             Text(_trim(detail, 36), style=_style(theme, "muted")),
         )
     if not rows:
-        table.add_row(Text("[ ]", style=_style(theme, "muted")), Text("No task board from runtime"), Text(""))
+        table.add_row(Text("[ ]", style=_style(theme, "muted")), Text("Idle - task board appears for work turns"), Text(""))
     return _panel(table, "Task Board", theme)
 
 

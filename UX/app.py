@@ -86,6 +86,7 @@ class UxPreviewApp:
         self.console.print(build_screen(snapshot))
 
     def submit_and_render_live(self, controller: UxController, text: str) -> str:
+        self.console.clear()
         with Live(build_screen(controller.snapshot()), console=self.console, refresh_per_second=4, transient=False) as live:
             result = controller.handle_input(text, on_change=lambda: live.update(build_screen(controller.snapshot())))
             live.update(build_screen(controller.snapshot()))
@@ -96,6 +97,7 @@ class UxPreviewApp:
             self.render(snapshot)
             return
         current_controller = controller or UxController(PreviewBackend(snapshot or demo_snapshot()))
+        self.console.clear()
         self.render(current_controller.snapshot())
         if once or not sys.stdin.isatty():
             return
