@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from .ipc import IpcServer
+from .ipc import IpcClient, IpcError, IpcServer
 
 if TYPE_CHECKING:
     from .gateway import Gateway
@@ -58,3 +58,38 @@ def make_gateway_handler(gateway: "Gateway") -> Callable[[dict, Callable[[dict],
 def serve_gateway(gateway: "Gateway", *, name: str = "mo", mo_home_path: str | None = None) -> IpcServer:
     """Start (and return) an IpcServer exposing ``gateway`` over local IPC."""
     return IpcServer(make_gateway_handler(gateway), name=name, mo_home_path=mo_home_path).start()
+
+
+def request_turn(
+    prompt: str,
+    *,
+    route_source: str = "user",
+    on_event: Callable[[dict], None] | None = None,
+    name: str = "mo",
+    mo_home_path: str | None = None,
+    timeout: float = 5.0,
+) -> str:
+    """Drive ONE turn against a warm daemon over IPC and return its final text.
+
+    This is the CLIENT half used by the non-interactive one-shot (``mo -p``). It
+    raises :class:`~core.ipc.IpcUnavailable` when no daemon is reachable, so the
+    caller can fall back to in-process; it raises :class:`~core.ipc.IpcError` if the
+    daemon reports a turn error. ``on_event`` receives each streamed event frame
+    (token / activity / board / proposal) for optional progress display.
+    """
+    client = IpcClient.connect(name=name, mo_home_path=mo_home_path, timeout=timeout)
+    try:
+        final = ""
+        for frame in client.request({"type": "run_turn", "input": str(prompt), "route_source": route_source}):
+            ftype = frame.get("type")
+            if ftype == "event":
+                if on_event:
+                    on_event(frame)
+            elif ftype == "response":
+                result = frame.get("result")
+                final = str(result.get("text", "")) if isinstance(result, dict) else ""
+            elif ftype == "error":
+                raise IpcError(str(frame.get("message", "daemon turn error")))
+        return final
+    finally:
+        client.close()

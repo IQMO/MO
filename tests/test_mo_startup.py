@@ -53,6 +53,29 @@ def test_main_version_is_noninteractive(monkeypatch, capsys):
     assert called["agent"] is False
 
 
+def test_prompt_flag_runs_oneshot_without_building_agent(monkeypatch, capsys):
+    monkeypatch.setattr(mo.os.path, "exists", lambda _path: True)
+    monkeypatch.setattr(mo, "_run_one_shot", lambda prompt, _config: f"ANSWER:{prompt}")
+    # The interactive path must NOT be taken for a one-shot.
+    monkeypatch.setattr(mo, "create_agent", lambda _config: (_ for _ in ()).throw(AssertionError("agent built for one-shot")))
+
+    mo.main(["-p", "what is 2+2"])
+
+    assert "ANSWER:what is 2+2" in capsys.readouterr().out
+
+
+def test_prompt_flag_without_value_is_usage_error(monkeypatch, capsys):
+    monkeypatch.setattr(mo.os.path, "exists", lambda _path: True)
+    monkeypatch.setattr(mo, "create_agent", lambda _config: (_ for _ in ()).throw(AssertionError("agent built")))
+
+    try:
+        mo.main(["-p"])
+    except SystemExit as exc:
+        assert exc.code == 2
+
+    assert "Usage: mo -p" in capsys.readouterr().err
+
+
 def test_main_provider_error_is_mo_native_without_traceback(monkeypatch, capsys):
     monkeypatch.setattr(mo.os.path, "exists", lambda _path: True)
     monkeypatch.setattr(mo, "_acquire_lock", lambda: True)

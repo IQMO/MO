@@ -1,3 +1,5 @@
+import pytest
+
 from core import ipc, ipc_service
 
 
@@ -142,3 +144,38 @@ def test_non_serializable_event_value_does_not_abort_turn(tmp_path):
     assert board and board[0]["rich"] == "RICH-OBJECT"
     assert frames[-1]["type"] == "response"
     assert frames[-1]["result"]["text"] == "ok"
+
+
+# --- one-shot client (request_turn) -----------------------------------------
+
+
+def test_request_turn_returns_final_text_and_streams(tmp_path):
+    gw = FakeGateway()
+    srv = _serve(tmp_path, gw)
+    seen = []
+    try:
+        text = ipc_service.request_turn("hi", on_event=seen.append, name="gw", mo_home_path=str(tmp_path))
+    finally:
+        srv.stop()
+    assert text == "done: hi"
+    kinds = [e.get("kind") for e in seen]
+    assert "token" in kinds and "activity" in kinds and "board" in kinds
+    assert gw.calls == [("hi", "user")]
+
+
+def test_request_turn_unavailable_raises(tmp_path):
+    with pytest.raises(ipc.IpcUnavailable):
+        ipc_service.request_turn("hi", name="absent", mo_home_path=str(tmp_path))
+
+
+def test_request_turn_propagates_daemon_error(tmp_path):
+    class BoomGateway(FakeGateway):
+        def run_turn(self, *_a, **_k):
+            raise RuntimeError("boom")
+
+    srv = _serve(tmp_path, BoomGateway())
+    try:
+        with pytest.raises(ipc.IpcError):
+            ipc_service.request_turn("hi", name="gw", mo_home_path=str(tmp_path))
+    finally:
+        srv.stop()

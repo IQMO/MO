@@ -74,12 +74,60 @@ def _run_state_migration(args: list[str]) -> None:
     print(render_state_migration_report(plan, result))
 
 
+def _prompt_arg(args: list[str]) -> str | None:
+    """Return the value of a one-shot ``-p``/``--prompt`` flag, or None if absent.
+
+    ``-p`` with no following value returns "" (an explicit usage error upstream),
+    distinct from None (flag not given).
+    """
+    for flag in ("-p", "--prompt"):
+        if flag in args:
+            idx = args.index(flag)
+            return args[idx + 1] if idx + 1 < len(args) else ""
+    return None
+
+
+def _run_one_shot(prompt: str, config_path: str) -> str:
+    """Run ONE non-interactive turn and return its final text.
+
+    Fast path: a warm daemon (`mo_service.py --warm`) already holds the agent — the
+    turn streams over local IPC and this process never constructs an agent or loads
+    the TUI. Fallback: no daemon reachable, so build the agent in-process and run the
+    turn here (same cost as a normal launch — never worse than no daemon). Activity
+    is shown on stderr only when it is a TTY, so stdout stays a clean, pipeable answer.
+    """
+    from core.ipc import IpcUnavailable
+    from core.ipc_service import request_turn
+
+    show_activity = sys.stderr.isatty()
+
+    def _on_event(frame: dict) -> None:
+        if show_activity and frame.get("kind") == "activity":
+            sys.stderr.write(f"\r\033[K… {frame.get('text', '')}")
+            sys.stderr.flush()
+
+    try:
+        text = request_turn(prompt, on_event=_on_event)
+        if show_activity:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
+        return text
+    except IpcUnavailable:
+        pass  # no warm daemon — fall back to a normal in-process turn
+
+    agent = create_agent(config_path)
+    gateway = Gateway(agent)
+    return gateway.run_turn(prompt, route_source="user")
+
+
 def _print_cli_help() -> None:
     from interface.command_registry import SLASH_COMMAND_HELP
 
     print("MO — local provider-first coding agent")
     print()
     print("Usage:")
+    print("  mo                                  # interactive TUI")
+    print("  mo -p \"prompt\" | --prompt \"prompt\"  # one non-interactive turn (uses a warm daemon if running)")
     print("  mo [--init]")
     print("  mo [--migrate-state [dry-run|apply|move] [--confirm]]")
     print("  mo [--help|--version]")
@@ -113,6 +161,15 @@ def main(argv: list[str] | None = None):
     if not os.path.exists(config_path):
         print(render_init_report(initialize_mo(project_path=CALLER_CWD)))
         print("\nRun `python mo.py` again after adding provider keys to ~/.mo/.env or your shell environment.")
+        return
+    prompt = _prompt_arg(args)
+    if prompt is not None:
+        if not prompt.strip():
+            print('Usage: mo -p "your prompt"', file=sys.stderr)
+            sys.exit(2)
+        text = _run_one_shot(prompt, config_path)
+        if text:
+            print(text)
         return
     try:
         agent = create_agent(config_path)
