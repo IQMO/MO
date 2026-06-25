@@ -68,7 +68,14 @@ class CompanionTray:
         return self._mode
 
     def set_mode(self, mode: str) -> None:
-        self._mode = mode
+        self._mode = "do" if str(mode or "").lower() == "do" else "guide"
+        self._update_title()
+        self._refresh_companion_mode()
+
+    def _refresh_companion_mode(self) -> None:
+        updater = getattr(self._companion, "_refresh_mode_indicator", None)
+        if callable(updater):
+            updater()
 
     # ------------------------------------------------------------------
     # Tray icon + menu
@@ -133,12 +140,10 @@ class CompanionTray:
             self._companion.toggle()
 
     def _on_mode_guide(self, _icon: Any, _item: Any) -> None:
-        self._mode = "guide"
-        self._update_title()
+        self.set_mode("guide")
 
     def _on_mode_do(self, _icon: Any, _item: Any) -> None:
-        self._mode = "do"
-        self._update_title()
+        self.set_mode("do")
 
     def _on_show_log(self, _icon: Any, _item: Any) -> None:
         if self._companion:

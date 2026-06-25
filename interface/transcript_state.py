@@ -98,17 +98,22 @@ class TranscriptStateMixin(TerminalMetricsMixin):
 
     def _visible_transcript_height(self) -> int:
         rows = self._terminal_rows()
+        columns = self._terminal_columns()
         from .layout import input_visual_height
-        from .ghost_panel import content_rows as _ghost_content_rows
+        from .ghost_panel import content_rows as _ghost_content_rows, panel_dimensions as _ghost_panel_dimensions
         ghost_lines = getattr(self, "_ghost_panel_lines", None) or []
-        ghost_inner = max(1, (rows or 80) - 4)
+        _ghost_total, ghost_inner = _ghost_panel_dimensions(max(1, (columns or 80) - 1))
         ghost_content = len(_ghost_content_rows(ghost_lines, ghost_inner))
+        main_board_text = "" if (
+            bool(getattr(self, "_goal_worker_active", False))
+            and not bool(getattr(self, "_goal_backgrounded", False))
+        ) else self.board_text
         return visible_transcript_height(
             terminal_rows=max(1, rows - 1),
             busy=bool(self.busy),
             goal_worker_active=bool(self._goal_worker_active),
             visible_goal_board_text=self._visible_goal_board_text(),
-            board_text=self.board_text,
+            board_text=main_board_text,
             palette_open=bool(self._palette.open),
             palette_item_count=len(self._palette._current_items()) if self._palette.open else 0,
             ghost_panel_open=bool(self._ghost_panel_open),

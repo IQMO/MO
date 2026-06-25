@@ -9,6 +9,8 @@ from typing import Any
 from . import input as _input_module
 from .input import prompt_toolkit_input
 from core.agent.agent_utils import visible_worker_state
+from core.provider.provider import clean_provider_error
+from core.sandbox import redact_sensitive_text
 
 
 def read_native_user_input(agent: Any, console: Any) -> str:
@@ -128,6 +130,31 @@ def _install_native_async_notices(agent: Any) -> None:
         traceback.print_exc()
 
 
+def _safe_error_text(exc: Exception) -> str:
+    clean = clean_provider_error(str(exc) or type(exc).__name__)
+    return redact_sensitive_text(clean)
+
+
+def _run_and_print_turn(agent: Any, gateway: Any, user_input: str) -> None:
+    try:
+        result = gateway.run_turn(user_input)
+    except Exception as exc:
+        detail = _safe_error_text(exc)
+        result = "\n".join([
+            "MO interface error: turn failed",
+            "  where: native terminal turn runner",
+            "Fix: try again or run /status; check monitor if this repeats.",
+            f"  detail: {detail}",
+        ])
+    if hasattr(agent, "autosave_session"):
+        agent.autosave_session()
+    if result:
+        print(result)
+    board = getattr(gateway, "last_task_board", None)
+    if board:
+        print(board.render())
+
+
 def run_native_terminal_loop(agent: Any, gateway: Any, console: Any) -> None:
     """Native-scroll terminal loop: output is printed into normal scrollback."""
     _install_native_async_notices(agent)
@@ -154,7 +181,7 @@ def run_native_terminal_loop(agent: Any, gateway: Any, console: Any) -> None:
             try:
                 cmd_result = agent.process_slash_command(user_input)
             except Exception as exc:  # a local command must never kill the REPL
-                print(f"Command failed: {user_input.split()[0]} ({type(exc).__name__}: {exc})")
+                print(f"Command failed: {user_input.split()[0]} ({type(exc).__name__}: {_safe_error_text(exc)})")
                 continue
             if cmd_result is None:
                 print(f"Unknown command: {user_input.split()[0]}")
@@ -171,35 +198,17 @@ def run_native_terminal_loop(agent: Any, gateway: Any, console: Any) -> None:
                 retry_input = getattr(agent, "_retry_pending_input", "")
                 agent._retry_pending_input = ""
                 if retry_input:
-                    result = gateway.run_turn(retry_input)
-                    if hasattr(agent, "autosave_session"):
-                        agent.autosave_session()
-                    if result:
-                        print(result)
+                    _run_and_print_turn(agent, gateway, retry_input)
                 continue
             if cmd_result == "[RUN_TURN]":
                 pending_input = getattr(agent, "_slash_pending_input", "")
                 agent._slash_pending_input = ""
                 if pending_input:
-                    result = gateway.run_turn(pending_input)
-                    if hasattr(agent, "autosave_session"):
-                        agent.autosave_session()
-                    if result:
-                        print(result)
-                    board = gateway.last_task_board
-                    if board:
-                        print(board.render())
+                    _run_and_print_turn(agent, gateway, pending_input)
                 continue
             print(cmd_result)
             continue
-        result = gateway.run_turn(user_input)
-        if hasattr(agent, "autosave_session"):
-            agent.autosave_session()
-        if result:
-            print(result)
-        board = gateway.last_task_board
-        if board:
-            print(board.render())
+        _run_and_print_turn(agent, gateway, user_input)
 
 
 def run_goal_plain(agent: Any) -> None:

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from interface.command_palette import PaletteItem, model_palette_items, palette_children_for_item
+from interface.command_palette import CommandPalette, PaletteItem, model_palette_items, palette_children_for_item
 
 
 def test_model_palette_items_reflect_agent_provider_chain_and_active_provider():
@@ -42,3 +42,17 @@ def test_palette_children_unknown_command_has_no_submenu():
     agent = SimpleNamespace(providers=[], provider_index=0)
 
     assert palette_children_for_item(PaletteItem("/status", "/status", "agent status"), agent) == []
+
+
+def test_recent_palette_filters_operator_only_commands_when_pack_absent(monkeypatch):
+    monkeypatch.setattr("core.owner_protocols.operator_protocols_installed", lambda: False)
+    palette = CommandPalette()
+    palette.record_command("/owner_comparison")
+    palette.record_command("/status")
+    palette.show()
+    palette.category_idx = 0
+
+    values = [item.value for item in palette._current_items()]
+
+    assert values == ["/status"]
+    assert "/owner_comparison" not in values

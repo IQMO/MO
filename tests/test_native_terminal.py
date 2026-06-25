@@ -3,6 +3,8 @@ from types import SimpleNamespace
 from core.tasking.task_board import TaskBoard, TaskItem
 import interface.native_terminal as native_terminal
 
+SECRET = "AKIAIOSFODNN7EXAMPLE"
+
 
 class DummyAgent:
     provider_name = "mock"
@@ -130,3 +132,62 @@ def test_native_terminal_routes_owner_comparison_slash_to_normal_turn(monkeypatc
     assert "owner_comparison started" in output
     assert gateway.calls == ["start OWNER_COMPARISON E:\\ref-a E:\\ref-b"]
     assert agent.autosaved == 1
+
+
+def test_native_terminal_retry_prints_final_board(monkeypatch, capsys):
+    class RetryAgent(DummyAgent):
+        def process_slash_command(self, text):
+            self.commands.append(text)
+            if text == "/retry":
+                self._retry_pending_input = "retry this"
+                return "[RETRY]"
+            if text == "/exit":
+                return "[EXIT]"
+            return None
+
+    inputs = iter(["/retry", "/exit"])
+    agent = RetryAgent()
+    gateway = SimpleNamespace(calls=[], last_task_board=None)
+
+    def fake_read(_agent, _console):
+        return next(inputs)
+
+    def fake_run_turn(text):
+        gateway.calls.append(text)
+        gateway.last_task_board = TaskBoard(tasks=[TaskItem("1", "Retry inspect", "completed")])
+        return "retry answer"
+
+    gateway.run_turn = fake_run_turn
+    monkeypatch.setattr(native_terminal, "read_native_user_input", fake_read)
+
+    native_terminal.run_native_terminal_loop(agent, gateway, console=None)
+
+    output = capsys.readouterr().out
+    assert "retry answer" in output
+    assert "1 tasks (1 done, 0 open)" in output
+    assert "Retry inspect" in output
+    assert gateway.calls == ["retry this"]
+
+
+def test_native_terminal_turn_error_is_sanitized(monkeypatch, capsys):
+    inputs = iter(["boom", "/exit"])
+    agent = DummyAgent()
+    gateway = SimpleNamespace(calls=[], last_task_board=None)
+
+    def fake_read(_agent, _console):
+        return next(inputs)
+
+    def fake_run_turn(text):
+        gateway.calls.append(text)
+        raise RuntimeError(f"provider leaked {SECRET}")
+
+    gateway.run_turn = fake_run_turn
+    monkeypatch.setattr(native_terminal, "read_native_user_input", fake_read)
+
+    native_terminal.run_native_terminal_loop(agent, gateway, console=None)
+
+    output = capsys.readouterr().out
+    assert "MO interface error: turn failed" in output
+    assert "[redacted-token]" in output
+    assert SECRET not in output
+    assert gateway.calls == ["boom"]

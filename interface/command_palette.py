@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .command_registry import DEFAULT_PALETTE_CATEGORY, PALETTE_CATEGORIES, SLASH_COMMANDS
+from .command_registry import DEFAULT_PALETTE_CATEGORY, PALETTE_CATEGORIES, SLASH_COMMANDS, _command_hidden
 
 DEFAULT_CATEGORY = DEFAULT_PALETTE_CATEGORY  # Tasks
 
@@ -149,6 +149,8 @@ class CommandPalette:
         root = cmd.split()[0] if cmd else cmd
         if root in ("/help", "/exit") or not root.startswith("/"):
             return
+        if _command_hidden(root):
+            return
         if root in self._recent:
             self._recent.remove(root)
         self._recent.insert(0, root)
@@ -169,7 +171,11 @@ class CommandPalette:
         idx = self.category_idx % len(PALETTE_CATEGORIES)
         name, items = PALETTE_CATEGORIES[idx]
         if name == "Recent":
-            return [PaletteItem(cmd, cmd, SLASH_COMMANDS.get(cmd, "")) for cmd in self._recent if cmd in SLASH_COMMANDS]
+            return [
+                PaletteItem(cmd, cmd, SLASH_COMMANDS.get(cmd, ""))
+                for cmd in self._recent
+                if cmd in SLASH_COMMANDS and not _command_hidden(cmd)
+            ]
         return [self._coerce_item(item) for item in items]
 
     def get_fragments(self) -> list[tuple[str, str]]:

@@ -179,6 +179,14 @@ class CompanionSurface:
             return ("● Guide — MO explains", "#5a8899")
         return ("● Do — MO can act", "#ffaa33")
 
+    def _refresh_mode_indicator(self) -> None:
+        self._post_gui_call(self._apply_mode_indicator)
+
+    def _apply_mode_indicator(self) -> None:
+        if self._mode_label is not None:
+            text, color = self._mode_indicator()
+            self._mode_label.config(text=text, fg=color)
+
     def panic_stop(self) -> None:
         """Emergency stop: interrupt the in-flight turn and block the next one."""
         self._panic_stop_requested = True
@@ -486,9 +494,7 @@ class CompanionSurface:
                 win.winfo_screenwidth(),
                 win.winfo_screenheight(),
             ))
-            if self._mode_label is not None:
-                text, color = self._mode_indicator()
-                self._mode_label.config(text=text, fg=color)
+            self._apply_mode_indicator()
             win.deiconify()
             self._entry.focus_set()
             self._visible = True
@@ -621,9 +627,10 @@ class CompanionSurface:
             if self._voice and self._voice.tts_available:
                 self._voice.speak_result(result, on_error=self._on_tts_error)
         except Exception as exc:
-            self._set_status(f"Error: {exc}", "#ff4444")
-            self._log_action("turn_error", str(exc)[:200])
-            traceback.print_exc()
+            safe_error = redact_sensitive_text(str(exc) or type(exc).__name__)
+            self._set_status(f"Error: {safe_error}", "#ff4444")
+            self._log_action("turn_error", safe_error[:200])
+            sys.stderr.write(f"[ghost-desktop] turn error: {safe_error}\n")
 
     # ------------------------------------------------------------------
     # Callbacks (called from Gateway thread)

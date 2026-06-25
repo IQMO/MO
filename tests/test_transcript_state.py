@@ -88,3 +88,35 @@ def test_transcript_state_visible_height_accounts_for_live_panels():
 
     harness._ghost_expanded = True
     assert harness._visible_transcript_height() == 1
+
+
+def test_ghost_panel_height_uses_terminal_columns_not_rows():
+    harness = TranscriptHarness()
+    harness._ghost_panel_open = True
+    harness._ghost_panel_lines = [
+        ("class:ghost-response", "Ghost reply " + ("wide terminals should keep this compact " * 6)),
+    ]
+
+    harness._app = FakeApp(rows=24, columns=100)
+    wide_height = harness._visible_transcript_height()
+
+    harness._app = FakeApp(rows=24, columns=32)
+    narrow_height = harness._visible_transcript_height()
+
+    assert wide_height > narrow_height
+
+
+def test_hidden_main_board_does_not_reserve_transcript_rows_during_foreground_goal():
+    harness = TranscriptHarness()
+    harness._app = FakeApp(rows=24, columns=100)
+    harness._goal_worker_active = True
+    harness._goal_backgrounded = False
+    harness._goal_board_text = "1 tasks (0 done, 1 open)\n→ Goal"
+
+    harness.board_text = ""
+    without_hidden_main = harness._visible_transcript_height()
+
+    harness.board_text = "3 tasks (0 done, 3 open)\n→ Main\n□ Verify"
+    with_hidden_main = harness._visible_transcript_height()
+
+    assert with_hidden_main == without_hidden_main

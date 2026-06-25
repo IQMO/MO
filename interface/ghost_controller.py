@@ -181,7 +181,7 @@ class GhostControllerMixin:
                 result = self._ghost_provider_unavailable_response(question, exc, route_suggestion)
                 registry.update(ghost_record.id, "blocked", f"ghost provider error: {type(exc).__name__}", result_summary=result[:240])
             if request_id != self._ghost_active_request_id:
-                self._record_stale_ghost_reply(question, result, route_suggestion)
+                self._record_stale_ghost_reply(question, result, route_suggestion, worker_id=ghost_record.id)
                 return
             route_name = ""
             if route_suggestion:
@@ -213,10 +213,18 @@ class GhostControllerMixin:
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def _record_stale_ghost_reply(self, question: str, result: str, route_suggestion: GhostRouteSuggestion | None = None) -> None:
+    def _record_stale_ghost_reply(self, question: str, result: str, route_suggestion: GhostRouteSuggestion | None = None, *, worker_id: str = "") -> None:
         """Keep late Ghost replies in history without overwriting the active panel."""
         route_name = str(getattr(route_suggestion, "route", "") or "")
         text = str(result or "stale Ghost reply ignored").strip() or "stale Ghost reply ignored"
+        if worker_id:
+            try:
+                registry = ensure_worker_registry(self.agent)
+                record = registry.get(worker_id)
+                if record and str(getattr(record, "state", "") or "") == "running":
+                    registry.update(worker_id, "completed", "stale Ghost reply kept in history", result_summary=text[:240])
+            except Exception:
+                traceback.print_exc()
         self._record_ghost_history("reply_stale", question, text, route=route_name)
 
     @staticmethod

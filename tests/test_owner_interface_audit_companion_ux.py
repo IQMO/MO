@@ -89,6 +89,19 @@ def test_mode_indicator_distinguishes_guide_and_do():
     assert g_color != d_color  # Do uses a distinct alert color (it can actuate)
 
 
+def test_mode_indicator_refresh_posts_current_mode_to_open_window():
+    from interface.ghost_desktop.companion import CompanionSurface
+    cs = CompanionSurface(agent=None, gateway=None)
+    cs._root = object()
+    cs._mode = "do"
+    cs._mode_label = _FakeLabel()
+
+    cs._refresh_mode_indicator()
+    _drain(cs)
+
+    assert "Do" in cs._mode_label.kwargs["text"]
+
+
 # ----------------------------------------------------------- voice button
 def test_voice_button_color_helper_posts_config():
     from interface.ghost_desktop.companion import CompanionSurface
@@ -120,6 +133,37 @@ def test_set_status_ellipsizes_long_text():
     _drain(cs)
     text = cs._status_label.kwargs["text"]
     assert len(text) <= 120 and text.endswith("…")
+
+
+def test_run_turn_error_status_redacts_exception_text(capsys):
+    from contextlib import nullcontext
+    from interface.ghost_desktop.companion import CompanionSurface
+
+    class FakeAgent:
+        system_message = "base"
+        _session = None
+
+        def lane_scope(self, _lane):
+            return nullcontext()
+
+        def isolated_session(self, _session):
+            return nullcontext()
+
+    class FakeGateway:
+        def run_turn(self, *_args, **_kwargs):
+            raise RuntimeError(f"provider leaked {SECRET}")
+
+    cs = CompanionSurface(agent=FakeAgent(), gateway=FakeGateway())
+    cs._root = object()
+    cs._status_label = _FakeLabel()
+
+    cs._run_turn("hello")
+    _drain(cs)
+    stderr = capsys.readouterr().err
+
+    assert SECRET not in cs._status_label.kwargs["text"]
+    assert "[redacted-token]" in cs._status_label.kwargs["text"]
+    assert SECRET not in stderr
 
 
 # ----------------------------------------------------------- mic release
@@ -273,6 +317,22 @@ def test_tray_update_title_reflects_mode():
     t._mode = "do"
     t._update_title()
     assert "Do" in t._tray.title
+
+
+def test_tray_mode_change_refreshes_companion_badge():
+    from interface.ghost_desktop.tray import CompanionTray
+
+    calls = []
+
+    class FakeCompanion:
+        def _refresh_mode_indicator(self):
+            calls.append("refresh")
+
+    t = CompanionTray(FakeCompanion())
+    t._on_mode_do(None, None)
+
+    assert t.mode == "do"
+    assert calls == ["refresh"]
 
 
 # ----------------------------------------------------------- route receipts

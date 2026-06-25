@@ -1093,19 +1093,33 @@ def test_ghost_empty_provider_text_gets_visible_fallback_not_no_response():
 def test_stale_ghost_reply_is_kept_in_history_without_overwriting_active_panel(monkeypatch):
     tui = _make_tui()
     monkeypatch.setattr("interface.ghost_history.append_ghost_audit", lambda *args, **kwargs: None)
+    record = ensure_worker_registry(tui.agent).create(
+        kind="ghost",
+        source="user",
+        route="main",
+        objective="old question",
+        state="running",
+        note="ghost panel side-chat",
+    )
     current_pending = GhostRouteSuggestion("main", "current ask", "idle")
     tui._ghost_pending_route = current_pending
     tui._ghost_panel_open = True
     tui._ghost_panel_lines = [("class:ghost-user", "new question"), ("class:ghost-response", "new answer")]
     before_panel = list(tui._ghost_panel_lines)
 
-    tui._record_stale_ghost_reply("old question", "old answer", GhostRouteSuggestion("main", "old ask", "idle"))
+    tui._record_stale_ghost_reply(
+        "old question",
+        "old answer",
+        GhostRouteSuggestion("main", "old ask", "idle"),
+        worker_id=record.id,
+    )
 
     assert tui._ghost_panel_lines == before_panel
     assert tui._ghost_pending_route is current_pending
     assert tui._ghost_history[-1]["kind"] == "reply_stale"
     assert tui._ghost_history[-1]["user"] == "old question"
     assert tui._ghost_history[-1]["response"] == "old answer"
+    assert tui.agent.workers.get(record.id).state == "completed"
 
 
 def test_one_off_ghost_question_does_not_keep_input_in_ghost_mode():
