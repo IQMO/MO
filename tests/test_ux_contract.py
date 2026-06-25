@@ -15,6 +15,7 @@ REPO = Path(__file__).resolve().parents[1]
 UX_ROOT = REPO / "UX"
 EXPECTED_PACKAGE_DIRS = {"state", "runtime", "render", "shell"}
 ROOT_COMPAT_SHIMS = {"app.py", "models.py", "controller.py", "layout.py", "theme.py", "adapters.py"}
+EXPECTED_RENDER_MODULES = {"common.py", "panels.py", "screen.py", "layout.py", "theme.py"}
 
 
 def _ux_python_files() -> list[Path]:
@@ -39,6 +40,7 @@ def test_ux_does_not_import_current_interface_package():
 
 def test_ux_has_layered_package_structure():
     assert {path.name for path in UX_ROOT.iterdir() if path.is_dir()} >= EXPECTED_PACKAGE_DIRS
+    assert {path.name for path in (UX_ROOT / "render").glob("*.py")} >= EXPECTED_RENDER_MODULES
     for name in ROOT_COMPAT_SHIMS:
         text = (UX_ROOT / name).read_text(encoding="utf-8")
         assert "Compatibility exports" in text

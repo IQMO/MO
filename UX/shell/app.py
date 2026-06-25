@@ -8,7 +8,7 @@ import sys
 from rich.console import Console
 from rich.live import Live
 
-from UX.render.layout import build_screen
+from UX.render import build_screen
 from UX.runtime.backends import PreviewBackend, RuntimeBackend, read_only_snapshot
 from UX.state.controller import UxController
 from UX.state.models import SessionSnapshot, demo_snapshot

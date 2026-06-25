@@ -1,183 +1,29 @@
-"""Rich renderers for the isolated UX surface."""
+"""Compatibility exports for UX render layout.
+
+New code should import from ``UX.render.screen`` and ``UX.render.panels``.
+"""
 from __future__ import annotations
 
-from rich import box
-from rich.console import Console, Group
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+from .panels import (
+    STATUS_MARKERS,
+    activity_panel,
+    composer_panel,
+    header,
+    lanes_panel,
+    task_board_panel,
+    transcript_panel,
+)
+from .screen import COMMAND_CENTER_MIN_WIDTH, build_screen, render_text
 
-from UX.state.models import BoardRow, LaneSnapshot, SessionSnapshot, TranscriptItem
-from .theme import DEFAULT_THEME, LANE_STYLE, STATUS_STYLE, UxTheme
-
-STATUS_MARKERS = {
-    "completed": "[x]",
-    "active": ">",
-    "blocked": "!",
-    "pending": "[ ]",
-}
-
-
-def _style(theme: UxTheme, token: str) -> str:
-    return getattr(theme, token, theme.text)
-
-
-def _trim(value: str, limit: int) -> str:
-    text = str(value or "").replace("\r", " ").strip()
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 3)].rstrip() + "..."
-
-
-def _panel(renderable: object, title: str, theme: UxTheme) -> Panel:
-    return Panel(
-        renderable,
-        title=title,
-        title_align="left",
-        border_style=_style(theme, "border"),
-        padding=(0, 1),
-        box=box.ASCII,
-    )
-
-
-def header(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) -> Panel:
-    grid = Table.grid(expand=True)
-    grid.add_column(ratio=1)
-    grid.add_column(justify="right", ratio=1)
-
-    left = Text()
-    left.append("MO", style=f"bold {_style(theme, 'brand')}")
-    left.append("  ")
-    left.append(snapshot.project or "project not set", style=_style(theme, "text"))
-    left.append("\n")
-    left.append(snapshot.model_label, style=_style(theme, "muted"))
-
-    right = Text()
-    right.append("BUSY" if snapshot.busy else "READY", style=_style(theme, "amber" if snapshot.busy else "green"))
-    if snapshot.runtime:
-        right.append("\n")
-        right.append(_trim(snapshot.runtime, 72), style=_style(theme, "muted"))
-
-    grid.add_row(left, right)
-    return _panel(grid, "Session", theme)
-
-
-def lanes_panel(lanes: tuple[LaneSnapshot, ...], theme: UxTheme = DEFAULT_THEME) -> Panel:
-    table = Table.grid(expand=True)
-    table.add_column(ratio=1)
-    table.add_column(ratio=1)
-    table.add_column(ratio=2)
-    table.add_column(ratio=1)
-    for lane in lanes:
-        style = _style(theme, LANE_STYLE.get(lane.status, "muted"))
-        table.add_row(
-            Text(lane.name.upper(), style=f"bold {style}"),
-            Text(lane.status, style=style),
-            Text(_trim(lane.detail, 72), style=_style(theme, "text")),
-            Text(lane.model, style=_style(theme, "muted")),
-        )
-    if not lanes:
-        table.add_row(Text("NO LANES", style=_style(theme, "muted")), Text("idle"), Text(""), Text(""))
-    return _panel(table, "Agent Lanes", theme)
-
-
-def task_board_panel(rows: tuple[BoardRow, ...], theme: UxTheme = DEFAULT_THEME) -> Panel:
-    table = Table.grid(expand=True)
-    table.add_column(width=5)
-    table.add_column(ratio=3)
-    table.add_column(ratio=1)
-    for row in rows:
-        style = _style(theme, STATUS_STYLE.get(row.status, "muted"))
-        detail = row.blocker if row.status == "blocked" and row.blocker else row.kind
-        table.add_row(
-            Text(STATUS_MARKERS.get(row.status, "[ ]"), style=f"bold {style}"),
-            Text(_trim(row.title, 92), style=style if row.status == "active" else _style(theme, "text")),
-            Text(_trim(detail, 36), style=_style(theme, "muted")),
-        )
-    if not rows:
-        table.add_row(Text("[ ]", style=_style(theme, "muted")), Text("Idle - task board appears for work turns"), Text(""))
-    return _panel(table, "Task Board", theme)
-
-
-def transcript_panel(items: tuple[TranscriptItem, ...], theme: UxTheme = DEFAULT_THEME, *, limit: int = 8) -> Panel:
-    text = Text()
-    selected = items[-limit:]
-    for index, item in enumerate(selected):
-        speaker = item.speaker.strip().lower() or "system"
-        speaker_style = _style(theme, "brand" if speaker in {"mo", "assistant"} else "blue")
-        text.append(speaker.upper(), style=f"bold {speaker_style}")
-        text.append("  ")
-        text.append(_trim(item.text, 160), style=_style(theme, "text"))
-        if index < len(selected) - 1:
-            text.append("\n")
-    if not selected:
-        text.append("No transcript yet", style=_style(theme, "muted"))
-    return _panel(text, "Transcript", theme)
-
-
-def composer_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) -> Panel:
-    text = Text()
-    if snapshot.notice:
-        text.append(_trim(snapshot.notice, 120), style=_style(theme, "amber"))
-        text.append("\n")
-    text.append("> ", style=f"bold {_style(theme, 'brand')}")
-    text.append(snapshot.composer_placeholder, style=_style(theme, "muted"))
-    if snapshot.composer_hint:
-        text.append("    ")
-        text.append(snapshot.composer_hint, style=_style(theme, "muted"))
-    return _panel(text, "Composer", theme)
-
-
-def activity_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) -> Panel:
-    text = Text()
-    state = "busy" if snapshot.busy else "ready"
-    state_style = _style(theme, "amber" if snapshot.busy else "green")
-    text.append(state.upper(), style=f"bold {state_style}")
-    if snapshot.notice:
-        text.append("\n")
-        text.append(_trim(snapshot.notice, 96), style=_style(theme, "amber"))
-    text.append("\n")
-    text.append("runtime truth: Gateway/taskboard", style=_style(theme, "muted"))
-    text.append("\n")
-    text.append("surface: isolated UX", style=_style(theme, "muted"))
-    return _panel(text, "Activity", theme)
-
-
-COMMAND_CENTER_MIN_WIDTH = 112
-
-
-def build_screen(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME, *, width: int = 110) -> object:
-    if width < COMMAND_CENTER_MIN_WIDTH:
-        return Group(
-            header(snapshot, theme),
-            lanes_panel(snapshot.lanes, theme),
-            task_board_panel(snapshot.board, theme),
-            transcript_panel(snapshot.transcript, theme, limit=12),
-            activity_panel(snapshot, theme),
-            composer_panel(snapshot, theme),
-        )
-
-    root = Layout(name="root")
-    root.split_column(
-        Layout(header(snapshot, theme), name="header", size=4),
-        Layout(name="body", ratio=1),
-        Layout(composer_panel(snapshot, theme), name="composer", size=4),
-    )
-    root["body"].split_row(
-        Layout(lanes_panel(snapshot.lanes, theme), name="lanes", size=34),
-        Layout(transcript_panel(snapshot.transcript, theme, limit=12), name="transcript", ratio=1),
-        Layout(name="side", size=40),
-    )
-    root["side"].split_column(
-        Layout(task_board_panel(snapshot.board, theme), name="board", ratio=2),
-        Layout(activity_panel(snapshot, theme), name="activity", ratio=1),
-    )
-    return root
-
-
-def render_text(snapshot: SessionSnapshot, *, width: int = 110, theme: UxTheme = DEFAULT_THEME) -> str:
-    display_width = max(60, int(width or 110))
-    console = Console(record=True, width=display_width, color_system=None)
-    console.print(build_screen(snapshot, theme, width=display_width))
-    return console.export_text(clear=False)
+__all__ = [
+    "COMMAND_CENTER_MIN_WIDTH",
+    "STATUS_MARKERS",
+    "activity_panel",
+    "build_screen",
+    "composer_panel",
+    "header",
+    "lanes_panel",
+    "render_text",
+    "task_board_panel",
+    "transcript_panel",
+]

@@ -12,7 +12,9 @@ taking ownership of runtime truth.
   lazy Agent/Gateway bridge. Runtime imports from `core` must stay inside
   functions or methods that explicitly create/use the runtime.
 - `UX/render/` - Rich renderers and theme tokens. Reads `SessionSnapshot`; does
-  not call Gateway, Agent, tools, or the current `interface/`.
+  not call Gateway, Agent, tools, or the current `interface/`. Panel components
+  live in `render/panels.py`; whole-screen composition lives in
+  `render/screen.py`.
 - `UX/shell/` - CLI parsing, batch/interactive command behavior, and live-screen
   orchestration.
 
@@ -47,7 +49,7 @@ convert runtime state into immutable display rows.
 
 The polished interface work should land in this order:
 
-1. Replace stacked panel composition with a stable command-center screen.
-2. Add dedicated lane/task/transcript/composer render modules under `render/`.
+1. Add proper focus/input affordances around the composer.
+2. Improve live task and transcript density without hiding important text.
 3. Keep live orchestration in `shell/`, not in render functions.
 4. Add parity tests before promoting any behavior toward `mo.py`.
