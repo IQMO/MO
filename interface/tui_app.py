@@ -75,15 +75,16 @@ class TuiAppMixin:
 
         # Scroll/selection contract:
         # - full_screen=False keeps MO out of alternate-screen fullscreen capture.
-        # - mouse_support=True routes the mouse wheel to the ScrollUp/ScrollDown
-        #   keybindings (transcript/ghost viewport scroll) instead of relying on
-        #   native scrollback that only re-engages after a terminal resize. Most
-        #   terminals still allow Shift+drag for native text selection/copy.
+        # - mouse_support=False: let the TERMINAL own the mouse, preserving native
+        #   click-drag text selection/copy and native wheel scrollback. (Enabling
+        #   PTK mouse_support captured the mouse and broke selection without giving
+        #   reliable wheel scroll in this inline, non-fullscreen layout.) In-app
+        #   scrolling is via the keyboard bindings (Up/Down, PageUp/PageDown).
         self._app = Application(
             layout=Layout(root, focused_element=self._input_buf),
             key_bindings=kb,
             full_screen=False,
-            mouse_support=True,
+            mouse_support=False,
             paste_mode=True,
             style=style,
         )

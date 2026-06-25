@@ -1380,6 +1380,14 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 "If changing an existing large file, inspect only needed ranges and use targeted edit_file replacements/small chunks; do not emit a full-file write_file rewrite."
             )
         else:
+            # A clearly-new substantive request (more than a short greeting/ambiguous
+            # return) supersedes parked work: clear it and inject nothing, so stale
+            # parked context can't pollute the new ask or nudge a resume (observed:
+            # after a hard-stop, the next unrelated message read as "lost"). Only
+            # short greetings / ambiguous follow-ups keep the "want to resume?" hint.
+            if len(str(user_input or "").split()) >= 4:
+                self._pending_interrupted_work = {}
+                return ""
             instruction = (
                 "Do not continue it, call tools for it, or imply it is active unless the operator explicitly asks to continue/resume it. "
                 "For a greeting or ambiguous follow-up like 'you tell me', answer naturally with this orientation: you may briefly mention that prior work is parked, "

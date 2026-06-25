@@ -73,6 +73,24 @@ class TurnRunnerMixin:
                 traceback.print_exc()
         _apply()
 
+    def _maybe_notify_model_change(self, model_at_start: tuple) -> None:
+        """Surface a mid-turn provider/model fallback in the transcript.
+
+        The runtime auto-falls-through the provider chain on rate/route/balance
+        blocks, which can silently land on a weaker model (e.g. big-pickle) — the
+        operator had to ask "why did you change model". This makes it visible: one
+        notice only when the model actually changes during the turn.
+        """
+        try:
+            now = (getattr(self.agent, "provider_name", ""), getattr(self.agent, "model", ""))
+            if not model_at_start or now == model_at_start or not now[1]:
+                return
+            reason = str(getattr(self.agent, "last_fallback_notice", "") or "").strip()
+            tail = f" - {reason}" if reason else ""
+            self._add("class:model-fallback", f"  ⚠ Model fallback: now on {now[0]}/{now[1]}{tail}")
+        except Exception:
+            traceback.print_exc()
+
     def _maybe_warn_low_balance(self, *, threshold: float = 2.00) -> None:
         """Drop a colored low-balance notice into the transcript, once per session.
 
@@ -100,6 +118,9 @@ class TurnRunnerMixin:
     def _run_turn_thread(self, user_input: str):
         cancel_event = threading.Event()
         self._current_turn_cancel_event = cancel_event
+        # Snapshot the model so a mid-turn provider fallback is surfaced to the
+        # operator (e.g. deepseek-v4-pro -> big-pickle on a rate/route block).
+        model_at_start = (getattr(self.agent, "provider_name", ""), getattr(self.agent, "model", ""))
         main_worker_id = getattr(self, "_active_main_worker_id", "") or ""
         route_source = "user"
         if main_worker_id:
@@ -238,6 +259,7 @@ class TurnRunnerMixin:
             self._busy_escape_count = 0
             self.activity_text = ""
             self.activity_started_at = 0.0
+            self._maybe_notify_model_change(model_at_start)
             self._maybe_warn_low_balance()
             # Completed taskboards leave the final MO report in transcript; incomplete
             # boards stay visible so unresolved work remains clear.

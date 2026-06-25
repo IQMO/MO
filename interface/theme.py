@@ -48,6 +48,7 @@ TUI_STYLE_DICT: dict[str, str] = {
     "notification-worker": "#888888",
     "notification-critical": "#ff4444 bold",
     "low-balance": "#ffae42 bold",
+    "model-fallback": "#ffae42 bold",
     "prt-header": "#bb86fc bold",
     "prt-critical": "#ff4444 bold",
     "prt-major": "#ffd166 bold",

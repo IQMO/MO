@@ -14,7 +14,7 @@ def test_tui_logo_lines_preserve_current_boot_banner():
     )
 
 
-def test_tui_app_enables_mouse_wheel_scroll_contract(monkeypatch):
+def test_tui_app_preserves_native_terminal_mouse_selection_contract(monkeypatch):
     created = {}
 
     class FakeBuffer:
@@ -66,9 +66,9 @@ def test_tui_app_enables_mouse_wheel_scroll_contract(monkeypatch):
     harness.run()
 
     assert created["full_screen"] is False
-    # mouse_support=True routes the wheel to the ScrollUp/ScrollDown bindings
-    # (transcript scroll); native text selection uses Shift+drag.
-    assert created["mouse_support"] is True
+    # mouse_support=False: terminal owns the mouse so native selection/copy and
+    # native wheel scrollback keep working (PTK mouse_support broke selection).
+    assert created["mouse_support"] is False
     assert created["key_bindings"] == "kb"
     assert created["style"] == "style"
     assert harness.added[:4] == [("class:logo", line) for line in LOGO_LINES]

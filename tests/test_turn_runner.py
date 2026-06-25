@@ -349,3 +349,48 @@ def test_low_balance_warns_once_below_threshold(monkeypatch):
     h2 = _H(); h2._maybe_warn_low_balance(); assert h2.added == []
     monkeypatch.setattr(bal, "balance_amount", lambda prov: None)
     h3 = _H(); h3._maybe_warn_low_balance(); assert h3.added == []
+
+
+def test_model_fallback_notice_only_on_change():
+    class _H(TurnRunnerMixin):
+        def __init__(self, prov, model, reason=""):
+            self.added = []
+            self.agent = SimpleNamespace(provider_name=prov, model=model, last_fallback_notice=reason)
+        def _add(self, style, text):
+            self.added.append((style, text))
+
+    # No change -> no notice.
+    h = _H("deepseek", "deepseek-v4-pro")
+    h._maybe_notify_model_change(("deepseek", "deepseek-v4-pro"))
+    assert h.added == []
+
+    # Changed mid-turn -> one colored notice naming the new model + reason.
+    h2 = _H("opencode-bigpickle", "big-pickle", "Switched to opencode-bigpickle/big-pickle: balance/route blocked")
+    h2._maybe_notify_model_change(("deepseek", "deepseek-v4-pro"))
+    assert len(h2.added) == 1
+    assert h2.added[0][0] == "class:model-fallback"
+    assert "big-pickle" in h2.added[0][1] and "balance/route" in h2.added[0][1]
+
+
+def test_parked_work_cleared_by_clearly_new_request_kept_for_greeting():
+    import core.agent.agent as agent_mod
+
+    class _Stub:
+        def __init__(self, resume=False):
+            self._pending_interrupted_work = {"user": "remove old dead path and test keys"}
+            self._resume = resume
+        def _looks_like_interrupted_resume_request(self, _t):
+            return self._resume
+
+    fn = agent_mod.Agent._pending_interrupted_work_context
+    # Clearly-new substantive request -> park cleared, nothing injected.
+    s = _Stub()
+    assert fn(s, "remove old dead paths and test the keys") == ""
+    assert s._pending_interrupted_work == {}
+    # Short/ambiguous return -> park kept, "resume?" hint injected.
+    s2 = _Stub()
+    out = fn(s2, "you tell me")
+    assert "Paused Interrupted Work" in out and s2._pending_interrupted_work != {}
+    # Explicit resume -> park cleared, resume instruction.
+    s3 = _Stub(resume=True)
+    assert "resume the parked work" in fn(s3, "proceed please") and s3._pending_interrupted_work == {}

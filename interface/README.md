@@ -70,7 +70,9 @@ Do not guess. Do not call something dead unless imports/tests prove it.
 - The TUI must render `gateway.last_task_board` truth, not arbitrary callback markup.
 - Final answers cannot complete open tasks by prose.
 - Failed verification remains blocked.
-- Native mouse selection/copy contract stays: `full_screen=False`, `mouse_support=False`; full transcript navigation is MO internal viewport scrolling, not guaranteed terminal scrollback.
+- Scroll/selection contract: `full_screen=False`, `mouse_support=False` — the terminal owns the mouse so native click-drag selection/copy and native wheel scrollback keep working; in-app scrolling is the keyboard bindings (Up/Down, PageUp/PageDown). (PTK `mouse_support=True` was tried and reverted: it captured the mouse and broke selection without reliable wheel scroll in this inline layout.)
+- Transcript notices (one-time, colored, at turn end, never block): low DeepSeek balance (`< $2.00`, once per session) and provider/model fallback (only when the model actually changes mid-turn, e.g. to `big-pickle`). Reuse the `_add` transcript path + theme styles; they are informational, not gates.
+- Parked interrupted work (after a hard-stop): a short greeting/ambiguous return keeps the "resume?" hint, but a clearly-new substantive request (>= 4 words) clears the park so stale context can't pollute the new ask or auto-resume.
 - Slash commands are control actions and must not echo raw commands as chat.
 - Ctrl+E prompt enhancement must replace the input buffer only (Esc reverts to the original); it may use local operator-profile guidance, but must not send, create taskboards, or mark progress.
 - Queue/steer behavior remains: first busy input queues, second Enter steers, third Enter requests stop, Esc cancels queued input; three busy Esc presses stop MO.
