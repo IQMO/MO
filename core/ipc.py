@@ -71,7 +71,11 @@ def _lock_down(path: Path) -> None:
 
 
 def _send_line(conn: socket.socket, obj: dict) -> None:
-    conn.sendall((json.dumps(obj) + "\n").encode("utf-8"))
+    # default=str so a stray non-serializable value in a streamed event (e.g. a
+    # rich renderable or a board object) degrades to its string form instead of
+    # raising inside a turn callback and aborting the turn. ensure_ascii=False
+    # keeps MO's UTF-8 text intact across the wire.
+    conn.sendall((json.dumps(obj, default=str, ensure_ascii=False) + "\n").encode("utf-8"))
 
 
 def _read_lines(conn: socket.socket) -> Iterator[str]:
