@@ -16,10 +16,18 @@ Run the Windows launcher in live mode:
 UX\run_ux.bat
 ```
 
-The launcher defaults to `--live`, so this also sends one live message and exits:
+The launcher defaults to `--live --width 120`, so this also sends one live
+message and exits:
 
 ```bat
 UX\run_ux.bat --message "who are you?"
+```
+
+Override the default launcher width:
+
+```bat
+set UX_WIDTH=140
+UX\run_ux.bat
 ```
 
 Run the local smoke path:
