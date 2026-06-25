@@ -19,6 +19,11 @@ class AgentTaskBoard:
         execution is recorded as evidence, but the active task is only completed
         when the Agent explicitly calls the complete_task tool.
         """
+        # Phase 1 (flag-gated, default off): MO owns the board — set_plan replaces the
+        # rows with MO's own plan. Inert unless taskboard.model_owned is enabled, so
+        # this is a no-op for the current Ghost/procedure-seeded flow.
+        if tool_name == "set_plan":
+            return self._apply_model_plan(task_board, arguments or {}, monitor=monitor)
         # Bind the active DEVMODE session dir to whatever dir THIS run actually writes
         # its artifacts into, so the economy writer targets it explicitly (never the
         # newest dir by mtime — see _write_devmode_economy_record).
@@ -74,6 +79,50 @@ class AgentTaskBoard:
                 "idx": idx,
                 "total": len(tasks),
             })
+        return True
+
+    def _model_owned_taskboard_enabled(self) -> bool:
+        cfg = getattr(self, "config", {}) or {}
+        tb = cfg.get("taskboard", {}) if isinstance(cfg.get("taskboard", {}), dict) else {}
+        return bool(tb.get("model_owned", False))
+
+    def _apply_model_plan(self, task_board: TaskBoard, arguments: dict, *, monitor: BackendMonitor | None = None) -> bool:
+        """Phase 1: let MO own the board by replacing its rows with MO's own plan.
+
+        Flag-gated (taskboard.model_owned, default off) so the current Ghost/
+        procedure-seeded flow is unchanged. Accepts ``tasks`` as a list of strings
+        or {text, kind} dicts; builds a linear evidence-gated board. Returns True
+        when it set rows, else False (flag off, or no usable tasks).
+        """
+        if not self._model_owned_taskboard_enabled():
+            return False
+        raw = arguments.get("tasks") or arguments.get("plan") or []
+        if not isinstance(raw, list):
+            return False
+        rows: list[dict] = []
+        for i, item in enumerate(raw, 1):
+            if isinstance(item, str):
+                text, kind = item.strip(), ""
+            elif isinstance(item, dict):
+                text = str(item.get("text") or item.get("title") or "").strip()
+                kind = str(item.get("kind") or "")
+            else:
+                continue
+            if not text:
+                continue
+            rows.append({
+                "id": str(len(rows) + 1),
+                "text": text,
+                "status": "active" if not rows else "pending",
+                "kind": kind,
+                "completion_gate": "tool",
+                "depends_on": [str(len(rows))] if rows else [],
+            })
+        if not rows:
+            return False
+        task_board.set_rows("MO plan", rows, objective=str(getattr(task_board, "objective", "") or ""))
+        if monitor:
+            monitor.emit("taskboard", {"update": "model_plan_set", "rows": len(rows)})
         return True
 
     @staticmethod

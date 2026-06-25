@@ -172,6 +172,13 @@ mcp:
     #   enabled: true
     #   timeout: 30
 
+taskboard:
+  # Phase 1 (default off): when true, MO owns the taskboard — it sets the board to
+  # its OWN plan via the set_plan tool and advances rows with complete_task, instead
+  # of the board being seeded from Ghost/work-procedure rows. Off keeps the current
+  # Ghost/procedure-seeded behavior unchanged.
+  model_owned: false
+
 skills:
   # Local best-practice packs MO reads before acting on a matching task.
   # Profile packs live under ~/.mo/skills; shipped seed packs are copied there

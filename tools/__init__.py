@@ -521,6 +521,24 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_plan",
+            "description": "Set the visible taskboard to YOUR OWN plan for this turn — the concrete steps you will actually take, in order. The board then tracks your real work; advance each row with complete_task as you finish it. Use a small, accurate plan (typically 2-6 steps), not generic boilerplate. Call this once near the start of a multi-step task.",
+            "parameters": {
+                "type": "object",
+                "required": ["tasks"],
+                "properties": {
+                    "tasks": {
+                        "type": "array",
+                        "description": "ordered list of concrete steps; each a short string or {text, kind}",
+                        "items": {"type": "object", "properties": {"text": {"type": "string"}, "kind": {"type": "string", "description": "inspect | edit | verify | report"}}},
+                    },
+                },
+            },
+        },
+    },
 ]
 
 
@@ -1242,8 +1260,21 @@ def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
         return f"Fact write failed: {exc}"
 
 
+def execute_set_plan(arguments: dict[str, Any]) -> str:
+    """Stub: the real board mutation happens in the dispatch layer (agent_taskboard
+    ._apply_model_plan), like complete_task. This only confirms to the model."""
+    raw = arguments.get("tasks") or arguments.get("plan") or []
+    if not isinstance(raw, list):
+        return "set_plan needs a 'tasks' list of short ordered steps."
+    n = sum(1 for t in raw if (isinstance(t, str) and t.strip()) or (isinstance(t, dict) and (t.get("text") or t.get("title"))))
+    if not n:
+        return "set_plan needs a non-empty 'tasks' list (each a short step)."
+    return f"Plan set with {n} step(s); the taskboard now tracks your plan. Advance each row with complete_task as you finish it."
+
+
 TOOL_EXECUTORS = {
     "record_profile_fact": execute_record_profile_fact,
+    "set_plan": execute_set_plan,
     "capture_screen": execute_capture_screen,
     "open_url": execute_open_url,
     "screen_size": execute_screen_size,

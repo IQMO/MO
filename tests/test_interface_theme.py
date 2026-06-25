@@ -43,6 +43,8 @@ EXPECTED_STYLE_KEYS = [
     "notification-goal",
     "notification-worker",
     "notification-critical",
+    "low-balance",
+    "model-fallback",
     "prt-header",
     "prt-critical",
     "prt-major",
