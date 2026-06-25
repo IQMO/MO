@@ -60,7 +60,11 @@ Durable insights and preferences learned dynamically from interaction history.
     "behavior.md": """# MO Behavioral Learning
 
 Generated compact behavior rules from explicit operator learning. Applies below the internal system prompt, current user request, tool/sandbox rules, taskboard truth, and direct evidence.
-"""
+""",
+    "facts.md": """# Operator Operational Facts (auto-captured)
+
+Durable facts the operator shared — servers, repos, access, deploy methods, project paths, credential LOCATIONS (never values), and host ALIASES (never raw IPs/SSH connection strings). MO records these autonomously via record_profile_fact.
+""",
 }
 
 
@@ -328,8 +332,20 @@ class Profile:
         # Always comes BEFORE the per-file excerpts so MO knows what exists even
         # when individual excerpts are truncated.  Tells MO which file to
         # read_file when it needs a term/section that was cut.
+        def _file_active(file_name: str) -> bool:
+            # facts.md ships as a template header; it should not consume context
+            # budget (or an index line) until MO has recorded a real fact entry.
+            if file_name != "facts.md":
+                return True
+            try:
+                return "- [" in (pdir / file_name).read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                return False
+
         index_entries: list[str] = []
         for file_name, _limit, _tail in profile_files:
+            if not _file_active(file_name):
+                continue
             entry = _profile_index_line(pdir / file_name)
             if entry:
                 index_entries.append(f"- {file_name}: {entry}")
@@ -356,6 +372,8 @@ class Profile:
                 return ""
 
         for file_name, limit, include_recent_tail in profile_files:
+            if not _file_active(file_name):
+                continue
             body = excerpt(pdir / file_name, limit, include_recent_tail=include_recent_tail)
             if body:
                 lines.append(f"\n### {file_name}\n{body}")

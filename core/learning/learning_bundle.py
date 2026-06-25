@@ -26,7 +26,7 @@ from ..skills import skills_root
 from ..text_safety import contains_secret_value
 
 BUNDLE_VERSION = "mo-learning-bundle-v1"
-PROFILE_FILES = ("operator.md", "thinking_model.md", "behavior.md", "learning.md", "terms.md", "identity.md")
+PROFILE_FILES = ("operator.md", "thinking_model.md", "behavior.md", "learning.md", "terms.md", "identity.md", "facts.md")
 
 
 def _memory_dir(profile: Any) -> Path:

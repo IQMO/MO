@@ -1,6 +1,9 @@
 """Shared tool/lane constants — single source of truth for sandbox enforcement."""
 
-MUTATING_TOOLS = frozenset({"write_file", "edit_file"})
+# Tools that mutate durable state — barred from read-only lanes. record_profile_fact
+# writes the operator profile (facts.md, auto-injected into context), so a review/
+# investigate lane must not be able to persist profile memory.
+MUTATING_TOOLS = frozenset({"write_file", "edit_file", "record_profile_fact"})
 READ_ONLY_LANES = frozenset({"report", "review-only", "investigate", "prt-review-only"})
 
 # Raw reads of these path shapes can disclose credential values before output

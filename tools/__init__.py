@@ -1182,17 +1182,42 @@ def execute_record_convention(arguments: dict[str, Any]) -> str:
 
 
 def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
-    """MO autonomously persists a durable operational fact the operator shared."""
+    """MO autonomously persists a durable operational fact the operator shared.
+
+    Hardened: facts.md is auto-injected into provider context every turn, so this
+    fails CLOSED against (a) secret values, (b) prompt-injection / markdown control
+    structure, and (c) raw reachable endpoints (IPs / SSH connection strings) —
+    record host aliases / locations / status, never raw endpoints or instructions.
+    """
+    import re as _re
     category = str(arguments.get("category", "") or "").strip().lower()
-    fact = str(arguments.get("fact", "") or "").strip()
-    evidence = str(arguments.get("evidence", "") or "").strip()
+    # Collapse to a single clean line — no multiline/markdown structure survives.
+    fact = " ".join(str(arguments.get("fact", "") or "").split())
+    evidence = " ".join(str(arguments.get("evidence", "") or "").split())
     if not category or not fact:
         return "Fact NOT recorded: need a category and a concrete one-line fact."
+    if len(fact) > 200:
+        return "Fact NOT recorded: keep it to one short line (<=200 chars)."
     try:
         from core.text_safety import contains_secret_value
         if contains_secret_value(fact) or contains_secret_value(evidence):
             return ("Fact NOT recorded: it contained a secret value. Record only the LOCATION/"
                     "status of a credential (e.g. 'the API keys live in the profile vault'), never the value.")
+    except Exception:
+        pass
+    # Reject instruction/markdown/control content (prompt-injection persistence).
+    if _re.search(r"(?:^|\s)#{1,6}\s|```|\b(?:system|assistant|user)\s*:|ignore (?:previous|prior|above)|disregard .*instruction|override .*instruction", fact, _re.I):
+        return "Fact NOT recorded: looks like instruction/markdown content, not a plain operational fact."
+    # Reject raw reachable endpoints — IPs / SSH connection strings get auto-injected
+    # every turn; store an alias/host name/location/status instead.
+    if _re.search(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", fact) or _re.search(r"\bssh://|\bssh\s+\S+@|@\d{1,3}(?:\.\d{1,3}){3}", fact, _re.I):
+        return "Fact NOT recorded: don't store raw IPs or SSH connection strings — record a host alias / location / status instead."
+    # Fail-closed safety scan (same class workflow-learning already blocks).
+    try:
+        from core.threat_scan import scan_text
+        scan = scan_text(f"{fact}\n{evidence}", surface="profile fact")
+        if getattr(scan, "blocked", False):
+            return f"Fact NOT recorded: failed the safety scan ({scan.reason()})."
     except Exception:
         pass
     try:
