@@ -23,7 +23,10 @@ def test_workspace_root_has_no_private_runtime_or_external_tooling_content():
     )
 
     present = [name for name in forbidden_plain_dirs if Path(name).exists()]
-    allowed_hidden_dirs = {".git"}
+    # Gitignored external dev-tool dirs that never get tracked or shipped (same
+    # category as .git). The guard still catches private runtime (memory/logs/
+    # operator) and any tracked/shippable pollution.
+    allowed_hidden_dirs = {".git", ".claude"}
     present.extend(
         sorted(
             path.name
