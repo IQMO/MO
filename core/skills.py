@@ -402,6 +402,9 @@ def write_skill_pack(
         "",
     ])
     text = "\n".join(frontmatter) + str(body or "").strip() + "\n"
+    issues = _skill_contract_issues(_parse_frontmatter("\n".join(frontmatter[1:-2])), str(body or ""))
+    if issues:
+        raise ValueError("invalid skill pack: " + "; ".join(issues))
     atomic_write_text(dest / "SKILL.md", text, encoding="utf-8")
     for rel, content in (supporting_files or {}).items():
         safe_rel = _safe_support_path(rel)
@@ -409,6 +412,28 @@ def write_skill_pack(
             continue
         atomic_write_text(dest / safe_rel, str(content or "")[:_MAX_SOURCE_TEXT_CHARS], encoding="utf-8")
     return dest / "SKILL.md"
+
+
+def validate_skill_pack(path: str | Path) -> list[str]:
+    """Return contract issues for a physical SKILL.md pack.
+
+    The validator is intentionally focused on machine-checkable contracts. In
+    particular, when a skill body says it activates only for an exact phrase,
+    the frontmatter triggers must match that phrase and must not include broad
+    aliases. This keeps hand-authored packs from over-firing at runtime.
+    """
+    source = Path(path)
+    try:
+        raw = source.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [f"cannot read skill pack: {exc}"]
+    if source.name.lower() != "skill.md":
+        return ["skill pack must be named SKILL.md"]
+    meta_text, body = _split_frontmatter(raw)
+    if not meta_text:
+        return ["missing SKILL.md frontmatter"]
+    meta = _parse_frontmatter(meta_text)
+    return _skill_contract_issues(meta, body)
 
 
 def write_convention(
@@ -594,6 +619,8 @@ def _parse_skill(path: Path) -> Skill | None:
             triggers = tuple(sorted(_meaningful_words(f"{name} {description}")))[:8]
         if not triggers:
             return None
+        if _skill_contract_issues({**meta, "triggers": triggers}, body):
+            return None
         mastery = {
             key: meta.get(key)
             for key in ("mastery_uses", "mastery_successes", "mastery_corrections", "last_used_at", "created_at")
@@ -699,6 +726,64 @@ def _parse_frontmatter(text: str) -> dict[str, Any]:
         else:
             data[key] = _parse_scalar(value)
     return data
+
+
+def _skill_contract_issues(meta: dict[str, Any], body: str) -> list[str]:
+    triggers = set(_coerce_triggers(meta.get("triggers")))
+    issues: list[str] = []
+    if not triggers:
+        issues.append("missing triggers")
+        return issues
+    exact, forbidden = _activation_contract_triggers(body)
+    if exact:
+        missing = sorted(exact - triggers)
+        extra = sorted(triggers - exact)
+        blocked = sorted(triggers & forbidden)
+        if missing:
+            issues.append("exact activation trigger missing: " + ", ".join(missing))
+        if extra:
+            issues.append("exact activation skill has extra triggers: " + ", ".join(extra))
+        if blocked:
+            issues.append("forbidden trigger listed: " + ", ".join(blocked))
+    return issues
+
+
+def _activation_contract_triggers(body: str) -> tuple[set[str], set[str]]:
+    exact: set[str] = set()
+    forbidden: set[str] = set()
+    for raw in str(body or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        low = line.lower()
+        has_exact_contract = (
+            "activate only" in low
+            or ("only when" in low and ("explicit" in low or "exact" in low) and ("trigger" in low or "write" in low or "type" in low))
+        )
+        has_forbidden = any(phrase in low for phrase in ("do not activate for", "don't activate for", "never activate for"))
+        if not has_exact_contract and not has_forbidden:
+            continue
+        if has_forbidden:
+            before, after = _split_forbidden_activation(line)
+        else:
+            before, after = line, ""
+        if has_exact_contract:
+            exact.update(_normalize_trigger(item) for item in _backtick_values(before) if _normalize_trigger(item))
+        if has_forbidden:
+            forbidden.update(_normalize_trigger(item) for item in _backtick_values(after) if _normalize_trigger(item))
+    exact -= forbidden
+    return exact, forbidden
+
+
+def _split_forbidden_activation(line: str) -> tuple[str, str]:
+    match = re.search(r"(?i)\b(?:do not|don't|never)\s+activate\s+for\b", line)
+    if not match:
+        return line, ""
+    return line[:match.start()], line[match.end():]
+
+
+def _backtick_values(text: str) -> list[str]:
+    return [match.group(1).strip() for match in re.finditer(r"`([^`]+)`", str(text or "")) if match.group(1).strip()]
 
 
 def _parse_scalar(value: str) -> Any:

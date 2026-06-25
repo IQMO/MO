@@ -7,6 +7,7 @@ from core.skills import (
     retire_stale_generated_skills,
     select_skills_context,
     should_include_skills,
+    validate_skill_pack,
     default_skill_roots,
     skills_root,
     write_skill_pack,
@@ -114,6 +115,62 @@ def test_skill_md_frontmatter_pack_loads_and_records_mastery(tmp_path):
 
     assert record_skill_outcome(path, "correction") is True
     assert "mastery_corrections: 1" in path.read_text(encoding="utf-8")
+
+
+def test_exact_activation_contract_rejects_extra_triggers(tmp_path):
+    root = tmp_path / "skills" / "exact-mode-alpha"
+    root.mkdir(parents=True)
+    path = root / "SKILL.md"
+    path.write_text(
+        """---
+name: "Exact Mode Alpha"
+description: "Exact trigger example"
+triggers:
+  - "exact-mode-alpha"
+  - "general mode"
+  - "exact alpha"
+---
+# Exact Mode Alpha
+
+- Activate only when the user explicitly writes `exact-mode-alpha`. Do not activate for `exact`, `alpha`, `exact alpha`, or general requests.
+""",
+        encoding="utf-8",
+    )
+
+    issues = validate_skill_pack(path)
+
+    assert any("extra triggers" in issue for issue in issues)
+    assert load_skills([tmp_path / "skills"]) == []
+
+
+def test_exact_activation_contract_allows_only_exact_trigger(tmp_path):
+    root = tmp_path / "skills" / "exact-mode-alpha"
+    path = write_skill_pack(
+        root=tmp_path / "skills",
+        name="Exact Mode Alpha",
+        description="Exact trigger example",
+        triggers=("exact-mode-alpha",),
+        body="- Activate only when the user explicitly writes `exact-mode-alpha`. Do not activate for `exact`, `alpha`, `exact alpha`, or general requests.",
+    )
+
+    assert path.parent == root
+    assert validate_skill_pack(path) == []
+    assert load_skills([tmp_path / "skills"])[0].triggers == ("exact-mode-alpha",)
+
+
+def test_write_skill_pack_rejects_exact_contract_mismatch(tmp_path):
+    import pytest
+
+    with pytest.raises(ValueError, match="extra triggers"):
+        write_skill_pack(
+            root=tmp_path / "skills",
+            name="Exact Mode Alpha",
+            description="Exact trigger example",
+            triggers=("exact-mode-alpha", "general mode"),
+            body="- Activate only when the user explicitly writes `exact-mode-alpha`. Do not activate for `exact`, `alpha`, `exact alpha`, or general requests.",
+        )
+
+    assert not (tmp_path / "skills" / "exact-mode-alpha" / "SKILL.md").exists()
 
 
 def test_project_local_skill_selection_does_not_mutate_pack(tmp_path):
