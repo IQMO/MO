@@ -21,7 +21,7 @@ _TIMEOUT_SECONDS = 8.0
 _CURRENCY_SYMBOL = {"USD": "$", "CNY": "¥"}
 
 _lock = threading.Lock()
-_state: dict[str, Any] = {"text": None, "fetched_at": 0.0, "fetching": False}
+_state: dict[str, Any] = {"text": None, "amount": None, "fetched_at": 0.0, "fetching": False}
 
 
 def is_official_deepseek(provider: Any) -> bool:
@@ -59,7 +59,19 @@ def format_balance(payload: dict[str, Any]) -> str | None:
     return f"DeepSeek {amount}{low}"
 
 
-def _fetch(url: str, api_key: str) -> str | None:
+def parse_amount(payload: dict[str, Any]) -> float | None:
+    """Extract the numeric total balance from the /user/balance JSON, or None."""
+    infos = payload.get("balance_infos") or []
+    if not isinstance(infos, list) or not infos:
+        return None
+    info = infos[0] if isinstance(infos[0], dict) else {}
+    try:
+        return float(str(info.get("total_balance") or "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _fetch(url: str, api_key: str) -> tuple[str | None, float | None]:
     try:
         req = urllib.request.Request(
             url, headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
@@ -67,16 +79,17 @@ def _fetch(url: str, api_key: str) -> str | None:
         with urllib.request.urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except Exception:
-        return None
+        return None, None
     if not isinstance(payload, dict):
-        return None
-    return format_balance(payload)
+        return None, None
+    return format_balance(payload), parse_amount(payload)
 
 
 def _refresh(url: str, api_key: str) -> None:
-    text = _fetch(url, api_key) if api_key else None
+    text, amount = _fetch(url, api_key) if api_key else (None, None)
     with _lock:
         _state["text"] = text
+        _state["amount"] = amount
         _state["fetched_at"] = time.time()
         _state["fetching"] = False
 
@@ -100,3 +113,17 @@ def balance_text(provider: Any) -> str | None:
             url = balance_endpoint(getattr(provider, "base_url", ""))
             threading.Thread(target=_refresh, args=(url, api_key), daemon=True).start()
         return _state["text"]
+
+
+def balance_amount(provider: Any) -> float | None:
+    """Cached numeric total balance for the official DeepSeek provider, or None.
+
+    Reads the same throttled cache as ``balance_text`` (which the footer refreshes
+    on every frame), so this is a non-blocking read. None for non-official
+    providers or before the first successful fetch.
+    """
+    if not is_official_deepseek(provider):
+        return None
+    with _lock:
+        amount = _state.get("amount")
+    return float(amount) if isinstance(amount, (int, float)) else None

@@ -73,6 +73,30 @@ class TurnRunnerMixin:
                 traceback.print_exc()
         _apply()
 
+    def _maybe_warn_low_balance(self, *, threshold: float = 2.00) -> None:
+        """Drop a colored low-balance notice into the transcript, once per session.
+
+        Reads the cached DeepSeek balance (kept fresh by the footer); fires only on
+        the official DeepSeek API and only the first time it goes under threshold.
+        """
+        if getattr(self, "_low_balance_notified", False):
+            return
+        try:
+            from core.provider.deepseek_balance import balance_amount
+            amount = balance_amount(getattr(self.agent, "active_provider", None))
+        except Exception:
+            amount = None
+        if amount is None or amount >= threshold:
+            return
+        self._low_balance_notified = True
+        try:
+            self._add(
+                "class:low-balance",
+                f"  ⚠ DeepSeek balance is low: ${amount:.2f} (below ${threshold:.2f}) - top up soon.",
+            )
+        except Exception:
+            traceback.print_exc()
+
     def _run_turn_thread(self, user_input: str):
         cancel_event = threading.Event()
         self._current_turn_cancel_event = cancel_event
@@ -214,6 +238,7 @@ class TurnRunnerMixin:
             self._busy_escape_count = 0
             self.activity_text = ""
             self.activity_started_at = 0.0
+            self._maybe_warn_low_balance()
             # Completed taskboards leave the final MO report in transcript; incomplete
             # boards stay visible so unresolved work remains clear.
             if self._app:

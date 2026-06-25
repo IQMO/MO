@@ -320,3 +320,32 @@ def test_turn_runner_passes_ghost_route_source_to_gateway():
     harness._run_turn_thread("build")
 
     assert gateway.route_source == "ghost"
+
+
+def test_low_balance_warns_once_below_threshold(monkeypatch):
+    import core.provider.deepseek_balance as bal
+
+    class _H(TurnRunnerMixin):
+        def __init__(self):
+            self._low_balance_notified = False
+            self.added = []
+            self.agent = SimpleNamespace(active_provider=object())
+
+        def _add(self, style, text):
+            self.added.append((style, text))
+
+    # Below threshold -> exactly one colored notice, then never again (one-time).
+    monkeypatch.setattr(bal, "balance_amount", lambda prov: 1.73)
+    h = _H()
+    h._maybe_warn_low_balance()
+    assert len(h.added) == 1
+    assert h.added[0][0] == "class:low-balance"
+    assert "1.73" in h.added[0][1] and "2.00" in h.added[0][1]
+    h._maybe_warn_low_balance()
+    assert len(h.added) == 1
+
+    # At/above threshold and unknown balance -> no notice.
+    monkeypatch.setattr(bal, "balance_amount", lambda prov: 5.0)
+    h2 = _H(); h2._maybe_warn_low_balance(); assert h2.added == []
+    monkeypatch.setattr(bal, "balance_amount", lambda prov: None)
+    h3 = _H(); h3._maybe_warn_low_balance(); assert h3.added == []

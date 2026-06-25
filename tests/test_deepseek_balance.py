@@ -83,9 +83,28 @@ def test_stale_cache_triggers_exactly_one_refresh(monkeypatch):
 
 
 def test_refresh_writes_cache_and_clears_flag(monkeypatch):
-    monkeypatch.setattr(db, "_fetch", lambda url, key: "DeepSeek $99.00")
+    monkeypatch.setattr(db, "_fetch", lambda url, key: ("DeepSeek $99.00", 99.0))
     _reset_state(fetching=True)
     db._refresh("https://api.deepseek.com/user/balance", "sk-test")
     assert db._state["text"] == "DeepSeek $99.00"
+    assert db._state["amount"] == 99.0
     assert db._state["fetching"] is False
     _reset_state()
+
+
+def test_parse_amount_extracts_numeric():
+    assert db.parse_amount({"balance_infos": [{"currency": "USD", "total_balance": "1.73"}]}) == 1.73
+    assert db.parse_amount({"balance_infos": []}) is None
+    assert db.parse_amount({"balance_infos": [{"total_balance": "x"}]}) is None
+
+
+def test_balance_amount_host_gated_and_cached():
+    # Non-official provider -> None regardless of cache.
+    assert db.balance_amount(_FakeProvider("https://opencode.ai/zen/v1")) is None
+    with db._lock:
+        db._state["amount"] = 1.5
+    try:
+        assert db.balance_amount(_FakeProvider("https://api.deepseek.com/v1")) == 1.5
+    finally:
+        with db._lock:
+            db._state["amount"] = None

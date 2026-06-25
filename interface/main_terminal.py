@@ -80,6 +80,8 @@ class MoTui(
         self._pre_enhance_text = ""
         self._enhance_holder_active = False
         self._enhance_in_flight = False
+        # One-time-per-session low-balance notice (DeepSeek official API only).
+        self._low_balance_notified = False
         self._busy_escape_count = 0
 
         # Goal UI state
