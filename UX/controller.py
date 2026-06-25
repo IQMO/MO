@@ -156,13 +156,13 @@ class UxController:
     def snapshot(self) -> SessionSnapshot:
         return self.backend.snapshot()
 
-    def handle_input(self, text: str) -> str:
+    def handle_input(self, text: str, *, on_change: Callable[[], None] | None = None) -> str:
         clean = str(text or "").strip()
         if clean.lower() in {"/exit", "/quit", "/q", "exit", "quit"}:
             self.exit_requested = True
             self.last_result = "[EXIT]"
             return self.last_result
-        self.callbacks = UxCallbacks()
+        self.callbacks = UxCallbacks(on_change=on_change)
         self.last_result = self.backend.submit(clean, callbacks=self.callbacks)
         if self.last_result == "[EXIT]":
             self.exit_requested = True

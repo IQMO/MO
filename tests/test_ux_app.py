@@ -5,6 +5,7 @@ from rich.console import Console
 
 import UX.app as app
 from UX.models import SessionSnapshot
+from UX.controller import PreviewBackend, UxController
 
 
 def test_runtime_unavailable_exits_cleanly(monkeypatch):
@@ -36,3 +37,17 @@ def test_once_snapshot_render_preserves_read_only_hint():
     text = console.export_text(clear=False)
     assert "read-only mode; no messages are sent" in text
     assert "preview only; /exit closes" not in text
+
+
+def test_single_message_renders_result_and_advances_preview():
+    text = app.run_single_message(UxController(PreviewBackend()), "hello", width=90)
+
+    assert "hello" in text
+    assert "Preview only" in text
+
+
+def test_read_only_rejects_message(monkeypatch):
+    with pytest.raises(SystemExit) as exc:
+        app.main(["--read-only", "--message", "hello"])
+
+    assert str(exc.value) == "--message cannot be used with --read-only"

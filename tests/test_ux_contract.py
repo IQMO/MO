@@ -133,3 +133,25 @@ def test_runtime_snapshot_adapter_uses_duck_typed_public_state():
     assert snapshot.board[0].status == "blocked"
     assert [item.speaker for item in snapshot.transcript] == ["user"]
     assert "internal prompt" not in " ".join(item.text for item in snapshot.transcript)
+
+
+def test_old_and_new_board_surfaces_read_same_taskboard_truth():
+    from core.tasking.task_board import TaskBoard, TaskItem
+    from interface.task_board_view import render_plain
+
+    board = TaskBoard(
+        tasks=[
+            TaskItem("1", "Inspect shared truth", "completed", kind="inspect"),
+            TaskItem("2", "Render active work", "active", kind="execute"),
+            TaskItem("3", "Report blocker", "blocked", blocker="waiting on evidence", kind="verify"),
+        ]
+    )
+
+    old_text = render_plain(board)
+    new_rows = rows_from_gateway_board(board)
+
+    for title in ("Inspect shared truth", "Render active work", "Report blocker"):
+        assert title in old_text
+        assert title in {row.title for row in new_rows}
+    assert [row.status for row in new_rows] == ["completed", "active", "blocked"]
+    assert new_rows[2].blocker == "waiting on evidence"

@@ -6,6 +6,7 @@ import io
 import sys
 
 from rich.console import Console
+from rich.live import Live
 
 from .controller import PreviewBackend, RuntimeBackend, UxController, read_only_snapshot
 from .layout import build_screen
@@ -19,6 +20,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--read-only", action="store_true", help="load MO runtime state without sending messages")
     parser.add_argument("--live", action="store_true", help="send messages through MO Gateway.run_turn")
     parser.add_argument("--smoke", action="store_true", help="run local UX smoke checks and exit")
+    parser.add_argument("--message", help="send one message through the selected mode, render the result, and exit")
     return parser.parse_args(argv)
 
 
@@ -59,6 +61,21 @@ def run_smoke(width: int = 100) -> str:
     return console.export_text(clear=False)
 
 
+def render_snapshot_text(snapshot: SessionSnapshot, *, width: int = 100) -> str:
+    console = Console(record=True, width=max(60, width), color_system=None, file=io.StringIO())
+    console.print(build_screen(snapshot))
+    return console.export_text(clear=False)
+
+
+def run_single_message(controller: UxController, message: str, *, width: int = 100) -> str:
+    before_count = len(controller.snapshot().transcript)
+    controller.handle_input(message)
+    snapshot = controller.snapshot()
+    if message.strip().lower() not in {"/exit", "/quit", "/q", "exit", "quit"} and len(snapshot.transcript) <= before_count:
+        raise RuntimeError("message did not advance transcript")
+    return render_snapshot_text(snapshot, width=width)
+
+
 class UxPreviewApp:
     """Small interactive shell for preview, read-only, and live runtime modes."""
 
@@ -67,6 +84,12 @@ class UxPreviewApp:
 
     def render(self, snapshot: SessionSnapshot) -> None:
         self.console.print(build_screen(snapshot))
+
+    def submit_and_render_live(self, controller: UxController, text: str) -> str:
+        with Live(build_screen(controller.snapshot()), console=self.console, refresh_per_second=4, transient=False) as live:
+            result = controller.handle_input(text, on_change=lambda: live.update(build_screen(controller.snapshot())))
+            live.update(build_screen(controller.snapshot()))
+            return result
 
     def run(self, *, once: bool = False, snapshot: SessionSnapshot | None = None, controller: UxController | None = None) -> None:
         if once and snapshot is not None and controller is None:
@@ -85,7 +108,7 @@ class UxPreviewApp:
                 return
             if not user_input:
                 continue
-            current_controller.handle_input(user_input)
+            self.submit_and_render_live(current_controller, user_input)
             if current_controller.exit_requested:
                 return
             self.console.clear()
@@ -100,13 +123,22 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.live and args.read_only:
         raise SystemExit("--live and --read-only are mutually exclusive")
+    if args.message and args.read_only:
+        raise SystemExit("--message cannot be used with --read-only")
     if args.read_only:
         handle = _create_runtime_or_exit(console)
         UxPreviewApp(console).run(once=True, snapshot=read_only_snapshot(handle))
         return
     if args.live:
         handle = _create_runtime_or_exit(console)
-        UxPreviewApp(console).run(once=bool(args.once), controller=UxController(RuntimeBackend(handle)))
+        controller = UxController(RuntimeBackend(handle))
+        if args.message:
+            console.print(run_single_message(controller, args.message, width=args.width), markup=False)
+            return
+        UxPreviewApp(console).run(once=bool(args.once), controller=controller)
+        return
+    if args.message:
+        console.print(run_single_message(UxController(PreviewBackend()), args.message, width=args.width), markup=False)
         return
     UxPreviewApp(console).run(once=bool(args.once))
 

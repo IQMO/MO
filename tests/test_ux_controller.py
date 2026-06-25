@@ -18,6 +18,15 @@ def test_preview_controller_captures_input_without_runtime():
     assert snapshot.transcript[-1].speaker == "mo"
 
 
+def test_controller_on_change_callback_is_used():
+    changed = []
+    controller = UxController(PreviewBackend())
+
+    controller.handle_input("hello", on_change=lambda: changed.append("changed"))
+
+    assert changed
+
+
 def test_preview_controller_exit_is_local():
     controller = UxController(PreviewBackend())
 

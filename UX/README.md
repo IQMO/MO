@@ -28,6 +28,12 @@ Send real turns through the MO Gateway:
 python -m UX --live
 ```
 
+Run one deterministic live smoke message and exit:
+
+```bash
+python -m UX --live --message "who are you?"
+```
+
 ## Phase Contract
 
 - Current production TUI stays in `interface/`.
@@ -57,7 +63,8 @@ python -m UX --live
 - Phase 2 read-only runtime: `python -m UX --read-only` creates Agent/Gateway and
   renders a snapshot without sending messages.
 - Phase 3 controlled actions: `python -m UX --live` sends messages through
-  `Gateway.run_turn` and renders the resulting snapshot.
+  `Gateway.run_turn` and renders the resulting snapshot. `--message` provides a
+  non-interactive smoke path.
 - Phase 4 comparison/coverage: `tests/test_ux_contract.py` and
   `tests/test_ux_controller.py` lock isolation, rendering, controller, and
   adapter behavior.
