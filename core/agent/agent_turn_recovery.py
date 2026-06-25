@@ -9,7 +9,7 @@ from typing import Any
 from ..provider.provider_audit import append_provider_audit
 from ..tasking.task_board import TaskBoard, record_snapshot
 from ..session.session_momentum import maybe_compact_session
-from ..path_defaults import operator_pack_root
+from ..path_defaults import operator_pack_root, repo_root
 from .agent_utils import _emit_task_board_update
 from ..owner_protocols import (
     is_owner_maintenance_activation,
@@ -357,6 +357,54 @@ class AgentTurnRecoveryMixin:
 
         return extra_context
 
+    def _capsule_ground_truth(self) -> str:
+        """Runtime-computed facts for a continuation/blocked capsule.
+
+        Under a budget-exhausted or handed-off context the model often cannot
+        recall its own dirty files / open taskboard rows — it then writes a
+        capsule that admits it "cannot reliably state" them, orphaning in-flight
+        work (observed live mo-1782383361). Compute them here so the capsule
+        carries ground truth regardless of remaining context. Fail-open: returns
+        "" on any error so a capsule is never blocked by this.
+        """
+        parts: list[str] = []
+        try:
+            gateway = getattr(self, "gateway", None)
+            seen: set[int] = set()
+            rows: list[str] = []
+            for board in (getattr(self, "_active_task_board", None), getattr(gateway, "last_task_board", None)):
+                if not board or id(board) in seen:
+                    continue
+                seen.add(id(board))
+                for task in list(getattr(board, "tasks", []) or []):
+                    if str(getattr(task, "status", "")) not in ("completed", "skipped"):
+                        rows.append(f"#{getattr(task, 'id', '?')} {str(getattr(task, 'text', '') or '')[:60]}")
+                if rows:
+                    break
+            if rows:
+                parts.append("open taskboard rows -> " + "; ".join(rows[:12]))
+        except Exception:
+            traceback.print_exc()
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=repo_root(), capture_output=True, text=True, timeout=10,
+            ).stdout
+            files = [line[3:].strip() for line in out.splitlines() if line.strip()]
+            if files:
+                shown = ", ".join(files[:30])
+                more = f" (+{len(files) - 30} more)" if len(files) > 30 else ""
+                parts.append(f"dirty files [{len(files)}] -> {shown}{more}")
+        except Exception:
+            traceback.print_exc()
+        if not parts:
+            return ""
+        return (
+            " RUNTIME GROUND TRUTH (computed now — copy verbatim into the capsule, do not "
+            "guess or omit): " + " | ".join(parts) + "."
+        )
+
     def _owner_maintenance_completed_taskboard_should_stop_tools(self, user_input: str, task_board: TaskBoard | None = None) -> bool:
         """Return True when completed OWNER_MAINTENANCE task truth must close instead of probing."""
         return is_owner_maintenance_activation(user_input) and self._owner_maintenance_taskboard_completed(task_board)
@@ -504,6 +552,7 @@ class AgentTurnRecoveryMixin:
                     "context only: completed work, unresolved finding IDs, dirty files, tests run, and "
                     "the exact next action. Do NOT call any tools. Do NOT re-read state. Do NOT restart "
                     "OWNER_MAINTENANCE. The next fresh/resume turn continues from this capsule."
+                    + self._capsule_ground_truth()
                 )
                 action = "force_blocked_in_place"
             if monitor:
@@ -518,6 +567,7 @@ class AgentTurnRecoveryMixin:
                 "Active work is not complete. Return [WORK BLOCKED] with a continuation capsule now: "
                 "completed work, unresolved taskboard rows, dirty files, tests run, and the exact next action. "
                 "Do NOT call any more tools in this exhausted turn. The next fresh work/resume turn must continue from this capsule without re-asking or redoing completed discovery."
+                + self._capsule_ground_truth()
             )
             reason = (
                 f"work-tool-budget-continuation ({tool_rounds}/{max_tools} rounds)"
@@ -550,11 +600,15 @@ class AgentTurnRecoveryMixin:
     def _turn_health_tool_blocked_instruction(self, user_input: str | None = None) -> str:
         active_work = False
         owner_maintenance_completed = False
+        ground_truth = ""
         if user_input is None:
+            # Degenerate static-text form: called with the user text as ``self``
+            # (no real agent), so runtime ground truth is unavailable here.
             user_input = str(self or "")
         else:
             active_work = self._has_open_runtime_work()
             owner_maintenance_completed = self._owner_maintenance_taskboard_completed()
+            ground_truth = self._capsule_ground_truth()
         if is_owner_maintenance_activation(user_input):
             if owner_maintenance_completed:
                 return (
@@ -567,6 +621,7 @@ class AgentTurnRecoveryMixin:
                 "Do not call more tools. Your next response must start exactly with "
                 "`[OWNER_MAINTENANCE BLOCKED]` and contain a continuation capsule: completed work, "
                 "unresolved finding IDs, dirty files, tests run, and the exact next action."
+                + ground_truth
             )
         if active_work:
             return (
@@ -574,6 +629,7 @@ class AgentTurnRecoveryMixin:
                 "Do not call more tools. Your next response must start exactly with "
                 "`[WORK BLOCKED]` and contain a continuation capsule: completed work, "
                 "unresolved taskboard rows, dirty files, tests run, and the exact next action."
+                + ground_truth
             )
         return (
             "[TURN HEALTH] Tool calls blocked — turn budget exhausted. "
