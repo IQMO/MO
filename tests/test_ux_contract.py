@@ -119,6 +119,17 @@ def test_demo_snapshot_renders_expected_panes():
     assert "THINKING" in text
     assert "EXECUTION" in text
     assert "COMPACTION" in text
+    assert "Activity" in text
+
+
+def test_command_center_render_places_major_panes_on_one_screen():
+    text = render_text(demo_snapshot(), width=120)
+    assert text.count("Session") == 1
+    assert text.count("Composer") == 1
+    assert "Agent Lanes" in text
+    assert "Transcript" in text
+    assert "Task Board" in text
+    assert "Activity" in text
 
 
 def test_local_smoke_path_advances_preview_transcript():

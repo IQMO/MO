@@ -58,13 +58,13 @@ def run_smoke(width: int = 100) -> str:
     if len(after.transcript) <= len(before.transcript):
         raise RuntimeError("preview transcript did not advance")
     console = Console(record=True, width=max(60, width), color_system=None, file=io.StringIO())
-    console.print(build_screen(after))
+    console.print(build_screen(after, width=console.width))
     return console.export_text(clear=False)
 
 
 def render_snapshot_text(snapshot: SessionSnapshot, *, width: int = 100) -> str:
     console = Console(record=True, width=max(60, width), color_system=None, file=io.StringIO())
-    console.print(build_screen(snapshot))
+    console.print(build_screen(snapshot, width=console.width))
     return console.export_text(clear=False)
 
 
@@ -84,13 +84,21 @@ class UxPreviewApp:
         self.console = console or Console()
 
     def render(self, snapshot: SessionSnapshot) -> None:
-        self.console.print(build_screen(snapshot))
+        self.console.print(build_screen(snapshot, width=self.console.width))
 
     def submit_and_render_live(self, controller: UxController, text: str) -> str:
         self.console.clear()
-        with Live(build_screen(controller.snapshot()), console=self.console, refresh_per_second=4, transient=False) as live:
-            result = controller.handle_input(text, on_change=lambda: live.update(build_screen(controller.snapshot())))
-            live.update(build_screen(controller.snapshot()))
+        with Live(
+            build_screen(controller.snapshot(), width=self.console.width),
+            console=self.console,
+            refresh_per_second=4,
+            transient=False,
+        ) as live:
+            result = controller.handle_input(
+                text,
+                on_change=lambda: live.update(build_screen(controller.snapshot(), width=self.console.width)),
+            )
+            live.update(build_screen(controller.snapshot(), width=self.console.width))
             return result
 
     def run(self, *, once: bool = False, snapshot: SessionSnapshot | None = None, controller: UxController | None = None) -> None:
