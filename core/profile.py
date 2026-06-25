@@ -272,6 +272,7 @@ class Profile:
         profile_files = (
             ("operator.md", 1400, False),
             ("terms.md", 450, False),
+            ("facts.md", 700, True),
             ("thinking_model.md", 500, False),
             ("behavior.md", 600, False),
             ("learning.md", 700, True),

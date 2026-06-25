@@ -110,3 +110,23 @@ def test_record_convention_tool_is_registered():
     names = {d["function"]["name"] for d in TOOL_DEFINITIONS}
     assert "record_convention" in names
     assert "record_convention" in TOOL_EXECUTORS
+
+
+def test_record_profile_fact_tool_registered_and_persists(tmp_path, monkeypatch):
+    from tools import TOOL_DEFINITIONS, TOOL_EXECUTORS, execute_record_profile_fact
+    names = {d["function"]["name"] for d in TOOL_DEFINITIONS}
+    assert "record_profile_fact" in names and "record_profile_fact" in TOOL_EXECUTORS
+
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    # Writes a durable fact, dedups, and surfaces in facts.md.
+    out = execute_record_profile_fact({"category": "server", "fact": "prod runs the api service on the deploy host", "evidence": "user said"})
+    assert "Recorded operator fact" in out
+    assert "already recorded" in execute_record_profile_fact({"category": "server", "fact": "prod runs the api service on the deploy host"})
+    # Refuses secret values and empty input.
+    assert "NOT recorded" in execute_record_profile_fact({"category": "credential", "fact": "key is sk-live-abcdef1234567890ABCDEF"})
+    assert "NOT recorded" in execute_record_profile_fact({"category": "", "fact": ""})
+
+    from pathlib import Path
+    from core.path_defaults import resolve_state_path
+    facts = Path(resolve_state_path("memory/profile/facts.md")).read_text(encoding="utf-8")
+    assert "api service on the deploy host" in facts and "sk-live" not in facts

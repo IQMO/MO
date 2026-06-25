@@ -505,6 +505,22 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "record_profile_fact",
+            "description": "Persist a durable OPERATIONAL fact the operator just shared about their setup, so you don't re-ask or re-discover it next time. Use it AUTONOMOUSLY (you decide) whenever the operator reveals something durable: a server/host, a repo or GitHub account/access, a deploy method, a project path, where a credential/key lives (its LOCATION, never the value), an SSH target, or a stated preference. Capture only what the operator actually shared — never guess. It auto-surfaces in your profile context on later turns. Do NOT store secret VALUES (keys/passwords/tokens) — only their location/status.",
+            "parameters": {
+                "type": "object",
+                "required": ["category", "fact"],
+                "properties": {
+                    "category": {"type": "string", "description": "one of: server | repo | access | credential | deploy | project | preference"},
+                    "fact": {"type": "string", "description": "the durable fact in one line, e.g. 'prod API runs as a systemd service on the deploy host under /opt/<app>'"},
+                    "evidence": {"type": "string", "description": "the operator's words / how you learned it"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -1165,7 +1181,44 @@ def execute_record_convention(arguments: dict[str, Any]) -> str:
         return f"Convention write failed: {exc}"
 
 
+def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
+    """MO autonomously persists a durable operational fact the operator shared."""
+    category = str(arguments.get("category", "") or "").strip().lower()
+    fact = str(arguments.get("fact", "") or "").strip()
+    evidence = str(arguments.get("evidence", "") or "").strip()
+    if not category or not fact:
+        return "Fact NOT recorded: need a category and a concrete one-line fact."
+    try:
+        from core.text_safety import contains_secret_value
+        if contains_secret_value(fact) or contains_secret_value(evidence):
+            return ("Fact NOT recorded: it contained a secret value. Record only the LOCATION/"
+                    "status of a credential (e.g. 'the API keys live in the profile vault'), never the value.")
+    except Exception:
+        pass
+    try:
+        from pathlib import Path
+        from core.path_defaults import resolve_state_path
+        from core.atomic_write import atomic_write_text
+        path = Path(resolve_state_path("memory/profile/facts.md"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header = (
+            "# Operator Operational Facts (auto-captured)\n\n"
+            "Durable facts the operator shared — servers, repos, access, deploy methods, "
+            "project paths, credential LOCATIONS (never values). MO records these autonomously.\n\n"
+        )
+        existing = path.read_text(encoding="utf-8") if path.exists() else header
+        line = f"- [{category}] {fact}"
+        if line in existing:
+            return f"Fact already recorded: {fact}"
+        body = existing if existing.strip() else header
+        atomic_write_text(path, body.rstrip() + "\n" + line + "\n", encoding="utf-8")
+        return f"Recorded operator fact [{category}]: {fact} (auto-surfaces in profile context next turns)."
+    except Exception as exc:
+        return f"Fact write failed: {exc}"
+
+
 TOOL_EXECUTORS = {
+    "record_profile_fact": execute_record_profile_fact,
     "capture_screen": execute_capture_screen,
     "open_url": execute_open_url,
     "screen_size": execute_screen_size,
