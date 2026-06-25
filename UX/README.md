@@ -10,6 +10,24 @@ Run the preview:
 python -m UX --once
 ```
 
+Run the local smoke path:
+
+```bash
+python -m UX --smoke
+```
+
+Load MO runtime state without sending a turn:
+
+```bash
+python -m UX --read-only
+```
+
+Send real turns through the MO Gateway:
+
+```bash
+python -m UX --live
+```
+
 ## Phase Contract
 
 - Current production TUI stays in `interface/`.
@@ -29,6 +47,20 @@ python -m UX --once
 - `adapters.py` - duck-typed runtime snapshot adapters; no top-level `core` or
   `interface` imports.
 - `app.py` - local preview runner; captures input only inside the preview.
+- `controller.py` - backend-independent input/state controller.
+- `runtime.py` - lazy MO Agent/Gateway bridge for explicit read-only/live modes.
+
+## Mode Status
+
+- Phase 1 interactive shell: `python -m UX` accepts local input and renders
+  transcript updates.
+- Phase 2 read-only runtime: `python -m UX --read-only` creates Agent/Gateway and
+  renders a snapshot without sending messages.
+- Phase 3 controlled actions: `python -m UX --live` sends messages through
+  `Gateway.run_turn` and renders the resulting snapshot.
+- Phase 4 comparison/coverage: `tests/test_ux_contract.py` and
+  `tests/test_ux_controller.py` lock isolation, rendering, controller, and
+  adapter behavior.
 
 ## UX Direction
 

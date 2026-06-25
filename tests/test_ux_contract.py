@@ -7,7 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from UX.adapters import rows_from_gateway_board, snapshot_from_runtime
-from UX.layout import render_text
+from UX.app import run_smoke
+from UX.layout import STATUS_MARKERS, render_text
 from UX.models import BoardRow, demo_snapshot
 
 REPO = Path(__file__).resolve().parents[1]
@@ -34,6 +35,22 @@ def test_ux_does_not_import_current_interface_package():
     assert offenders == []
 
 
+def test_production_entrypoint_does_not_import_experimental_ux():
+    mo_text = (REPO / "mo.py").read_text(encoding="utf-8")
+    terminal_loop = (REPO / "interface" / "terminal_loop.py").read_text(encoding="utf-8")
+    assert "import UX" not in mo_text
+    assert "from UX" not in mo_text
+    assert "import UX" not in terminal_loop
+    assert "from UX" not in terminal_loop
+
+
+def test_windows_launcher_targets_isolated_package():
+    text = (UX_ROOT / "run_ux.bat").read_text(encoding="utf-8")
+    assert "-m UX" in text
+    assert "mo.py" not in text
+    assert "interface" not in text
+
+
 def test_ux_package_import_is_light_and_isolated():
     code = "import sys; import UX; print('interface' in sys.modules); print('core.agent.agent' in sys.modules)"
     result = subprocess.run([sys.executable, "-c", code], cwd=REPO, text=True, capture_output=True, check=True)
@@ -50,6 +67,23 @@ def test_demo_snapshot_renders_expected_panes():
     assert "THINKING" in text
     assert "EXECUTION" in text
     assert "COMPACTION" in text
+
+
+def test_local_smoke_path_advances_preview_transcript():
+    text = run_smoke(width=90)
+    assert "smoke input" in text
+    assert "Preview only" in text
+    assert text.count("Session") == 1
+    assert "[x]  Inspect interface contracts" in text
+
+
+def test_ux_statuses_are_display_defined_and_stable():
+    assert STATUS_MARKERS == {
+        "completed": "[x]",
+        "active": ">",
+        "blocked": "!",
+        "pending": "[ ]",
+    }
 
 
 def test_board_row_normalizes_unknown_status_to_pending():

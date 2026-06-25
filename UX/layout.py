@@ -36,7 +36,7 @@ def _panel(renderable: object, title: str, theme: UxTheme) -> Panel:
         title_align="left",
         border_style=_style(theme, "border"),
         padding=(0, 1),
-        box=box.SQUARE,
+        box=box.ASCII,
     )
 
 
