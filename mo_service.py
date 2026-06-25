@@ -9,7 +9,13 @@ from __future__ import annotations
 import os
 import sys
 
-sys.dont_write_bytecode = True
+# Redirect Python's bytecode cache OUT of the checkout instead of disabling it.
+# Disabling bytecode writes recompiled all ~370 modules in memory on every
+# service (re)start (~7s, never cached). On a VPS/systemd loop that tax is paid on
+# each restart. pycache_prefix under ~/.mo keeps the checkout clean while caching,
+# so restarts drop ~10x. A read-only home degrades to no-cache, never an error.
+_MO_HOME = os.environ.get("MO_HOME") or os.path.join(os.path.expanduser("~"), ".mo")
+sys.pycache_prefix = os.path.join(_MO_HOME, "pycache")
 
 from core.text_safety import configure_utf8_stdio
 

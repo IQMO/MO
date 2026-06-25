@@ -22,6 +22,7 @@ nul
 with open*
 personal/
 .claude/
+.agents/
 # Leak-prevention safety net ONLY — owner-only protocol/state files do NOT live
 # here. They resolve from ~/.mo/operator (or MO_OPERATOR_PACK) under the user's
 # MO profile; this checkout is the one public product repo and never a submodule

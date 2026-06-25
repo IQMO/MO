@@ -1,11 +1,16 @@
 import os
 import shutil
 import sys
+import tempfile
 import pytest
 from pathlib import Path
 
 
-sys.dont_write_bytecode = True
+# Cache test-run bytecode OUTSIDE the checkout (keeps the tree clean — the prior
+# `dont_write_bytecode` intent) instead of disabling it. Disabling it recompiled
+# every module on every `pytest` invocation; a stable out-of-tree prefix caches
+# across runs, so the suite starts far faster while the checkout stays cache-free.
+sys.pycache_prefix = os.path.join(tempfile.gettempdir(), "mo-test-pycache")
 
 
 # State must live under ~/.mo (or MO_STATE_HOME), NEVER the project checkout.
