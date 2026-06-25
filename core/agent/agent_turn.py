@@ -36,8 +36,6 @@ from ..final_gates import (
     run_self_protocol_truth_gate,
     run_verify_edits_gate,
 )
-from ..learning.proactive_learning import build_learning_context
-from ..learning.workflow_learning import build_workflow_learning_context
 from ..learning.feedback_learning import record_feedback_learning
 from .agent_turn_dispatch import AgentTurnDispatchMixin
 from .agent_turn_recovery import AgentTurnRecoveryMixin
@@ -1180,8 +1178,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 "proposal_chars": len(proposal_context),
                 "coordination_chars": len(coordination_context),
                 "work_pattern_chars": len(work_pattern_context),
-                "workflow_learning_chars": 0,
-                "proactive_learning_chars": 0,
                 "skills_chars": len(skills_context),
                 "workspace_chars": len(workspace_context),
                 "project_context_chars": len(project_context),

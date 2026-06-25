@@ -560,8 +560,7 @@ def test_profile_loads_on_operator_runtime_turn_not_just_greeting(monkeypatch, t
 
     monkeypatch.setattr("core.agent.agent_turn.should_include_workspace_awareness", lambda _text: False)
     monkeypatch.setattr("core.agent.agent_turn.should_include_code_graph_context", lambda _text: False)
-    monkeypatch.setattr("core.agent.agent_turn.build_workflow_learning_context", lambda *_a, **_k: "")
-    monkeypatch.setattr("core.agent.agent_turn.build_learning_context", lambda *_a, **_k: "")
+
 
     agent._build_extra_context("check the production deploy keys and report")
     assert agent._last_turn_context_flags["profile"] is True
