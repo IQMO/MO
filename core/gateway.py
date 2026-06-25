@@ -763,10 +763,10 @@ def _new_gateway_board(
 ) -> TaskBoard:
     """Create board from Ghost's planned rows, or a single-row fallback.
 
-    When ``model_owned`` is set (Phase 2), normal work turns get a single
-    placeholder row that MO replaces with its own plan via ``set_plan`` — Ghost
-    and the work-procedure no longer seed the rows. Owner protocols keep their
-    explicit phase rows regardless.
+    When ``model_owned`` is set, normal work turns get an EMPTY board that MO
+    populates with its own plan via ``set_plan`` — Ghost and the work-procedure no
+    longer seed the rows, and an unplanned board can't false-trip the
+    done-claim/contract gates. Owner protocols keep their explicit phase rows.
     """
     board = TaskBoard(turn_id=turn_id, session_id=session_id, source="gateway")
     target = str(title or "").strip() or user_input[:80]
@@ -776,9 +776,10 @@ def _new_gateway_board(
     elif is_owner_comparison_activation(user_input):
         rows = _owner_comparison_gateway_phase_rows()
     elif model_owned and not proto:
-        # MO owns the board: a single placeholder it replaces via set_plan, instead
-        # of Ghost/work-procedure rows (which over-decomposed and desynced).
-        rows = [{"id": "1", "text": "Planning the work…", "status": "active", "kind": "inspect", "completion_gate": "tool", "depends_on": []}]
+        # MO owns the board: start EMPTY and let MO populate it via set_plan. An
+        # empty board (no rows) cannot false-trip the done-claim/contract gates if
+        # MO doesn't plan; once set_plan runs, its rows go through the normal gates.
+        return board
     elif not rows and not proto:
         # No Ghost plan and NOT an owner protocol: seed the matching build/reasoning
         # work procedure so the board carries the proven evidence-gated phases instead

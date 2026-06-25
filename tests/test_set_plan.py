@@ -51,14 +51,16 @@ def test_set_plan_no_usable_tasks_is_noop_even_when_on():
 
 # ── Phase 2: gateway stops Ghost/procedure seeding when MO owns the board ──
 
-def test_new_gateway_board_model_owned_uses_placeholder_not_ghost_rows():
+def test_new_gateway_board_model_owned_starts_empty_not_ghost_rows():
     from core.gateway import _new_gateway_board
     b = _new_gateway_board(
         "t", "s", "commit and push everything",
         rows=[{"id": "1", "text": "ghost a", "status": "active"}, {"id": "2", "text": "ghost b"}],
         model_owned=True,
     )
-    assert [t.title for t in b.tasks] == ["Planning the work…"]  # one placeholder; ghost rows dropped
+    # Empty board: ghost/procedure rows dropped; MO populates it via set_plan. An
+    # empty board can't false-trip the done-claim/contract gates if MO doesn't plan.
+    assert b.tasks == []
 
 
 def test_new_gateway_board_default_keeps_ghost_rows():

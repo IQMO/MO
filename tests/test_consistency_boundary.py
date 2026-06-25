@@ -74,6 +74,16 @@ def test_taskboard_boundary_detects_done_claim_with_open_rows():
     assert any(f.kind == "taskboard_done_claim_conflict" for f in boundary.findings)
 
 
+def test_taskboard_boundary_empty_board_with_done_claim_is_clean():
+    # Phase 3: a MO-owned board MO never populated via set_plan stays EMPTY (no
+    # rows). An empty board + a done-claim must NOT false-trip the conflict gate.
+    board = TaskBoard("turn", "build_create", [])
+
+    boundary = check_consistency_boundary("turn_final", task_board=board, final_text="Done, all fixed.")
+
+    assert not any(f.kind == "taskboard_done_claim_conflict" for f in boundary.findings)
+
+
 def test_learning_promise_without_record_is_finding():
     boundary = check_consistency_boundary(
         "turn_final",
