@@ -148,6 +148,18 @@ def _no_tool_evidence_continuation(
 class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
     """Turn-execution mixin: run loop, provider dispatch, tool handling."""
 
+    def _activate_final_report_row(self, task_board: TaskBoard, *, on_board_update: object = None, on_board_event: object = None) -> None:
+        """Activate the final report row and emit board update.
+
+        Shared by run_turn() and AgentTurnRecoveryMixin._finalize_turn_for_answer()
+        so both finalization paths show the same report row on the taskboard.
+        """
+        if task_board and task_board.tasks:
+            report_id = self._final_report_task_id(task_board)
+            if report_id and task_board.activate(report_id):
+                record_snapshot(task_board, "updated")
+                _emit_task_board_update(task_board, update="updated", on_board_update=on_board_update, on_board_event=on_board_event)
+
     def run_turn(self, user_input: str, task_board: TaskBoard | None = None, monitor: BackendMonitor | None = None, on_board_update: object = None, on_token: object = None, on_activity: object = None, on_first_tool: object = None, cancel_event: object = None, on_assistant_text: object = None, on_board_event: object = None, on_action: object = None) -> str:
         """Execute a single turn: detect lane, call provider with full tools, dispatch, critique.
 
@@ -796,11 +808,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # Final board update: activate report row then complete any active
             # final/report row before consistency checks so diagnostics see
             # current task truth.
+            self._activate_final_report_row(task_board, on_board_update=on_board_update, on_board_event=on_board_event)
             if task_board and task_board.tasks:
-                report_id = self._final_report_task_id(task_board)
-                if report_id and task_board.activate(report_id):
-                    record_snapshot(task_board, "updated")
-                    _emit_task_board_update(task_board, update="updated", on_board_update=on_board_update, on_board_event=on_board_event)
                 protocol_closed = self._finalize_self_protocol_task_board_for_answer(user_input, final_text, task_board)
                 if protocol_closed or (not protocol_closed and self._finalize_task_board_for_answer(task_board)):
                     record_snapshot(task_board, "completed" if task_board.open_count() == 0 else "updated")
@@ -855,8 +864,30 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             if _verify_instr:
                 self.session.add_assistant(_verify_instr)
                 continue
-            # OWNER_INTEGRITY_AUDIT reports are quantitative by design. The preflight tells the model
-            # the contract; this runtime gate enforces it against the actual turn.
+            # OWNER_INTEGRITY_AUDIT: normalize quantitative truth FIRST (tool calls, errors, corpus)
+            # so the runtime owns the numbers, not the model. The gate then only checks qualitative
+            # violations (coverage denominator, ledger path, dead-code claims, line spans) that the
+            # normalization layer cannot fix automatically. This order eliminates the band-aid loop
+            # where the gate loops on tool-count mismatches that normalization then overwrites anyway.
+            if is_owner_integrity_audit_activation(user_input):
+                _iam_tool_calls = sum((tool_call_counts or {}).values())
+                _iam_tool_errors = sum((tool_error_counts or {}).values())
+                _iam_corpus = owner_integrity_audit_source_corpus_count()
+                final_text = normalize_owner_integrity_audit_report_text(
+                    final_text,
+                    tool_calls=_iam_tool_calls,
+                    tool_errors=_iam_tool_errors,
+                    corpus=_iam_corpus,
+                )
+                try:
+                    reconcile_latest_owner_integrity_audit_report(
+                        tool_calls=_iam_tool_calls,
+                        tool_errors=_iam_tool_errors,
+                        corpus=_iam_corpus,
+                        report_text=final_text,
+                    )
+                except Exception:
+                    traceback.print_exc()
             _owner_integrity_audit_reporting_instruction = run_owner_integrity_audit_reporting_gate(
                 user_input,
                 final_text,
@@ -885,25 +916,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             if _claim_instruction:
                 self.session.add_assistant(_claim_instruction)
                 continue
-            if is_owner_integrity_audit_activation(user_input):
-                _iam_tool_calls = sum((tool_call_counts or {}).values())
-                _iam_tool_errors = sum((tool_error_counts or {}).values())
-                _iam_corpus = owner_integrity_audit_source_corpus_count()
-                final_text = normalize_owner_integrity_audit_report_text(
-                    final_text,
-                    tool_calls=_iam_tool_calls,
-                    tool_errors=_iam_tool_errors,
-                    corpus=_iam_corpus,
-                )
-                try:
-                    reconcile_latest_owner_integrity_audit_report(
-                        tool_calls=_iam_tool_calls,
-                        tool_errors=_iam_tool_errors,
-                        corpus=_iam_corpus,
-                        report_text=final_text,
-                    )
-                except Exception:
-                    traceback.print_exc()
             self.session.add_assistant(final_text, reasoning_content=str(reasoning) if reasoning else None)
             # Turn-end security check on modified files and response text
             if turn_modified_files:

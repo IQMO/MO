@@ -12,7 +12,6 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Any
-import traceback
 
 from core.agent.agent import create_agent
 from core.backend_monitor import get_monitor, redact_monitor_text
@@ -86,7 +85,7 @@ def run_service(
     """Run MO Agent as a headless long-lived service."""
     stop = stop_event or threading.Event()
     if install_signals:
-        _install_signal_handlers(stop)
+        install_signal_handlers(stop)
     runtime = create_service_runtime(config_path, surface=surface)
     try:
         while not stop.wait(max(0.1, float(poll_interval or 1.0))):
@@ -128,7 +127,7 @@ def _start_scheduler(agent: Any, gateway: Gateway) -> Any:
         return None
 
 
-def _install_signal_handlers(stop_event: threading.Event) -> None:
+def install_signal_handlers(stop_event: threading.Event) -> None:
     """Install SIGINT/SIGTERM handlers when running in the main thread."""
     if threading.current_thread() is not threading.main_thread():
         return
@@ -143,7 +142,7 @@ def _install_signal_handlers(stop_event: threading.Event) -> None:
         try:
             signal.signal(sig, _handle)
         except Exception:
-            traceback.print_exc()
+            pass
 
 
 def _emit_service_event(gateway: Any, kind: str, payload: dict[str, Any] | None = None) -> None:

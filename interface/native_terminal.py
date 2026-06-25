@@ -8,6 +8,7 @@ from typing import Any
 
 from . import input as _input_module
 from .input import prompt_toolkit_input
+from core.agent.agent_utils import visible_worker_state
 
 
 def read_native_user_input(agent: Any, console: Any) -> str:
@@ -73,16 +74,7 @@ def _startup_workers_summary(agent: Any) -> str:
 
 
 def _visible_worker_state(state: str) -> str:
-    value = str(state or "").strip().lower()
-    if value in {"offered", "accepted", "pending"}:
-        return "queued"
-    if value in {"active"}:
-        return "running"
-    if value in {"done"}:
-        return "completed"
-    if value in {"cancelled", "canceled"}:
-        return "paused"
-    return value if value in {"running", "queued", "blocked", "completed", "paused", "failed", "open"} else "running"
+    return visible_worker_state(state)
 
 
 def _startup_attention_summary(agent: Any) -> str:

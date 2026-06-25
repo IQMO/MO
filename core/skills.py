@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .atomic_write import atomic_write_text
+from .jsonl_utils import read_jsonl
 from .path_defaults import mo_home, resolve_state_path
 
 _MAX_BODY_CHARS = 1800
@@ -158,7 +159,7 @@ def load_generated_learning_skills(profile: Any | None = None) -> list[Skill]:
 def load_confirmed_suggestion_skills(profile: Any | None = None) -> list[Skill]:
     path = _memory_root(profile) / "learning_suggestions.jsonl"
     out: list[Skill] = []
-    for row in _read_jsonl(path):
+    for row in read_jsonl(path):
         if str(row.get("status") or "").lower() != "confirmed":
             continue
         recommendation = _one_line(row.get("recommendation", ""), 500)
@@ -184,7 +185,7 @@ def load_confirmed_suggestion_skills(profile: Any | None = None) -> list[Skill]:
 def load_promoted_workflow_skills(profile: Any | None = None) -> list[Skill]:
     path = _memory_root(profile) / "workflow_promoted.jsonl"
     out: list[Skill] = []
-    for row in _read_jsonl(path):
+    for row in read_jsonl(path):
         if str(row.get("status") or "").lower() != "promoted":
             continue
         trigger = _one_line(row.get("trigger", ""), 220)
@@ -938,25 +939,6 @@ def _memory_root(profile: Any | None = None) -> Path:
     if profile_path:
         return Path(profile_path).expanduser().parent
     return Path(resolve_state_path("memory"))
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    try:
-        if not path.exists():
-            return []
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(value, dict):
-                rows.append(value)
-    except OSError:
-        return []
-    return rows
 
 
 def _safe_support_path(value: str) -> Path | None:

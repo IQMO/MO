@@ -160,13 +160,7 @@ class AgentTurnRecoveryMixin:
         self.session.add_assistant(message)
         # Finalize taskboard if present
         if task_board and task_board.tasks:
-            report_id = self._final_report_task_id(task_board)
-            if report_id and task_board.activate(report_id):
-                record_snapshot(task_board, "updated")
-                _emit_task_board_update(
-                    task_board, update="updated",
-                    on_board_update=on_board_update, on_board_event=on_board_event,
-                )
+            self._activate_final_report_row(task_board, on_board_update=on_board_update, on_board_event=on_board_event)
             if self._finalize_task_board_for_answer(task_board):
                 record_snapshot(
                     task_board,

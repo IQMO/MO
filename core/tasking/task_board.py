@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..path_defaults import ENV_MO_STATE_HOME, ENV_TASKBOARD_LEDGER_DISABLE, ENV_TASKBOARD_LEDGER_PATH, TASKBOARD_LEDGER_PATH
+from ..jsonl_utils import read_recent_ledger_entries, resolve_ledger_path
+from ..path_defaults import ENV_TASKBOARD_LEDGER_DISABLE, ENV_TASKBOARD_LEDGER_PATH, TASKBOARD_LEDGER_PATH
 
 STATUSES = {"pending", "active", "completed", "blocked"}
 OPEN = {"pending", "active", "blocked"}
@@ -36,6 +37,25 @@ STATUS_MARKERS = {"completed": "√", "active": "→", "blocked": "!", "pending"
 def status_marker(status: str) -> str:
     """Return the D003 checklist symbol for a task status."""
     return STATUS_MARKERS.get(str(status or "").strip().lower(), STATUS_MARKERS["pending"])
+
+
+def attach_taskboard_to_text(owner: Any, text: str) -> str:
+    """Append compact taskboard render to text if the owner has a board with tasks.
+
+    Shared by the Telegram gateway and Ghost desktop companion so they both show
+    the same evidence-gated task truth.
+    """
+    text = str(text or "")
+    try:
+        board = getattr(owner, "last_task_board", None)
+        if board is None or not getattr(board, "tasks", None):
+            return text
+        rendered = str(board.render() or "").strip()
+        if not rendered or rendered in text:
+            return text
+        return f"{text}\n\n{rendered}" if text else rendered
+    except Exception:
+        return text
 
 
 @dataclass
@@ -825,26 +845,19 @@ def read_recent_snapshots(
         raw_lines = ledger_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except Exception:
         return []
-    matches: list[dict[str, Any]] = []
-    for raw in reversed(raw_lines):
-        try:
-            item = json.loads(raw)
-        except Exception:
-            continue
-        if not isinstance(item, dict):
-            continue
+
+    def _filter(item: dict[str, Any]) -> bool:
         if board_id and str(item.get("board_id") or "") != str(board_id):
-            continue
+            return False
         if turn_id and str(item.get("turn_id") or "") != str(turn_id):
-            continue
+            return False
         if source and str(item.get("source") or "") != str(source):
-            continue
+            return False
         if session_id and str(item.get("session_id") or "") != str(session_id):
-            continue
-        matches.append(item)
-        if len(matches) >= max(1, int(limit or 1)):
-            break
-    return list(reversed(matches))
+            return False
+        return True
+
+    return read_recent_ledger_entries(raw_lines, limit, filter_fn=_filter)
 
 
 def resume_last_board(
@@ -967,19 +980,12 @@ def _task_item_from_snapshot(snapshot: dict[str, Any]) -> TaskItem:
 
 def _resolve_ledger_path(path: str | Path | None = None) -> Path | None:
     """Return the ledger path, or None when ledger writes are disabled."""
-    if os.environ.get(ENV_TASKBOARD_LEDGER_DISABLE, "").strip().lower() in ("1", "true", "yes"):
-        return None
-    if path:
-        return Path(path)
-    env_path = os.environ.get(ENV_TASKBOARD_LEDGER_PATH, "")
-    if env_path:
-        return Path(env_path)
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        return None
-    state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-    if state_home:
-        return Path(state_home) / TASKBOARD_LEDGER_PATH
-    return Path(TASKBOARD_LEDGER_PATH)
+    return resolve_ledger_path(
+        path=path,
+        disable_env=ENV_TASKBOARD_LEDGER_DISABLE,
+        path_env=ENV_TASKBOARD_LEDGER_PATH,
+        default_name=TASKBOARD_LEDGER_PATH,
+    )
 
 
 def _snapshot_fingerprint(record: dict[str, Any]) -> str:

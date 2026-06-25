@@ -20,8 +20,9 @@ import traceback
 from .atomic_write import atomic_write_text
 from .backend_monitor import get_monitor, redact_monitor_text
 from .instance import get_instance_id
+from .jsonl_utils import read_recent_ledger_entries, resolve_ledger_path
 from .number_utils import as_int as _as_int
-from .path_defaults import ENV_MO_STATE_HOME, HEARTBEAT_LEDGER_PATH, ENV_HEARTBEAT_LEDGER_DISABLE, ENV_HEARTBEAT_LEDGER_PATH
+from .path_defaults import ENV_HEARTBEAT_LEDGER_DISABLE, ENV_HEARTBEAT_LEDGER_PATH, HEARTBEAT_LEDGER_PATH
 
 
 SURFACE_ALIASES = {
@@ -191,22 +192,15 @@ def read_recent_heartbeats(
         return []
     wanted = normalize_surface(surface) if surface else ""
     wanted_instance = str(instance_id or "").strip()
-    matches: list[dict[str, Any]] = []
-    for raw in reversed(raw_lines):
-        try:
-            item = json.loads(raw)
-        except Exception:
-            continue
-        if not isinstance(item, dict):
-            continue
+
+    def _filter(item: dict[str, Any]) -> bool:
         if wanted and normalize_surface(str(item.get("surface") or "")) != wanted:
-            continue
+            return False
         if wanted_instance and str(item.get("instance_id") or "") != wanted_instance:
-            continue
-        matches.append(item)
-        if len(matches) >= max(1, int(limit or 1)):
-            break
-    return list(reversed(matches))
+            return False
+        return True
+
+    return read_recent_ledger_entries(raw_lines, limit, filter_fn=_filter)
 
 
 def build_surface_environment_context(
@@ -318,19 +312,12 @@ def start_heartbeat_service_if_enabled(agent: Any, gateway: Any = None, *, surfa
 
 
 def _resolve_heartbeat_path(path: str | Path | None = None) -> Path | None:
-    if os.environ.get(ENV_HEARTBEAT_LEDGER_DISABLE, "").strip().lower() in {"1", "true", "yes"}:
-        return None
-    if path:
-        return Path(path)
-    env_path = os.environ.get(ENV_HEARTBEAT_LEDGER_PATH, "")
-    if env_path:
-        return Path(env_path)
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        return None
-    state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-    if state_home:
-        return Path(state_home) / HEARTBEAT_LEDGER_PATH
-    return Path(HEARTBEAT_LEDGER_PATH)
+    return resolve_ledger_path(
+        path=path,
+        disable_env=ENV_HEARTBEAT_LEDGER_DISABLE,
+        path_env=ENV_HEARTBEAT_LEDGER_PATH,
+        default_name=HEARTBEAT_LEDGER_PATH,
+    )
 
 
 def _context_pressure(agent: Any) -> dict[str, Any]:

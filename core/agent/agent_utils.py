@@ -3,11 +3,14 @@
 import inspect
 import os
 import re
+import time
 from pathlib import Path
 import traceback
+from typing import Any
 
 from ..env_utils import int_env
 from ..path_defaults import ENV_MO_STATE_HOME, mo_home, private_state_enabled
+from ..session.session import Session
 from ..tasking.task_board import TaskBoard, board_update_event
 from ..text_utils import cap_by_tokens, token_aware_truncation_enabled
 from interface.task_board_view import render_rich
@@ -46,20 +49,93 @@ def _call_on_first_tool(callback, tool_name: str, arguments: dict):
     return callback()
 
 
-def _prune_tool_audit_log(path: Path) -> None:
-    max_bytes = max(0, int_env("MO_TOOL_AUDIT_MAX_BYTES", 2_000_000))
+def prune_jsonl_log(
+    path: Path,
+    *,
+    env_max_bytes_var: str,
+    env_keep_lines_var: str,
+    default_max_bytes: int = 1_000_000,
+    default_keep_lines: int = 2_000,
+) -> None:
+    """Trim a JSONL log to max_bytes, keeping at least N trailing lines.
+
+    Common pattern shared by ghost_audit, review_audit, and tool_audit.
+    Each provides its own env var names so config is independent per system.
+    """
+    max_bytes = max(0, int_env(env_max_bytes_var, default_max_bytes))
     if max_bytes <= 0:
         return
     try:
         if not path.exists() or path.stat().st_size <= max_bytes:
             return
-        keep = max(1, int_env("MO_TOOL_AUDIT_KEEP_LINES", 5_000))
+        keep = max(1, int_env(env_keep_lines_var, default_keep_lines))
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-keep:]
         while len(("\n".join(lines) + "\n").encode("utf-8")) > max_bytes and len(lines) > 1:
             lines.pop(0)
         path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
     except Exception:
         return
+
+
+def _prune_tool_audit_log(path: Path) -> None:
+    """Legacy wrapper — delegates to shared prune_jsonl_log."""
+    prune_jsonl_log(
+        path,
+        env_max_bytes_var="MO_TOOL_AUDIT_MAX_BYTES",
+        env_keep_lines_var="MO_TOOL_AUDIT_KEEP_LINES",
+        default_max_bytes=2_000_000,
+        default_keep_lines=5_000,
+    )
+
+
+def visible_worker_state(state: str) -> str:
+    """Normalize a raw worker state into a display-friendly label.
+
+    Shared by AgentStatusCommands._visible_worker_state and the native
+    terminal startup summary so they stay in sync.
+    """
+    value = str(state or "").strip().lower()
+    if value in {"offered", "accepted", "pending"}:
+        return "queued"
+    if value in {"active"}:
+        return "running"
+    if value in {"done"}:
+        return "completed"
+    if value in {"cancelled", "canceled"}:
+        return "paused"
+    return value if value in {"running", "queued", "blocked", "completed", "paused", "failed", "open"} else "running"
+
+
+def load_session_from_manager(agent: Any, session_name: str, *, session_id_prefix: str, sanitize: bool = False) -> "Session":
+    """Load a saved session from the agent's session manager and hydrate fields.
+
+    Shared by the scheduler and Telegram gateway so both hydrate session data
+    the same way. Callers pass a unique session_id_prefix and optionally request
+    sanitize_for_provider() (Telegram does, scheduler does not).
+    """
+    session = Session(str(getattr(agent, "system_message", "") or "You are MO."))
+    manager = getattr(agent, "_sessions", None)
+    data = None
+    if manager and hasattr(manager, "load"):
+        try:
+            data = manager.load(session_name)
+        except Exception:
+            data = None
+    if isinstance(data, dict):
+        session.session_id = data.get("session_id", session.session_id)
+        session.turn_count = int(data.get("turn_count", 0) or 0)
+        session.messages = list(data.get("messages", []) or [])
+        session.total_tokens = int(data.get("total_tokens", 0) or 0)
+        session.output_tokens = int(data.get("output_tokens", 0) or 0)
+        session.token_log = list(data.get("token_log", []) or [])
+        if sanitize:
+            try:
+                session.sanitize_for_provider()
+            except Exception:
+                pass
+    else:
+        session.session_id = f"{session_id_prefix}-{int(time.time())}"
+    return session
 
 
 GHOST_PROPOSAL_SYSTEM = """You are Ghost, MO's fast planner and intent guardrail layer.

@@ -17,6 +17,7 @@ from typing import Any
 from ..atomic_write import atomic_write_text
 from ..backend_monitor import redact_monitor_text
 from ..env_utils import int_env
+from ..jsonl_utils import read_jsonl
 
 
 @dataclass(frozen=True)
@@ -498,25 +499,14 @@ def _mark_suggestions_prompted(path: Path, ids: tuple[str, ...], prompted_at: fl
     wanted = {str(item) for item in ids}
     if not wanted or not path.exists():
         return
+    rows = read_jsonl(path)
     changed = False
-    rows: list[dict[str, Any]] = []
-    try:
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict):
-                if str(row.get("id") or "") in wanted:
-                    row["last_prompted_at"] = prompted_at
-                    changed = True
-                rows.append(row)
-        if changed:
-            atomic_write_text(path, "\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
-    except OSError:
-        return
+    for row in rows:
+        if str(row.get("id") or "") in wanted:
+            row["last_prompted_at"] = prompted_at
+            changed = True
+    if changed:
+        atomic_write_text(path, "\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
 
 
 _RELEVANCE_STOPWORDS = frozenset({
@@ -583,20 +573,7 @@ def _snippet(text: str) -> str:
 def _existing_ids(path: Path) -> set[str]:
     if not path.exists():
         return set()
-    ids: set[str] = set()
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(value, dict) and value.get("id"):
-                ids.add(str(value.get("id")))
-    except OSError:
-        pass
-    return ids
+    return {str(row["id"]) for row in read_jsonl(path) if row.get("id")}
 
 
 def _suggestion_from_dict(row: Any) -> LearningSuggestion | None:

@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 import traceback
 
+from .agent_utils import visible_worker_state
+
 
 class AgentStatusCommands:
     """`/status` dashboard and its per-area summary helpers."""
@@ -127,16 +129,7 @@ class AgentStatusCommands:
             return "needs attention"
 
     def _visible_worker_state(self, state: str) -> str:
-        value = str(state or "").strip().lower()
-        if value in {"offered", "accepted", "pending"}:
-            return "queued"
-        if value in {"active"}:
-            return "running"
-        if value in {"done"}:
-            return "completed"
-        if value in {"cancelled", "canceled"}:
-            return "paused"
-        return value if value in {"running", "queued", "blocked", "completed", "paused", "failed", "open"} else "running"
+        return visible_worker_state(state)
 
     def _status_goal_summary(self) -> str:
         try:

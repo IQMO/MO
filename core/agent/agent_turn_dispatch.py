@@ -33,6 +33,7 @@ from ..owner_protocols import (
     owner_comparison_readonly_source_roots,
 )
 from ..path_defaults import mo_home, operator_pack_root, repo_root
+from ..tasking.task_evidence import taskboard_tool_summary
 
 
 # Read-family tools return data the model EXPLICITLY requested and are already
@@ -326,13 +327,7 @@ class AgentTurnDispatchMixin:
 
     @staticmethod
     def _safe_tool_summary(name: str, arguments: dict) -> str:
-        if name in {"read_file", "write_file", "edit_file"}:
-            return str(arguments.get("path") or "")[:240]
-        if name in {"find_files", "grep", "git_status", "test_runner", "project_bridge"}:
-            return str(arguments.get("root") or arguments.get("workdir") or arguments.get("path") or arguments.get("pattern") or "")[:240]
-        if name == "shell":
-            return str(arguments.get("command") or "")[:240]
-        return ""
+        return taskboard_tool_summary(name, arguments)
 
     @staticmethod
     def _tool_result_is_error(result: str) -> bool:

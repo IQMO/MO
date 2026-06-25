@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 import traceback
 
+from core.agent.agent_utils import load_session_from_manager
 from core.auto_reply import maybe_auto_reply
 from core.backend_monitor import get_monitor, redact_monitor_text
 from core.heartbeat import record_heartbeat
@@ -23,6 +24,7 @@ from core.path_defaults import resolve_state_path
 from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
 from core.secrets import resolve_secret, secret_status
 from core.session.session import Session
+from core.tasking.task_board import attach_taskboard_to_text
 
 from .auth import TelegramAuthStore
 from .formatting import compact_for_telegram
@@ -378,28 +380,11 @@ class TelegramGateway:
                 self.agent._session_name = previous_session
 
     def _load_session(self, session_name: str) -> Session:
-        session = Session(str(getattr(self.agent, "system_message", "") or "You are MO."))
-        manager = getattr(self.agent, "_sessions", None)
-        data = None
-        if manager and hasattr(manager, "load"):
-            try:
-                data = manager.load(session_name)
-            except Exception:
-                data = None
-        if isinstance(data, dict):
-            session.session_id = data.get("session_id", session.session_id)
-            session.turn_count = int(data.get("turn_count", 0) or 0)
-            session.messages = list(data.get("messages", []) or [])
-            session.total_tokens = int(data.get("total_tokens", 0) or 0)
-            session.output_tokens = int(data.get("output_tokens", 0) or 0)
-            session.token_log = list(data.get("token_log", []) or [])
-            try:
-                session.sanitize_for_provider()
-            except Exception:
-                traceback.print_exc()
-        else:
-            session.session_id = f"mo-telegram-{int(time.time())}"
-        return session
+        return load_session_from_manager(
+            self.agent, session_name,
+            session_id_prefix="mo-telegram",
+            sanitize=True,
+        )
 
     def _save_session(self, session_name: str, session: Session) -> None:
         manager = getattr(self.agent, "_sessions", None)
@@ -451,23 +436,8 @@ class TelegramGateway:
 
     @staticmethod
     def _append_task_board(reply: str, router: Any) -> str:
-        """Append the compact taskboard to remote work replies.
-
-        Task truth is MO's product contract; the Telegram surface must show the
-        same evidence-gated board the terminal shows, not text-only answers.
-        Best-effort: rendering problems never break reply delivery.
-        """
-        text = str(reply or "")
-        try:
-            board = getattr(router, "last_task_board", None)
-            if board is None or not getattr(board, "tasks", None):
-                return text
-            rendered = str(board.render() or "").strip()
-            if not rendered or rendered in text:
-                return text
-            return f"{text}\n\n{rendered}" if text else rendered
-        except Exception:
-            return text
+        """Append the compact taskboard to remote work replies."""
+        return attach_taskboard_to_text(router, reply)
 
     def _post_json(self, client: Any, base: str, method: str, payload: dict[str, Any], *, timeout: float = 20.0) -> Any:
         return client.post(f"{base}/{method}", json=payload, timeout=timeout)

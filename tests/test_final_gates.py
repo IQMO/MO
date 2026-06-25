@@ -183,7 +183,8 @@ def test_owner_integrity_audit_reporting_gate_silent_for_non_owner_integrity_aud
     assert out is None
 
 
-def test_owner_integrity_audit_reporting_gate_blocks_tool_count_mismatch(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_ignores_tool_count_mismatch_normalized(monkeypatch):
+    """Tool-call count mismatches are owned by normalization layer — gate does not block."""
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
     out = run_owner_integrity_audit_reporting_gate(
@@ -193,11 +194,11 @@ def test_owner_integrity_audit_reporting_gate_blocks_tool_count_mismatch(monkeyp
         {},
         fired=set(),
     )
-    assert out is not None
-    assert "exact tool calls = 54" in out
+    assert out is None  # normalization owns tool counts, gate does not block
 
 
-def test_owner_integrity_audit_reporting_gate_rechecks_after_corrective_tool_changes_count(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_normalization_owns_tool_count_corrections(monkeypatch):
+    """After normalization fixes tool counts, the gate does not re-block on them."""
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
     out = run_owner_integrity_audit_reporting_gate(
@@ -209,12 +210,11 @@ def test_owner_integrity_audit_reporting_gate_rechecks_after_corrective_tool_cha
         continuations=1,
         max_continuations=3,
     )
-    assert out is not None
-    assert "tool-call count mismatch" in out
-    assert "exact tool calls = 50" in out
+    assert out is None  # normalization layer owns tool counts; gate won't block on them
 
 
-def test_owner_integrity_audit_reporting_gate_reports_all_violations_at_once(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_reports_qualitative_violations_only(monkeypatch):
+    """Tool-count/error mismatches are normalization-owned. Gate reports only qualitative violations."""
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
     text = (
@@ -229,14 +229,15 @@ def test_owner_integrity_audit_reporting_gate_reports_all_violations_at_once(mon
         fired=set(),
     )
     assert out is not None
-    assert "tool-call count mismatch" in out
-    assert "tool-error count mismatch" in out
     assert "sampled N of 369" in out
     assert '"zero dead code" claim lacks dead-code analyzer evidence' in out
     assert "broad file-read coverage claim" in out
+    assert "tool-call count mismatch" not in out
+    assert "tool-error count mismatch" not in out
 
 
-def test_owner_integrity_audit_reporting_gate_blocks_error_count_mismatch(monkeypatch):
+def test_owner_integrity_audit_reporting_gate_ignores_error_count_mismatch_normalized(monkeypatch):
+    """Tool-error count mismatches are owned by normalization layer — gate does not block."""
     monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     out = run_owner_integrity_audit_reporting_gate(
@@ -246,8 +247,7 @@ def test_owner_integrity_audit_reporting_gate_blocks_error_count_mismatch(monkey
         {"shell": 2},
         fired=set(),
     )
-    assert out is not None
-    assert "exact tool errors = 2" in out
+    assert out is None  # normalization owns tool error counts, gate does not block
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_wrong_scope_denominator(monkeypatch):

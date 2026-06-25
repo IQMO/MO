@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..agent.agent_utils import prune_jsonl_log
 from ..backend_monitor import redact_monitor_text
 from ..env_utils import int_env
 from ..path_defaults import ENV_MO_STATE_HOME, mo_home, private_state_enabled
@@ -15,19 +16,11 @@ LOG_PATH = Path("logs/ghost_audit.jsonl")
 
 
 def _prune_ghost_audit_log(path: Path) -> None:
-    max_bytes = max(0, int_env("MO_GHOST_AUDIT_MAX_BYTES", 1_000_000))
-    if max_bytes <= 0:
-        return
-    try:
-        if not path.exists() or path.stat().st_size <= max_bytes:
-            return
-        keep = max(1, int_env("MO_GHOST_AUDIT_KEEP_LINES", 2_000))
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-keep:]
-        while len(("\n".join(lines) + "\n").encode("utf-8")) > max_bytes and len(lines) > 1:
-            lines.pop(0)
-        path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
-    except Exception:
-        return
+    prune_jsonl_log(
+        path,
+        env_max_bytes_var="MO_GHOST_AUDIT_MAX_BYTES",
+        env_keep_lines_var="MO_GHOST_AUDIT_KEEP_LINES",
+    )
 
 
 def append_ghost_audit(

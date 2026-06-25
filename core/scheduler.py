@@ -19,6 +19,7 @@ import traceback
 from .backend_monitor import get_monitor, redact_monitor_text
 from .heartbeat import record_heartbeat
 from .session.session import Session
+from .agent.agent_utils import load_session_from_manager
 from .path_defaults import resolve_state_path
 from .runtime_lock import acquire_runtime_lock, release_runtime_lock
 from .secrets import resolve_secret
@@ -448,24 +449,11 @@ def _append_run(path: Path, item: dict[str, Any]) -> None:
 
 
 def _load_scheduler_session(agent: Any, session_name: str) -> Session:
-    session = Session(str(getattr(agent, "system_message", "") or "You are MO."))
-    manager = getattr(agent, "_sessions", None)
-    data = None
-    if manager and hasattr(manager, "load"):
-        try:
-            data = manager.load(session_name)
-        except Exception:
-            data = None
-    if isinstance(data, dict):
-        session.session_id = data.get("session_id", session.session_id)
-        session.turn_count = int(data.get("turn_count", 0) or 0)
-        session.messages = list(data.get("messages", []) or [])
-        session.total_tokens = int(data.get("total_tokens", 0) or 0)
-        session.output_tokens = int(data.get("output_tokens", 0) or 0)
-        session.token_log = list(data.get("token_log", []) or [])
-    else:
-        session.session_id = f"mo-scheduler-{_safe_name(session_name)}-{int(time.time())}"
-    return session
+    return load_session_from_manager(
+        agent, session_name,
+        session_id_prefix=f"mo-scheduler-{_safe_name(session_name)}",
+        sanitize=False,
+    )
 
 
 def _save_scheduler_session(agent: Any, session_name: str, session: Session) -> None:

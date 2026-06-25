@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ..atomic_write import atomic_write_json, atomic_write_text
+from ..jsonl_utils import read_jsonl
 from ..path_defaults import resolve_state_path
 from ..skills import skills_root
 from ..text_safety import contains_secret_value
@@ -50,10 +51,10 @@ def export_learning_bundle(profile: Any, *, path: str | Path | None = None) -> d
         if file_path.exists():
             bundle["profile_files"][name] = file_path.read_text(encoding="utf-8", errors="replace")
     bundle["confirmed_suggestions"] = [
-        row for row in _read_jsonl(memory / "learning_suggestions.jsonl")
+        row for row in read_jsonl(memory / "learning_suggestions.jsonl")
         if str(row.get("status") or "").lower() == "confirmed"
     ]
-    bundle["promoted_workflows"] = _read_jsonl(memory / "workflow_promoted.jsonl")
+    bundle["promoted_workflows"] = read_jsonl(memory / "workflow_promoted.jsonl")
     bundle["skills"] = _read_skill_tree(skills_root(profile))
 
     flat = json.dumps(bundle, ensure_ascii=False)
@@ -93,8 +94,8 @@ def import_learning_bundle(profile: Any, path: str | Path, *, confirm: bool = Fa
     memory = _memory_dir(profile)
     suggestions_path = memory / "learning_suggestions.jsonl"
     promoted_path = memory / "workflow_promoted.jsonl"
-    existing_suggestions = {str(row.get("id") or "") for row in _read_jsonl(suggestions_path)}
-    existing_promoted = {str(row.get("id") or "") for row in _read_jsonl(promoted_path)}
+    existing_suggestions = {str(row.get("id") or "") for row in read_jsonl(suggestions_path)}
+    existing_promoted = {str(row.get("id") or "") for row in read_jsonl(promoted_path)}
     skill_root = skills_root(profile)
     existing_skill_files = _existing_skill_files(skill_root)
 
@@ -135,22 +136,6 @@ def import_learning_bundle(profile: Any, path: str | Path, *, confirm: bool = Fa
             atomic_write_text(review_dir / name, str(content), encoding="utf-8")
     plan.update({"imported": True, "dry_run": False, "review_dir": str(review_dir) if profile_files else ""})
     return plan
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            rows.append(row)
-    return rows
 
 
 def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:

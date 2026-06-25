@@ -16,6 +16,7 @@ import traceback
 
 from ..atomic_write import atomic_write_text
 from ..env_utils import int_env
+from ..jsonl_utils import read_jsonl
 from ..text_safety import contains_secret_value
 from ..threat_scan import scan_text
 
@@ -191,7 +192,7 @@ def promote_workflow_candidate(profile: Any, user_text: str, assistant_text: str
     if request_scan.blocked or _has_secret_warning(request_scan):
         return {"promoted": False, "blocked": True, "reason": request_scan.reason() or "secret-bearing approval text"}
     path = _candidate_path(profile)
-    candidate = _select_candidate(_read_jsonl(path), text)
+    candidate = _select_candidate(read_jsonl(path), text)
     if not candidate:
         return {"promoted": False, "reason": "no matching skill candidate"}
     candidate_text = "\n".join(str(candidate.get(key) or "") for key in ("trigger", "behavior", "scope", "anti_pattern", "source_text"))
@@ -226,7 +227,7 @@ def build_workflow_learning_context(profile: Any, user_input: str, *, max_chars:
     user_text = str(user_input or "").strip()
     if not user_text or not any(marker in user_text.lower() for marker in _WORK_MARKERS):
         return ""
-    selected = _relevant_promoted(_read_jsonl(_promoted_path(profile)), user_text)
+    selected = _relevant_promoted(read_jsonl(_promoted_path(profile)), user_text)
     if not selected:
         return ""
     lines = [
@@ -245,7 +246,7 @@ def build_workflow_learning_context(profile: Any, user_input: str, *, max_chars:
 
 def load_promoted_workflows(profile: Any) -> list[dict[str, Any]]:
     """Load approved workflows for tests/internal maintenance."""
-    return _read_jsonl(_promoted_path(profile))
+    return read_jsonl(_promoted_path(profile))
 
 
 def stage_structural_graph_candidates(profile: Any, *, root: str | Path | None = None, max_items: int = 8) -> dict[str, Any]:
@@ -316,7 +317,7 @@ def _expire_stale_candidates(path: Path, *, ttl_days: int | None = None) -> int:
     if ttl <= 0 or not path.exists():
         return 0
     cutoff = time.time() - ttl * 86400
-    records = _read_jsonl(path)
+    records = read_jsonl(path)
     kept = [
         r for r in records
         if str(r.get("status") or "candidate") != "candidate" or float(r.get("created_at") or cutoff) >= cutoff
@@ -330,7 +331,7 @@ def _expire_stale_candidates(path: Path, *, ttl_days: int | None = None) -> int:
 def _append_candidate_record(path: Path, candidate: dict[str, Any]) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     _expire_stale_candidates(path)
-    records = _read_jsonl(path)
+    records = read_jsonl(path)
     if any(record.get("id") == candidate["id"] for record in records):
         return False
     norm = _normalize_candidate_text(candidate)
@@ -463,29 +464,10 @@ def _prune_jsonl(path: Path, env_name: str, default: int) -> None:
         return
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    try:
-        if not path.exists():
-            return []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(value, dict):
-                records.append(value)
-    except OSError:
-        return []
-    return records
-
-
 def _append_unique_record(path: Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     record_id = str(record.get("id") or "")
-    if record_id and any(str(item.get("id") or "") == record_id for item in _read_jsonl(path)):
+    if record_id and any(str(item.get("id") or "") == record_id for item in read_jsonl(path)):
         return
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
@@ -493,7 +475,7 @@ def _append_unique_record(path: Path, record: dict[str, Any]) -> None:
 
 
 def _rewrite_candidate_status(path: Path, candidate_id: str, promoted: dict[str, Any]) -> None:
-    records = _read_jsonl(path)
+    records = read_jsonl(path)
     if not records:
         return
     out = [promoted if str(record.get("id") or "") == candidate_id else record for record in records]

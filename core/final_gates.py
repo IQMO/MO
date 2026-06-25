@@ -212,9 +212,10 @@ def run_owner_integrity_audit_reporting_gate(
 ) -> str | None:
     """Force OWNER_INTEGRITY_AUDIT reports to reconcile with runtime/code truth before finishing.
 
-    The OWNER_INTEGRITY_AUDIT preflight gives the model the contract at turn start. This answer-time gate
-    closes the hole observed live: the model can still *say* "18 tool calls" after running
-    54 tools unless the runtime checks the final answer before accepting it.
+    Tool-call and tool-error counts are owned by the runtime normalization layer
+    (``normalize_owner_integrity_audit_report_text``), which runs before this gate.
+    This gate only enforces qualitative/structural violations normalization cannot fix:
+    coverage denominator, ledger path, dead-code claims, line-span accuracy.
     """
     if not is_owner_integrity_audit_activation(user_input):
         return None
@@ -250,13 +251,10 @@ def run_owner_integrity_audit_reporting_gate(
         on_activity("OWNER_INTEGRITY_AUDIT report conflicts with runtime truth - reconciling before finishing...")
     return (
         "[OWNER_INTEGRITY_AUDIT REPORTING TRUTH] Your final OWNER_INTEGRITY_AUDIT report conflicts with runtime/code truth: "
-        f"{violation}. Continue now and correct the report before finishing. Required facts: "
-        f"exact tool calls = {actual_tool_calls}; exact tool errors = {actual_tool_errors}; "
-        f"coverage must use 'sampled N of {corpus}'; the evidence ledger must be under "
+        f"{violation}. Continue now and correct the report before finishing. "
+        f"Coverage must use 'sampled N of {corpus}'; the evidence ledger must be under "
         "~/.mo/memory/owner_integrity_audit/ with a session-unique filename, not repo-local memory/ and not "
-        "date-only. If you use another tool, these counts change; recount from the updated "
-        "runtime history before the next final answer. Any function/file line-count claim "
-        "must be re-measured from the current tree or removed."
+        "date-only. Any function/file line-count claim must be re-measured from the current tree or removed."
     )
 
 
@@ -268,18 +266,14 @@ def _owner_integrity_audit_reporting_violation(
     corpus: int,
     root: str,
 ) -> str | None:
-    violations: list[str] = []
-    tool_claims = _claimed_ints(_TOOL_CALL_CLAIM_RE, text)
-    if not tool_claims:
-        violations.append(f"missing exact tool-call count (actual {actual_tool_calls})")
-    elif any(value != actual_tool_calls for value in tool_claims):
-        violations.append(f"tool-call count mismatch (claimed {tool_claims}, actual {actual_tool_calls})")
+    """Check qualitative report violations only.
 
-    error_claims = _claimed_ints(_TOOL_ERROR_CLAIM_RE, text)
-    if not error_claims:
-        violations.append(f"missing exact tool-error count (actual {actual_tool_errors})")
-    elif any(value != actual_tool_errors for value in error_claims):
-        violations.append(f"tool-error count mismatch (claimed {error_claims}, actual {actual_tool_errors})")
+    Tool-call and tool-error counts are owned by the runtime normalization layer
+    (``normalize_owner_integrity_audit_report_text``), which runs before this gate.
+    This function only checks structural/qualitative violations the normalization
+    layer cannot fix automatically.
+    """
+    violations: list[str] = []
 
     denominators = {int(match.group(1)) for match in _SAMPLED_DENOMINATOR_RE.finditer(text or "")}
     if corpus not in denominators:

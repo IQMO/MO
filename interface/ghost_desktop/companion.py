@@ -26,6 +26,7 @@ from typing import Any, Callable
 
 from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
 from core.sandbox import redact_sensitive_text
+from core.tasking.task_board import attach_taskboard_to_text
 from interface.ghost_desktop.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
 from interface.ghost_desktop.tray import CompanionTray, start_tray_if_enabled
 
@@ -663,20 +664,7 @@ class CompanionSurface:
             self._log_action("ghost_plan", plan[:200])
 
     def _append_task_board(self, reply: str) -> str:
-        # Taskboard is MO's product contract — every surface shows the same
-        # evidence-gated board. Mirrors the Telegram surface (board.render()),
-        # best-effort so a render glitch never swallows the answer.
-        text = str(reply or "")
-        try:
-            board = getattr(self._gateway, "last_task_board", None)
-            if board is None or not getattr(board, "tasks", None):
-                return text
-            rendered = str(board.render() or "").strip()
-            if not rendered or rendered in text:
-                return text
-            return f"{text}\n\n{rendered}" if text else rendered
-        except Exception:
-            return text
+        return attach_taskboard_to_text(self._gateway, reply)
 
     def _on_assistant_text(self, delta: str) -> None:
         # Called from the Gateway thread — tkinter is NOT thread-safe, so never
