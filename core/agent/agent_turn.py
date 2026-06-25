@@ -82,6 +82,266 @@ from ..security_check import run_turn_security_check
 from interface.ghost import sanitize_proposal_for_context
 from interface.task_board_view import render_plain
 
+# ---------------------------------------------------------------------------
+# Post-provider gate pipeline — declarative gate/action sequence
+# ---------------------------------------------------------------------------
+# Each pipeline entry is (name, kind, fn) where fn(agent, ctx) returns
+# _CONTINUE (the gate fired — continue the provider loop) or None (pass).
+# Actions always return None.
+
+_CONTINUE = object()
+
+# Maximum corrective re-prompts for owner-protocol terminal-stop gates and the
+# contract/self-protocol-truth gates. After the cap, allow the stop with a logged
+# disagreement note — must not loop to max_provider_requests.
+PROTOCOL_STOP_GATE_MAX = 2
+
+
+class _GateContext:
+    """Mutable state threaded through the post-provider gate/action pipeline.
+    
+    Holds all the variables the gates and actions read or mutate, so the
+    pipeline entries are pure functions of (agent, ctx).
+    """
+    __slots__ = (
+        "user_input", "content", "final_text", "reasoning", "notes",
+        "task_board", "monitor", "on_activity", "on_board_update", "on_board_event",
+        "final_gates_fired", "protocol_stop_gate_continuations",
+        "contract_gate_continuations", "self_protocol_truth_continuations",
+        "owner_integrity_audit_reporting_truth_continuations",
+        "turn_initial_completed_ids", "turn_modified_files",
+        "tool_call_counts", "tool_error_counts",
+        "owner_maintenance_active", "owner_comparison_active",
+        "owner_interface_audit_active", "no_evidence",
+        "devmode_monitor_path", "devmode_run_ids",
+        "devmode_frozen_errs", "devmode_session_dir",
+        "total_tool_calls", "boundary_report", "response",
+    )
+
+
+def _run_post_provider_pipeline(agent, ctx: _GateContext) -> str:
+    """Run the post-provider gate/action pipeline. Returns ctx.final_text on pass,
+    or _CONTINUE when a gate fires (caller must ``continue`` the provider loop).
+    """
+    for _name, _kind, fn in _POST_PROVIDER_PIPELINE:
+        result = fn(agent, ctx)
+        if result is _CONTINUE:
+            return _CONTINUE
+    return ctx.final_text
+
+
+# -- Pipeline entry functions (pure: (agent, ctx) -> _CONTINUE | None) ----------
+
+def _pipeline_no_tool_evidence(agent, ctx):
+    if ctx.no_evidence is not None:
+        if ctx.on_activity:
+            ctx.on_activity(ctx.no_evidence[0])
+        agent.session.add_assistant(ctx.no_evidence[1])
+        return _CONTINUE
+    return None
+
+
+def _pipeline_owner_interface_audit_stop(agent, ctx):
+    if not owner_interface_audit_final_allows_stop(ctx.user_input, ctx.content):
+        if ctx.protocol_stop_gate_continuations.get("owner_interface_audit", 0) < PROTOCOL_STOP_GATE_MAX:
+            ctx.protocol_stop_gate_continuations["owner_interface_audit"] = ctx.protocol_stop_gate_continuations.get("owner_interface_audit", 0) + 1
+            if ctx.on_activity:
+                ctx.on_activity("continuing OWNER_INTERFACE_AUDIT...")
+            agent.session.add_assistant(owner_interface_audit_continuation_instruction(ctx.user_input, ctx.content))
+            return _CONTINUE
+        if ctx.on_activity:
+            ctx.on_activity("OWNER_INTERFACE_AUDIT stop-gate disagreement — allowing stop after cap")
+    return None
+
+
+def _pipeline_owner_comparison_stop(agent, ctx):
+    if not owner_comparison_final_allows_stop(ctx.user_input, ctx.content):
+        if ctx.protocol_stop_gate_continuations.get("owner_comparison", 0) < PROTOCOL_STOP_GATE_MAX:
+            ctx.protocol_stop_gate_continuations["owner_comparison"] = ctx.protocol_stop_gate_continuations.get("owner_comparison", 0) + 1
+            if ctx.on_activity:
+                ctx.on_activity("continuing OWNER_COMPARISON...")
+            agent.session.add_assistant(owner_comparison_continuation_instruction(ctx.user_input, ctx.content))
+            return _CONTINUE
+        if ctx.on_activity:
+            ctx.on_activity("OWNER_COMPARISON stop-gate disagreement — allowing stop after cap")
+    return None
+
+
+def _pipeline_devmode_economy(agent, ctx):
+    """Write the economy ledger BEFORE the OWNER_MAINTENANCE closeout gate evaluates."""
+    if ctx.owner_maintenance_active:
+        agent._write_devmode_economy_record()
+        agent._reconcile_devmode_summary_marker(ctx.content)
+    return None
+
+
+def _pipeline_owner_maintenance_stop(agent, ctx):
+    if not owner_maintenance_final_allows_stop(
+        ctx.user_input, ctx.content,
+        monitor_path=ctx.devmode_monitor_path,
+        session_ids=ctx.devmode_run_ids or None,
+        frozen_error_count=ctx.devmode_frozen_errs,
+        session_dir=ctx.devmode_session_dir,
+    ):
+        if ctx.protocol_stop_gate_continuations.get("owner_maintenance", 0) < PROTOCOL_STOP_GATE_MAX:
+            ctx.protocol_stop_gate_continuations["owner_maintenance"] = ctx.protocol_stop_gate_continuations.get("owner_maintenance", 0) + 1
+            if ctx.on_activity:
+                ctx.on_activity("continuing OWNER_MAINTENANCE...")
+            agent.session.add_assistant(owner_maintenance_continuation_instruction(
+                ctx.user_input, ctx.content,
+                monitor_path=ctx.devmode_monitor_path,
+                session_ids=ctx.devmode_run_ids or None,
+                frozen_error_count=ctx.devmode_frozen_errs,
+                session_dir=ctx.devmode_session_dir,
+            ))
+            return _CONTINUE
+        if ctx.on_activity:
+            ctx.on_activity("OWNER_MAINTENANCE stop-gate disagreement — allowing stop after cap")
+    return None
+
+
+def _pipeline_critique(agent, ctx):
+    """Finalize the response text (secrets-only critique) and record learning."""
+    if ctx.on_activity:
+        ctx.on_activity("finalizing response...")
+    critique_result = agent._review_final_answer(ctx.content, monitor=ctx.monitor)
+    ctx.final_text = critique_result.text
+    ctx.reasoning = getattr(ctx.response, "reasoning_content", None) or getattr(ctx.response, "reasoning", None)
+    ctx.notes = agent._record_turn_memory_and_learning(ctx.user_input, ctx.final_text)
+    ctx.final_text = agent._append_after_turn_notes(ctx.final_text, ctx.notes)
+    return None
+
+
+def _pipeline_board_finalization(agent, ctx):
+    """Activate final report row, finalize self-protocol and task boards."""
+    agent._activate_final_report_row(ctx.task_board, on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
+    if ctx.task_board and ctx.task_board.tasks:
+        protocol_closed = agent._finalize_self_protocol_task_board_for_answer(ctx.user_input, ctx.final_text, ctx.task_board)
+        if protocol_closed or (not protocol_closed and agent._finalize_task_board_for_answer(ctx.task_board)):
+            record_snapshot(ctx.task_board, "completed" if ctx.task_board.open_count() == 0 else "updated")
+            _emit_task_board_update(ctx.task_board, update="completed" if ctx.task_board.open_count() == 0 else "updated", on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
+    return None
+
+
+def _pipeline_contract_gate(agent, ctx):
+    _contract_instr, new_count = run_contract_gate(
+        agent, ctx.task_board, ctx.user_input, ctx.turn_initial_completed_ids,
+        count=ctx.contract_gate_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
+        on_activity=ctx.on_activity,
+    )
+    ctx.contract_gate_continuations = new_count
+    if _contract_instr:
+        agent.session.add_assistant(_contract_instr)
+        return _CONTINUE
+    return None
+
+
+def _pipeline_consistency_boundary(agent, ctx):
+    ctx.boundary_report = agent._run_consistency_boundary(
+        "turn_final", user_text=ctx.user_input, final_text=ctx.final_text,
+        learning_notes=ctx.notes, task_board=ctx.task_board,
+    )
+    return None
+
+
+def _pipeline_self_protocol_truth(agent, ctx):
+    _sp_instr, new_count = run_self_protocol_truth_gate(
+        agent, ctx.user_input, ctx.final_text, ctx.boundary_report,
+        count=ctx.self_protocol_truth_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
+        on_activity=ctx.on_activity,
+    )
+    ctx.self_protocol_truth_continuations = new_count
+    if _sp_instr:
+        agent.session.add_assistant(_sp_instr)
+        return _CONTINUE
+    return None
+
+
+def _pipeline_done_claim(agent, ctx):
+    _done_claim_instruction = run_done_claim_gate(
+        agent, ctx.boundary_report, fired=ctx.final_gates_fired, on_activity=ctx.on_activity,
+    )
+    if _done_claim_instruction:
+        agent.session.add_assistant(_done_claim_instruction)
+        return _CONTINUE
+    return None
+
+
+def _pipeline_verify_edits(agent, ctx):
+    _verify_instr = run_verify_edits_gate(
+        agent, ctx.turn_modified_files, fired=ctx.final_gates_fired, on_activity=ctx.on_activity,
+    )
+    if _verify_instr:
+        agent.session.add_assistant(_verify_instr)
+        return _CONTINUE
+    return None
+
+
+def _pipeline_iam_normalize(agent, ctx):
+    """Normalize quantitative truth BEFORE the IAM reporting gate evaluates."""
+    if is_owner_integrity_audit_activation(ctx.user_input):
+        _iam_tool_calls = sum((ctx.tool_call_counts or {}).values())
+        _iam_tool_errors = sum((ctx.tool_error_counts or {}).values())
+        _iam_corpus = owner_integrity_audit_source_corpus_count()
+        ctx.final_text = normalize_owner_integrity_audit_report_text(
+            ctx.final_text, tool_calls=_iam_tool_calls,
+            tool_errors=_iam_tool_errors, corpus=_iam_corpus,
+        )
+        try:
+            reconcile_latest_owner_integrity_audit_report(
+                tool_calls=_iam_tool_calls, tool_errors=_iam_tool_errors,
+                corpus=_iam_corpus, report_text=ctx.final_text,
+            )
+        except Exception:
+            traceback.print_exc()
+    return None
+
+
+def _pipeline_iam_reporting(agent, ctx):
+    _owner_integrity_audit_reporting_instruction = run_owner_integrity_audit_reporting_gate(
+        ctx.user_input, ctx.final_text, ctx.tool_call_counts, ctx.tool_error_counts,
+        fired=ctx.final_gates_fired,
+        continuations=ctx.owner_integrity_audit_reporting_truth_continuations,
+        max_continuations=3, monitor=ctx.monitor, on_activity=ctx.on_activity,
+    )
+    if _owner_integrity_audit_reporting_instruction:
+        ctx.owner_integrity_audit_reporting_truth_continuations += 1
+        agent.session.add_assistant(_owner_integrity_audit_reporting_instruction)
+        return _CONTINUE
+    return None
+
+
+def _pipeline_claim_gates(agent, ctx):
+    _claim_instruction = run_claim_gates(
+        agent, ctx.final_text, ctx.tool_call_counts,
+        fired=ctx.final_gates_fired, monitor=ctx.monitor, on_activity=ctx.on_activity,
+    )
+    if _claim_instruction:
+        agent.session.add_assistant(_claim_instruction)
+        return _CONTINUE
+    return None
+
+
+# -- The pipeline: ordered list of (name, kind, entry_fn) -----------------------
+
+_POST_PROVIDER_PIPELINE = [
+    ("no_tool_evidence", "gate", _pipeline_no_tool_evidence),
+    ("owner_interface_audit_stop", "gate", _pipeline_owner_interface_audit_stop),
+    ("owner_comparison_stop", "gate", _pipeline_owner_comparison_stop),
+    ("devmode_economy", "action", _pipeline_devmode_economy),
+    ("owner_maintenance_stop", "gate", _pipeline_owner_maintenance_stop),
+    ("critique", "action", _pipeline_critique),
+    ("board_finalization", "action", _pipeline_board_finalization),
+    ("contract_gate", "gate", _pipeline_contract_gate),
+    ("consistency_boundary", "action", _pipeline_consistency_boundary),
+    ("self_protocol_truth", "gate", _pipeline_self_protocol_truth),
+    ("done_claim", "gate", _pipeline_done_claim),
+    ("verify_edits", "gate", _pipeline_verify_edits),
+    ("iam_normalize", "action", _pipeline_iam_normalize),
+    ("iam_reporting", "gate", _pipeline_iam_reporting),
+    ("claim_gates", "gate", _pipeline_claim_gates),
+]
+
 
 def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
     if not task_board:
@@ -209,7 +469,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         # max_provider_requests when a near-terminal completion keeps tripping the
         # regex. After the cap, allow the stop with a logged disagreement note.
         protocol_stop_gate_continuations: dict[str, int] = {}
-        PROTOCOL_STOP_GATE_MAX = 2
         # Snapshot rows already completed at TURN START so the closing contract
         # gate audits every task completed during THIS turn (across all provider
         # rounds), while still excluding rows completed in prior turns. Using a
@@ -711,8 +970,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 return final_text
 
 
-            # OWNER_MAINTENANCE evidence gate: completion claims require at least one tool call.
-            # Without tool evidence, even a correctly-prefixed completion is fabrication.
+            # --- Post-provider gate pipeline ---
+            # Assemble the gate context from run_turn locals, then run the
+            # declarative pipeline (gates fire continuations; actions advance state).
             owner_maintenance_active = is_owner_maintenance_activation(user_input)
             owner_comparison_active = is_owner_comparison_activation(user_input)
             owner_interface_audit_active = is_owner_interface_audit_activation(user_input)
@@ -724,198 +984,53 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 total_tool_calls=total_tool_calls,
                 devmode_taskboard_completed=self._owner_maintenance_taskboard_completed(task_board),
             )
-            if no_evidence is not None:
-                if on_activity:
-                    on_activity(no_evidence[0])
-                self.session.add_assistant(no_evidence[1])
-                continue
-
-            if not owner_interface_audit_final_allows_stop(user_input, content):
-                if protocol_stop_gate_continuations.get("owner_interface_audit", 0) < PROTOCOL_STOP_GATE_MAX:
-                    protocol_stop_gate_continuations["owner_interface_audit"] = protocol_stop_gate_continuations.get("owner_interface_audit", 0) + 1
-                    if on_activity:
-                        on_activity("continuing OWNER_INTERFACE_AUDIT...")
-                    self.session.add_assistant(owner_interface_audit_continuation_instruction(user_input, content))
-                    continue
-                if on_activity:
-                    on_activity("OWNER_INTERFACE_AUDIT stop-gate disagreement — allowing stop after cap")
-
-            if not owner_comparison_final_allows_stop(user_input, content):
-                if protocol_stop_gate_continuations.get("owner_comparison", 0) < PROTOCOL_STOP_GATE_MAX:
-                    protocol_stop_gate_continuations["owner_comparison"] = protocol_stop_gate_continuations.get("owner_comparison", 0) + 1
-                    if on_activity:
-                        on_activity("continuing OWNER_COMPARISON...")
-                    self.session.add_assistant(owner_comparison_continuation_instruction(user_input, content))
-                    continue
-                if on_activity:
-                    on_activity("OWNER_COMPARISON stop-gate disagreement — allowing stop after cap")
-
-            # Write the authoritative economy ledger to the active session dir BEFORE
-            # the OWNER_MAINTENANCE closeout gate evaluates. The gate's continuation tells the
-            # model to "read economy.md and own the tool-error ledger"; the record used
-            # to be written only on a *passing* closeout (agent_taskboard), so a blocked
-            # closeout could never produce the file the model needs to satisfy the gate —
-            # a deadlock that loops every OWNER_MAINTENANCE with tool errors to [OWNER_MAINTENANCE BLOCKED]
-            # (observed live mo-1782065291: 5 recovered errors, economy.md never written,
-            # model could not own a ledger it had no file for). Writing it here breaks the
-            # cycle: the next continuation turn reads the real counts and can finalize.
-            if owner_maintenance_active:
-                self._write_devmode_economy_record()
-                # A [OWNER_MAINTENANCE BLOCKED] terminal must never leave a [OWNER_MAINTENANCE COMPLETE]
-                # in summary.md (observed T0403). Reconcile the marker deterministically.
-                self._reconcile_devmode_summary_marker(content)
-
             devmode_monitor_path = getattr(monitor, "path", None) if monitor is not None else None
             devmode_run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
-            # Use the error count frozen at the first closeout write (set by
-            # _write_devmode_economy_record above) so the gate owns a stable terminal
-            # count — post-freeze closeout-edit errors can't move the target and loop it.
             devmode_frozen_errs = getattr(self, "_devmode_closeout_frozen_errors", None)
             devmode_session_dir = getattr(self, "_active_devmode_session_dir", None)
-            if not owner_maintenance_final_allows_stop(
-                user_input,
-                content,
-                monitor_path=devmode_monitor_path,
-                session_ids=devmode_run_ids or None,
-                frozen_error_count=devmode_frozen_errs,
-                session_dir=devmode_session_dir,
-            ):
-                if protocol_stop_gate_continuations.get("owner_maintenance", 0) < PROTOCOL_STOP_GATE_MAX:
-                    protocol_stop_gate_continuations["owner_maintenance"] = protocol_stop_gate_continuations.get("owner_maintenance", 0) + 1
-                    if on_activity:
-                        on_activity("continuing OWNER_MAINTENANCE...")
-                    self.session.add_assistant(owner_maintenance_continuation_instruction(
-                        user_input,
-                        content,
-                        monitor_path=devmode_monitor_path,
-                        session_ids=devmode_run_ids or None,
-                        frozen_error_count=devmode_frozen_errs,
-                        session_dir=devmode_session_dir,
-                    ))
-                    continue
-                if on_activity:
-                    on_activity("OWNER_MAINTENANCE stop-gate disagreement — allowing stop after cap")
 
-            # 3. Finalize (secrets-only critique)
-            if on_activity:
-                on_activity("finalizing response...")
-            critique_result = self._review_final_answer(content, monitor=monitor)
-            final_text = critique_result.text
+            ctx = _GateContext()
+            ctx.user_input = user_input
+            ctx.content = content
+            ctx.final_text = ""
+            ctx.reasoning = None
+            ctx.notes = None
+            ctx.task_board = task_board
+            ctx.monitor = monitor
+            ctx.on_activity = on_activity
+            ctx.on_board_update = on_board_update
+            ctx.on_board_event = on_board_event
+            ctx.final_gates_fired = final_gates_fired
+            ctx.protocol_stop_gate_continuations = protocol_stop_gate_continuations
+            ctx.contract_gate_continuations = contract_gate_continuations
+            ctx.self_protocol_truth_continuations = self_protocol_truth_continuations
+            ctx.owner_integrity_audit_reporting_truth_continuations = owner_integrity_audit_reporting_truth_continuations
+            ctx.turn_initial_completed_ids = turn_initial_completed_ids
+            ctx.turn_modified_files = turn_modified_files
+            ctx.tool_call_counts = tool_call_counts
+            ctx.tool_error_counts = tool_error_counts
+            ctx.owner_maintenance_active = owner_maintenance_active
+            ctx.owner_comparison_active = owner_comparison_active
+            ctx.owner_interface_audit_active = owner_interface_audit_active
+            ctx.no_evidence = no_evidence
+            ctx.devmode_monitor_path = devmode_monitor_path
+            ctx.devmode_run_ids = devmode_run_ids
+            ctx.devmode_frozen_errs = devmode_frozen_errs
+            ctx.devmode_session_dir = devmode_session_dir
+            ctx.total_tool_calls = total_tool_calls
+            ctx.response = response
 
-            reasoning = getattr(response, "reasoning_content", None) or getattr(response, "reasoning", None)
-            notes = self._record_turn_memory_and_learning(user_input, final_text)
-            final_text = self._append_after_turn_notes(final_text, notes)
-            # Final board update: activate report row then complete any active
-            # final/report row before consistency checks so diagnostics see
-            # current task truth.
-            self._activate_final_report_row(task_board, on_board_update=on_board_update, on_board_event=on_board_event)
-            if task_board and task_board.tasks:
-                protocol_closed = self._finalize_self_protocol_task_board_for_answer(user_input, final_text, task_board)
-                if protocol_closed or (not protocol_closed and self._finalize_task_board_for_answer(task_board)):
-                    record_snapshot(task_board, "completed" if task_board.open_count() == 0 else "updated")
-                    _emit_task_board_update(task_board, update="completed" if task_board.open_count() == 0 else "updated", on_board_update=on_board_update, on_board_event=on_board_event)
-            # Contract gate on closing boards — migrated to the registry. Same
-            # board-closing condition, OWNER_MAINTENANCE/OWNER_INTERFACE_AUDIT whole-board vs turn-scoped
-            # branching, enforce_contract_gate call, counter bound, and
-            # disagreement-after-cap behavior. The counter stays a run_turn local,
-            # threaded through and reassigned from the return.
-            _contract_instr, contract_gate_continuations = run_contract_gate(
-                self, task_board, user_input, turn_initial_completed_ids,
-                count=contract_gate_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
-                on_activity=on_activity,
-            )
-            if _contract_instr:
-                self.session.add_assistant(_contract_instr)
+            result = _run_post_provider_pipeline(self, ctx)
+            if result is _CONTINUE:
+                # Thread mutable counters back to run_turn locals for the next iteration.
+                protocol_stop_gate_continuations = ctx.protocol_stop_gate_continuations
+                contract_gate_continuations = ctx.contract_gate_continuations
+                self_protocol_truth_continuations = ctx.self_protocol_truth_continuations
+                owner_integrity_audit_reporting_truth_continuations = ctx.owner_integrity_audit_reporting_truth_continuations
                 continue
-            boundary_report = self._run_consistency_boundary("turn_final", user_text=user_input, final_text=final_text, learning_notes=notes, task_board=task_board)
-            # Self-protocol completion-truth gate — migrated to the registry. Same
-            # position (after contract, before done-claim), same counter bound, same
-            # short-circuit (counter checked before the boundary predicate), same
-            # activity message and protocol-specific continuation instruction. Counter
-            # stays a run_turn local, threaded through and reassigned.
-            _sp_instr, self_protocol_truth_continuations = run_self_protocol_truth_gate(
-                self, user_input, final_text, boundary_report,
-                count=self_protocol_truth_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
-                on_activity=on_activity,
-            )
-            if _sp_instr:
-                self.session.add_assistant(_sp_instr)
-                continue
-            # Ordinary turns: a "done" claim while board rows are still open is fake
-            # progress. The registry forces one bounded continuation to close rows with
-            # evidence or block them (once-per-turn via final_gates_fired). Runs at its
-            # original position — before verify-edits and the claim gates.
-            _done_claim_instruction = run_done_claim_gate(
-                self, boundary_report, fired=final_gates_fired, on_activity=on_activity,
-            )
-            if _done_claim_instruction:
-                self.session.add_assistant(_done_claim_instruction)
-                continue
-            # Before finishing a code-editing turn, the registry runs the changed
-            # files' affected tests; if they fail, force one bounded continuation so
-            # the model fixes them before claiming done. The affected-test side effect
-            # and its fail-open/bounded behavior live in
-            # _affected_test_failure_instruction. Same position (after done-claim,
-            # before the claim gates); the guard is set only after a failure fires, so
-            # a passing check can re-run later this turn (semantics unchanged).
-            _verify_instr = run_verify_edits_gate(
-                self, turn_modified_files, fired=final_gates_fired, on_activity=on_activity,
-            )
-            if _verify_instr:
-                self.session.add_assistant(_verify_instr)
-                continue
-            # OWNER_INTEGRITY_AUDIT: normalize quantitative truth FIRST (tool calls, errors, corpus)
-            # so the runtime owns the numbers, not the model. The gate then only checks qualitative
-            # violations (coverage denominator, ledger path, dead-code claims, line spans) that the
-            # normalization layer cannot fix automatically. This order eliminates the band-aid loop
-            # where the gate loops on tool-count mismatches that normalization then overwrites anyway.
-            if is_owner_integrity_audit_activation(user_input):
-                _iam_tool_calls = sum((tool_call_counts or {}).values())
-                _iam_tool_errors = sum((tool_error_counts or {}).values())
-                _iam_corpus = owner_integrity_audit_source_corpus_count()
-                final_text = normalize_owner_integrity_audit_report_text(
-                    final_text,
-                    tool_calls=_iam_tool_calls,
-                    tool_errors=_iam_tool_errors,
-                    corpus=_iam_corpus,
-                )
-                try:
-                    reconcile_latest_owner_integrity_audit_report(
-                        tool_calls=_iam_tool_calls,
-                        tool_errors=_iam_tool_errors,
-                        corpus=_iam_corpus,
-                        report_text=final_text,
-                    )
-                except Exception:
-                    traceback.print_exc()
-            _owner_integrity_audit_reporting_instruction = run_owner_integrity_audit_reporting_gate(
-                user_input,
-                final_text,
-                tool_call_counts,
-                tool_error_counts,
-                fired=final_gates_fired,
-                continuations=owner_integrity_audit_reporting_truth_continuations,
-                max_continuations=3,
-                monitor=monitor,
-                on_activity=on_activity,
-            )
-            if _owner_integrity_audit_reporting_instruction:
-                owner_integrity_audit_reporting_truth_continuations += 1
-                self.session.add_assistant(_owner_integrity_audit_reporting_instruction)
-                continue
-            # Verify-before-claiming (driven, not prompt-hoped): the declarative
-            # claim-gate registry forces ONE bounded continuation when the answer
-            # makes an unverified completion/cleanliness claim, an unverified
-            # current-state/version claim, or an unsourced external claim. Each gate
-            # is once-per-turn (final_gates_fired), high-precision (ordinary prose
-            # never fires), and bounded by max_provider_requests overall.
-            _claim_instruction = run_claim_gates(
-                self, final_text, tool_call_counts,
-                fired=final_gates_fired, monitor=monitor, on_activity=on_activity,
-            )
-            if _claim_instruction:
-                self.session.add_assistant(_claim_instruction)
-                continue
+
+            final_text = ctx.final_text
+            reasoning = ctx.reasoning
             self.session.add_assistant(final_text, reasoning_content=str(reasoning) if reasoning else None)
             # Turn-end security check on modified files and response text
             if turn_modified_files:

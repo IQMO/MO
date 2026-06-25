@@ -396,6 +396,66 @@ class Gateway:
             return result_text
 
 
+def _continue_after_runtime_boundary(
+    agent: object,
+    user_input: str,
+    result_text: str,
+    *,
+    monitor: BackendMonitor,
+    callbacks: dict[str, object],
+    cancel_event: object = None,
+    on_activity: object = None,
+    namespace: str,
+    config_key: str,
+    default_max: int,
+    guard_fn: object,
+    prompt_fn: object,
+    activity_msg: str,
+    event_kind_prefix: str,
+) -> str:
+    """Single continuation engine — resume after recoverable runtime budgets.
+
+    Parameterized for both owner-protocol (OWNER_MAINTENANCE) and ordinary-work
+    continuation loops. The two callers are thin wrappers that supply the
+    namespace-specific values.
+    """
+    if not _callable_bool(guard_fn):
+        return result_text
+
+    cfg = getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {}
+    agent_cfg = cfg.get("agent", {}) if isinstance(cfg.get("agent", {}), dict) else {}
+    max_continuations = _safe_positive_int(agent_cfg.get(config_key), default_max)
+    continuation_count = 0
+    current = str(result_text or "")
+
+    while _runtime_boundary_needs_continuation(current, namespace):
+        if continuation_count >= max_continuations:
+            monitor.emit("session_event", {
+                "kind": f"{event_kind_prefix}_auto_continuation_limit",
+                "continuations": continuation_count,
+                "result_preview": current[:300],
+            })
+            return current
+        if getattr(cancel_event, "is_set", lambda: False)():
+            return "[ABORTED] Current turn stopped."
+
+        continuation_count += 1
+        if callable(on_activity):
+            on_activity(activity_msg)
+        monitor.emit("session_event", {
+            "kind": f"{event_kind_prefix}_auto_continuation",
+            "continuation": continuation_count,
+            "boundary_preview": current[:300],
+        })
+        current = str(agent.run_turn(
+            prompt_fn(current, continuation_count),
+            monitor=monitor,
+            **callbacks,
+        ) or "")
+
+    return current
+
+
 def _continue_owner_maintenance_after_runtime_boundary(
     agent: object,
     user_input: str,
@@ -406,47 +466,23 @@ def _continue_owner_maintenance_after_runtime_boundary(
     cancel_event: object = None,
     on_activity: object = None,
 ) -> str:
-    """Resume OWNER_MAINTENANCE in fresh turns after recoverable runtime budgets.
-
-    This is intentionally narrower than the reverted autonomous runner: it does
-    not take over OWNER_MAINTENANCE generally, and it does not auto-resume sandbox,
-    permission, provider-error, or safety boundaries.
-    """
-    if not is_owner_maintenance_activation(user_input):
-        return result_text
-
-    cfg = getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {}
-    agent_cfg = cfg.get("agent", {}) if isinstance(cfg.get("agent", {}), dict) else {}
-    max_continuations = _safe_positive_int(agent_cfg.get("owner_maintenance_auto_continuation_max_turns"), 20)
-    continuation_count = 0
-    current = str(result_text or "")
-
-    while _runtime_boundary_needs_continuation(current, "owner_maintenance"):
-        if continuation_count >= max_continuations:
-            monitor.emit("session_event", {
-                "kind": "owner_maintenance_auto_continuation_limit",
-                "continuations": continuation_count,
-                "result_preview": current[:300],
-            })
-            return current
-        if getattr(cancel_event, "is_set", lambda: False)():
-            return "[ABORTED] Current turn stopped."
-
-        continuation_count += 1
-        if callable(on_activity):
-            on_activity("OWNER_MAINTENANCE: continuing after runtime boundary...")
-        monitor.emit("session_event", {
-            "kind": "owner_maintenance_auto_continuation",
-            "continuation": continuation_count,
-            "boundary_preview": current[:300],
-        })
-        current = str(agent.run_turn(
-            _owner_maintenance_continuation_prompt(current, continuation_count),
-            monitor=monitor,
-            **callbacks,
-        ) or "")
-
-    return current
+    """Resume OWNER_MAINTENANCE in fresh turns after recoverable runtime budgets."""
+    return _continue_after_runtime_boundary(
+        agent,
+        user_input,
+        result_text,
+        monitor=monitor,
+        callbacks=callbacks,
+        cancel_event=cancel_event,
+        on_activity=on_activity,
+        namespace="owner_maintenance",
+        config_key="owner_maintenance_auto_continuation_max_turns",
+        default_max=20,
+        guard_fn=lambda: is_owner_maintenance_activation(user_input),
+        prompt_fn=lambda current, count: _owner_maintenance_continuation_prompt(current, count),
+        activity_msg="OWNER_MAINTENANCE: continuing after runtime boundary...",
+        event_kind_prefix="owner_maintenance",
+    )
 
 
 def _continue_work_after_runtime_boundary(
@@ -460,49 +496,23 @@ def _continue_work_after_runtime_boundary(
     on_activity: object = None,
     has_open_board: object = None,
 ) -> str:
-    """Resume ordinary authorized work after recoverable runtime budgets.
-
-    Goal mode already owns its loop, and OWNER_MAINTENANCE has a stricter protocol
-    loop. This only bridges plain work turns that already produced an open
-    taskboard and hit a local budget boundary.
-    """
-    if is_owner_maintenance_activation(user_input):
-        return result_text
-    if not _callable_bool(has_open_board):
-        return result_text
-
-    cfg = getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {}
-    agent_cfg = cfg.get("agent", {}) if isinstance(cfg.get("agent", {}), dict) else {}
-    max_continuations = _safe_positive_int(agent_cfg.get("work_auto_continuation_max_turns"), 3)
-    continuation_count = 0
-    current = str(result_text or "")
-
-    while _runtime_boundary_needs_continuation(current, "work"):
-        if continuation_count >= max_continuations:
-            monitor.emit("session_event", {
-                "kind": "work_auto_continuation_limit",
-                "continuations": continuation_count,
-                "result_preview": current[:300],
-            })
-            return current
-        if getattr(cancel_event, "is_set", lambda: False)():
-            return "[ABORTED] Current turn stopped."
-
-        continuation_count += 1
-        if callable(on_activity):
-            on_activity("MO: continuing active work after runtime boundary...")
-        monitor.emit("session_event", {
-            "kind": "work_auto_continuation",
-            "continuation": continuation_count,
-            "boundary_preview": current[:300],
-        })
-        current = str(agent.run_turn(
-            _work_continuation_prompt(user_input, current, continuation_count),
-            monitor=monitor,
-            **callbacks,
-        ) or "")
-
-    return current
+    """Resume ordinary authorized work after recoverable runtime budgets."""
+    return _continue_after_runtime_boundary(
+        agent,
+        user_input,
+        result_text,
+        monitor=monitor,
+        callbacks=callbacks,
+        cancel_event=cancel_event,
+        on_activity=on_activity,
+        namespace="work",
+        config_key="work_auto_continuation_max_turns",
+        default_max=3,
+        guard_fn=lambda: not is_owner_maintenance_activation(user_input) and _callable_bool(has_open_board),
+        prompt_fn=lambda current, count: _work_continuation_prompt(user_input, current, count),
+        activity_msg="MO: continuing active work after runtime boundary...",
+        event_kind_prefix="work",
+    )
 
 
 # Recoverable runtime-budget boundaries that a fresh continuation turn can resume
