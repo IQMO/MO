@@ -487,6 +487,24 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "record_convention",
+            "description": "Record a durable, code-LOCATION-scoped convention you have learned, so it AUTO-SURFACES whenever you or a future MO run works on the matching files - without re-reading context. Use ONLY for a real, evidence-backed rule tied to a code area (e.g. 'in core/tasking, task rows advance only via complete_task evidence'). Requires a file-glob `scope`. Do NOT use for one-off task notes or general behavioral style. Persists to the operator's global skill store across all runs.",
+            "parameters": {
+                "type": "object",
+                "required": ["name", "rule", "scope"],
+                "properties": {
+                    "name": {"type": "string", "description": "short convention name"},
+                    "rule": {"type": "string", "description": "the rule in one or two sentences"},
+                    "scope": {"type": "string", "description": "space-separated file-globs the rule governs, e.g. 'core/tasking/* core/agent/agent_taskboard.py'"},
+                    "evidence": {"type": "string", "description": "why it is true - the correction, pattern, or file:line evidence"},
+                    "confidence": {"type": "string", "description": "high | medium | low"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -1127,6 +1145,26 @@ def execute_complete_task(arguments: dict[str, Any]) -> str:
     return "Active task marked as complete. You may now proceed to the next phase of work."
 
 
+def execute_record_convention(arguments: dict[str, Any]) -> str:
+    """MO records a durable, code-location-scoped convention it has learned (autonomous)."""
+    try:
+        from core.skills import write_convention
+        path = write_convention(
+            name=str(arguments.get("name", "") or "").strip(),
+            rule=str(arguments.get("rule", "") or "").strip(),
+            scope=str(arguments.get("scope", "") or "").strip(),
+            evidence=str(arguments.get("evidence", "") or "").strip(),
+            confidence=(str(arguments.get("confidence", "high") or "high").strip() or "high"),
+        )
+        return (f"Convention recorded ({path}). Scope: {arguments.get('scope')}. "
+                "It will auto-surface on later turns and future runs when you work on matching files.")
+    except ValueError as exc:
+        return (f"Convention NOT recorded: {exc}. A convention needs a concrete rule AND a file-glob "
+                "scope (e.g. 'core/tasking/*'). A behavioral style with no code location is not a convention.")
+    except Exception as exc:
+        return f"Convention write failed: {exc}"
+
+
 TOOL_EXECUTORS = {
     "capture_screen": execute_capture_screen,
     "open_url": execute_open_url,
@@ -1158,4 +1196,5 @@ TOOL_EXECUTORS = {
     "find_callers": execute_find_callers,
     "find_callees": execute_find_callees,
     "complete_task": execute_complete_task,
+    "record_convention": execute_record_convention,
 }

@@ -8,6 +8,7 @@ selection path so Agent context injection has one "skills" source.
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -266,6 +267,96 @@ def select_skills_context(
     return out
 
 
+# --- location-aware selection (conventions: rules surfaced by WHERE MO is working) ----
+# select_skills_context above matches by user-input TEXT (task triggers). This path matches
+# by CODE LOCATION: a skill whose `scope` carries file-globs surfaces when MO is working on
+# files the graph selected (the node file-paths), so MO sees its conventions for THIS area
+# without dumping every rule. Additive — does not change the text-match path.
+
+def _scope_path_globs(scope: str) -> list[str]:
+    """Extract file-path globs from a skill scope string. Descriptive scopes like
+    'universal' / 'matching turns' yield none (those are text/behavioral, not location)."""
+    tokens = re.split(r"[,\s|;]+", str(scope or "").strip())
+    globs: list[str] = []
+    for tok in tokens:
+        t = tok.strip().replace("\\", "/")
+        if not t:
+            continue
+        if "/" in t or "*" in t or t.endswith((".py", ".md", ".html", ".css", ".js", ".ts", ".tsx", ".json", ".yaml", ".yml")):
+            globs.append(t)
+    return globs
+
+
+def skill_matches_location(skill: Skill, file_paths: list[str]) -> bool:
+    """True when the skill's scope file-globs match any of the given code locations."""
+    globs = _scope_path_globs(getattr(skill, "scope", "") or "")
+    if not globs or not file_paths:
+        return False
+    norm = [str(p).replace("\\", "/").lstrip("./") for p in file_paths if p]
+    for glob in globs:
+        for fp in norm:
+            if fnmatch.fnmatch(fp, glob) or fp == glob or fp.endswith("/" + glob):
+                return True
+    return False
+
+
+def select_skills_by_location(
+    skills: list[Skill],
+    file_paths: list[str],
+    *,
+    max_skills: int = 3,
+    max_chars: int = _MAX_CONTEXT_CHARS,
+) -> str:
+    """Return a compact block of conventions whose scope governs the code in scope.
+
+    `file_paths` = the file-paths of the graph nodes the current turn is working on
+    (already relevance-selected by the code graph). Empty when no location context.
+    """
+    if not file_paths or not skills:
+        return ""
+    matched = [skill for skill in skills if skill_matches_location(skill, file_paths)]
+    if not matched:
+        return ""
+    selected = matched[:max_skills]
+    parts = ["### MO conventions for the code in scope - follow these where they apply"]
+    for skill in selected:
+        head = f"\n**{skill.name}**"
+        if skill.description:
+            head += f" - {skill.description}"
+        if getattr(skill, "provenance", "authored") != "authored":
+            head += f" [{skill.provenance}]"
+        parts.append(head)
+        parts.append(f"Scope: {skill.scope}")
+        parts.append(skill.body.strip()[:_MAX_BODY_CHARS])
+    out = "\n".join(part for part in parts if part).strip()
+    if len(out) > max_chars:
+        out = out[:max_chars].rsplit("\n", 1)[0] + "\n[conventions truncated]"
+    return out
+
+
+def select_conventions_context(
+    user_input: str,
+    roots: list[str | os.PathLike],
+    file_paths: list[str],
+    *,
+    profile: Any | None = None,
+    config: dict[str, Any] | None = None,
+    max_skills: int = 3,
+    max_chars: int = _MAX_CONTEXT_CHARS,
+) -> str:
+    """Location-triggered conventions for the code in scope this turn.
+
+    Complements ``select_skills_context`` (text/task-triggered): loads the same unified
+    skill set and surfaces the ones whose ``scope`` file-globs govern ``file_paths``.
+    Empty when there is no location context or no scoped rule applies."""
+    if not file_paths:
+        return ""
+    skills = _dedupe_skills([*load_skills(roots), *load_generated_learning_skills(profile)])
+    if not skills:
+        return ""
+    return select_skills_by_location(skills, file_paths, max_skills=max_skills, max_chars=max_chars)
+
+
 def write_skill_pack(
     *,
     root: str | Path,
@@ -275,6 +366,7 @@ def write_skill_pack(
     body: str,
     provenance: str = "authored",
     approval: str = "",
+    scope: str = "",
     candidate_id: str = "",
     source_kind: str = "",
     supporting_files: dict[str, str] | None = None,
@@ -295,6 +387,8 @@ def write_skill_pack(
         f"provenance: {_yaml_quote(provenance)}",
         f"approval: {_yaml_quote(approval)}",
     ])
+    if scope:
+        frontmatter.append(f"scope: {_yaml_quote(scope)}")
     if candidate_id:
         frontmatter.append(f"candidate_id: {_yaml_quote(candidate_id)}")
     if source_kind:
@@ -315,6 +409,43 @@ def write_skill_pack(
             continue
         atomic_write_text(dest / safe_rel, str(content or "")[:_MAX_SOURCE_TEXT_CHARS], encoding="utf-8")
     return dest / "SKILL.md"
+
+
+def write_convention(
+    *,
+    name: str,
+    rule: str,
+    scope: str,
+    evidence: str = "",
+    confidence: str = "high",
+    profile: Any | None = None,
+    config: dict[str, Any] | None = None,
+) -> Path:
+    """Persist a location-scoped convention MO learned, to the profile skill root.
+
+    Evidence-gated AUTONOMY: MO writes this itself (no operator confirm) when it has a
+    durable rule for a code area. But a convention is only durable with a SCOPE (file-globs)
+    AND a rule; without a real path-glob scope it is just noise and is rejected. The
+    autonomous twin of ``select_conventions_context`` - what MO writes here surfaces by
+    location on later turns, and across ALL runs (the profile root is global)."""
+    clean_rule = _one_line(rule, 500).strip()
+    clean_scope = " ".join(str(scope or "").split()).strip()
+    if not clean_rule or not _scope_path_globs(clean_scope):
+        raise ValueError("convention requires a non-empty rule and a file-glob scope")
+    body = clean_rule
+    if evidence:
+        body += f"\n\nEvidence: {_one_line(evidence, 400).strip()}"
+    triggers = tuple(_meaningful_words(f"{name} {clean_rule}"))[:8] or ("convention",)
+    return write_skill_pack(
+        root=skills_root(profile, config=config),
+        name=_one_line(name, 90) or "MO convention",
+        description=clean_rule[:180],
+        triggers=triggers,
+        body=body,
+        provenance="learned-convention",
+        approval=f"autonomous:{confidence}",
+        scope=clean_scope,
+    )
 
 
 def write_skill_pack_from_candidate(

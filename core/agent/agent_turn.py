@@ -1096,6 +1096,32 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 )
         except Exception:
             traceback.print_exc()
+        conventions_context = ""
+        try:
+            cfg = getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}
+            skills_cfg = cfg.get("skills", {}) if isinstance(cfg.get("skills", {}), dict) else {}
+            if skills_cfg.get("enabled", True):
+                from ..skills import select_conventions_context, default_skill_roots
+                from ..graph.code_graph import relevant_node_paths
+                node_paths = relevant_node_paths(
+                    user_input,
+                    cwd=getattr(self, "project_cwd", None),
+                    profile=getattr(self, "profile", None),
+                )
+                conventions_context = select_conventions_context(
+                    user_input,
+                    default_skill_roots(
+                        getattr(self, "project_cwd", None),
+                        getattr(self, "runtime_home", None),
+                        profile=getattr(self, "profile", None),
+                        config=cfg,
+                    ),
+                    node_paths,
+                    profile=getattr(self, "profile", None),
+                    config=cfg,
+                )
+        except Exception:
+            traceback.print_exc()
         self._last_turn_context_flags = {
             "profile": bool(profile_context),
             "memory": bool(recalled_context),
@@ -1105,6 +1131,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             "workflow_learning": False,
             "proactive_learning": False,
             "skills": bool(skills_context),
+            "conventions": bool(conventions_context),
             "workspace": bool(workspace_context),
             "project_context": bool(project_context),
             "mo_control": bool(mo_control_context),
@@ -1128,6 +1155,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("ghost_proposal", "Ghost intent guardrails for this turn", proposal_context, 3, "scope guardrail only; not proof of completion", max_chars=1400),
                 ContextSource("work_pattern", "Active work pattern", work_pattern_context, 3, "process guidance for this turn; verify before claims", max_chars=1800),
                 ContextSource("skills", "Relevant MO skills", skills_context, 3, "authored, promoted, and confirmed local skill guidance for this task; follow before acting and verify with tools", max_chars=2600),
+                ContextSource("conventions", "MO conventions for the code in scope", conventions_context, 2, "location-scoped rules/conventions for the files in scope this turn; follow where they apply, verify with tools", max_chars=2000),
                 ContextSource("workspace", "Workspace / worker awareness", workspace_context, 3, "coordination context only; not proof of code correctness", max_chars=1600),
                 ContextSource("project_context", "Project-local instructions (current working directory)", project_context, 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", max_chars=3200),
                 ContextSource("mo_control", "MO control workspace authority", mo_control_context, 3, "active policy/orientation for cross-repo/server work; live checks still win", max_chars=2600),

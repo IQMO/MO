@@ -135,6 +135,32 @@ def build_code_graph_context(
     return _format_context(graph, selected, status=status, root=root, max_chars=max_chars)
 
 
+_REPO_PATH_RE = re.compile(r"(?:core|interface|tools|tests|skills)/[\w./-]+\.[A-Za-z0-9]+")
+
+
+def relevant_node_paths(user_input: str, *, cwd: str | None = None, profile: Any | None = None, max_nodes: int = 8) -> list[str]:
+    """File-paths of the code in scope this turn — used to surface location-scoped
+    conventions (skills whose scope globs these files). Two cheap signals:
+    (1) repo paths the request names explicitly, (2) best-effort graph-selected node
+    paths. LOAD-ONLY (never builds the graph) so it costs nothing when absent."""
+    paths: list[str] = []
+    for raw in _REPO_PATH_RE.findall(str(user_input or "")):
+        p = raw.strip("`*.,;:() ").replace("\\", "/")
+        if p and p not in paths:
+            paths.append(p)
+    try:
+        root = _project_root(cwd or os.getcwd())
+        graph = _load_graph(_graph_path(root))
+        if graph:
+            for node in _select_nodes(graph, user_input, max_nodes=max_nodes, profile=profile):
+                fp = str(node.get("filePath") or "").replace("\\", "/")
+                if fp and fp not in paths:
+                    paths.append(fp)
+    except Exception:
+        pass
+    return paths
+
+
 def _code_graph_enabled() -> bool:
     value = str(os.environ.get("MO_CODE_GRAPH", "1")).strip().lower()
     return value not in {"0", "false", "off", "no", "disabled"}
