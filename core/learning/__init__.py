@@ -2,7 +2,6 @@
 
 Modules:
 - memory: SQLite episodic memory with FTS5 search
-- knowledge_store: Unified categorized knowledge store
 - feedback_learning: Operator feedback → profile learning extraction
 - proactive_learning: Pattern-mined learning suggestions that can become local skills
 - trace_learning: Trace-based learning extraction

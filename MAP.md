@@ -33,7 +33,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 
 ## Verification
 - Focused tests first: `python -m pytest tests/<target>.py -q`.
-- Tiered sweeps: `-m smoke` (~156 tests) or `-m "smoke or unit"` (~1,060 tests) — auto-tiered by conftest.
+- Tiered sweeps: `-m smoke` (~236 tests) or `-m "smoke or unit"` (~1,540 tests) — auto-tiered by conftest.
 - Broad Python suite when behavior changes: `python -m pytest -q` (use a shell timeout of 300s+).
 - Do not use Node tooling; this is a Python project.
 

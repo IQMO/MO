@@ -89,8 +89,6 @@ def record_workflow_candidate_result(profile: Any, user_text: str, assistant_tex
         added = _append_candidate_record(path, candidate)
     except OSError as exc:
         return {"recorded": False, "reason": f"write failed: {type(exc).__name__}", "candidate": candidate}
-    if added:
-        _wire_workflow_to_knowledge_store(candidate)
     repeat_count = int(candidate.get("repeat_count") or 1)
     if added and repeat_count >= 3:
         notice = f"Skill repeated {repeat_count}x: approve skill candidate {candidate.get('id', '')}"
@@ -571,25 +569,3 @@ def _compact_behavior(text: str) -> str:
 def _one_line(value: Any, limit: int) -> str:
     clean = " ".join(str(value or "").split()).strip()
     return clean[:limit].rsplit(" ", 1)[0] + "..." if len(clean) > limit else clean
-
-
-def _wire_workflow_to_knowledge_store(candidate: dict[str, Any]) -> None:
-    """Optionally record workflow candidate into the unified knowledge store."""
-    try:
-        from .knowledge_store import get_knowledge_store
-        store = get_knowledge_store()
-        title = candidate.get("title", candidate.get("name", candidate.get("trigger", "")))
-        desc = candidate.get("description", candidate.get("summary", candidate.get("behavior", "")))
-        content = f"{title}: {desc}" if title and desc else (title or desc or str(candidate.get("id", "")))
-        store.record(
-            "workflow",
-            "workflow",
-            content,
-            {
-                "source": "workflow_learning",
-                "candidate_id": candidate.get("id", ""),
-                "repeat_count": candidate.get("repeat_count", 1),
-            },
-        )
-    except Exception:
-        pass

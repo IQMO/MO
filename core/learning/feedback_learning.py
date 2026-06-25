@@ -80,32 +80,9 @@ def record_feedback_learning(profile: Any, user_text: str, assistant_text: str =
     try:
         profile.append_profile_learning(source, insights)
         _bridge_to_finding_patterns(insights)
-        _wire_to_knowledge_store(insights, user_text)
         return True
     except Exception:
         return False
-
-
-def _wire_to_knowledge_store(insights: dict[str, Any], user_text: str) -> None:
-    """Optionally record feedback insights into the unified knowledge store."""
-    try:
-        from .knowledge_store import get_knowledge_store
-        store = get_knowledge_store()
-        for section, items in insights.items():
-            if section == "core_traits":
-                category = "evidence"
-            elif section == "communication_style":
-                category = "communication"
-            elif section == "evolution":
-                category = "error_pattern"
-            elif section == "current_focus":
-                category = "scope_control"
-            else:
-                category = "feedback"
-            for item in items:
-                store.record("feedback", category, item, {"source": "feedback_learning"})
-    except Exception:
-        pass
 
 
 def _bridge_to_finding_patterns(insights: dict[str, Any]) -> None:

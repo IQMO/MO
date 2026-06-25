@@ -421,7 +421,7 @@ def _continue_owner_maintenance_after_runtime_boundary(
     continuation_count = 0
     current = str(result_text or "")
 
-    while _owner_maintenance_runtime_boundary_needs_continuation(current):
+    while _runtime_boundary_needs_continuation(current, "owner_maintenance"):
         if continuation_count >= max_continuations:
             monitor.emit("session_event", {
                 "kind": "owner_maintenance_auto_continuation_limit",
@@ -477,7 +477,7 @@ def _continue_work_after_runtime_boundary(
     continuation_count = 0
     current = str(result_text or "")
 
-    while _work_runtime_boundary_needs_continuation(current):
+    while _runtime_boundary_needs_continuation(current, "work"):
         if continuation_count >= max_continuations:
             monitor.emit("session_event", {
                 "kind": "work_auto_continuation_limit",
@@ -505,58 +505,40 @@ def _continue_work_after_runtime_boundary(
     return current
 
 
-def _owner_maintenance_runtime_boundary_needs_continuation(result_text: str) -> bool:
+# Recoverable runtime-budget boundaries that a fresh continuation turn can resume
+# (shared by the owner-maintenance and ordinary-work continuation engines).
+_RECOVERABLE_BOUNDARY_MARKERS = (
+    "budget exhaustion",
+    "tool budget",
+    "tool rounds",
+    "max provider",
+    "max tool",
+    "request limit",
+    "turn limit",
+    "persistently blocked after budget",
+    "continuation required in the next fresh turn",
+    "no more tools allowed this turn",
+    "current runtime instruction explicitly forbids further tool calls",
+    "tool-use gate",
+)
+
+
+def _runtime_boundary_needs_continuation(result_text: str, namespace: str) -> bool:
+    """True when ``result_text`` ended on a recoverable runtime budget for ``namespace``.
+
+    ``namespace`` is the marker family ("owner_maintenance" or "work"); the logic is
+    identical across both, only the marker prefixes differ.
+    """
     text = _terminal_marker_text(result_text)
     if not text:
         return False
     if text.startswith(("[max provider requests]", "[max tool rounds]")):
         return True
-    if text.startswith(("[owner_maintenance continuation capsule]", "[owner_maintenance continuation]")):
+    if text.startswith((f"[{namespace} continuation capsule]", f"[{namespace} continuation]")):
         return True
-    if not text.startswith("[owner_maintenance blocked]"):
+    if not text.startswith(f"[{namespace} blocked]"):
         return False
-    recoverable_markers = (
-        "budget exhaustion",
-        "tool budget",
-        "tool rounds",
-        "max provider",
-        "max tool",
-        "request limit",
-        "turn limit",
-        "persistently blocked after budget",
-        "continuation required in the next fresh turn",
-        "no more tools allowed this turn",
-        "current runtime instruction explicitly forbids further tool calls",
-        "tool-use gate",
-    )
-    return any(marker in text for marker in recoverable_markers)
-
-
-def _work_runtime_boundary_needs_continuation(result_text: str) -> bool:
-    text = _terminal_marker_text(result_text)
-    if not text:
-        return False
-    if text.startswith(("[max provider requests]", "[max tool rounds]")):
-        return True
-    if text.startswith(("[work continuation capsule]", "[work continuation]")):
-        return True
-    if not text.startswith("[work blocked]"):
-        return False
-    recoverable_markers = (
-        "budget exhaustion",
-        "tool budget",
-        "tool rounds",
-        "max provider",
-        "max tool",
-        "request limit",
-        "turn limit",
-        "persistently blocked after budget",
-        "continuation required in the next fresh turn",
-        "no more tools allowed this turn",
-        "current runtime instruction explicitly forbids further tool calls",
-        "tool-use gate",
-    )
-    return any(marker in text for marker in recoverable_markers)
+    return any(marker in text for marker in _RECOVERABLE_BOUNDARY_MARKERS)
 
 
 def _terminal_marker_text(result_text: str) -> str:

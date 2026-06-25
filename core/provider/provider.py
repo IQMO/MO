@@ -1001,37 +1001,6 @@ def init_provider(config: dict = None):
     }
 
 
-def review_providers(config: dict = None) -> list[BaseProvider]:
-    """Return the restricted provider chain for PRT diff review."""
-    if config is None:
-        config = load_config()
-    _load_runtime_env(config)
-
-    prt_cfg = config.get("prt", {}) if isinstance(config.get("prt", {}), dict) else {}
-    review_model = prt_cfg.get("default_model") or PRT_REVIEW_MODEL_ORDER[0]
-    fallback_model = prt_cfg.get("fallback_model") or PRT_REVIEW_MODEL_ORDER[1]
-
-    providers_cfg = list(config.get("providers") or [])
-    providers: list[BaseProvider] = []
-
-    for pcfg in providers_cfg:
-        try:
-            model = pcfg.get("model") or review_model
-            providers.append(_provider_from_config(pcfg, model))
-        except Exception:
-            continue
-
-    chain = prt_review_provider_chain(
-        providers,
-        default_model=str(review_model),
-        fallback_model=str(fallback_model),
-    )
-    if not chain:
-        raise ProviderError("No DeepSeek v4 Pro or Codex providers found for PRT review.")
-
-    return chain
-
-
 # ── Error utilities ────────────────────────────────────────────────
 
 def is_rate_limit_error(error_msg: str) -> bool:

@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from core.provider import provider as provider_module
-from core.provider.provider import CodexOAuthProvider, MockProvider, init_provider, review_providers
+from core.provider.provider import CodexOAuthProvider, MockProvider, init_provider
 
 
 def test_mock_provider_streams_text_tokens():
@@ -42,27 +42,6 @@ def test_init_provider_respects_default_and_fallback_model_selectors():
     assert [provider.model for provider in result["providers"]] == ["primary-model", "fallback-model", "third-model"]
     assert result["provider_name"] == "primary"
     assert result["fallback_model"] == "fallback-model"
-
-
-def test_review_providers_restricts_prt_to_deepseek_and_codex():
-    config = {
-        "providers": [
-            {"name": "flash", "type": "mock", "model": "deepseek-v4-flash"},
-            {"name": "anthropic", "type": "mock", "model": "claude-opus-4-7"},
-            {"name": "codex", "type": "mock", "model": "gpt-5.5"},
-            {"name": "bigpickle", "type": "mock", "model": "big-pickle"},
-            {"name": "pro", "type": "mock", "model": "deepseek-v4-pro"},
-        ],
-        "model": {"default": "deepseek-v4-pro", "fallback": "openai-codex"},
-        "prt": {"default_model": "deepseek-v4-pro", "fallback_model": "codex"},
-    }
-
-    chain = review_providers(config)
-
-    assert [(provider.name, provider.model) for provider in chain] == [
-        ("pro", "deepseek-v4-pro"),
-        ("codex", "gpt-5.5"),
-    ]
 
 
 def test_codex_provider_keeps_backend_base_url(tmp_path):

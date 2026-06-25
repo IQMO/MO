@@ -187,14 +187,6 @@ def owner_protocol_label(key: str) -> str:
     return str(value).strip() if value else _DEFAULT_LABELS.get(key, key.replace("_", " "))
 
 
-def owner_protocol_marker(key: str, state: str) -> str:
-    state_key = "blocked_marker" if str(state).lower() == "blocked" else "complete_marker"
-    value = _protocol_entry(key).get(state_key)
-    if value:
-        return str(value)
-    return f"[{owner_protocol_label(key).upper()} {str(state).upper()}]"
-
-
 def owner_comparison_readonly_source_roots(user_input: str) -> list[str]:
     """Return existing local source roots explicitly supplied to an owner comparison turn.
 

@@ -129,7 +129,6 @@ def write_learning_suggestions(
                 continue
             fh.write(json.dumps(suggestion.as_dict(), ensure_ascii=False, sort_keys=True) + "\n")
             existing.add(suggestion.id)
-            _wire_suggestion_to_knowledge_store(suggestion)
     _prune_learning_suggestions(out)
     return out
 
@@ -622,30 +621,3 @@ def _suggestion_from_dict(row: Any) -> LearningSuggestion | None:
         )
     except Exception:
         return None
-
-
-def _wire_suggestion_to_knowledge_store(suggestion: LearningSuggestion) -> None:
-    """Optionally record learning suggestion into the unified knowledge store."""
-    try:
-        from .knowledge_store import get_knowledge_store
-        store = get_knowledge_store()
-        category_map = {
-            "evidence_first": "evidence",
-            "scope_control": "scope_control",
-            "communication_concise": "communication",
-            "clean_finish": "tool_efficiency",
-        }
-        category = category_map.get(suggestion.kind, "feedback")
-        store.record(
-            "proactive_learning",
-            category,
-            suggestion.recommendation,
-            {
-                "source": "proactive_learning",
-                "suggestion_id": suggestion.id,
-                "suggestion_kind": suggestion.kind,
-                "evidence_count": len(suggestion.evidence),
-            },
-        )
-    except Exception:
-        pass

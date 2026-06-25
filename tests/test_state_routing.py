@@ -32,11 +32,6 @@ def test_episodic_memory_default_routes_to_state_home():
     _assert_under_state_home(EpisodicMemory().path, "EpisodicMemory()")
 
 
-def test_knowledge_store_default_routes_to_state_home():
-    from core.learning.knowledge_store import KnowledgeStore
-    _assert_under_state_home(KnowledgeStore().path, "KnowledgeStore()")
-
-
 def test_finding_pattern_store_default_routes_to_state_home():
     from core.review.finding_patterns import FindingPatterns
     _assert_under_state_home(FindingPatterns().history_dir, "FindingPatterns()")
