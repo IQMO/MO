@@ -232,6 +232,13 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         # Load tool definitions
         from tools import TOOL_DEFINITIONS
         self.tool_definitions = self._ordered_tool_definitions(TOOL_DEFINITIONS)
+        # set_plan (MO-owned taskboard) is only exposed when the flag is on, so
+        # flag-off runs see no behavior change and never make an inert call.
+        if not self._model_owned_taskboard_enabled():
+            self.tool_definitions = [
+                d for d in self.tool_definitions
+                if (d.get("function", {}).get("name") if "function" in d else d.get("name")) != "set_plan"
+            ]
 
         # MCP (Model Context Protocol) — operator-configured and inert until
         # servers are listed; configured tools are sandbox-gated.

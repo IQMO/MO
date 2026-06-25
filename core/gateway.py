@@ -282,7 +282,12 @@ class Gateway:
                         if board.state in ("abandoned", "blocked"):
                             board.state = "active"
                     else:
-                        board = _new_gateway_board(turn_id, session_id, board_objective, rows=ghost_plan_rows if ghost_plan_rows else None)
+                        model_owned = bool(getattr(self.agent, "_model_owned_taskboard_enabled", lambda: False)())
+                        board = _new_gateway_board(
+                            turn_id, session_id, board_objective,
+                            rows=None if model_owned else (ghost_plan_rows if ghost_plan_rows else None),
+                            model_owned=model_owned,
+                        )
                     self.last_task_board = board
                     self.task_board_registry.set_board(board_slot, board)
                     board_holder[0] = board
@@ -754,8 +759,15 @@ def _new_gateway_board(
     *,
     title: str | None = None,
     rows: list[dict[str, object]] | None = None,
+    model_owned: bool = False,
 ) -> TaskBoard:
-    """Create board from Ghost's planned rows, or a single-row fallback."""
+    """Create board from Ghost's planned rows, or a single-row fallback.
+
+    When ``model_owned`` is set (Phase 2), normal work turns get a single
+    placeholder row that MO replaces with its own plan via ``set_plan`` — Ghost
+    and the work-procedure no longer seed the rows. Owner protocols keep their
+    explicit phase rows regardless.
+    """
     board = TaskBoard(turn_id=turn_id, session_id=session_id, source="gateway")
     target = str(title or "").strip() or user_input[:80]
     proto = is_owner_protocol_activation(user_input)
@@ -763,6 +775,10 @@ def _new_gateway_board(
         rows = _owner_maintenance_gateway_phase_rows()
     elif is_owner_comparison_activation(user_input):
         rows = _owner_comparison_gateway_phase_rows()
+    elif model_owned and not proto:
+        # MO owns the board: a single placeholder it replaces via set_plan, instead
+        # of Ghost/work-procedure rows (which over-decomposed and desynced).
+        rows = [{"id": "1", "text": "Planning the work…", "status": "active", "kind": "inspect", "completion_gate": "tool", "depends_on": []}]
     elif not rows and not proto:
         # No Ghost plan and NOT an owner protocol: seed the matching build/reasoning
         # work procedure so the board carries the proven evidence-gated phases instead

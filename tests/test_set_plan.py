@@ -47,3 +47,23 @@ def test_set_plan_no_usable_tasks_is_noop_even_when_on():
     changed = _Agent(model_owned=True)._advance_task_board_after_tool(b, "set_plan", {"tasks": ["", "   "]})
     assert changed is False
     assert [t.title for t in b.tasks] == ["ghost row"]
+
+
+# ── Phase 2: gateway stops Ghost/procedure seeding when MO owns the board ──
+
+def test_new_gateway_board_model_owned_uses_placeholder_not_ghost_rows():
+    from core.gateway import _new_gateway_board
+    b = _new_gateway_board(
+        "t", "s", "commit and push everything",
+        rows=[{"id": "1", "text": "ghost a", "status": "active"}, {"id": "2", "text": "ghost b"}],
+        model_owned=True,
+    )
+    assert [t.title for t in b.tasks] == ["Planning the work…"]  # one placeholder; ghost rows dropped
+
+
+def test_new_gateway_board_default_keeps_ghost_rows():
+    from core.gateway import _new_gateway_board
+    b = _new_gateway_board(
+        "t", "s", "commit and push", rows=[{"id": "1", "text": "ghost a", "status": "active"}], model_owned=False,
+    )
+    assert [t.title for t in b.tasks] == ["ghost a"]
