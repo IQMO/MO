@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .adapters import snapshot_from_runtime
-from .controller import UxCallbacks
-from .models import SessionSnapshot
+from UX.runtime.adapters import snapshot_from_runtime
+from UX.state.controller import UxCallbacks
+from UX.state.models import SessionSnapshot
 
 
 class RuntimeUnavailable(RuntimeError):

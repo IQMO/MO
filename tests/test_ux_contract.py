@@ -13,6 +13,8 @@ from UX.models import BoardRow, demo_snapshot
 
 REPO = Path(__file__).resolve().parents[1]
 UX_ROOT = REPO / "UX"
+EXPECTED_PACKAGE_DIRS = {"state", "runtime", "render", "shell"}
+ROOT_COMPAT_SHIMS = {"app.py", "models.py", "controller.py", "layout.py", "theme.py", "adapters.py"}
 
 
 def _ux_python_files() -> list[Path]:
@@ -31,6 +33,52 @@ def test_ux_does_not_import_current_interface_package():
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 if module == "interface" or module.startswith("interface."):
+                    offenders.append(str(path.relative_to(REPO)))
+    assert offenders == []
+
+
+def test_ux_has_layered_package_structure():
+    assert {path.name for path in UX_ROOT.iterdir() if path.is_dir()} >= EXPECTED_PACKAGE_DIRS
+    for name in ROOT_COMPAT_SHIMS:
+        text = (UX_ROOT / name).read_text(encoding="utf-8")
+        assert "Compatibility exports" in text
+        assert len(text.splitlines()) <= 24
+
+
+def test_state_layer_has_no_runtime_render_or_product_imports():
+    forbidden = ("UX.runtime", "UX.render", "interface", "core")
+    offenders: list[str] = []
+    for path in (UX_ROOT / "state").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            module = ""
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module = alias.name
+                    if module == "core" or any(module == token or module.startswith(f"{token}.") for token in forbidden):
+                        offenders.append(str(path.relative_to(REPO)))
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module == "core" or any(module == token or module.startswith(f"{token}.") for token in forbidden):
+                    offenders.append(str(path.relative_to(REPO)))
+    assert offenders == []
+
+
+def test_render_layer_has_no_runtime_or_product_imports():
+    forbidden = ("UX.runtime", "interface", "core")
+    offenders: list[str] = []
+    for path in (UX_ROOT / "render").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            module = ""
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module = alias.name
+                    if module == "core" or any(module == token or module.startswith(f"{token}.") for token in forbidden):
+                        offenders.append(str(path.relative_to(REPO)))
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module == "core" or any(module == token or module.startswith(f"{token}.") for token in forbidden):
                     offenders.append(str(path.relative_to(REPO)))
     assert offenders == []
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from rich.console import Console
 
-import UX.app as app
+import UX.shell.app as app
 from UX.models import SessionSnapshot
 from UX.controller import PreviewBackend, UxController
 

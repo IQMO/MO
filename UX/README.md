@@ -59,14 +59,15 @@ python -m UX --live --message "who are you?"
 
 ## Structure
 
-- `models.py` - immutable display snapshots.
-- `layout.py` - Rich renderers for session, lanes, task board, transcript, and
-  composer.
-- `adapters.py` - duck-typed runtime snapshot adapters; no top-level `core` or
-  `interface` imports.
-- `app.py` - local preview runner; captures input only inside the preview.
-- `controller.py` - backend-independent input/state controller.
-- `runtime.py` - lazy MO Agent/Gateway bridge for explicit read-only/live modes.
+- `state/` - immutable display snapshots and backend-independent controller.
+- `runtime/` - preview/live backends, runtime snapshot adapters, and lazy
+  Agent/Gateway bridge.
+- `render/` - Rich renderers and theme tokens.
+- `shell/` - CLI parsing, interactive loop, and live-screen orchestration.
+- Root modules such as `app.py`, `models.py`, and `controller.py` are
+  compatibility shims only.
+
+See `ARCHITECTURE.md` before adding new UX code.
 
 ## Mode Status
 
