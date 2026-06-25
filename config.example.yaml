@@ -176,7 +176,9 @@ skills:
   # Local best-practice packs MO reads before acting on a matching task.
   # Profile packs live under ~/.mo/skills; shipped seed packs are copied there
   # on first use. Project-local skills/ roots are opt-in only.
-  # The most relevant packs are injected per turn. No marketplace, no install flow.
+  # The most relevant packs are injected per turn. Exact-trigger packs are
+  # validated before save/load; file-glob conventions only surface for matching
+  # code locations. No marketplace, no install flow.
   enabled: true
   project_local: false
   decay_days: 60
