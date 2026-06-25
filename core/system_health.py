@@ -28,10 +28,10 @@ class SystemHealth:
 _FILE_TARGETS: dict[str, dict[str, int]] = {
     "logs/ghost_audit.jsonl": {"max_bytes": 1_000_000}, "logs/review_audit.jsonl": {"max_bytes": 1_000_000}, "logs/tool_audit.jsonl": {"max_bytes": 2_000_000},
     "memory/profile/learning.md": {"max_entries": 200}, "memory/profile/behavior.md": {"max_entries": 100}, "memory/workflow_candidates.jsonl": {"max_entries": 100},
-    "memory/workflow_promoted.jsonl": {"max_entries": 50}, "memory/learning_suggestions.jsonl": {"max_entries": 100}, "memory/goal-runs/": {"max_files": 50},
+    "memory/workflow_promoted.jsonl": {"max_entries": 50}, "memory/learning_suggestions.jsonl": {"max_entries": 100}, "skills/": {"max_files": 200}, "memory/goal-runs/": {"max_files": 50},
 }
 
-_CONFIG_DEFAULTS = dict(MO_BACKEND_MONITOR="0", MO_CODE_GRAPH="1", MO_CODE_GRAPH_MAX_FILES="1200", MO_GHOST_AUDIT_KEEP_LINES="2000", MO_GHOST_AUDIT_MAX_BYTES="1000000", MO_GOAL_RUNS_KEEP="50", MO_LEARNING_DECAY_DAYS="60", MO_LEARNING_SUGGESTIONS_ENABLED="1", MO_LEARNING_SUGGESTIONS_MAX="100", MO_PROFILE_BEHAVIOR_MAX_ENTRIES="100", MO_PROFILE_LEARNING_MAX_ENTRIES="200", MO_PROVIDER_AUDIT_MAX_BYTES="1000000", MO_REVIEW_AUDIT_KEEP_LINES="2000", MO_REVIEW_AUDIT_MAX_BYTES="1000000", MO_STRUCTURAL_COMMUNITY_STRATEGY="path", MO_STRUCTURAL_GRAPH="mo", MO_STRUCTURAL_GRAPH_AUTO_UPDATE="1", MO_STRUCTURAL_GRAPH_AUTOBUILD="1", MO_STRUCTURAL_GRAPH_DELTA_LIMIT="24", MO_STRUCTURAL_GRAPH_UPDATE_CMD="", MO_TOKEN_AWARE_TRUNCATION="0", MO_TOOL_AUDIT_KEEP_LINES="5000", MO_TOOL_AUDIT_MAX_BYTES="2000000", MO_WORKFLOW_CANDIDATE_MAX="100", MO_WORKFLOW_PROMOTED_MAX="50")
+_CONFIG_DEFAULTS = dict(MO_BACKEND_MONITOR="0", MO_CODE_GRAPH="1", MO_CODE_GRAPH_MAX_FILES="1200", MO_GHOST_AUDIT_KEEP_LINES="2000", MO_GHOST_AUDIT_MAX_BYTES="1000000", MO_GOAL_RUNS_KEEP="50", MO_LEARNING_DECAY_DAYS="60", MO_LEARNING_SUGGESTION_TTL_DAYS="7", MO_LEARNING_SUGGESTIONS_ENABLED="1", MO_LEARNING_SUGGESTIONS_MAX="100", MO_PROFILE_BEHAVIOR_MAX_ENTRIES="100", MO_PROFILE_LEARNING_MAX_ENTRIES="200", MO_PROVIDER_AUDIT_MAX_BYTES="1000000", MO_REVIEW_AUDIT_KEEP_LINES="2000", MO_REVIEW_AUDIT_MAX_BYTES="1000000", MO_STRUCTURAL_COMMUNITY_STRATEGY="path", MO_STRUCTURAL_GRAPH="mo", MO_STRUCTURAL_GRAPH_AUTO_UPDATE="1", MO_STRUCTURAL_GRAPH_AUTOBUILD="1", MO_STRUCTURAL_GRAPH_DELTA_LIMIT="24", MO_STRUCTURAL_GRAPH_UPDATE_CMD="", MO_TOKEN_AWARE_TRUNCATION="0", MO_TOOL_AUDIT_KEEP_LINES="5000", MO_TOOL_AUDIT_MAX_BYTES="2000000", MO_WORKFLOW_CANDIDATE_MAX="100", MO_WORKFLOW_CANDIDATE_TTL_DAYS="7", MO_WORKFLOW_PROMOTED_MAX="50")
 
 
 def check_file_health(root: str = ".") -> dict[str, Any]:
@@ -43,7 +43,7 @@ def check_file_health(root: str = ".") -> dict[str, Any]:
             out[name] = {"exists": False, "bytes": 0, "status": "missing"}
             continue
         if path.is_dir():
-            files = sorted(path.glob("*.json"))
+            files = sorted(item for item in path.rglob("*") if item.is_file())
             cap = caps.get("max_files")
             count = len(files)
             total = sum(_stat(item)["bytes"] for item in files)
@@ -78,6 +78,7 @@ def check_learning_health(root: str = ".") -> dict[str, Any]:
         "profile_learning": {"entries": len(re.findall(r"^## \S+T\S+Z\s+—\s+profile learning", learning, re.M)), "categories": dict(sorted(cats.items()))},
         "behavior_rules": {"count": len([line for line in behavior.splitlines() if line.startswith("- ")]), "categories": dict(Counter(re.findall(r"^- ([\w-]+):", behavior, re.M)))},
         "workflow": {"candidates": _jsonl_count(base / "memory/workflow_candidates.jsonl"), "promoted": _jsonl_count(base / "memory/workflow_promoted.jsonl")},
+        "skills": _skills_summary(base / "skills"),
         "finding_patterns": (_fp := _patterns_summary(_load_json(base / "memory/review_history/patterns.json"))),
         "operator_terms": _terms_summary(base / "memory/profile/terms.md"),
         "memory": _memory_summary(base / "memory/learning.sqlite"),
@@ -85,7 +86,7 @@ def check_learning_health(root: str = ".") -> dict[str, Any]:
         # active once any fixed/ignored feedback has actually been recorded.
         "bridges": {
             "feedback_to_finding_patterns": bool((_fp.get("fixed", 0) or 0) + (_fp.get("ignored", 0) or 0)),
-            "learning_to_ghost": False,   # known-pending integration (tracked, not yet wired)
+            "learning_to_skills": True,
             "terms_to_provider": False,   # known-pending integration (tracked, not yet wired)
         },
     }
@@ -147,6 +148,18 @@ def _patterns_summary(data: Any) -> dict[str, int]:
 
 def _terms_summary(path: Path) -> dict[str, Any]:
     return {"exists": path.exists(), "count": len(re.findall(r"^[-*] `?([^`:]+)`?:", _read_text(path), re.M))}
+
+
+def _skills_summary(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"exists": False, "packs": 0, "generated": 0}
+    packs = list(path.glob("*/SKILL.md"))
+    generated = 0
+    for skill_path in packs:
+        text = _read_text(skill_path)
+        if "candidate_id:" in text or "provenance: \"confirmed-learning\"" in text:
+            generated += 1
+    return {"exists": True, "packs": len(packs), "generated": generated}
 
 
 def _memory_summary(path: Path) -> dict[str, Any]:

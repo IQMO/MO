@@ -32,6 +32,7 @@ def _agent(tmp_path):
     profile = ProfileStub(_path=str(tmp_path / "mo.db"))
     agent.profile = profile
     agent.allowed_roots = [str(tmp_path)]
+    agent.config = {}
     agent.sandbox_config = {
         "enabled": True,
         "audit_log": str(tmp_path / "tool_audit.jsonl"),
@@ -108,8 +109,8 @@ def test_agent_stages_workflow_from_local_file_without_provider(tmp_path):
 
     response = agent.run_turn(f"adopt this review workflow from {source}")
 
-    assert "Workflow candidate staged" in response
-    assert "Approve with: approve workflow candidate workflow-candidate:" in response
+    assert "Skill candidate staged" in response
+    assert "Approve with: approve skill candidate workflow-candidate:" in response
     assert "Inspect relevant files" in response
     stored = (tmp_path / "workflow_candidates.jsonl").read_text(encoding="utf-8")
     assert "review-workflow.md" in stored
@@ -123,7 +124,7 @@ def test_agent_blocks_workflow_url_when_sandbox_disallows_fetch(tmp_path):
 
     response = agent.run_turn("adopt this workflow from https://example.com/workflow.md")
 
-    assert response.startswith("Workflow source blocked:")
+    assert response.startswith("Skill source blocked:")
     audit = [json.loads(line) for line in (tmp_path / "tool_audit.jsonl").read_text(encoding="utf-8").splitlines()]
     assert audit[0]["tool"] == "web_fetch"
     assert audit[0]["blocked"] is True
@@ -134,11 +135,16 @@ def test_agent_promotes_staged_workflow_after_explicit_approval(tmp_path):
     source.write_text("# Testing workflow\n- Run tests before claiming fixed.\n", encoding="utf-8")
     agent = _agent(tmp_path)
     staged = agent.run_turn(f"adopt this testing workflow from {source}")
-    candidate_id = staged.split("approve workflow candidate ", 1)[1].strip()
+    candidate_id = staged.split("approve skill candidate ", 1)[1].strip()
 
-    promoted = agent.run_turn(f"approve workflow candidate {candidate_id}")
+    promoted = agent.run_turn(f"approve skill candidate {candidate_id}")
 
-    assert promoted.startswith("Workflow promoted:")
+    assert promoted.startswith("Skill promoted:")
+    assert "Skill pack:" in promoted
+    assert (tmp_path / "skills").exists()
+    skill_main = next((tmp_path / "skills").glob("*/SKILL.md"))
+    assert "Use this skill" in skill_main.read_text(encoding="utf-8")
+    assert "Testing workflow" in (skill_main.parent / "references" / "source.md").read_text(encoding="utf-8")
     promoted_store = (tmp_path / "workflow_promoted.jsonl").read_text(encoding="utf-8")
     assert candidate_id in promoted_store
     assert agent.profile.learned
@@ -149,7 +155,7 @@ def test_agent_does_not_promote_from_bare_candidate_id(tmp_path):
     source.write_text("# Testing workflow\n- Run tests before claiming fixed.\n", encoding="utf-8")
     agent = _agent(tmp_path)
     staged = agent.run_turn(f"adopt this testing workflow from {source}")
-    candidate_id = staged.split("approve workflow candidate ", 1)[1].strip()
+    candidate_id = staged.split("approve skill candidate ", 1)[1].strip()
 
     response = agent._maybe_handle_workflow_control_turn(candidate_id)
 

@@ -1215,6 +1215,27 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 notes.append(str(workflow_result.get("notice") or WORKFLOW_CANDIDATE_NOTICE))
         except Exception:
             traceback.print_exc()
+        try:
+            if memory and str(os.environ.get("MO_LEARNING_SUGGESTIONS_ENABLED", "1")).strip() != "0":
+                from ..learning.proactive_learning import (
+                    mine_learning_suggestions,
+                    next_learning_suggestion_notice,
+                    write_learning_suggestions,
+                )
+
+                profile_path = getattr(getattr(self, "profile", None), "_path", None)
+                suggestions_path = (
+                    Path(profile_path).parent / "learning_suggestions.jsonl"
+                    if profile_path else Path(resolve_state_path("memory/learning_suggestions.jsonl", getattr(self, "config", {}) or {}))
+                )
+                suggestions = mine_learning_suggestions(getattr(memory, "path", None))
+                if suggestions:
+                    write_learning_suggestions(suggestions, path=suggestions_path)
+                notice = next_learning_suggestion_notice(path=suggestions_path)
+                if notice:
+                    notes.append(notice)
+        except Exception:
+            traceback.print_exc()
         return notes
 
     @staticmethod
@@ -1227,7 +1248,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
 
     @staticmethod
     def _append_after_turn_notes(text: str, notes: list[str]) -> str:
-        clean = [str(note or "").strip()[:48] for note in notes if str(note or "").strip()]
+        clean = [str(note or "").strip()[:140] for note in notes if str(note or "").strip()]
         if not clean:
             return str(text or "")
         return (str(text or "").rstrip() + "\n" + "\n".join(clean)).strip()

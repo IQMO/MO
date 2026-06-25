@@ -78,6 +78,12 @@ def test_health_report_reads_graph_learning_and_sqlite(tmp_path):
         "## 2026-06-01T00:00:00Z — profile learning\n- core_traits: verify\n",
         encoding="utf-8",
     )
+    skill = tmp_path / "skills" / "verify-first" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(
+        "---\nname: \"Verify first\"\ndescription: \"generated\"\ntriggers:\n  - \"verify\"\ncandidate_id: \"learning-suggestion:x\"\n---\nbody\n",
+        encoding="utf-8",
+    )
     db_path = tmp_path / "memory" / "learning.sqlite"
     with sqlite3.connect(db_path) as conn:
         conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY)")
@@ -87,6 +93,8 @@ def test_health_report_reads_graph_learning_and_sqlite(tmp_path):
 
     assert report.graph["structural"]["nodes"] == 1
     assert report.learning["profile_learning"]["entries"] == 1
+    assert report.learning["skills"]["packs"] == 1
+    assert report.learning["skills"]["generated"] == 1
     assert report.learning["memory"]["turns"] == 1
 
 

@@ -983,7 +983,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         """Assemble the dynamic context block injected into the system message each turn.
 
         Includes: operator profile, episodic memory recall, Ghost intent guardrails,
-        work pattern guidance, workflow learning, workspace awareness, code graph slice,
+        work pattern guidance, unified local skills, workspace awareness, code graph slice,
         and reasoning level preference.  Used by run_turn.
 
         Profile context is gated: simple_chat / greeting turns skip the full profile
@@ -1027,8 +1027,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         proposal_context = f"### Ghost Intent Guardrails For This Turn\n{pending_proposal}" if pending_proposal else ""
         coordination_context = build_main_coordination_context(self, user_input)
         work_pattern_context = build_work_pattern_context(user_input)
-        workflow_learning_context = build_workflow_learning_context(getattr(self, "profile", None), user_input)
-        learning_context = build_learning_context(user_input)
         workspace_needed = should_include_workspace_awareness(user_input)
         if not workspace_needed:
             try:
@@ -1087,7 +1085,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 from ..skills import select_skills_context, default_skill_roots
                 skills_context = select_skills_context(
                     user_input,
-                    default_skill_roots(getattr(self, "project_cwd", None), getattr(self, "runtime_home", None)),
+                    default_skill_roots(
+                        getattr(self, "project_cwd", None),
+                        getattr(self, "runtime_home", None),
+                        profile=getattr(self, "profile", None),
+                        config=cfg,
+                    ),
+                    profile=getattr(self, "profile", None),
+                    config=cfg,
                 )
         except Exception:
             traceback.print_exc()
@@ -1097,8 +1102,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             "ghost_proposal": bool(proposal_context),
             "coordination": bool(coordination_context),
             "work_pattern": bool(work_pattern_context),
-            "workflow_learning": bool(workflow_learning_context),
-            "proactive_learning": bool(learning_context),
+            "workflow_learning": False,
+            "proactive_learning": False,
+            "skills": bool(skills_context),
             "workspace": bool(workspace_context),
             "project_context": bool(project_context),
             "mo_control": bool(mo_control_context),
@@ -1121,15 +1127,13 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=3000),
                 ContextSource("ghost_proposal", "Ghost intent guardrails for this turn", proposal_context, 3, "scope guardrail only; not proof of completion", max_chars=1400),
                 ContextSource("work_pattern", "Active work pattern", work_pattern_context, 3, "process guidance for this turn; verify before claims", max_chars=1800),
-                ContextSource("skills", "Relevant skill packs", skills_context, 3, "best-practice packs for this task; follow before acting, verify with tools", max_chars=2200),
+                ContextSource("skills", "Relevant MO skills", skills_context, 3, "authored, promoted, and confirmed local skill guidance for this task; follow before acting and verify with tools", max_chars=2600),
                 ContextSource("workspace", "Workspace / worker awareness", workspace_context, 3, "coordination context only; not proof of code correctness", max_chars=1600),
                 ContextSource("project_context", "Project-local instructions (current working directory)", project_context, 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", max_chars=3200),
                 ContextSource("mo_control", "MO control workspace authority", mo_control_context, 3, "active policy/orientation for cross-repo/server work; live checks still win", max_chars=2600),
                 ContextSource("self_capability", "MO self-capability preflight", self_capability_context, 1, "hard gate for MO self/OWNER_MAINTENANCE work; inventory existing capabilities before edits/builds", max_chars=7200),
                 ContextSource("devmode_output", "OWNER_MAINTENANCE runtime-owned output directory", devmode_output_context, 1, "authoritative private artifact directory for this OWNER_MAINTENANCE run; never hand-roll a memory/devmode timestamp", max_chars=1200),
                 ContextSource("pending_interrupted", "Paused interrupted work", pending_interrupted_context, 3, "continuity context only; do not resume unless relevant to current request", max_chars=1100),
-                ContextSource("workflow_learning", "Approved workflow learning", workflow_learning_context, 4, "operator-approved but relevance-gated; lower authority than current scope/evidence", max_chars=1200),
-                ContextSource("proactive_learning", "Confirmed learning suggestions", learning_context, 4, "operator-confirmed learning; lower authority than current scope/evidence", max_chars=1000),
                 ContextSource("reasoning", "Runtime reasoning preference", reasoning_context, 4, "runtime preference only; evidence and current task still win", max_chars=400),
                 ContextSource("memory", "Recalled past interactions", recalled_context, 5, "orientation only; not tool receipts or current proof", max_chars=2400),
                 ContextSource("code_graph", "Code map", code_graph_context, 5, "orientation only; graph hints must be verified with files/tools/tests", max_chars=1800),
@@ -1148,8 +1152,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 "proposal_chars": len(proposal_context),
                 "coordination_chars": len(coordination_context),
                 "work_pattern_chars": len(work_pattern_context),
-                "workflow_learning_chars": len(workflow_learning_context),
-                "proactive_learning_chars": len(learning_context),
+                "workflow_learning_chars": 0,
+                "proactive_learning_chars": 0,
+                "skills_chars": len(skills_context),
                 "workspace_chars": len(workspace_context),
                 "project_context_chars": len(project_context),
                 "mo_control_chars": len(mo_control_context),

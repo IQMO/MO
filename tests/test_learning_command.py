@@ -51,6 +51,8 @@ def test_learning_confirm_and_dismiss_review_suggestions(tmp_path, monkeypatch):
     assert read_learning_suggestions(include_inactive=True)[0].status == "confirmed"
     learning = (tmp_path / "memory" / "profile" / "learning.md").read_text(encoding="utf-8")
     assert "tool errors" in learning.lower()
+    skill_path = next((tmp_path / "skills").glob("*/SKILL.md"))
+    assert "verify after tool errors" in skill_path.read_text(encoding="utf-8")
 
     second = LearningSuggestion(
         id="learning-suggestion:trace:no_context_bridge:dismissme",

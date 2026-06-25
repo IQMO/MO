@@ -97,7 +97,7 @@ _CAPABILITY_FILES = (
     ("call graph", "core/graph/callgraph.py", "get_callers()/get_callees() exposed as the `find_callers`/`find_callees` tools — answer who-calls-X cheaply before manual reference hunting"),
     ("slash command registry", "interface/command_registry.py", "lists runtime commands such as /structural-graph and /learning"),
     ("learning mining", "core/learning/proactive_learning.py", "/learning suggestions and /profile mine review safe learning updates"),
-    ("workflow learning", "core/learning/workflow_learning.py", "stages/promotes workflow candidates; never auto-executes them"),
+    ("local skill learning", "core/learning/workflow_learning.py", "stages/promotes local skill candidates; never auto-executes them"),
     ("turn learning hook", "core/agent/agent.py", "_record_turn_memory_and_learning() records feedback/terms/workflow results"),
     ("turn workflow control", "core/agent/agent_turn_dispatch.py", "_maybe_handle_workflow_control_turn() handles explicit workflow adoption"),
     ("provider audit", "core/provider/provider_audit.py", "logs provider requests/responses for trace review"),
@@ -109,7 +109,7 @@ _CAPABILITY_FILES = (
     ("input behavior gates", "core/behavior_gates.py", "run_input_gates() — declarative pre-provider registry (threat scan + malicious-code refusal)"),
     ("content safety", "core/content_safety.py", "classify_harmful_coding_request() refuses malware/attack-tooling builds; dual-use-aware, operator-disableable"),
     ("write-time secret gate", "core/sandbox.py", "guard_tool_call blocks writing hardcoded secret literals into files (contains_hardcoded_secret_literal)"),
-    ("skills", "core/skills.py", "select_skills_context() injects relevant read-before-acting best-practice packs from skills/ and ~/.mo/skills"),
+    ("skills", "core/skills.py", "select_skills_context() injects relevant authored, promoted, and confirmed local skill packs from the profile-owned ~/.mo/skills root"),
     ("semantic memory", "core/learning/embeddings.py", "optional embeddings backend (build_embedder) gives EpisodicMemory.recall meaning-based ranking; bm25 keyword fallback"),
     ("adaptive reasoning", "core/agent/agent.py", "_adaptive_reasoning_level() picks per-turn depth; per-provider reasoning_effort seam in core/provider/provider.py"),
 )

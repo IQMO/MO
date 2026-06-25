@@ -95,7 +95,7 @@ def build_active_context_bridge(
     parts: list[str] = [
         "### MO Active Context Bridge",
         "Priority 1 — Non-negotiable contract",
-        "- The internal system prompt, sandbox/tool rules, taskboard truth, and the explicit current user request win over profile, memory, workflow, graph, and old session context.",
+        "- The internal system prompt, sandbox/tool rules, taskboard truth, and the explicit current user request win over profile, memory, local skills, graph, and old session context.",
         "- Evidence rule: use files, tool results, logs, tests, or runtime checks before factual claims or completion claims.",
         "- Scope rule: do not broaden the operator's request unless needed for safety, verification, or a clearly reported blocker.",
     ]
@@ -148,9 +148,9 @@ def _resolved_conflicts(user_input: str, sources: list[ContextSource]) -> list[s
             "Memory/graph hints may orient file selection only; re-read files and run relevant checks before claiming current code, tests, or completion."
         )
 
-    if "workflow_learning" in text_by_key:
+    if "skills" in text_by_key:
         conflicts.append(
-            "Approved workflow learning applies only when its trigger truly matches; current user scope, sandbox/tool rules, and taskboard evidence still win."
+            "Local skill guidance applies only when its trigger truly matches; current user scope, sandbox/tool rules, and taskboard evidence still win."
         )
 
     if "workspace" in text_by_key:

@@ -48,6 +48,24 @@ def test_code_graph_refreshes_small_stale_delta(tmp_path):
     assert "new_name" in second
 
 
+def test_code_graph_ignores_git_tracked_paths_missing_on_disk(tmp_path, monkeypatch):
+    (tmp_path / "live.py").write_text("def live_symbol():\n    return 1\n", encoding="utf-8")
+
+    def fake_run(args, **_kwargs):
+        if args[:3] == ["git", "rev-parse", "--show-toplevel"]:
+            return SimpleNamespace(returncode=0, stdout=str(tmp_path))
+        if args[:2] == ["git", "ls-files"]:
+            return SimpleNamespace(returncode=0, stdout="live.py\nremoved.py\n")
+        return SimpleNamespace(returncode=1, stdout="")
+
+    monkeypatch.setattr("core.graph.code_graph.subprocess.run", fake_run)
+
+    context = build_code_graph_context("inspect live removed", cwd=str(tmp_path))
+
+    assert "live_symbol" in context
+    assert "removed.py" not in context
+
+
 def test_code_graph_can_be_disabled_by_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MO_CODE_GRAPH", "0")
     (tmp_path / "app.py").write_text("def hidden_when_disabled():\n    pass\n", encoding="utf-8")

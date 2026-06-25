@@ -83,7 +83,7 @@ def test_agent_records_memory_and_feedback_learning(tmp_path):
     )
 
     assert any(note.startswith("Noted:") for note in notes)
-    assert all(len(note) < 50 for note in notes)
+    assert all(len(note) < 160 for note in notes)
     assert len(agent.memory.turns) == 1
     assert agent.memory.turns[0]["assistant"] == "implemented"
     assert len(agent.profile.calls) == 1
@@ -100,5 +100,5 @@ def test_agent_reports_staged_workflow_candidate_notice(tmp_path):
         "understood",
     )
 
-    assert "Workflow staged: approve latest" in notes
-    assert all(len(note) < 50 for note in notes)
+    assert any(note.startswith("Skill staged: approve skill candidate workflow-candidate:") for note in notes)
+    assert all(len(note) < 160 for note in notes)

@@ -792,9 +792,32 @@ def _unknowns(
     return rows
 
 
+_HANDOFF_GENERIC_GRAPH_TERMS = {
+    "compact",
+    "context",
+    "continue",
+    "handoff",
+    "status",
+    "summary",
+    "test",
+    "unit",
+}
+
+
+def _specific_handoff_graph_query(query: str) -> bool:
+    words = [
+        word
+        for word in re.findall(r"[a-z0-9_./-]{3,}", str(query or "").lower())
+        if word not in {"and", "for", "that", "the", "this", "with"}
+    ]
+    if len(words) < 2 and (not words or words[0] in _HANDOFF_GENERIC_GRAPH_TERMS):
+        return False
+    return True
+
+
 def _code_graph_context_for_handoff(query: str) -> str:
     query = str(query or "").strip()
-    if not query or not should_include_code_graph_context(query):
+    if not query or not _specific_handoff_graph_query(query) or not should_include_code_graph_context(query):
         return ""
     try:
         graph_context = build_code_graph_context(query, max_chars=1200, max_nodes=6)

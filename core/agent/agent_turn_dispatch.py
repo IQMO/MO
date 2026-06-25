@@ -120,22 +120,27 @@ class AgentTurnDispatchMixin:
         )
 
     def _maybe_handle_workflow_control_turn(self, user_input: str) -> str | None:
-        """Handle workflow adoption/promotion without a provider call.
+        """Handle local skill adoption/promotion without a provider call.
 
         External skills/workflows are untrusted source material. MO stages them
-        as inert workflow candidates, then requires explicit approval before any
-        relevance-gated guidance is used.
+        as inert local skill candidates, then requires explicit approval before
+        any relevance-gated guidance is used.
         """
         text = str(user_input or "").strip()
         if not text:
             return None
+        learning = self._maybe_handle_learning_control_turn(text)
+        if learning is not None:
+            return learning
         if WORKFLOW_APPROVAL_RE.search(text) and not WORKFLOW_ADOPTION_RE.search(text):
             result = promote_workflow_candidate(getattr(self, "profile", None), text, "workflow approval handled locally")
             if result.get("promoted"):
-                return f"Workflow promoted: `{result.get('id', '')}`\nApplies only when relevant; current scope, tools, sandbox, and Gateway taskboard truth still win."
+                skill_path = str(result.get("skill_path") or "")
+                path_line = f"\nSkill pack: {skill_path}" if skill_path else ""
+                return f"Skill promoted: `{result.get('id', '')}`{path_line}\nApplies only when relevant; current scope, tools, sandbox, and Gateway taskboard truth still win."
             if result.get("blocked"):
-                return f"Workflow promotion blocked: {result.get('reason', 'unsafe workflow candidate')}"
-            return f"No workflow promoted: {result.get('reason', 'no matching workflow candidate')}"
+                return f"Skill promotion blocked: {result.get('reason', 'unsafe skill candidate')}"
+            return f"No skill promoted: {result.get('reason', 'no matching skill candidate')}"
         if not WORKFLOW_ADOPTION_RE.search(text):
             return None
         # Fail open: WORKFLOW_ADOPTION_RE also matches bare "use the same method/skill
@@ -154,7 +159,7 @@ class AgentTurnDispatchMixin:
             return None
         loaded = self._load_workflow_adoption_source(text)
         if not loaded.get("ok"):
-            return loaded.get("message") or "Give me a workflow file path, URL, or pasted workflow text to stage."
+            return loaded.get("message") or "Give me a skill/workflow file path, URL, or pasted guidance text to stage."
         staged = stage_workflow_source_candidate(
             getattr(self, "profile", None),
             str(loaded.get("content") or ""),
@@ -163,18 +168,18 @@ class AgentTurnDispatchMixin:
             request_text=text,
         )
         if not staged.get("staged"):
-            reason = staged.get("reason", "could not stage workflow")
-            prefix = "Workflow adoption blocked" if staged.get("blocked") else "Workflow adoption failed"
+            reason = staged.get("reason", "could not stage skill")
+            prefix = "Skill adoption blocked" if staged.get("blocked") else "Skill adoption failed"
             return f"{prefix}: {reason}"
         candidate = staged.get("candidate") or {}
         duplicate = "already staged" if staged.get("duplicate") else "staged"
         return (
-            f"Workflow candidate {duplicate}: `{staged.get('id', '')}`\n"
+            f"Skill candidate {duplicate}: `{staged.get('id', '')}`\n"
             f"When: {candidate.get('trigger', '')}\n"
             f"Do: {candidate.get('behavior', '')}\n"
             f"Avoid: {candidate.get('anti_pattern', '')}\n"
             f"Source: {candidate.get('source_label', '')}\n"
-            f"Approve with: approve workflow candidate {staged.get('id', '')}"
+            f"Approve with: approve skill candidate {staged.get('id', '')}"
         )
 
     def _load_workflow_adoption_source(self, user_input: str) -> dict[str, object]:
@@ -186,11 +191,11 @@ class AgentTurnDispatchMixin:
             block_reason = guard_tool_call("web_fetch", args, lane=self._active_lane, allowed_roots=self.allowed_roots, sandbox_config=self.sandbox_config)
             if block_reason:
                 self._write_tool_audit("web_fetch", args, "", block_reason)
-                return {"ok": False, "message": f"Workflow source blocked: {block_reason}"}
+                return {"ok": False, "message": f"Skill source blocked: {block_reason}"}
             result = self._dispatch_tool("web_fetch", args)
             self._write_tool_audit("web_fetch", args, result, None)
             if str(result).startswith("Error"):
-                return {"ok": False, "message": f"Workflow source fetch failed: {result[:240]}"}
+                return {"ok": False, "message": f"Skill source fetch failed: {result[:240]}"}
             return {"ok": True, "kind": "url", "label": url, "content": result}
 
         path = self._extract_workflow_source_path(text)
@@ -199,17 +204,17 @@ class AgentTurnDispatchMixin:
             block_reason = guard_tool_call("read_file", args, lane=self._active_lane, allowed_roots=self.allowed_roots, sandbox_config=self.sandbox_config)
             if block_reason:
                 self._write_tool_audit("read_file", args, "", block_reason)
-                return {"ok": False, "message": f"Workflow source blocked: {block_reason}"}
+                return {"ok": False, "message": f"Skill source blocked: {block_reason}"}
             result = self._dispatch_tool("read_file", args)
             self._write_tool_audit("read_file", args, result, None)
             if str(result).startswith("Error"):
-                return {"ok": False, "message": f"Workflow source read failed: {result[:240]}"}
+                return {"ok": False, "message": f"Skill source read failed: {result[:240]}"}
             return {"ok": True, "kind": "file", "label": path, "content": result}
 
         inline = self._extract_inline_workflow_source(text)
         if inline:
             return {"ok": True, "kind": "text", "label": "inline workflow text", "content": inline}
-        return {"ok": False, "message": "Give me a workflow file path, URL, or pasted workflow text to stage."}
+        return {"ok": False, "message": "Give me a skill/workflow file path, URL, or pasted guidance text to stage."}
 
     @staticmethod
     def _extract_workflow_source_path(text: str) -> str:
@@ -243,6 +248,23 @@ class AgentTurnDispatchMixin:
         if any(marker in low for marker in AgentTurnDispatchMixin._NARRATION_MARKERS):
             return ""
         return inline
+
+    def _maybe_handle_learning_control_turn(self, text: str) -> str | None:
+        """Natural-language alias for local learning/skill management."""
+        clean = " ".join(str(text or "").strip().split())
+        low = clean.lower()
+        if not low:
+            return None
+        suggestion_match = re.search(r"learning-suggestion:[a-z0-9_:-]+", clean, flags=re.I)
+        if suggestion_match and re.search(r"\b(confirm|approve|accept|save)\b", low):
+            return self._cmd_learning_review("confirm", suggestion_match.group(0))
+        if suggestion_match and re.search(r"\b(dismiss|reject|ignore|drop)\b", low):
+            return self._cmd_learning_review("dismiss", suggestion_match.group(0))
+        if re.fullmatch(r"(?:show|list|review|what(?:'s| is))\s+(?:what\s+)?(?:you\s+)?(?:learned|learning|local skills|skills)(?:\s+status)?[?.!]*", low):
+            return self._cmd_learning("status")
+        if re.fullmatch(r"(?:show|list|review)\s+(?:pending\s+)?(?:learning|suggestions|skill candidates|skills pending)(?:\s+pending)?[?.!]*", low):
+            return self._cmd_learning("pending")
+        return None
 
     def _detect_tool_abuse(self, name: str, arguments: dict) -> str:
         if not hasattr(self, "_tool_history"):

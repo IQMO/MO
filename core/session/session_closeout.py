@@ -1,6 +1,6 @@
 """Deterministic MO session closeout.
 
-This is MO's built-in SFF shape: a local truth refresh at real session
+This is MO's built-in session closeout: a local truth refresh at real session
 boundaries, not a public skill or another agent. It records clean/unresolved
 state, token economics, compression savings, taskboard evidence, workers/goals,
 and workspace dirtiness as orientation only.
@@ -269,7 +269,7 @@ def stage_session_closeout_feedback(
     try:
         from ..learning.workflow_learning import stage_workflow_source_candidate
     except Exception:
-        return {"staged": False, "patterns": patterns, "repeated": repeated, "reason": "workflow learning unavailable"}
+        return {"staged": False, "patterns": patterns, "repeated": repeated, "reason": "skill learning unavailable"}
 
     for pattern in repeated:
         source = _closeout_candidate_source(pattern, closeout)
@@ -278,7 +278,7 @@ def stage_session_closeout_feedback(
             source,
             source_label=f"session closeout repeated pattern: {pattern}",
             source_kind="session-closeout",
-            request_text="stage repeated session closeout workflow learning",
+            request_text="stage repeated session closeout skill candidate",
         )
         if result.get("staged"):
             staged.append({"pattern": pattern, "id": result.get("id", ""), "duplicate": bool(result.get("duplicate"))})

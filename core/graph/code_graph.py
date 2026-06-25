@@ -190,7 +190,7 @@ def _discover_files(root: Path) -> list[str]:
         proc = subprocess.run(["git", "ls-files"], cwd=str(root), text=True, capture_output=True, timeout=5)
         if proc.returncode == 0 and proc.stdout.strip():
             candidates = [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
-            return [p for p in candidates if _indexable_path(p)]
+            return [p for p in candidates if _indexable_path(p) and (root / p).is_file()]
     except Exception:
         traceback.print_exc()
 

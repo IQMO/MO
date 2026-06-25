@@ -11,7 +11,7 @@ from .text_utils import words
 
 
 WORKFLOW_GATING_RE = re.compile(
-    r"\b(?:adopt|learn|approve|promote|activate|use)\b.{0,80}\b(?:workflow|workflow-candidate|skill|style|process|method)\b"
+    r"\b(?:adopt|learn|save|stage|approve|promote|activate|use)\b.{0,80}\b(?:workflow|workflow-candidate|skill|skill-candidate|style|process|method)\b"
     r"|\bworkflow-candidate:[a-f0-9]{8,40}\b",
     re.I | re.S,
 )

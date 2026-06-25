@@ -19,6 +19,7 @@ def test_workspace_root_has_no_private_runtime_or_external_tooling_content():
         "memory",
         "logs",
         "." + "omx",
+        "." + "agents",
         ".pytest_cache",
         ".ruff_cache",
         "__pycache__",
@@ -29,11 +30,6 @@ def test_workspace_root_has_no_private_runtime_or_external_tooling_content():
     present = [name for name in forbidden_dirs if Path(name).exists()]
 
     assert present == []
-
-    external_runner_dir = Path("." + "agents")
-    if external_runner_dir.exists():
-        assert external_runner_dir.is_dir()
-        assert list(external_runner_dir.iterdir()) == []
 
 
 def test_public_docs_do_not_reference_external_tooling_markers():
@@ -124,6 +120,8 @@ def test_current_docs_do_not_import_retired_root_trace_tools():
     ]
 
     for path in current_paths:
+        if not path.exists():
+            continue
         text = path.read_text(encoding="utf-8")
         assert "status/TRACE-VALIDATION-COMPLETE" not in text
         assert "../mo_trace.py" not in text

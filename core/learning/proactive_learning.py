@@ -319,7 +319,7 @@ def expire_stale_suggestions(
     now: float | None = None,
 ) -> int:
     """Mark unreviewed suggestions older than the TTL as expired; return count."""
-    ttl = int(ttl_days if ttl_days is not None else int_env("MO_LEARNING_SUGGESTION_TTL_DAYS", 30))
+    ttl = int(ttl_days if ttl_days is not None else int_env("MO_LEARNING_SUGGESTION_TTL_DAYS", 7))
     if ttl <= 0:
         return 0
     src = Path(path)
@@ -395,6 +395,39 @@ def render_learning_clusters(
     return "\n".join(lines)
 
 
+def next_learning_suggestion_notice(
+    *,
+    path: str | Path = "memory/learning_suggestions.jsonl",
+    min_confidence: float = 0.62,
+    cooldown_hours: float = 24.0,
+    now: float | None = None,
+) -> str:
+    """Return one actionable learning notice and mark its cluster prompted.
+
+    Suggestions remain inert. This is only the missing review prompt: it tells
+    the operator a recurring cluster is ready and gives natural-language confirm
+    or dismiss wording. A per-cluster cooldown prevents repeated after-turn spam.
+    """
+    current = float(now if now is not None else time.time())
+    suggestions = read_learning_suggestions(path=path)
+    if not suggestions:
+        return ""
+    rows_by_id = _read_rows_by_id(Path(path))
+    cooldown = max(0.0, float(cooldown_hours or 0.0)) * 3600
+    for cluster in cluster_suggestions(suggestions, now=current):
+        if cluster.confidence < min_confidence:
+            continue
+        prompted = max(float((rows_by_id.get(sid) or {}).get("last_prompted_at") or 0.0) for sid in cluster.ids)
+        if prompted and cooldown and current - prompted < cooldown:
+            continue
+        _mark_suggestions_prompted(Path(path), cluster.ids, current)
+        return (
+            f"Learning suggestion ready ({cluster.kind}, {cluster.count}x): "
+            f"say confirm learning suggestion {cluster.representative.id} or dismiss learning suggestion {cluster.representative.id}"
+        )
+    return ""
+
+
 def build_learning_context(
     user_input: str,
     *,
@@ -406,7 +439,7 @@ def build_learning_context(
     Only confirmed suggestions are included (operator-approved). Unreviewed
     "suggested" items are not injected — they must be reviewed via /learning
     first. The text follows the same compact orientation-only contract as
-    workflow learning context.
+    selected local skill context.
     """
     user_text = str(user_input or "").strip()
     if not user_text:
@@ -441,6 +474,50 @@ def _read_confirmed_suggestions(path: str | Path) -> list[LearningSuggestion]:
     """Read only confirmed suggestions from the JSONL file."""
     return [s for s in read_learning_suggestions(path=str(path), include_inactive=True)
             if str(s.status).lower() == "confirmed"]
+
+
+def _read_rows_by_id(path: Path) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    try:
+        if not path.exists():
+            return rows
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict) and row.get("id"):
+                rows[str(row["id"])] = row
+    except OSError:
+        return rows
+    return rows
+
+
+def _mark_suggestions_prompted(path: Path, ids: tuple[str, ...], prompted_at: float) -> None:
+    wanted = {str(item) for item in ids}
+    if not wanted or not path.exists():
+        return
+    changed = False
+    rows: list[dict[str, Any]] = []
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                if str(row.get("id") or "") in wanted:
+                    row["last_prompted_at"] = prompted_at
+                    changed = True
+                rows.append(row)
+        if changed:
+            atomic_write_text(path, "\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
+    except OSError:
+        return
 
 
 _RELEVANCE_STOPWORDS = frozenset({

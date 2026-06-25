@@ -2,7 +2,7 @@
 
 Trace learning is a boundary-time canary. It reads already-recorded trace facts
 and writes inert suggestions only; it never calls providers, changes task truth,
-or applies profile/workflow learning without explicit operator confirmation.
+or applies profile/local skill learning without explicit operator confirmation.
 """
 from __future__ import annotations
 

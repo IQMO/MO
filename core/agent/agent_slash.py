@@ -183,6 +183,7 @@ class AgentSlashCommands:
         if sub in {"confirm", "dismiss"}:
             return self._cmd_learning_review(sub, arg)
         from core.learning.proactive_learning import cluster_suggestions, read_learning_suggestions
+        from core.skills import default_skill_roots, load_generated_learning_skills, load_skills
         from core.system_health import build_health_report
         report = build_health_report(self.runtime_home)
         profile = report.learning.get("profile_learning", {})
@@ -193,15 +194,22 @@ class AgentSlashCommands:
         active = read_learning_suggestions(path=suggestions_path)
         pending_clusters = cluster_suggestions(active)
         confirmed = [s for s in read_learning_suggestions(path=suggestions_path, include_inactive=True) if str(s.status).lower() == "confirmed"]
-        skills = cluster_suggestions(confirmed)
+        confirmed_clusters = cluster_suggestions(confirmed)
+        roots = default_skill_roots(
+            getattr(self, "project_cwd", None),
+            getattr(self, "runtime_home", None),
+            profile=getattr(self, "profile", None),
+            config=cfg,
+        )
+        skill_count = len(load_skills(roots)) + len(load_generated_learning_skills(getattr(self, "profile", None)))
         categories = profile.get("categories", {}) if isinstance(profile.get("categories", {}), dict) else {}
         category_text = ", ".join(f"{name} {count}" for name, count in sorted(categories.items())) if categories else "none"
         return "\n".join([
             "Learning status:",
             f"  profile entries: {profile.get('entries', 0)} · categories: {category_text}",
             f"  behavior rules:   {behavior.get('count', 0)}",
-            f"  workflow:         {workflow.get('candidates', 0)} staged / {workflow.get('promoted', 0)} promoted",
-            f"  skills:           {len(skills)} confirmed cluster(s) (inject when relevant)",
+            f"  candidates:       {workflow.get('candidates', 0)} staged / {workflow.get('promoted', 0)} promoted",
+            f"  skills:           {skill_count} local/generated pack(s); {len(confirmed_clusters)} confirmed cluster(s)",
             f"  suggestions:      {len(pending_clusters)} cluster(s) pending review ({len(active)} raw)",
             f"  memory:           {memory.get('turns', 0)} turns · FTS5 {'yes' if memory.get('fts5') else 'no'} · misses {memory.get('miss_terms', 0)}",
             f"  graph:            {graph.get('nodes', 0)} nodes / {graph.get('edges', 0)} edges / {graph.get('communities', 0)} communities",
@@ -233,7 +241,23 @@ class AgentSlashCommands:
         representative = suggestions.get(clean_id) or next((suggestions[mid] for mid in member_ids if mid in suggestions), None)
         result = apply_trace_learning_suggestion(getattr(self, "profile", None), representative) if representative else ""
         updated = sum(1 for mid in member_ids if update_learning_suggestion_status(mid, "confirmed", path=suggestions_path))
-        return f"Confirmed cluster: {updated} suggestion(s) — now part of MO's skills ({clean_id})\n{result}".rstrip()
+        skill_path = ""
+        if representative:
+            try:
+                from core.skills import write_skill_pack_from_suggestion
+
+                row = representative.as_dict()
+                row["status"] = "confirmed"
+                skill_path = str(write_skill_pack_from_suggestion(
+                    row,
+                    profile=getattr(self, "profile", None),
+                    runtime_home=getattr(self, "runtime_home", None),
+                    config=cfg,
+                ))
+            except Exception:
+                traceback.print_exc()
+        skill_line = f"\nSkill pack: {skill_path}" if skill_path else ""
+        return f"Confirmed cluster: {updated} suggestion(s) - now part of MO's skills ({clean_id}){skill_line}\n{result}".rstrip()
 
     def _cmd_structural_graph(self, rest: str) -> str:
         """Show or build MO's optional structural code graph."""

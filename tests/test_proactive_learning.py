@@ -202,3 +202,22 @@ def test_render_learning_clusters_shows_top_five_and_totals():
     assert "2 stale suggestion(s) auto-expired" in text
     assert "+3 lower-confidence cluster(s)" in text
     assert "MO" in text and "skills" in text
+
+
+def test_next_learning_suggestion_notice_is_actionable_and_rate_limited(tmp_path):
+    import json
+    from core.learning.proactive_learning import next_learning_suggestion_notice
+
+    path = tmp_path / "suggestions.jsonl"
+    rows = [
+        {"id": "learning-suggestion:evidence:a1", "kind": "evidence_first", "recommendation": "Verify before claiming.", "evidence": [], "status": "suggested", "created_at": 1000.0},
+        {"id": "learning-suggestion:evidence:a2", "kind": "evidence_first", "recommendation": "Verify before claiming.", "evidence": [], "status": "suggested", "created_at": 1001.0},
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    notice = next_learning_suggestion_notice(path=path, min_confidence=0.0, now=2000.0)
+    again = next_learning_suggestion_notice(path=path, min_confidence=0.0, now=2100.0)
+
+    assert "confirm learning suggestion learning-suggestion:evidence:a2" in notice
+    assert "dismiss learning suggestion learning-suggestion:evidence:a2" in notice
+    assert again == ""

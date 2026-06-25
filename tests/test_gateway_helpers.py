@@ -25,6 +25,10 @@ class TestWorkflowControlRequest:
 
     def test_approve_triggers(self):
         assert is_workflow_control_request("approve workflow pattern")
+        assert is_workflow_control_request("approve skill candidate workflow-candidate:abcdef123456")
+
+    def test_save_skill_source_triggers(self):
+        assert is_workflow_control_request("save this testing skill: always run pytest before claiming fixed")
 
     def test_activate_triggers(self):
         assert is_workflow_control_request("activate workflow-candidate:1234567890abcdef")
@@ -79,6 +83,7 @@ class TestSelectTemplate:
     def test_workflow_control_overrides(self):
         assert select_template("adopt workflow") == "simple_chat"
         assert select_template("learn workflow pattern") == "simple_chat"
+        assert select_template("save this testing skill: always run pytest before claiming fixed") == "simple_chat"
 
     def test_problem_over_review(self):
         """Problem triggers take priority over review triggers."""

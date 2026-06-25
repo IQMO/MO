@@ -81,6 +81,39 @@ def test_compact_handoff_summary_includes_file_refs_and_graph(tmp_path, monkeypa
     assert len(summary.splitlines()) < 500
 
 
+def test_handoff_skips_code_graph_for_generic_focus(monkeypatch):
+    agent = _agent_with_session()
+    calls = []
+    monkeypatch.setattr("core.session.handoff.should_include_code_graph_context", lambda _query: True)
+    monkeypatch.setattr(
+        "core.session.handoff.build_code_graph_context",
+        lambda query, max_chars=1200, max_nodes=6: calls.append(query) or "unexpected graph",
+    )
+
+    document = build_handoff_document(agent, focus="handoff", reason="unit test")
+
+    assert calls == []
+    assert "### Code graph slice" not in document
+    assert "No code graph slice generated for this handoff" in document
+
+
+def test_handoff_keeps_code_graph_for_specific_focus(monkeypatch):
+    agent = _agent_with_session()
+    calls = []
+    monkeypatch.setattr("core.session.handoff.should_include_code_graph_context", lambda _query: True)
+    monkeypatch.setattr(
+        "core.session.handoff.build_code_graph_context",
+        lambda query, max_chars=1200, max_nodes=6: calls.append(query)
+        or "### MO Internal Code Map - orientation only\n- file: `core/session/handoff.py` symbols=build_handoff_document",
+    )
+
+    document = build_handoff_document(agent, focus="inspect core/session/handoff.py", reason="unit test")
+
+    assert calls == ["inspect core/session/handoff.py"]
+    assert "### Code graph slice" in document
+    assert "core/session/handoff.py" in document
+
+
 def test_handoff_document_is_temp_redacted_and_reference_based():
     agent = _agent_with_session()
     agent.session.add_user("please continue; api_key=sk-secret123")

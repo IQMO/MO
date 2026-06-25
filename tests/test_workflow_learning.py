@@ -78,6 +78,8 @@ def test_workflow_learning_promotes_only_explicit_approval(tmp_path):
     promoted = load_promoted_workflows(profile)
     assert len(promoted) == 1
     assert promoted[0]["status"] == "promoted"
+    assert promoted[0]["skill_path"].endswith("SKILL.md")
+    assert (tmp_path / "skills").exists()
     assert profile.learned
 
 
@@ -93,7 +95,7 @@ def test_repeated_workflow_candidates_create_notice_without_promotion(tmp_path):
 
     assert [result["recorded"] for result in results] == [True, True, True]
     assert results[-1]["repeat_count"] == 3
-    assert results[-1]["notice"] == "Workflow repeated 3x: approve latest?"
+    assert results[-1]["notice"].startswith("Skill repeated 3x: approve skill candidate workflow-candidate:")
     assert load_promoted_workflows(profile) == []
 
 
@@ -106,7 +108,7 @@ def test_approved_workflow_learning_context_is_relevance_gated(tmp_path):
     context = build_workflow_learning_context(profile, "audit evidence for this taskboard")
     unrelated = build_workflow_learning_context(profile, "chat about lunch")
 
-    assert "MO Internal Workflow Learning" in context
+    assert "MO Internal Local Skills" in context
     assert "audit evidence" in context.lower()
     assert "taskboard evidence still win" in context
     assert unrelated == ""

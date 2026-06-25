@@ -1,7 +1,7 @@
-"""Internal workflow-candidate learning for MO.
+"""Compatibility staging for MO local skill candidates.
 
 Candidates are local/inert. Only explicit operator promotion creates compact,
-relevance-gated workflow guidance for later turns. Taskboard truth still lives
+relevance-gated local skill guidance for later turns. Taskboard truth still lives
 with Gateway/Agent evidence, never here.
 """
 from __future__ import annotations
@@ -33,12 +33,14 @@ _PROMOTION_MARKERS = (
     "promote workflow candidate", "approve workflow candidate", "promote workflow learning",
     "approve workflow learning", "approve workflow", "promote workflow", "activate workflow",
     "activate workflow candidate", "use workflow candidate", "wire workflow candidate",
+    "promote skill candidate", "approve skill candidate", "activate skill candidate",
+    "use skill candidate", "approve skill", "promote skill",
 )
-WORKFLOW_CANDIDATE_NOTICE = "Workflow staged: approve latest"
-WORKFLOW_REPEAT_NOTICE = "Workflow repeated 3x: approve latest?"
+WORKFLOW_CANDIDATE_NOTICE = "Skill staged: approve latest"
+WORKFLOW_REPEAT_NOTICE = "Skill repeated 3x: approve latest?"
 
 def extract_workflow_candidate(user_text: str, assistant_text: str = "") -> dict[str, Any]:
-    """Return an inert workflow candidate from explicit high-signal feedback only."""
+    """Return an inert local skill candidate from explicit high-signal feedback only."""
     text = str(user_text or "").strip()
     low = text.lower()
     if not text or not any(marker.lower() in low for marker in _SIGNAL_MARKERS):
@@ -81,7 +83,7 @@ def record_workflow_candidate_result(profile: Any, user_text: str, assistant_tex
     """
     candidate = extract_workflow_candidate(user_text, assistant_text)
     if not candidate:
-        return {"recorded": False, "reason": "no high-signal workflow candidate"}
+        return {"recorded": False, "reason": "no high-signal skill candidate"}
     path = _candidate_path(profile)
     try:
         added = _append_candidate_record(path, candidate)
@@ -90,7 +92,10 @@ def record_workflow_candidate_result(profile: Any, user_text: str, assistant_tex
     if added:
         _wire_workflow_to_knowledge_store(candidate)
     repeat_count = int(candidate.get("repeat_count") or 1)
-    notice = WORKFLOW_REPEAT_NOTICE if added and repeat_count >= 3 else WORKFLOW_CANDIDATE_NOTICE
+    if added and repeat_count >= 3:
+        notice = f"Skill repeated {repeat_count}x: approve skill candidate {candidate.get('id', '')}"
+    else:
+        notice = f"Skill staged: approve skill candidate {candidate.get('id', '')}"
     return {
         "recorded": bool(added),
         "duplicate": not added,
@@ -109,10 +114,10 @@ def stage_workflow_source_candidate(
     source_kind: str = "text",
     request_text: str = "",
 ) -> dict[str, Any]:
-    """Stage an inert workflow candidate from an external file/link/paste.
+    """Stage an inert skill candidate from an external file/link/paste.
 
     External "skills" are untrusted source material. This function scans and
-    compacts them into MO's existing workflow-candidate format; it does not
+    compacts them into MO's existing candidate format; it does not
     promote, execute, create commands, or change taskboard truth.
     """
     source = str(source_text or "").strip()
@@ -168,6 +173,7 @@ def extract_workflow_candidate_from_source(
         "source_label": label,
         "source_sha1": hashlib.sha1(source.encode("utf-8", errors="ignore")).hexdigest(),
         "source_excerpt": _one_line(source, 500),
+        "source_text": source[:12000],
         "created_at": time.time(),
     }
     if request_text:
@@ -178,19 +184,19 @@ def extract_workflow_candidate_from_source(
 
 
 def promote_workflow_candidate(profile: Any, user_text: str, assistant_text: str = "") -> dict[str, Any]:
-    """Promote a staged workflow candidate only on explicit operator approval."""
+    """Promote a staged skill candidate only on explicit operator approval."""
     text = str(user_text or "").strip()
     low = text.lower()
     if not text or not any(marker in low for marker in _PROMOTION_MARKERS):
-        return {"promoted": False, "reason": "no explicit workflow promotion request"}
+        return {"promoted": False, "reason": "no explicit skill promotion request"}
     request_scan = scan_text(text, surface="workflow promotion request")
     if request_scan.blocked or _has_secret_warning(request_scan):
         return {"promoted": False, "blocked": True, "reason": request_scan.reason() or "secret-bearing approval text"}
     path = _candidate_path(profile)
     candidate = _select_candidate(_read_jsonl(path), text)
     if not candidate:
-        return {"promoted": False, "reason": "no matching workflow candidate"}
-    candidate_text = "\n".join(str(candidate.get(key) or "") for key in ("trigger", "behavior", "scope", "anti_pattern"))
+        return {"promoted": False, "reason": "no matching skill candidate"}
+    candidate_text = "\n".join(str(candidate.get(key) or "") for key in ("trigger", "behavior", "scope", "anti_pattern", "source_text"))
     candidate_scan = scan_text(candidate_text, surface="workflow candidate promotion")
     if candidate_scan.blocked or _has_secret_warning(candidate_scan):
         reason = candidate_scan.reason() if candidate_scan.blocked else "secret-bearing candidate text"
@@ -204,16 +210,21 @@ def promote_workflow_candidate(profile: Any, user_text: str, assistant_text: str
         "assistant_excerpt_at_approval": str(assistant_text or "")[:240],
     })
     try:
+        from ..skills import write_skill_pack_from_candidate
+
+        skill_path = write_skill_pack_from_candidate(promoted, profile=profile)
+        promoted["skill_path"] = str(skill_path)
+        promoted["skill_status"] = "active"
         _rewrite_candidate_status(path, str(candidate.get("id") or ""), promoted)
         _append_unique_record(_promoted_path(profile), promoted)
         _append_profile_learning(profile, promoted)
-        return {"promoted": True, "id": promoted.get("id", ""), "path": str(_promoted_path(profile))}
-    except OSError as exc:
+        return {"promoted": True, "id": promoted.get("id", ""), "path": str(_promoted_path(profile)), "skill_path": str(skill_path)}
+    except Exception as exc:
         return {"promoted": False, "reason": f"write failed: {type(exc).__name__}", "id": candidate.get("id", "")}
 
 
 def build_workflow_learning_context(profile: Any, user_input: str, *, max_chars: int = 900) -> str:
-    """Return compact approved workflow guidance relevant to the current turn."""
+    """Return compact approved local skill guidance relevant to the current turn."""
     user_text = str(user_input or "").strip()
     if not user_text or not any(marker in user_text.lower() for marker in _WORK_MARKERS):
         return ""
@@ -221,7 +232,7 @@ def build_workflow_learning_context(profile: Any, user_input: str, *, max_chars:
     if not selected:
         return ""
     lines = [
-        "### MO Internal Workflow Learning — approved, relevance-gated",
+        "### MO Internal Local Skills - approved, relevance-gated",
         "Apply only when the trigger truly fits this turn. Current user scope, sandbox, tools, and Gateway/taskboard evidence still win.",
     ]
     for record in selected[:3]:
@@ -231,7 +242,7 @@ def build_workflow_learning_context(profile: Any, user_input: str, *, max_chars:
         if anti:
             lines.append(f"  Avoid: {anti}")
     text = "\n".join(lines).strip()
-    return text if len(text) <= max_chars else text[:max_chars].rsplit("\n", 1)[0] + "\n[workflow learning truncated]"
+    return text if len(text) <= max_chars else text[:max_chars].rsplit("\n", 1)[0] + "\n[local skill context truncated]"
 
 
 def load_promoted_workflows(profile: Any) -> list[dict[str, Any]]:
@@ -240,10 +251,10 @@ def load_promoted_workflows(profile: Any) -> list[dict[str, Any]]:
 
 
 def stage_structural_graph_candidates(profile: Any, *, root: str | Path | None = None, max_items: int = 8) -> dict[str, Any]:
-    """Stage inert workflow candidates discovered from structural graph data.
+    """Stage inert local skill candidates discovered from structural graph data.
 
     These are not promoted automatically. They use the same candidate schema as
-    text-derived workflow learning, so the operator must explicitly approve them
+    text-derived skill learning, so the operator must explicitly approve them
     before they influence future turns.
     """
     try:
@@ -303,7 +314,7 @@ def _expire_stale_candidates(path: Path, *, ttl_days: int | None = None) -> int:
     compared against ``"staged"``, a status no record ever has, so the TTL never
     expired anything.)
     """
-    ttl = int(ttl_days if ttl_days is not None else int_env("MO_WORKFLOW_CANDIDATE_TTL_DAYS", 30))
+    ttl = int(ttl_days if ttl_days is not None else int_env("MO_WORKFLOW_CANDIDATE_TTL_DAYS", 7))
     if ttl <= 0 or not path.exists():
         return 0
     cutoff = time.time() - ttl * 86400
@@ -535,8 +546,8 @@ def _append_profile_learning(profile: Any, promoted: dict[str, Any]) -> None:
         profile.append_profile_learning(
             "workflow-promoted:" + source_id,
             {
-                "evolution": [f"Approved workflow learning: when {trigger}, {behavior}"],
-                "core_traits": ["Apply approved workflow learning only when relevant; current scope, evidence, and taskboard truth still win"],
+                "evolution": [f"Approved local skill: when {trigger}, {behavior}"],
+                "core_traits": ["Apply approved local skills only when relevant; current scope, evidence, and taskboard truth still win"],
             },
         )
     except Exception:
@@ -567,8 +578,8 @@ def _wire_workflow_to_knowledge_store(candidate: dict[str, Any]) -> None:
     try:
         from .knowledge_store import get_knowledge_store
         store = get_knowledge_store()
-        title = candidate.get("title", candidate.get("name", ""))
-        desc = candidate.get("description", candidate.get("summary", ""))
+        title = candidate.get("title", candidate.get("name", candidate.get("trigger", "")))
+        desc = candidate.get("description", candidate.get("summary", candidate.get("behavior", "")))
         content = f"{title}: {desc}" if title and desc else (title or desc or str(candidate.get("id", "")))
         store.record(
             "workflow",

@@ -110,7 +110,7 @@ class TestReviewDiff:
         assert "Python stdlib" in PRT_REVIEW_SYSTEM
         assert "project utilities" in PRT_REVIEW_SYSTEM
         assert "Ponytail" not in PRT_REVIEW_SYSTEM
-        assert ".agents" not in PRT_REVIEW_SYSTEM
+    assert "." + "agents" not in PRT_REVIEW_SYSTEM
 
     @patch("core.review.diff_review.subprocess.check_output")
     @patch("core.threat_scan.scan_text")

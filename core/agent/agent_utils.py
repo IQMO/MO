@@ -98,11 +98,11 @@ RULES:
 - Do NOT put code, file contents, or full paragraphs in titles. Titles are labels."""
 
 WORKFLOW_ADOPTION_RE = re.compile(
-    r"\b(?:adopt|learn|use)\b.{0,80}\b(?:workflow|skill|style|process|method)\b",
+    r"\b(?:adopt|learn|save|stage|use)\b.{0,80}\b(?:workflow|skill|style|process|method)\b",
     re.I | re.S,
 )
 WORKFLOW_APPROVAL_RE = re.compile(
-    r"\b(?:approve|promote|activate|use)\b.{0,80}\bworkflow(?: candidate| learning)?\b",
+    r"\b(?:approve|promote|activate|use)\b.{0,80}\b(?:workflow|skill)(?: candidate| learning)?\b",
     re.I | re.S,
 )
 # An UNAMBIGUOUS workflow-adoption signal: the literal word "workflow"/"workflow-candidate".

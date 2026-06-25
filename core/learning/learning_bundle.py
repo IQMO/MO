@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from ..atomic_write import atomic_write_json, atomic_write_text
+from ..path_defaults import resolve_state_path
+from ..skills import skills_root
 from ..text_safety import contains_secret_value
 
 BUNDLE_VERSION = "mo-learning-bundle-v1"
@@ -28,7 +30,7 @@ PROFILE_FILES = ("operator.md", "thinking_model.md", "behavior.md", "learning.md
 
 def _memory_dir(profile: Any) -> Path:
     profile_path = getattr(profile, "_path", None)
-    return Path(profile_path).parent if profile_path else Path("memory")
+    return Path(profile_path).parent if profile_path else Path(resolve_state_path("memory"))
 
 
 def export_learning_bundle(profile: Any, *, path: str | Path | None = None) -> dict[str, Any]:
@@ -41,6 +43,7 @@ def export_learning_bundle(profile: Any, *, path: str | Path | None = None) -> d
         "profile_files": {},
         "confirmed_suggestions": [],
         "promoted_workflows": [],
+        "skills": {},
     }
     for name in PROFILE_FILES:
         file_path = profile_dir / name
@@ -51,6 +54,7 @@ def export_learning_bundle(profile: Any, *, path: str | Path | None = None) -> d
         if str(row.get("status") or "").lower() == "confirmed"
     ]
     bundle["promoted_workflows"] = _read_jsonl(memory / "workflow_promoted.jsonl")
+    bundle["skills"] = _read_skill_tree(skills_root(profile))
 
     flat = json.dumps(bundle, ensure_ascii=False)
     if contains_secret_value(flat):
@@ -67,6 +71,7 @@ def export_learning_bundle(profile: Any, *, path: str | Path | None = None) -> d
             "profile_files": len(bundle["profile_files"]),
             "confirmed_suggestions": len(bundle["confirmed_suggestions"]),
             "promoted_workflows": len(bundle["promoted_workflows"]),
+            "skills": len(bundle["skills"]),
         },
     }
 
@@ -90,6 +95,8 @@ def import_learning_bundle(profile: Any, path: str | Path, *, confirm: bool = Fa
     promoted_path = memory / "workflow_promoted.jsonl"
     existing_suggestions = {str(row.get("id") or "") for row in _read_jsonl(suggestions_path)}
     existing_promoted = {str(row.get("id") or "") for row in _read_jsonl(promoted_path)}
+    skill_root = skills_root(profile)
+    existing_skill_files = _existing_skill_files(skill_root)
 
     new_suggestions = [
         row for row in bundle.get("confirmed_suggestions") or []
@@ -100,12 +107,17 @@ def import_learning_bundle(profile: Any, path: str | Path, *, confirm: bool = Fa
         if isinstance(row, dict) and row.get("id") and str(row["id"]) not in existing_promoted
     ]
     profile_files = {k: v for k, v in (bundle.get("profile_files") or {}).items() if k in PROFILE_FILES}
+    skill_files = {
+        k: v for k, v in (bundle.get("skills") or {}).items()
+        if isinstance(k, str) and isinstance(v, str) and _safe_bundle_skill_path(k) and k not in existing_skill_files
+    }
 
     plan = {
         "imported": False,
         "dry_run": not confirm,
         "new_confirmed_suggestions": len(new_suggestions),
         "new_promoted_workflows": len(new_promoted),
+        "new_skill_files": len(skill_files),
         "profile_files_for_review": sorted(profile_files),
         "note": "profile prose is never auto-merged; review the staged copies and merge by hand",
     }
@@ -114,6 +126,8 @@ def import_learning_bundle(profile: Any, path: str | Path, *, confirm: bool = Fa
 
     _append_jsonl(suggestions_path, new_suggestions)
     _append_jsonl(promoted_path, new_promoted)
+    for rel, content in skill_files.items():
+        atomic_write_text(skill_root / rel, content, encoding="utf-8")
     review_dir = memory / "imports" / datetime.now().strftime("%Y-%m-%dT%H%M")
     if profile_files:
         review_dir.mkdir(parents=True, exist_ok=True)
@@ -146,3 +160,42 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("a", encoding="utf-8") as fh:
         for row in rows:
             fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _read_skill_tree(root: Path) -> dict[str, str]:
+    if not root.exists():
+        return {}
+    out: dict[str, str] = {}
+    for path in sorted(item for item in root.rglob("*") if item.is_file() and item.suffix.lower() in {".md", ".txt"}):
+        try:
+            rel = str(path.relative_to(root)).replace("\\", "/")
+            if _safe_bundle_skill_path(rel):
+                out[rel] = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+    return out
+
+
+def _existing_skill_files(root: Path) -> set[str]:
+    if not root.exists():
+        return set()
+    return {
+        str(path.relative_to(root)).replace("\\", "/")
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def _safe_bundle_skill_path(value: str) -> bool:
+    text = str(value or "").replace("\\", "/").strip("/")
+    if not text or ".." in text.split("/"):
+        return False
+    path = Path(text)
+    if path.is_absolute() or path.suffix.lower() not in {".md", ".txt"}:
+        return False
+    parts = text.split("/")
+    if len(parts) < 2 or not parts[0]:
+        return False
+    if parts[-1] == "SKILL.md":
+        return True
+    return "references" in parts[1:] and path.suffix.lower() in {".md", ".txt"}

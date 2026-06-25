@@ -25,6 +25,12 @@ def _seed_learning(tmp_path):
         json.dumps({"id": "w1", "trigger": "build turns", "behavior": "verify with tests", "status": "promoted"}) + "\n",
         encoding="utf-8",
     )
+    skill = tmp_path / "skills" / "verified-build" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(
+        "---\nname: \"Verified build\"\ndescription: \"verify builds\"\ntriggers:\n  - \"build\"\n---\nRun focused tests.\n",
+        encoding="utf-8",
+    )
 
 
 def test_export_includes_confirmed_only_and_counts(tmp_path):
@@ -37,8 +43,10 @@ def test_export_includes_confirmed_only_and_counts(tmp_path):
     bundle = json.loads((tmp_path / "memory" / "exports").glob("*.json").__next__().read_text(encoding="utf-8"))
     assert [r["id"] for r in bundle["confirmed_suggestions"]] == ["s1"]  # pending s2 excluded
     assert [r["id"] for r in bundle["promoted_workflows"]] == ["w1"]
+    assert "verified-build/SKILL.md" in bundle["skills"]
     assert "operator.md" in bundle["profile_files"]
     assert result["counts"]["confirmed_suggestions"] == 1
+    assert result["counts"]["skills"] == 1
 
 
 def test_export_refuses_secret_bearing_content(tmp_path):
@@ -67,6 +75,7 @@ def test_import_dry_run_then_confirm_appends_without_overwrite(tmp_path):
     dry = import_learning_bundle(target, exported["path"])
     assert dry["dry_run"] is True and dry["imported"] is False
     assert dry["new_confirmed_suggestions"] == 1
+    assert dry["new_skill_files"] == 1
     # dry-run wrote nothing
     assert "s1" not in (target_root / "memory" / "learning_suggestions.jsonl").read_text(encoding="utf-8")
 
@@ -75,6 +84,7 @@ def test_import_dry_run_then_confirm_appends_without_overwrite(tmp_path):
     content = (target_root / "memory" / "learning_suggestions.jsonl").read_text(encoding="utf-8")
     assert "local1" in content and "s1" in content  # append-only, local survives
     assert "operator.md" in applied["profile_files_for_review"]
+    assert (target_root / "skills" / "verified-build" / "SKILL.md").exists()
     assert applied["review_dir"]  # prose staged for manual review, never auto-merged
 
     # idempotent: re-import adds nothing new

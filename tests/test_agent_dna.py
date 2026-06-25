@@ -44,7 +44,7 @@ def test_lean_build_context_is_mo_native_and_safety_bounded():
     assert "minimum complete code" in context
     assert "never remove required validation" in context
     assert "Ponytail" not in context
-    assert ".agents" not in context
+    assert "." + "agents" not in context
 
 
 def test_prd_context_is_alignment_not_forced_build_gate_or_skill():
@@ -57,5 +57,6 @@ def test_prd_context_is_alignment_not_forced_build_gate_or_skill():
     assert "acceptance criteria" in context
     assert "Taskboard truth" in context
     assert "/skill" in context
+    assert "/skills" in context
     assert "marketplace install" in context
     assert len(context) < 1800

@@ -40,7 +40,7 @@ DEFAULT_HINTS: tuple[str, ...] = (
     # ── PRT ──
     "PRT auto-reviews significant commits — keep scores above 4.5. Use /prt for a deep review with auto-fix.",
     # ── Learning ──
-    "/learning shows what MO has learned from your feedback, saved workflows, and proactive corrections.",
+    "/learning shows pending suggestions and approved local skills learned from your feedback.",
     "MO detects your work patterns (build, fix, design, review) and adapts its process automatically.",
     # ── Provider ──
     "Use /model to check which AI provider is currently active.",
