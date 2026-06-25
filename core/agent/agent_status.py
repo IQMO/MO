@@ -41,6 +41,7 @@ class AgentStatusCommands:
             f"  taskboard:  {self._status_taskboard_summary()}",
             f"  context:    {self._status_context_summary()}",
             f"  graph:      {self._status_graph_summary()}",
+            f"  mcp:        {self._status_mcp_summary()}",
         ]
         lines.extend(self._status_hidden_attention_rows())
         if self._tool_context_saving_ops() > 0:
@@ -75,6 +76,21 @@ class AgentStatusCommands:
                 )
         lines.append(f"  profile:  {self.profile.total_sessions} sessions · {self.profile.total_turns} turns lifetime")
         return "\n".join(lines)
+
+    def _status_mcp_summary(self) -> str:
+        mgr = getattr(self, "mcp_manager", None)
+        if not mgr:
+            return "off (no servers configured)"
+        try:
+            clients = getattr(mgr, "_clients", {}) or {}
+            parts = [f"{name} ({len(getattr(c, 'tools', []) or [])} tools)" for name, c in clients.items()]
+            text = ", ".join(parts) if parts else "enabled, no tools"
+            degraded = list(getattr(mgr, "degraded", []) or [])
+            if degraded:
+                text += f"; degraded: {', '.join(degraded)}"
+            return text
+        except Exception:
+            return "unavailable"
 
     def _status_heartbeat_summary(self) -> str:
         try:

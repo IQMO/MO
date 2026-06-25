@@ -106,18 +106,24 @@ def render_existing_instances_notice(
     items = recent_instance_snapshots(config, current_pid=current_pid, limit=max_items)
     if not items:
         return ""
+    live = [item for item in items if item.get("pid_alive")]
+    stale_count = sum(1 for item in items if not item.get("pid_alive"))
     lines = ["MO instance notice: this terminal starts as an isolated instance."]
-    for item in items:
-        state = "live" if item.get("pid_alive") else "stale"
+    # List only LIVE sibling instances (the ones that actually matter for
+    # multi-instance coordination); collapse stale history to one line so the
+    # header isn't flooded with dead-pid entries.
+    for item in live:
         instance = str(item.get("instance_id") or "legacy")[:32]
         surface = str(item.get("surface") or "unknown")[:24]
         slot = str(item.get("slot") or "")[:48]
         session_id = str(item.get("session_id") or "")[:48]
         age = _age_text(float(item.get("age_seconds") or 0.0))
         lines.append(
-            f"  - {state}: pid {item.get('pid')} · instance {instance} · "
+            f"  - live: pid {item.get('pid')} · instance {instance} · "
             f"{surface} · {age} ago · slot {slot or '-'} · session {session_id or '-'}"
         )
+    if stale_count:
+        lines.append(f"  - {stale_count} stale instance(s) — use /sessions to view")
     lines.append("Singleton resources such as Telegram, scheduler, and Ghost tray/hotkey are resource-locked.")
     return "\n".join(lines)
 

@@ -799,7 +799,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     name = tc_data["function"]["name"]
                     arguments = self._project_scoped_tool_arguments(name, self._parsed_tool_arguments(tc_data))
                     if on_activity:
-                        on_activity(f"tooling ({name})...")
+                        # Prettify MCP tool names (mcp__server__tool -> "server · tool")
+                        # so the activity line clearly shows an MCP tool is running.
+                        label = name
+                        if name.startswith("mcp__"):
+                            mcp_parts = name.split("__", 2)
+                            if len(mcp_parts) == 3:
+                                label = f"mcp:{mcp_parts[1]} · {mcp_parts[2]}"
+                        on_activity(f"tooling ({label})...")
 
                     if monitor:
                         monitor.emit("tool_call", {"request": provider_requests, "surface": self._provider_surface(), "worker_id": self._provider_worker_id(), "tool": name, "summary": self._safe_tool_summary(name, arguments)})

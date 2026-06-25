@@ -49,6 +49,18 @@ def startup_identity_lines(agent: Any) -> list[str]:
     if provider or model:
         sep = " / " if provider and model else ""
         lines.append(f"  model:   {provider}{sep}{model}")
+    mcp = getattr(agent, "mcp_manager", None)
+    if mcp:
+        try:
+            clients = getattr(mcp, "_clients", {}) or {}
+            if clients:
+                summary = ", ".join(f"{n} ({len(getattr(c, 'tools', []) or [])} tools)" for n, c in clients.items())
+                degraded = list(getattr(mcp, "degraded", []) or [])
+                if degraded:
+                    summary += f"; degraded: {', '.join(degraded)}"
+                lines.append(f"  mcp:     {summary}")
+        except Exception:
+            pass
     return lines
 
 
