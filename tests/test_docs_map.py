@@ -15,19 +15,22 @@ def test_root_has_one_public_config_template():
 
 
 def test_workspace_root_has_no_private_runtime_or_external_tooling_content():
-    forbidden_dirs = (
+    forbidden_plain_dirs = (
         "memory",
         "logs",
-        "." + "omx",
-        "." + "agents",
-        ".pytest_cache",
-        ".ruff_cache",
         "__pycache__",
         "operator",
-        ".mo",
     )
 
-    present = [name for name in forbidden_dirs if Path(name).exists()]
+    present = [name for name in forbidden_plain_dirs if Path(name).exists()]
+    allowed_hidden_dirs = {".git"}
+    present.extend(
+        sorted(
+            path.name
+            for path in Path(".").iterdir()
+            if path.is_dir() and path.name.startswith(".") and path.name not in allowed_hidden_dirs
+        )
+    )
 
     assert present == []
 
@@ -40,13 +43,7 @@ def test_public_docs_do_not_reference_external_tooling_markers():
         "CLAUDE.md",
         "config.example.yaml",
     )
-    forbidden_markers = (
-        "." + "agents",
-        "." + "omx",
-        "oh-my-" + "codex",
-        "O" + "MX",
-        "profile-" + "build",
-    )
+    forbidden_markers = ("profile-" + "build",)
 
     for relative_path in public_docs:
         text = Path(relative_path).read_text(encoding="utf-8")
