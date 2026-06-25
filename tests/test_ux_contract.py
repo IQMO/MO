@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+import ast
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+from UX.adapters import rows_from_gateway_board, snapshot_from_runtime
+from UX.layout import render_text
+from UX.models import BoardRow, demo_snapshot
+
+REPO = Path(__file__).resolve().parents[1]
+UX_ROOT = REPO / "UX"
+
+
+def _ux_python_files() -> list[Path]:
+    return sorted(path for path in UX_ROOT.rglob("*.py") if path.is_file())
+
+
+def test_ux_does_not_import_current_interface_package():
+    offenders: list[str] = []
+    for path in _ux_python_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "interface" or alias.name.startswith("interface."):
+                        offenders.append(str(path.relative_to(REPO)))
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module == "interface" or module.startswith("interface."):
+                    offenders.append(str(path.relative_to(REPO)))
+    assert offenders == []
+
+
+def test_ux_package_import_is_light_and_isolated():
+    code = "import sys; import UX; print('interface' in sys.modules); print('core.agent.agent' in sys.modules)"
+    result = subprocess.run([sys.executable, "-c", code], cwd=REPO, text=True, capture_output=True, check=True)
+    assert result.stdout.splitlines() == ["False", "False"]
+
+
+def test_demo_snapshot_renders_expected_panes():
+    text = render_text(demo_snapshot(), width=100)
+    assert "MO" in text
+    assert "Agent Lanes" in text
+    assert "Task Board" in text
+    assert "Transcript" in text
+    assert "Composer" in text
+    assert "THINKING" in text
+    assert "EXECUTION" in text
+    assert "COMPACTION" in text
+
+
+def test_board_row_normalizes_unknown_status_to_pending():
+    row = BoardRow.from_mapping({"id": "1", "title": "Bad status", "status": "done-ish"})
+    assert row.status == "pending"
+
+
+def test_gateway_board_adapter_normalizes_object_task_status():
+    task = SimpleNamespace(id="1", title="Object task", status="done-ish", blocker="", kind="")
+    rows = rows_from_gateway_board(SimpleNamespace(tasks=[task]))
+    assert rows[0].status == "pending"
+
+
+def test_gateway_board_adapter_is_display_only_duck_typing():
+    board = SimpleNamespace(
+        summary=lambda: {
+            "tasks": [
+                {"id": "1", "title": "Inspect", "status": "completed", "kind": "inspect"},
+                {"id": "2", "title": "Fix", "status": "active", "kind": "edit"},
+            ]
+        }
+    )
+    rows = rows_from_gateway_board(board)
+    assert [row.title for row in rows] == ["Inspect", "Fix"]
+    assert [row.status for row in rows] == ["completed", "active"]
+
+
+def test_runtime_snapshot_adapter_uses_duck_typed_public_state():
+    board = SimpleNamespace(summary=lambda: {"tasks": [{"id": "1", "title": "Verify", "status": "blocked", "blocker": "tests"}]}, open_count=lambda: 1)
+    gateway = SimpleNamespace(last_task_board=board)
+    agent = SimpleNamespace(
+        project_cwd="E:\\MO-clean",
+        runtime_home="~/.mo",
+        provider_name="opencode",
+        model="deepseek-v4-pro",
+        messages=[
+            {"role": "system", "content": "internal prompt must not render"},
+            {"role": "tool", "content": "tool payload must not render"},
+            {"role": "user", "content": "hello"},
+        ],
+    )
+
+    snapshot = snapshot_from_runtime(agent, gateway)
+
+    assert snapshot.project == "E:\\MO-clean"
+    assert snapshot.model_label == "opencode / deepseek-v4-pro"
+    assert snapshot.board[0].status == "blocked"
+    assert [item.speaker for item in snapshot.transcript] == ["user"]
+    assert "internal prompt" not in " ".join(item.text for item in snapshot.transcript)
