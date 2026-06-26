@@ -523,16 +523,18 @@ def test_blocked_run_reconciles_summary_complete_marker_to_blocked(tmp_path):
 
 def test_reconcile_devmode_summary_marker_fires_only_on_blocked_terminal(tmp_path):
     """The agent hook reconciles summary.md ONLY when the terminal answer is BLOCKED —
-    a COMPLETE terminal leaves the summary's COMPLETE intact."""
+    a COMPLETE terminal leaves the summary's COMPLETE intact. Returns bool."""
     from core.tasking.agent_taskboard import AgentTaskBoard
     agent = AgentTaskBoard.__new__(AgentTaskBoard)
     active = tmp_path / "2026-01-06T0000"
     active.mkdir()
     (active / "summary.md").write_text("## Closeout\n- [OWNER_MAINTENANCE COMPLETE]\n", encoding="utf-8")
     agent._active_devmode_session_dir = active
-    agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE COMPLETE] HEALTHY.")
+    result = agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE COMPLETE] HEALTHY.")
+    assert result is False  # non-blocked text → no-op
     assert "[OWNER_MAINTENANCE COMPLETE]" in (active / "summary.md").read_text(encoding="utf-8")
-    agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE BLOCKED] turn budget exhausted; continuation capsule")
+    result = agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE BLOCKED] turn budget exhausted; continuation capsule")
+    assert result is True  # blocked text with session dir → reconciled
     out = (active / "summary.md").read_text(encoding="utf-8")
     assert "[OWNER_MAINTENANCE COMPLETE]" not in out and "[OWNER_MAINTENANCE BLOCKED]" in out
 
@@ -558,7 +560,8 @@ def test_blocked_terminal_reconciliation_projects_blocked_manifest(tmp_path):
     agent.session = SimpleNamespace(session_id="session-blocked")
     agent.gateway = SimpleNamespace(last_task_board=board)
 
-    agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE BLOCKED] open taskboard rows")
+    result = agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE BLOCKED] open taskboard rows")
+    assert result is True
 
     summary = (active / "summary.md").read_text(encoding="utf-8")
     assert "[OWNER_MAINTENANCE COMPLETE]" not in summary

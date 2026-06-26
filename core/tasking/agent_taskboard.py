@@ -700,17 +700,21 @@ class AgentTaskBoard:
         except Exception:
             return False
 
-    def _reconcile_devmode_summary_marker(self, final_text: str) -> None:
+    def _reconcile_devmode_summary_marker(self, final_text: str) -> bool:
         """If the model's terminal answer is [OWNER_MAINTENANCE BLOCKED], make summary.md agree —
-        a blocked run must never leave a [OWNER_MAINTENANCE COMPLETE] in its summary."""
+        a blocked run must never leave a [OWNER_MAINTENANCE COMPLETE] in its summary.
+
+        Returns True if reconciliation was attempted (blocked text with a session dir);
+        returns False for no-op paths (non-blocked text, no session dir, or internal failure)
+        so callers can detect silent failure and log evidence."""
         try:
             from ..self_maintenance.devmode_closeout import _owner_maintenance_terminal_prefix_text
             text = _owner_maintenance_terminal_prefix_text(final_text) or ""
             if not text.startswith("[OWNER_MAINTENANCE BLOCKED]"):
-                return
+                return False
             target = getattr(self, "_active_devmode_session_dir", None)
             if target is None:
-                return
+                return False
             changed = AgentTaskBoard._reconcile_summary_terminal_marker(Path(target) / "summary.md", blocked=True)
             # A blocked terminal must leave the manifest status="blocked" — it can never
             # read "complete" (acceptance criterion 7).
@@ -718,8 +722,9 @@ class AgentTaskBoard:
                 status="blocked",
                 reconciliations={"summary_terminal_marker": "changed" if changed else "ok"},
             )
+            return True
         except Exception:
-            pass
+            return False
 
     @staticmethod
     def _final_should_complete_task(task: object) -> bool:

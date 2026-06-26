@@ -737,7 +737,11 @@ def _block_open_protocol_board_at_turn_end(
         try:
             reconcile = getattr(agent, "_reconcile_devmode_summary_marker", None)
             if callable(reconcile):
-                reconcile(blocked_text)
+                if not reconcile(blocked_text):
+                    monitor.emit("protocol_artifact_reconcile_failed", {
+                        "protocol": protocol,
+                        "error": "reconciliation returned False (session dir unset or internal failure)",
+                    })
         except Exception as exc:
             monitor.emit("protocol_artifact_reconcile_failed", {
                 "protocol": protocol,

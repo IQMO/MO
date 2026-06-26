@@ -111,8 +111,9 @@ class _ProtocolCompleteWithOpenBoardAgent(_NoToolAgent):
             on_first_tool("read_file", {"path": "README.md"})
         return "[OWNER_MAINTENANCE COMPLETE] done"
 
-    def _reconcile_devmode_summary_marker(self, final_text: str) -> None:
+    def _reconcile_devmode_summary_marker(self, final_text: str) -> bool:
         self.reconciled_markers.append(final_text)
+        return True
 
 
 class _ExplodingAfterBoardAgent(_NoToolAgent):
