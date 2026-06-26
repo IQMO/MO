@@ -862,6 +862,13 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         if task_board and (task_board.tasks or name == "set_plan") and not self._tool_result_is_error(result):
                             before_board = _task_board_change_fingerprint(task_board)
                             advanced = self._advance_task_board_after_tool(task_board, name, arguments, monitor=monitor)
+                            # Honest result: if set_plan was refused because an owner
+                            # protocol owns the board, say so — otherwise execute_set_plan's
+                            # "Plan set" confirmation misleads MO into retrying (observed
+                            # live mo-1782437654: 3 wasted set_plan calls before fallback).
+                            if name == "set_plan" and not advanced and self._board_is_protocol_owned(task_board):
+                                result = ("set_plan was not applied: this taskboard is managed by an active protocol. "
+                                          "Advance its rows with complete_task as you finish each phase; do not call set_plan here.")
                             if advanced or _task_board_change_fingerprint(task_board) != before_board:
                                 record_snapshot(task_board, "updated")
                         if on_board_update and task_board:

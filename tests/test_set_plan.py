@@ -83,6 +83,21 @@ def test_set_plan_refuses_to_overwrite_owner_protocol_board():
     assert [t.title for t in b.tasks] == ["Boot protocol", "Final OWNER_MAINTENANCE report"]  # untouched
 
 
+def test_board_is_protocol_owned_detects_final_gate():
+    # The shared signal the guard and the honest tool-result both use.
+    empty = TaskBoard(turn_id="t", session_id="s", source="gateway")
+    assert AgentTaskBoard._board_is_protocol_owned(empty) is False
+    mo_board = TaskBoard(turn_id="t", session_id="s", source="gateway")
+    mo_board.set_rows("MO plan", [{"id": "1", "text": "x", "status": "active", "completion_gate": "tool"}])
+    assert AgentTaskBoard._board_is_protocol_owned(mo_board) is False
+    proto = TaskBoard(turn_id="t", session_id="s", source="gateway")
+    proto.set_rows("start owner maintenance", [
+        {"id": "1", "text": "boot", "status": "active", "completion_gate": "tool"},
+        {"id": "2", "text": "final report", "status": "pending", "completion_gate": "final"},
+    ])
+    assert AgentTaskBoard._board_is_protocol_owned(proto) is True
+
+
 def test_set_plan_no_usable_tasks_is_noop_even_when_on():
     b = _ghost_board()
     changed = _Agent(model_owned=True)._advance_task_board_after_tool(b, "set_plan", {"tasks": ["", "   "]})

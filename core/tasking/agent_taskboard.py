@@ -81,6 +81,15 @@ class AgentTaskBoard:
             })
         return True
 
+    @staticmethod
+    def _board_is_protocol_owned(task_board: TaskBoard) -> bool:
+        """True when an owner protocol owns this board. Protocols seed a fixed
+        phase board whose closeout row carries a 'final' gate; MO's own set_plan
+        rows are all 'tool'-gated. So a 'final' gate ⇒ protocol board (under
+        model_owned) — set_plan must not replace it, and the tool result tells MO
+        to advance with complete_task instead."""
+        return any(getattr(t, "completion_gate", "") == "final" for t in (getattr(task_board, "tasks", None) or []))
+
     def _model_owned_taskboard_enabled(self) -> bool:
         cfg = getattr(self, "config", {}) or {}
         tb = cfg.get("taskboard", {}) if isinstance(cfg.get("taskboard", {}), dict) else {}
@@ -102,8 +111,7 @@ class AgentTaskBoard:
         # completion contract; MO advances them with complete_task, not set_plan.
         # Under model_owned only protocol boards carry a 'final' gate — MO's own
         # set_plan rows are all 'tool'-gated — so a 'final' row means hands off.
-        existing = getattr(task_board, "tasks", None) or []
-        if any(getattr(t, "completion_gate", "") == "final" for t in existing):
+        if self._board_is_protocol_owned(task_board):
             if monitor:
                 monitor.emit("taskboard", {"update": "set_plan_skipped_protocol_board"})
             return False
