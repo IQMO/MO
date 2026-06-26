@@ -729,16 +729,27 @@ def _block_open_protocol_board_at_turn_end(
         }
     except Exception:
         traceback.print_exc()
+    blocked_text = (
+        f"[{protocol} BLOCKED] Protocol returned a terminal marker while the taskboard still has "
+        f"{board.open_count()} open row(s). Resume and close the board with evidence before final closeout."
+    )
+    if protocol == "OWNER_MAINTENANCE":
+        try:
+            reconcile = getattr(agent, "_reconcile_devmode_summary_marker", None)
+            if callable(reconcile):
+                reconcile(blocked_text)
+        except Exception as exc:
+            monitor.emit("protocol_artifact_reconcile_failed", {
+                "protocol": protocol,
+                "error": str(exc)[:300],
+            })
     monitor.emit("protocol_open_taskboard_blocked", {
         "protocol": protocol,
         "board_id": board.board_id,
         "open_count": board.open_count(),
         "task_id": str(task_id or ""),
     })
-    return (
-        f"[{protocol} BLOCKED] Protocol returned a terminal marker while the taskboard still has "
-        f"{board.open_count()} open row(s). Resume and close the board with evidence before final closeout."
-    )
+    return blocked_text
 
 
 def record_terminal_snapshot(

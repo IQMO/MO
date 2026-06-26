@@ -102,10 +102,17 @@ class _BlockingAgent(_NoToolAgent):
 
 
 class _ProtocolCompleteWithOpenBoardAgent(_NoToolAgent):
+    def __init__(self, session_id: str = "session-gateway"):
+        super().__init__(session_id=session_id)
+        self.reconciled_markers: list[str] = []
+
     def run_turn(self, user_input, monitor=None, on_first_tool=None, on_board_update=None, **_kwargs):
         if on_first_tool:
             on_first_tool("read_file", {"path": "README.md"})
         return "[OWNER_MAINTENANCE COMPLETE] done"
+
+    def _reconcile_devmode_summary_marker(self, final_text: str) -> None:
+        self.reconciled_markers.append(final_text)
 
 
 class _ExplodingAfterBoardAgent(_NoToolAgent):
@@ -365,6 +372,9 @@ def test_gateway_blocks_owner_maintenance_turn_that_exits_with_open_taskboard(tm
     assert gateway.last_task_board is not None
     assert gateway.last_task_board.state == "blocked"
     assert gateway.last_task_board.open_count() > 0
+    assert agent.reconciled_markers
+    assert agent.reconciled_markers[-1].startswith("[OWNER_MAINTENANCE BLOCKED]")
+    assert "[OWNER_MAINTENANCE COMPLETE]" not in agent.reconciled_markers[-1]
     pending = getattr(agent, "_pending_interrupted_work", {})
     assert pending["reason"] == "open_protocol_taskboard"
     recent = read_recent_snapshots(limit=5, path=ledger)
