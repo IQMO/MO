@@ -8,10 +8,31 @@ If any future change breaks compression, these tests fail immediately.
 """
 from types import SimpleNamespace
 
+import pytest
+
 from core.agent.agent import Agent
 from core.backend_monitor import BackendMonitor
 from core.tasking.task_board import TaskBoard, TaskItem
 from core.tool_compress import classify
+
+
+@pytest.fixture(autouse=True)
+def _stub_repo_graph_builds(monkeypatch):
+    """These tests exercise the compression→handoff pipeline, NOT graph building.
+
+    run_turn otherwise AST-parses the WHOLE repo twice per turn (code-graph slice
+    in _build_extra_context + structural summary in the forced handoff) — ~25s per
+    test, ~135s for this file alone. No test here asserts graph/workspace content,
+    so replace those builders with the legitimate "no graph available" result ("").
+    All turn control flow (handoff still fires, compression still runs, sessions
+    still store) is unchanged; only the repo-wide parse is removed."""
+    cheap = lambda *a, **k: ""
+    # Patch every import site (module-level `from ... import` binds a local name,
+    # so the source-module patch alone wouldn't reach these callers).
+    monkeypatch.setattr("core.agent.agent_turn.build_code_graph_context", cheap, raising=False)
+    monkeypatch.setattr("core.agent.agent_turn.build_workspace_awareness", cheap, raising=False)
+    monkeypatch.setattr("core.session.handoff.build_code_graph_context", cheap, raising=False)
+    monkeypatch.setattr("core.graph.structural_graph.build_structural_summary", cheap, raising=False)
 
 
 def make_agent_without_init():

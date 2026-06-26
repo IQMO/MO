@@ -1071,15 +1071,22 @@ def _term_variants(term: str) -> list[str]:
 
 def _score_nodes(data: dict[str, Any], terms: list[str], profile: Any | None = None) -> list[tuple[float, str]]:
     scored: list[tuple[float, str]] = []
+    # Compute term variants ONCE, not once per node — _term_variants is pure and
+    # this loop runs over every graph node, so per-node recomputation was the
+    # dominant cost of context selection (hundreds of thousands of calls).
+    variants_by_term = [_term_variants(term) for term in terms]
+    term_set = set(terms)
+    test_terms_present = bool({"test", "tests", "pytest", "verify"} & term_set)
     for node_id, node in _node_map(data).items():
         label = str(node.get("label") or node.get("name") or node_id).lower()
         bare = label.rstrip("()")
         source = str(node.get("source_file") or "").lower().replace("\\", "/")
         hay = " ".join(str(node.get(key, "")) for key in ("id", "label", "file_type", "source_file", "source_location", "community")).lower()
+        node_id_lower = node_id.lower()
         score = 0.0
-        for term in terms:
-            for variant in _term_variants(term):
-                if variant == bare or variant == label or variant == node_id.lower():
+        for variants in variants_by_term:
+            for variant in variants:
+                if variant == bare or variant == label or variant == node_id_lower:
                     score += 100.0
                     break
                 if bare.startswith(variant):
@@ -1095,7 +1102,7 @@ def _score_nodes(data: dict[str, Any], terms: list[str], profile: Any | None = N
                     score += 1.0
                     break
         score += _personalized_boost(source, profile)
-        if source.startswith("tests/") and not ({"test", "tests", "pytest", "verify"} & set(terms)):
+        if source.startswith("tests/") and not test_terms_present:
             score *= 0.55
         if score > 0:
             scored.append((score, node_id))

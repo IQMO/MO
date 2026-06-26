@@ -247,6 +247,13 @@ def _indexable_path(rel: str) -> bool:
     return Path(rel).suffix.lower() in _INDEX_EXTENSIONS or name in {"readme", "license"}
 
 
+# Process-scoped graph memo: {root: (fingerprint_signature, graph)}. Lets a
+# turn-heavy process (or the test suite) reuse a just-built graph instead of
+# re-reading/rebuilding it when no source file changed. Keyed by fingerprints so
+# it self-invalidates the moment any file's mtime/size changes.
+_GRAPH_MEMO: dict[str, tuple[str, dict[str, Any]]] = {}
+
+
 def _fingerprints(root: Path, files: list[str]) -> dict[str, str]:
     fps: dict[str, str] = {}
     for rel in files:
@@ -256,6 +263,16 @@ def _fingerprints(root: Path, files: list[str]) -> dict[str, str]:
             continue
         fps[rel] = f"{int(st.st_mtime_ns)}:{int(st.st_size)}"
     return fps
+
+
+def _fps_signature(fingerprints: dict[str, str]) -> str:
+    h = hashlib.sha256()
+    for rel in sorted(fingerprints):
+        h.update(rel.encode("utf-8", "replace"))
+        h.update(b"\0")
+        h.update(fingerprints[rel].encode("utf-8", "replace"))
+        h.update(b"\0")
+    return h.hexdigest()
 
 
 def _load_graph(path: Path) -> dict[str, Any] | None:
@@ -286,6 +303,26 @@ def _stale_files(graph: dict[str, Any] | None, current_fps: dict[str, str]) -> l
 
 
 def _build_graph(root: Path, files: list[str], fingerprints: dict[str, str]) -> dict[str, Any]:
+    """Build the code graph, memoized per process on (root, file fingerprints).
+
+    _build_graph is a pure function of its inputs, and it is the single hotspot
+    shared by BOTH graph paths (the legacy code-graph slice and the structural
+    summary via load_or_build_graph_data). AST-parsing the whole repo costs
+    ~10s; memoizing here means a turn-heavy process — and the test suite, which
+    resets the on-disk cache home every test — parses the repo once instead of
+    once per turn. The key is the fingerprints, so any file edit (new mtime/size)
+    misses the memo and triggers a real rebuild — a stale graph is never served.
+    """
+    sig = _fps_signature(fingerprints)
+    memo = _GRAPH_MEMO.get(str(root))
+    if memo is not None and memo[0] == sig:
+        return memo[1]
+    graph = _build_graph_uncached(root, files, fingerprints)
+    _GRAPH_MEMO[str(root)] = (sig, graph)
+    return graph
+
+
+def _build_graph_uncached(root: Path, files: list[str], fingerprints: dict[str, str]) -> dict[str, Any]:
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     module_to_file = _module_index(files)

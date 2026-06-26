@@ -196,9 +196,12 @@ def test_agent_injects_code_graph_context_into_provider_context(monkeypatch):
         return type("Resp", (), {"usage": None, "finish_reason": "stop", "tool_calls": [], "content": "done"})()
 
     agent._call_provider = fake_call_provider
+    # Patch the names agent_turn bound at import (module-level `from ... import`),
+    # not the source module — otherwise the REAL repo graph builds (~10s) and the
+    # assertion passes for the wrong reason.
     monkeypatch.setattr("core.agent.agent_turn.should_include_workspace_awareness", lambda _text: False)
-    monkeypatch.setattr("core.graph.code_graph.should_include_code_graph_context", lambda _text: True)
-    monkeypatch.setattr("core.graph.code_graph.build_code_graph_context", lambda _text: "### MO Internal Code Map - orientation only\n- file: core/agent.py")
+    monkeypatch.setattr("core.agent.agent_turn.should_include_code_graph_context", lambda _text: True)
+    monkeypatch.setattr("core.agent.agent_turn.build_code_graph_context", lambda _text: "### MO Internal Code Map - orientation only\n- file: core/agent.py")
 
     result = agent.run_turn("investigate agent context")
 
@@ -232,6 +235,9 @@ def test_agent_injects_workspace_awareness_into_provider_context(monkeypatch):
     captured = {}
 
     monkeypatch.setattr("core.agent.agent_turn.build_workspace_awareness", lambda _agent: "### Workspace / worker awareness\nGit state: 1 uncommitted file(s)")
+    # Disable the real repo code-graph build (~10s) — this test asserts workspace
+    # injection only. Patch agent_turn's bound name, not the source module.
+    monkeypatch.setattr("core.agent.agent_turn.should_include_code_graph_context", lambda _text: False)
 
     def fake_call_provider(on_token=None, extra_context=None):
         captured["extra_context"] = extra_context
