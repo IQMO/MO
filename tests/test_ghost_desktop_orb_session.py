@@ -59,6 +59,17 @@ def test_orb_easing_clamped_and_monotonic():
     assert all(b >= a for a, b in zip(vals, vals[1:]))
 
 
+def test_orb_color_helpers_yield_valid_hex():
+    import re
+    from interface.ghost_desktop.orb import _lerp_hex, _glow_shade, _MOON_RGB, _DARK_RGB
+    hexre = re.compile(r"^#[0-9a-f]{6}$")
+    assert _lerp_hex(_MOON_RGB, _DARK_RGB, 0.0) == "#00cccc"
+    assert hexre.match(_lerp_hex(_MOON_RGB, _DARK_RGB, 0.5))
+    assert _lerp_hex(_MOON_RGB, _DARK_RGB, 1.0) == "#0b1418"
+    assert _lerp_hex(_MOON_RGB, _DARK_RGB, 5.0) == "#0b1418"  # clamped
+    assert all(hexre.match(_glow_shade(i)) for i in range(4))
+
+
 # ── Session continuity across restarts (isolated 'ghost-desktop' slot) ─────────
 
 class _FakeSessions:
@@ -109,6 +120,28 @@ def test_ghost_desktop_session_persists_to_own_slot_and_reloads():
     s2 = second._ensure_ghost_session()
     assert any("open notepad" in str(m.get("content", "")) for m in s2.messages)
     assert s2.turn_count == 1
+
+
+def test_recorder_auto_stops_after_trailing_silence():
+    import numpy as np
+    from interface.ghost_desktop.voice import PushToTalkRecorder
+    r = PushToTalkRecorder(sample_rate=16000, silence_threshold=0.01, silence_hangover=0.5)
+    n = 1600  # 0.1s chunks at 16kHz
+    loud = np.full((n, 1), 0.1, dtype="float32")
+    quiet = np.zeros((n, 1), dtype="float32")
+
+    # Pre-speech silence must NOT arm the auto-stop.
+    assert r._is_trailing_silence(quiet) is False
+    assert r._speech_started is False
+
+    # First speech heard → armed, but not a stop yet.
+    assert r._is_trailing_silence(loud) is False
+    assert r._speech_started is True
+
+    # Trailing quiet accumulates; fires only once the hangover (0.5s) is reached.
+    fired = [r._is_trailing_silence(quiet) for _ in range(5)]
+    assert fired[:4] == [False, False, False, False]
+    assert fired[4] is True
 
 
 def test_ghost_desktop_session_persist_is_noop_without_manager():

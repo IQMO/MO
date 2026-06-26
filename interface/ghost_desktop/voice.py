@@ -56,6 +56,9 @@ class VoiceRecognizer:
         if self._load_error:
             return False
         try:
+            import os
+            # Quiet the benign HF symlink/cache notice on Windows (no Dev Mode).
+            os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
             from faster_whisper import WhisperModel
             self._model = WhisperModel(
                 self._model_size,
@@ -198,7 +201,14 @@ class PushToTalkRecorder:
     (by the companion hotkey system) — start() on key-down, stop() on key-up.
     """
 
-    def __init__(self, sample_rate: int = 16000, max_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        sample_rate: int = 16000,
+        max_seconds: float = 30.0,
+        *,
+        silence_threshold: float = 0.012,
+        silence_hangover: float = 1.2,
+    ) -> None:
         self._sample_rate = sample_rate
         self._max_seconds = max_seconds
         self._max_samples = int(sample_rate * max_seconds)
@@ -207,6 +217,13 @@ class PushToTalkRecorder:
         self._buffer: list[Any] = []
         self._stream: Any = None
         self.last_error = ""  # human-readable reason start() failed (mic perms, etc.)
+        # Voice-activity auto-stop: once the operator has spoken, end the capture
+        # after a short trailing silence so they never have to tap again to finish.
+        self._silence_threshold = float(silence_threshold)
+        self._silence_hangover = float(silence_hangover)
+        self._speech_started = False
+        self._silence_run = 0.0  # seconds of quiet accumulated since the last speech
+        self.level = 0.0  # smoothed live RMS (0..~0.3); the orb reads this to react
 
     @property
     def available(self) -> bool:
@@ -228,6 +245,9 @@ class PushToTalkRecorder:
             import sounddevice as sd
             self._buffer = []
             self._collected = 0
+            self._speech_started = False
+            self._silence_run = 0.0
+            self.level = 0.0
             self.last_error = ""
             self._stream = sd.InputStream(
                 samplerate=self._sample_rate,
@@ -286,6 +306,33 @@ class PushToTalkRecorder:
         chunk = indata.copy()
         self._buffer.append(chunk)
         self._collected += len(chunk)
+        # End-of-speech detection: stop shortly after the operator goes quiet, so
+        # they don't have to tap again to signal "done". Only armed after speech is
+        # actually heard, so the initial pre-speech silence never cuts the capture.
+        if self._is_trailing_silence(chunk):
+            self._recording = False
+            if self._stream is not None:
+                import sounddevice as sd
+                raise sd.CallbackStop
+
+    def _is_trailing_silence(self, chunk: Any) -> bool:
+        """True once speech has been heard and enough trailing quiet has elapsed."""
+        try:
+            import numpy as np
+            rms = float(np.sqrt(np.mean(np.square(chunk)))) if len(chunk) else 0.0
+        except Exception:
+            return False
+        # Smoothed live level so the orb can pulse with the operator's voice.
+        self.level = 0.8 * self.level + 0.2 * rms
+        duration = len(chunk) / float(self._sample_rate or 16000)
+        if rms >= self._silence_threshold:
+            self._speech_started = True
+            self._silence_run = 0.0
+            return False
+        if not self._speech_started:
+            return False  # still waiting for the first word — don't arm yet
+        self._silence_run += duration
+        return self._silence_run >= self._silence_hangover
 
 
 # ------------------------------------------------------------------

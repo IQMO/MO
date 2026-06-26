@@ -18,8 +18,10 @@ from __future__ import annotations
 import time
 from typing import Any
 
-# A colour that will not appear in the moon art; keyed fully transparent + click-through.
-_CHROMA = "#ff00ff"
+# Near-black transparency key: the moon is rendered anti-aliased (PIL) and flattened
+# onto this colour, so the feathered rim fades to a soft dark halo and only the exact
+# key pixels are keyed out (transparent + click-through). No art pixel equals it.
+_CHROMA = "#010101"
 _MOON = "#00cccc"        # cyan half-moon = MO mark
 _MOON_DARK = "#04141a"   # the shadowed limb of the crescent
 _GLOW = "#3fe0e0"
@@ -29,9 +31,27 @@ _SIZE = 72               # window + canvas edge (px)
 _GLIDE_SECONDS = 0.45    # travel time to a new point
 
 
+_MOON_RGB = (0, 204, 204)
+_LISTEN_RGB = (187, 134, 252)
+_DARK_RGB = (11, 20, 24)
+
+
 def _ease_out_cubic(t: float) -> float:
     t = max(0.0, min(1.0, t))
     return 1.0 - (1.0 - t) ** 3
+
+
+def _lerp_hex(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> str:
+    t = max(0.0, min(1.0, t))
+    r = int(round(c1[0] + (c2[0] - c1[0]) * t))
+    g = int(round(c1[1] + (c2[1] - c1[1]) * t))
+    b = int(round(c1[2] + (c2[2] - c1[2]) * t))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _glow_shade(i: int) -> str:
+    """Outer glow rings fade from near-cyan toward the dark background as i grows."""
+    return _lerp_hex(_MOON_RGB, _DARK_RGB, min(1.0, 0.35 + i * 0.2))
 
 
 class GhostOrb:
@@ -69,6 +89,9 @@ class GhostOrb:
         self._listening = False
         self._hide_at = 0.0          # auto-park time after a point
         self._phase = 0.0            # breathing/pulse clock
+        self._level = 0.0            # live mic level (0..~0.3) → audio-reactive rings
+        self._photo: Any = None      # current ImageTk frame (kept to avoid GC)
+        self._pil_ok = True          # falls back to canvas ovals if PIL is unusable
 
     # ------------------------------------------------------------------
     # Public control (GUI-thread only)
@@ -85,6 +108,19 @@ class GhostOrb:
         self._show()
         return True
 
+    def wake(self, x: int | None = None, y: int | None = None, seconds: float = 2.4) -> bool:
+        """Briefly show the breathing moon (at a point, or where it last was) — a
+        visible 'Ghost is here' with no target to fly to. Used on summon so the
+        moon is always the face of Win+Alt+M, never a bare window."""
+        now = time.time()
+        if x is not None and y is not None:
+            self._x, self._y = float(x), float(y)
+            self._from = self._to = (self._x, self._y)
+        self._glide_dur = 0.0
+        self._hide_at = now + max(0.5, float(seconds or 2.4))
+        self._show()
+        return True
+
     def set_listening(self, on: bool) -> None:
         """Show/clear the breathing ring while voice capture is active."""
         self._listening = bool(on)
@@ -93,6 +129,13 @@ class GhostOrb:
             self._show()
         elif not self._is_gliding():
             self._hide_at = time.time() + 0.6
+
+    def set_level(self, level: float) -> None:
+        """Feed the live mic level so the listening rings react to the voice."""
+        try:
+            self._level = max(0.0, float(level or 0.0))
+        except Exception:
+            self._level = 0.0
 
     def park(self) -> None:
         """Hide the moon."""
@@ -151,6 +194,66 @@ class GhostOrb:
             pass
 
     def _draw(self, now: float) -> None:
+        if self._pil_ok and self._render_pil(now):
+            return
+        self._draw_canvas(now)
+
+    def _render_pil(self, now: float) -> bool:
+        """Anti-aliased moon via PIL: draw at 2x and downscale so edges are smooth,
+        then flatten onto the near-black key (feather → soft halo). Returns False to
+        fall back to the canvas ovals if PIL isn't usable."""
+        try:
+            from PIL import Image, ImageDraw, ImageTk
+        except Exception:
+            self._pil_ok = False
+            return False
+        try:
+            ss = 2
+            s = self._size
+            big = s * ss
+            cx = cy = big / 2.0
+            base_r = big * 0.22
+            breathe = 0.5 + 0.5 * _sin(now * 2.2)
+            lvl = max(0.0, min(1.0, self._level * 6.0))
+            img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+            d = ImageDraw.Draw(img)
+
+            def ring(r: float, rgba: tuple, w: int) -> None:
+                d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=rgba, width=max(1, int(w)))
+
+            def disc(r: float, cxx: float, rgba: tuple) -> None:
+                d.ellipse([cxx - r, cy - r, cxx + r, cy + r], fill=rgba)
+
+            # Listening: reactive purple rings whose spread/brightness grow with voice.
+            if self._listening:
+                for i in range(3):
+                    spread = (i + 1) / 3.0
+                    rr = base_r + big * 0.04 + lvl * big * 0.32 * spread
+                    alpha = int(170 * (1.0 - spread) * (0.4 + 0.6 * lvl))
+                    ring(rr, (187, 134, 252, max(0, alpha)), ss * 2)
+                ring(base_r + big * 0.05 + breathe * big * 0.02, (187, 134, 252, 90), ss)
+
+            # Soft cyan glow halo, fading outward → smooth feathered edge.
+            for i, gr in enumerate((0.16, 0.11, 0.07, 0.04)):
+                ring(base_r + big * gr, (0, 204, 204, int(75 * (1.0 - i / 4.0))), ss * 2)
+
+            # Moon body + offset shadow disc → the ◐ crescent, gentle size pulse on level.
+            body_r = base_r * (1.0 + 0.06 * lvl)
+            disc(body_r, cx, (0, 204, 204, 255))
+            disc(body_r, cx + body_r * 0.55, (4, 20, 26, 255))
+
+            img = img.resize((s, s), Image.LANCZOS)
+            flat = Image.new("RGB", (s, s), (1, 1, 1))  # == _CHROMA #010101
+            flat.paste(img, (0, 0), img)
+            self._photo = ImageTk.PhotoImage(flat)
+            self._canvas.delete("all")
+            self._canvas.create_image(s // 2, s // 2, image=self._photo)
+            return True
+        except Exception:
+            self._pil_ok = False
+            return False
+
+    def _draw_canvas(self, now: float) -> None:
         c = self._canvas
         try:
             c.delete("all")
@@ -158,22 +261,28 @@ class GhostOrb:
             return
         cx = cy = self._size / 2.0
         breathe = 0.5 + 0.5 * _sin(now * 2.2)        # 0..1 gentle
-        base_r = self._size * 0.26
+        base_r = self._size * 0.24
+        lvl = max(0.0, min(1.0, self._level * 6.0))  # normalise mic level to 0..1
 
-        # Listening: an expanding soft ring that fades as it grows.
+        # Listening: audio-reactive concentric rings — an equalizer-like bloom that
+        # grows with how loud you speak, over a steady breathing ring.
         if self._listening:
-            pulse = (now * 1.4) % 1.0
-            ring_r = base_r + pulse * self._size * 0.22
-            self._oval(cx, cy, ring_r, outline=_LISTEN, width=2)
+            self._oval(cx, cy, base_r + 6 + breathe * 3, outline=_LISTEN, width=1)
+            for i in range(3):
+                spread = (i + 1) / 3.0
+                react_r = base_r + 4 + lvl * self._size * 0.30 * spread
+                self._oval(cx, cy, react_r,
+                           outline=_lerp_hex(_LISTEN_RGB, _DARK_RGB, spread * (1.0 - 0.5 * lvl)),
+                           width=2 if i == 0 else 1)
 
-        # Outer glow (a couple of faint rings that breathe).
-        self._oval(cx, cy, base_r + 6 + breathe * 3, outline=_GLOW, width=1)
-        self._oval(cx, cy, base_r + 3, outline=_GLOW, width=1)
+        # Soft glow halo: graduated rings fading outward so the rim reads soft, not hard.
+        for i, gr in enumerate((11, 8, 5, 3)):
+            self._oval(cx, cy, base_r + gr + breathe * 2, outline=_glow_shade(i), width=1)
 
-        # The moon body, then a shadow disc offset to carve the ◐ crescent.
-        self._oval(cx, cy, base_r, fill=_MOON, outline="")
-        shadow_dx = base_r * 0.55
-        self._oval(cx + shadow_dx, cy, base_r, fill=_MOON_DARK, outline="")
+        # Moon body + offset shadow disc → the ◐ crescent, with a gentle size pulse.
+        body_r = base_r * (1.0 + 0.06 * lvl)
+        self._oval(cx, cy, body_r, fill=_MOON, outline="")
+        self._oval(cx + body_r * 0.55, cy, body_r, fill=_MOON_DARK, outline="")
 
     def _oval(self, cx: float, cy: float, r: float, **kw: Any) -> None:
         try:

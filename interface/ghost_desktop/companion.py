@@ -40,8 +40,8 @@ _ENTRY_BG = "#10242b"
 _MUTED = "#5a8899"
 _BORDER = "#123038"
 _LISTEN = "#bb86fc"  # voice-listening accent (matches the orb)
-WINDOW_WIDTH = 380
-WINDOW_HEIGHT = 184
+WINDOW_WIDTH = 400
+WINDOW_HEIGHT = 268
 WINDOW_OFFSET = 24
 
 # Desktop Ghost keeps its OWN persisted session slot (never "main"): isolated from
@@ -402,8 +402,14 @@ class CompanionSurface:
     def _gui_loop(self) -> None:
         import tkinter as tk
 
+        dnd_ok = False
         try:
-            root = tk.Tk()
+            try:
+                from tkinterdnd2 import TkinterDnD
+                root = TkinterDnD.Tk()  # enables OS file drag-and-drop
+                dnd_ok = True
+            except Exception:
+                root = tk.Tk()
         except Exception:
             self._running = False
             self._gui_ready.set()
@@ -459,30 +465,27 @@ class CompanionSurface:
                                       font=("Segoe UI", 8, "bold"))
         self._listen_label.pack(side="right", padx=(0, 10))
 
-        # Ghost's reply / explanation — the primary, one-sided area (scrollable).
-        resp_frame = tk.Frame(card, bg=CARD)
-        resp_frame.pack(fill="both", expand=True, padx=14, pady=(0, 6))
-        resp_scroll = tk.Scrollbar(resp_frame)
-        resp_scroll.pack(side="right", fill="y")
-        self._response = tk.Text(resp_frame, fg=TEXT, bg=CARD,
-                                 font=("Segoe UI", 10), wrap="word",
-                                 height=6, relief="flat", borderwidth=0,
-                                 highlightthickness=0, cursor="arrow",
-                                 spacing1=2, spacing3=3,
-                                 yscrollcommand=resp_scroll.set, state="disabled")
-        self._response.pack(side="left", fill="both", expand=True)
-        resp_scroll.config(command=self._response.yview)
+        # The input + controls are packed to the BOTTOM first so they are ALWAYS
+        # visible — the reply area then fills whatever space is left above them.
+        # (Previously the reply expanded and pushed the input off a short window.)
+        hint = "Win+Alt+M speak  ·  type + Enter  ·  drop files to attach  ·  Esc hide"
+        tk.Label(card, text=hint, fg="#3a6677", bg=CARD, font=("Segoe UI", 8)).pack(
+            side="bottom", fill="x", padx=14, pady=(0, 8))
 
-        # status line (thin, between reply and input)
-        self._status_label = tk.Label(card, text="Win+Alt+M to speak", anchor="w",
-                                      fg=_MUTED, bg=CARD, font=("Segoe UI", 8))
-        self._status_label.pack(fill="x", padx=14, pady=(0, 2))
-
-        # slim manual input bar (secondary to voice) with a leading prompt mark
+        # manual input bar (mic fallback) with leading mark + Run/Stop buttons
         entry_frame = tk.Frame(card, bg=_ENTRY_BG)
-        entry_frame.pack(fill="x", padx=14, pady=(0, 6))
+        entry_frame.pack(side="bottom", fill="x", padx=14, pady=(0, 6))
         tk.Label(entry_frame, text="›", fg=CYAN, bg=_ENTRY_BG,
                  font=("Segoe UI", 11, "bold")).pack(side="left", padx=(8, 2))
+        # Run (▶) and Stop (⏹) — explicit clickable controls, not just Enter.
+        tk.Button(entry_frame, text="⏹", command=self._on_stop_click,
+                  fg="#ff6b6b", bg=_ENTRY_BG, activebackground=_ENTRY_BG,
+                  activeforeground="#ff9b9b", relief="flat", bd=0,
+                  font=("Segoe UI", 11), cursor="hand2").pack(side="right", padx=(2, 6))
+        tk.Button(entry_frame, text="▶", command=lambda: self._on_submit(None),
+                  fg=CYAN, bg=_ENTRY_BG, activebackground=_ENTRY_BG,
+                  activeforeground="#7fffff", relief="flat", bd=0,
+                  font=("Segoe UI", 11), cursor="hand2").pack(side="right", padx=(2, 2))
         self._entry = tk.Entry(entry_frame, font=("Segoe UI", 10),
                                fg=TEXT, bg=_ENTRY_BG,
                                insertbackground=CYAN, relief="flat",
@@ -491,11 +494,34 @@ class CompanionSurface:
         self._entry.bind("<Return>", self._on_submit)
         self._entry.bind("<Escape>", lambda _e: self.hide())
 
-        # bottom hint
-        hint = "Win+Alt+M speak  ·  type to ask  ·  Esc hide"
-        tk.Label(card, text=hint,
-                 fg="#3a6677", bg=CARD, font=("Segoe UI", 8)).pack(
-                     fill="x", padx=14, pady=(0, 8))
+        # status line (thin, just above the input)
+        self._status_label = tk.Label(card, text="Win+Alt+M to speak", anchor="w",
+                                      fg=_MUTED, bg=CARD, font=("Segoe UI", 8))
+        self._status_label.pack(side="bottom", fill="x", padx=14, pady=(0, 2))
+
+        # Ghost's reply / explanation — the primary area, fills the space above.
+        resp_frame = tk.Frame(card, bg=CARD)
+        resp_frame.pack(side="top", fill="both", expand=True, padx=14, pady=(0, 6))
+        resp_scroll = tk.Scrollbar(resp_frame)
+        resp_scroll.pack(side="right", fill="y")
+        self._response = tk.Text(resp_frame, fg=TEXT, bg=CARD,
+                                 font=("Segoe UI", 10), wrap="word",
+                                 height=4, relief="flat", borderwidth=0,
+                                 highlightthickness=0, cursor="arrow",
+                                 spacing1=2, spacing3=3,
+                                 yscrollcommand=resp_scroll.set, state="disabled")
+        self._response.pack(side="left", fill="both", expand=True)
+        resp_scroll.config(command=self._response.yview)
+
+        # Drag-and-drop files anywhere on the card → attach + remember in the session.
+        if dnd_ok:
+            try:
+                from tkinterdnd2 import DND_FILES
+                for _dt in (card, resp_frame, self._response):
+                    _dt.drop_target_register(DND_FILES)
+                    _dt.dnd_bind("<<Drop>>", self._on_files_dropped)
+            except Exception:
+                traceback.print_exc()
 
         # Drag-to-move from the header (borderless windows have no titlebar).
         def _start_drag(event: Any) -> None:
@@ -573,6 +599,9 @@ class CompanionSurface:
                 self._poll_voice_autostop()
                 if self._orb is not None:
                     try:
+                        if self._recording_voice and self._voice is not None:
+                            rec = getattr(self._voice, "recorder", None)
+                            self._orb.set_level(float(getattr(rec, "level", 0.0) or 0.0))
                         self._orb.tick()
                     except Exception:
                         pass
@@ -678,6 +707,89 @@ class CompanionSurface:
             sessions.save_snapshot(GHOST_DESKTOP_SESSION_SLOT, session)
         except Exception:
             traceback.print_exc()
+
+    def _on_stop_click(self) -> None:
+        """⏹ — cancel a live recording, else interrupt the running turn."""
+        if self._recording_voice:
+            self._recording_voice = False
+            self._orb_set_listening(False)
+            rec = getattr(self._voice, "recorder", None)
+            if rec is not None:
+                try:
+                    rec.stop()  # discard the capture, don't transcribe
+                except Exception:
+                    pass
+            self._set_status("Stopped listening.", _MUTED)
+            return
+        if self._turn_thread is not None and self._turn_thread.is_alive():
+            self.panic_stop()
+            return
+        self._set_status("Nothing running.", _MUTED)
+
+    def _attachments_dir(self):
+        """~/.mo/gdesktop/attachments — Ghost Desktop's own file home (created lazily)."""
+        from pathlib import Path
+        base = None
+        sessions = getattr(self._agent, "_sessions", None)
+        try:
+            if sessions is not None and getattr(sessions, "dir", None):
+                base = Path(sessions.dir).parent.parent  # ~/.mo/memory/sessions → ~/.mo
+        except Exception:
+            base = None
+        if base is None:
+            base = Path.home() / ".mo"
+        dest = base / "gdesktop" / "attachments"
+        dest.mkdir(parents=True, exist_ok=True)
+        return dest
+
+    def _on_files_dropped(self, event: Any) -> None:
+        """Files dropped on the window: copy into the attachments home and record a
+        note in the persisted desktop session so MO can act on them and remember
+        them across restarts."""
+        import shutil
+        from pathlib import Path
+        try:
+            raw = self._root.tk.splitlist(event.data)
+        except Exception:
+            raw = str(getattr(event, "data", "") or "").split()
+        try:
+            dest_dir = self._attachments_dir()
+        except Exception:
+            self._set_status("Could not open attachments folder", "#ff6b6b")
+            return
+        saved: list = []
+        for item in raw:
+            try:
+                src = Path(str(item).strip("{}").strip())
+                if not src.exists() or not src.is_file():
+                    continue
+                dest = dest_dir / src.name
+                stem, suffix, i = dest.stem, dest.suffix, 1
+                while dest.exists():
+                    dest = dest_dir / f"{stem}-{i}{suffix}"
+                    i += 1
+                shutil.copy2(src, dest)
+                saved.append(dest)
+            except Exception:
+                traceback.print_exc()
+        if not saved:
+            self._set_status("No files attached", "#ffcc44")
+            return
+        names = ", ".join(s.name for s in saved)
+        try:
+            session = self._ensure_ghost_session()
+            session.add_user(
+                f"[Operator attached {len(saved)} file(s) to Ghost Desktop: {names}. "
+                f"Saved under {saved[0].parent}. Read them with your file tools when relevant.]"
+            )
+            self._persist_ghost_session()
+        except Exception:
+            traceback.print_exc()
+        self._log_action("attach", names)
+        self._set_status(f"Attached & remembered: {names}", "#44cc88")
+        self._set_response("📎 Attached " + str(len(saved)) + " file(s):\n"
+                           + "\n".join(f"  • {s.name}" for s in saved))
+        self.show()
 
     def _run_turn(self, user_input: str) -> None:
         if self._panic_stop_requested:
@@ -884,7 +996,25 @@ class CompanionSurface:
         if self._voice_input_configured() and self._voice is not None and self._voice.stt_available:
             self._on_voice_input()
             return
+        # No voice backend: still wake the moon at the cursor so the orb is the face
+        # of the summon (not a bare window), then open the manual text input.
+        self._orb_wake()
         self.toggle()
+
+    def _orb_wake(self) -> None:
+        """Show the breathing moon at the current pointer (GUI-thread marshalled)."""
+        orb = self._orb
+        if orb is None:
+            return
+
+        def _do() -> None:
+            try:
+                x, y = self._root.winfo_pointerxy()
+            except Exception:
+                x = y = None
+            orb.wake(x, y)
+
+        self._post_gui_call(_do)
 
     def _orb_set_listening(self, on: bool) -> None:
         orb = self._orb
