@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-from .path_defaults import ENV_MO_STATE_HOME
+from .path_defaults import resolve_state_path
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -54,10 +54,7 @@ def resolve_ledger_path(
         return Path(env_path)
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return None
-    state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-    if state_home:
-        return Path(state_home) / default_name
-    return Path(default_name)
+    return Path(resolve_state_path(default_name))
 
 
 def read_recent_ledger_entries(

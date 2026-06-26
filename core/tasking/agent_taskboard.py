@@ -320,7 +320,17 @@ class AgentTaskBoard:
             task_board.activate(ready_id)
         return True
 
-    def _finalize_self_protocol_task_board_for_answer(self, user_input: str, final_text: str, task_board: TaskBoard) -> bool:
+    def _finalize_self_protocol_task_board_for_answer(
+        self,
+        user_input: str,
+        final_text: str,
+        task_board: TaskBoard,
+        *,
+        monitor_path=None,
+        session_ids=None,
+        frozen_error_count=None,
+        session_dir=None,
+    ) -> bool:
         """Close self-protocol phase rows only after their terminal report gate passes.
 
         OWNER_MAINTENANCE and OWNER_COMPARISON own deterministic phase boards. Their phases are
@@ -346,15 +356,23 @@ class AgentTaskBoard:
         elif is_owner_maintenance_activation(user_input):
             from ..backend_monitor import active_monitor_path
             self._track_devmode_run_session_id()
-            monitor_path = active_monitor_path()
-            run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            if monitor_path is None:
+                monitor_path = active_monitor_path()
+            if session_ids is None:
+                run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
+            else:
+                run_ids = set(session_ids or set())
+            if frozen_error_count is None:
+                frozen_error_count = getattr(self, "_devmode_closeout_frozen_errors", None)
+            if session_dir is None:
+                session_dir = getattr(self, "_active_devmode_session_dir", None)
             if not owner_maintenance_final_allows_stop(
                 user_input,
                 final_text,
                 monitor_path=monitor_path,
                 session_ids=run_ids or None,
-                frozen_error_count=getattr(self, "_devmode_closeout_frozen_errors", None),
-                session_dir=getattr(self, "_active_devmode_session_dir", None),
+                frozen_error_count=frozen_error_count,
+                session_dir=session_dir,
             ):
                 return False
             evidence = "final:owner_maintenance_protocol_closeout"

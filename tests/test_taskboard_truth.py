@@ -174,6 +174,77 @@ def test_owner_maintenance_completion_conflict_continues_until_boundary_clean():
     assert any("[OWNER_MAINTENANCE AUTONOMY] Completion is not allowed" in msg for msg in assistant_messages)
 
 
+def test_owner_maintenance_validated_closeout_closes_protocol_rows_after_notes(monkeypatch):
+    """A stop-gate-approved OWNER_MAINTENANCE terminal report must close the fixed
+    protocol board before later answer notes can make the finalizer re-read a
+    different closeout view."""
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    captured = {}
+    agent = _agent_with_boundary_capture(captured)
+    agent.max_provider_requests = 4
+    agent.max_tool_rounds = 4
+    agent.tool_definitions = [{"name": "shell"}]
+    agent.allowed_roots = ["."]
+    agent.sandbox_config = {"enabled": False}
+    agent._active_lane = None
+    agent.tool_compress_enabled = False
+    agent._project_scoped_tool_arguments = lambda _name, arguments: arguments
+    agent._self_mutation_block_reason = lambda *_args, **_kwargs: None
+    agent._operator_approved = lambda *_args, **_kwargs: False
+    agent._dispatch_tool = lambda *_args, **_kwargs: "shell:evidence"
+    agent._write_tool_audit = lambda *_args, **_kwargs: None
+    agent._cap_tool_result_for_context = lambda result, **_kwargs: result
+    agent._tool_result_is_error = lambda _result: False
+    agent._append_after_turn_notes = lambda text, _notes: text + "\nRemaining: audit note"
+    agent._devmode_run_session_ids = set()
+    agent._devmode_closeout_frozen_errors = 0
+    agent._active_devmode_session_dir = None
+    calls: list[str] = []
+    agent._write_devmode_economy_record = lambda: calls.append("economy")
+    agent._reconcile_devmode_summary_marker = lambda _text: False
+    agent._reconcile_devmode_workflow_closeout = lambda _board: calls.append("workflow")
+    agent._write_devmode_manifest_record = lambda **kwargs: calls.append(f"manifest:{kwargs.get('status')}")
+    agent._track_devmode_run_session_id = lambda: agent._devmode_run_session_ids.add("mo-test")
+
+    responses = iter([
+        SimpleNamespace(
+            content="",
+            tool_calls=[{"id": "call-1", "function": {"name": "shell", "arguments": '{"command":"git status"}'}}],
+            usage=None,
+            finish_reason="tool_calls",
+        ),
+        SimpleNamespace(
+            content="[OWNER_MAINTENANCE COMPLETE] healthy; no open work; 0 tool errors",
+            tool_calls=[],
+            usage=None,
+            finish_reason="stop",
+        ),
+    ])
+    agent._call_provider = lambda **_kwargs: next(responses)
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Boot protocol", "completed", kind="inspect", completion_gate="tool",
+                 evidence=["read_file:OWNER_MAINTENANCE.md"]),
+        TaskItem("2", "Capability matrix", "completed", kind="verify", completion_gate="verification",
+                 depends_on=["1"], evidence=["read_file:summary.md"]),
+        TaskItem("3", "Catalog findings", "completed", kind="verify", completion_gate="verification",
+                 depends_on=["2"], evidence=["shell:rg findings"]),
+        TaskItem("4", "Fix validated findings", "active", kind="edit", completion_gate="verification",
+                 depends_on=["3"]),
+        TaskItem("5", "Verify behavior", "pending", kind="verify", completion_gate="verification",
+                 depends_on=["4"]),
+        TaskItem("6", "Write final report", "pending", kind="report", completion_gate="final",
+                 depends_on=["5"]),
+    ])
+
+    result = agent.run_turn("start OWNER_MAINTENANCE", task_board=board)
+
+    assert result == "[OWNER_MAINTENANCE COMPLETE] healthy; no open work; 0 tool errors\nRemaining: audit note"
+    assert board.open_count() == 0
+    assert all(row.status == "completed" for row in board.tasks)
+    assert calls == ["economy", "economy", "workflow", "manifest:complete"]
+    assert captured["task_board"] is board
+
+
 def test_owner_comparison_preliminary_answer_continues_until_terminal_closeout():
     captured = {}
     agent = _agent_with_boundary_capture(captured)

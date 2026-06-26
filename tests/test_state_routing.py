@@ -71,6 +71,27 @@ def test_resolve_state_path_never_returns_cwd_memory():
             f"resolve_state_path({rel!r}) -> {resolved} points into the checkout"
 
 
+def test_jsonl_ledgers_route_to_mo_home_when_state_env_absent(monkeypatch):
+    from core.heartbeat import _resolve_heartbeat_path
+    from core.path_defaults import HEARTBEAT_LEDGER_PATH, TASKBOARD_LEDGER_PATH, mo_home
+    from core.tasking.task_board import _resolve_ledger_path
+
+    monkeypatch.delenv("MO_HOME", raising=False)
+    monkeypatch.delenv("MO_STATE_HOME", raising=False)
+    monkeypatch.delenv("MO_TASKBOARD_LEDGER_PATH", raising=False)
+    monkeypatch.delenv("MO_HEARTBEAT_LEDGER_PATH", raising=False)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    expected_home = mo_home()
+    taskboard = Path(_resolve_ledger_path()).resolve()
+    heartbeat = Path(_resolve_heartbeat_path()).resolve()
+
+    assert taskboard == (expected_home / TASKBOARD_LEDGER_PATH).resolve()
+    assert heartbeat == (expected_home / HEARTBEAT_LEDGER_PATH).resolve()
+    assert not str(taskboard).startswith(str((Path.cwd() / "memory").resolve()))
+    assert not str(heartbeat).startswith(str((Path.cwd() / "memory").resolve()))
+
+
 def test_workflow_candidate_without_profile_routes_to_state_home():
     from core.learning.workflow_learning import record_workflow_candidate
 

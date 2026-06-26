@@ -99,6 +99,8 @@ _CONTEXT_SOURCE_SPECS = (
     ("reasoning", "Runtime reasoning preference", 4, "runtime preference only; evidence and current task still win", 400),
     ("memory", "Recalled past interactions", 5, "orientation only; not tool receipts or current proof", 2400),
     ("code_graph", "Code map", 5, "orientation only; graph hints must be verified with files/tools/tests", 1800),
+    ("learning", "MO Internal Learning Context — operator-confirmed, relevance-gated", 3, "apply only when the recommendation fits this turn; current user scope, sandbox, tools, and Gateway/taskboard evidence still win", 1200),
+    ("workflow_learning", "MO Internal Local Skills — approved, relevance-gated", 3, "apply only when the trigger truly fits this turn; current user scope, sandbox, tools, and Gateway/taskboard evidence still win", 1400),
 )
 
 
@@ -133,10 +135,7 @@ def _context_sources(parts: dict[str, str]) -> tuple[ContextSource, ...]:
 
 
 def _context_flags(parts: dict[str, str]) -> dict[str, bool]:
-    flags = {key: bool(parts.get(key, "")) for key, *_ in _CONTEXT_SOURCE_SPECS}
-    flags["workflow_learning"] = False
-    flags["proactive_learning"] = False
-    return flags
+    return {key: bool(parts.get(key, "")) for key, *_ in _CONTEXT_SOURCE_SPECS}
 
 
 def _context_char_counts(parts: dict[str, str]) -> dict[str, int]:
@@ -843,6 +842,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             ctx.devmode_run_ids = devmode_run_ids
             ctx.devmode_frozen_errs = devmode_frozen_errs
             ctx.devmode_session_dir = devmode_session_dir
+            ctx.protocol_closeout_text = ""
             ctx.total_tool_calls = total_tool_calls
             ctx.response = response
 
@@ -1094,6 +1094,20 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 )
         except Exception:
             traceback.print_exc()
+        learning_context = ""
+        try:
+            from ..learning.proactive_learning import build_learning_context
+            learning_context = build_learning_context(user_input)
+        except Exception:
+            traceback.print_exc()
+        workflow_learning_context = ""
+        try:
+            from ..learning.workflow_learning import build_workflow_learning_context
+            profile = getattr(self, "profile", None)
+            if profile is not None:
+                workflow_learning_context = build_workflow_learning_context(profile, user_input)
+        except Exception:
+            traceback.print_exc()
         context_parts = {
             "profile": profile_context,
             "memory": recalled_context,
@@ -1113,6 +1127,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             "environment": environment_context,
             "datetime": datetime_context,
             "reasoning": reasoning_context,
+            "learning": learning_context,
+            "workflow_learning": workflow_learning_context,
         }
         self._last_turn_context_flags = _context_flags(context_parts)
         self._pending_turn_proposal = ""

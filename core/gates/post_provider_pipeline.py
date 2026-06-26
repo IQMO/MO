@@ -67,6 +67,7 @@ class _GateContext:
         "owner_interface_audit_active", "no_evidence",
         "devmode_monitor_path", "devmode_run_ids",
         "devmode_frozen_errs", "devmode_session_dir",
+        "protocol_closeout_text",
         "total_tool_calls", "boundary_report", "response",
     )
 
@@ -113,6 +114,8 @@ def _pipeline_owner_interface_audit_stop(agent, ctx):
         if ctx.on_activity:
             ctx.on_activity("OWNER_INTERFACE_AUDIT stop-gate blocked after cap")
         _protocol_stop_blocked("OWNER_INTERFACE_AUDIT", ctx)
+    elif ctx.owner_interface_audit_active:
+        ctx.protocol_closeout_text = ctx.content
     return None
 
 
@@ -127,6 +130,8 @@ def _pipeline_owner_comparison_stop(agent, ctx):
         if ctx.on_activity:
             ctx.on_activity("OWNER_COMPARISON stop-gate blocked after cap")
         _protocol_stop_blocked("OWNER_COMPARISON", ctx)
+    elif ctx.owner_comparison_active:
+        ctx.protocol_closeout_text = ctx.content
     return None
 
 
@@ -135,6 +140,9 @@ def _pipeline_devmode_economy(agent, ctx):
     if ctx.owner_maintenance_active:
         agent._write_devmode_economy_record()
         agent._reconcile_devmode_summary_marker(ctx.content)
+        ctx.devmode_run_ids = set(getattr(agent, "_devmode_run_session_ids", None) or set())
+        ctx.devmode_frozen_errs = getattr(agent, "_devmode_closeout_frozen_errors", ctx.devmode_frozen_errs)
+        ctx.devmode_session_dir = getattr(agent, "_active_devmode_session_dir", ctx.devmode_session_dir)
     return None
 
 
@@ -161,6 +169,8 @@ def _pipeline_owner_maintenance_stop(agent, ctx):
         if ctx.on_activity:
             ctx.on_activity("OWNER_MAINTENANCE stop-gate blocked after cap")
         _protocol_stop_blocked("OWNER_MAINTENANCE", ctx)
+    elif ctx.owner_maintenance_active:
+        ctx.protocol_closeout_text = ctx.content
     return None
 
 
@@ -180,7 +190,16 @@ def _pipeline_board_finalization(agent, ctx):
     """Activate final report row, finalize self-protocol and task boards."""
     agent._activate_final_report_row(ctx.task_board, on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
     if ctx.task_board and ctx.task_board.tasks:
-        protocol_closed = agent._finalize_self_protocol_task_board_for_answer(ctx.user_input, ctx.final_text, ctx.task_board)
+        closeout_text = ctx.protocol_closeout_text or ctx.final_text
+        protocol_closed = agent._finalize_self_protocol_task_board_for_answer(
+            ctx.user_input,
+            closeout_text,
+            ctx.task_board,
+            monitor_path=ctx.devmode_monitor_path,
+            session_ids=ctx.devmode_run_ids or None,
+            frozen_error_count=ctx.devmode_frozen_errs,
+            session_dir=ctx.devmode_session_dir,
+        )
         if protocol_closed or (not protocol_closed and agent._finalize_task_board_for_answer(ctx.task_board)):
             record_snapshot(ctx.task_board, "completed" if ctx.task_board.open_count() == 0 else "updated")
             _emit_task_board_update(ctx.task_board, update="completed" if ctx.task_board.open_count() == 0 else "updated", on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
