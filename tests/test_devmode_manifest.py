@@ -24,6 +24,9 @@ def test_manifest_artifact_entries_hash_present_and_record_missing(tmp_path):
     # economy.md + manifest.json are runtime-owned
     assert by_name["economy.md"]["runtime_owned"] is True
     assert by_name[MANIFEST_NAME]["runtime_owned"] is True
+    assert by_name[MANIFEST_NAME]["self_referential"] is True
+    assert by_name[MANIFEST_NAME]["bytes"] is None
+    assert by_name[MANIFEST_NAME]["sha256"] is None
     # acceptance criterion 5: the core SESSION artifacts are all indexed
     for required in ("summary.md", "workflow.md", "catalog.md", "capability-matrix.md", "economy.md", MANIFEST_NAME):
         assert required in by_name

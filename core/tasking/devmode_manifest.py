@@ -58,6 +58,36 @@ def artifact_entry(path: Path) -> dict[str, Any]:
     return entry
 
 
+def manifest_artifact_entry(path: Path) -> dict[str, Any]:
+    """Metadata for manifest.json itself.
+
+    A manifest cannot honestly include its own content hash or byte size: writing those
+    values changes the file being hashed. Record that self-reference explicitly instead
+    of indexing a stale previous manifest.
+    """
+    path = Path(path)
+    return {
+        "name": path.name,
+        "path": str(path),
+        "exists": True,
+        "bytes": None,
+        "sha256": None,
+        "runtime_owned": True,
+        "self_referential": True,
+    }
+
+
+def _artifact_entries(session_dir: Path) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for name in _ARTIFACT_NAMES:
+        path = session_dir / name
+        if name == MANIFEST_NAME:
+            entries.append(manifest_artifact_entry(path))
+        else:
+            entries.append(artifact_entry(path))
+    return entries
+
+
 def _taskboard_projection(task_board: Any) -> dict[str, Any]:
     """Project the live/final taskboard into the manifest — per-row evidence truth so a
     final-token-only or zero-evidence row is visible, not hidden."""
@@ -159,7 +189,7 @@ def build_devmode_manifest(
                                    if frozen_tool_errors is not None else _i("tool_errors")),
         },
         "taskboard": taskboard,
-        "artifacts": [artifact_entry(session_dir / name) for name in _ARTIFACT_NAMES],
+        "artifacts": _artifact_entries(session_dir),
         "reconciliations": dict(reconciliations or {}),
         "warnings": list(warnings or []),
     }

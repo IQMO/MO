@@ -440,6 +440,40 @@ def test_terminal_closeout_carries_real_evidence_not_hollow_token(monkeypatch):
         assert any("read_file" in e or "git" in e for e in nonfinal)
 
 
+def test_owner_maintenance_closeout_updates_workflow_before_final_manifest(monkeypatch):
+    """The final manifest must index the final workflow.md, including the runtime
+    closeout section. A complete manifest written before the final workflow update
+    leaves stale workflow bytes/hash in manifest.json."""
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    calls: list[str] = []
+
+    def fake_economy(self):
+        calls.append("economy")
+
+    def fake_workflow(self, task_board):
+        calls.append("workflow")
+
+    def fake_manifest(self, **kwargs):
+        calls.append(f"manifest:{kwargs.get('status')}")
+
+    monkeypatch.setattr(Agent, "_write_devmode_economy_record", fake_economy)
+    monkeypatch.setattr(Agent, "_reconcile_devmode_workflow_closeout", fake_workflow)
+    monkeypatch.setattr(Agent, "_write_devmode_manifest_record", fake_manifest)
+
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool",
+                 evidence=["read_file:OWNER_MAINTENANCE.md"]),
+        TaskItem("2", "Report", "active", kind="report", completion_gate="final", depends_on=["1"]),
+    ])
+    agent = object.__new__(Agent)
+    assert agent._finalize_self_protocol_task_board_for_answer(
+        "start OWNER_MAINTENANCE",
+        "[OWNER_MAINTENANCE COMPLETE] healthy; no open work",
+        board,
+    )
+    assert calls == ["economy", "workflow", "manifest:complete"]
+
+
 def test_self_completed_empty_phase_row_is_backfilled_at_closeout(monkeypatch):
     """A diagnostic/reasoning row the model closed itself via complete_task with NO
     real evidence must be backfilled with the session's gathered evidence at closeout —

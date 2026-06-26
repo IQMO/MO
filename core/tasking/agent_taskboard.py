@@ -405,8 +405,8 @@ class AgentTaskBoard:
         # closing out. For DEVMODE, mark the manifest status="complete" and stamp the
         # runtime-owned workflow closeout (the model never returns to tick phase rows).
         if is_owner_maintenance_activation(user_input):
-            self._write_devmode_manifest_record(status="complete")
             self._reconcile_devmode_workflow_closeout(task_board)
+            self._write_devmode_manifest_record(status="complete")
         return changed
 
     def _bind_active_devmode_dir_from_write(self, arguments: dict) -> None:
