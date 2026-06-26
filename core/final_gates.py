@@ -12,6 +12,8 @@ through this module:
 - self-protocol completion-truth gate;
 - done-claim task-truth gate;
 - verify-edits affected-test gate;
+- LSP-diagnostics edit-truth gate (blocks "fixed/clean" while a configured language
+  server still reports errors in files edited this turn);
 - OWNER_INTEGRITY_AUDIT report truth gate;
 - completion/cleanliness, current-state/version, and unsourced-external claim gates.
 
