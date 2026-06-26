@@ -42,13 +42,37 @@ def test_set_plan_owns_board_when_flag_on():
     assert all(t.status == "pending" for t in b.tasks[1:])
 
 
+def test_set_plan_populates_an_empty_model_owned_board():
+    # The normal model_owned flow: the gateway creates an EMPTY board and MO calls
+    # set_plan to populate it. The empty-board path must apply (no rows to "advance"
+    # is exactly when set_plan creates them). Regression for zero "MO plan" boards.
+    b = TaskBoard(turn_id="t", session_id="s", source="gateway")
+    assert b.tasks == []
+    changed = _Agent(model_owned=True)._advance_task_board_after_tool(
+        b, "set_plan", {"tasks": ["inspect", "fix", "verify"]}
+    )
+    assert changed is True
+    assert [t.title for t in b.tasks] == ["inspect", "fix", "verify"]
+
+
+def test_runtime_should_create_board_for_set_plan():
+    from core.gateway import _runtime_should_create_board
+    from core.gateway_helpers import select_template
+    trivial = "hi"
+    assert select_template(trivial) == "simple_chat"  # guard: input really is trivial
+    # set_plan materializes the board it will populate even on a trivial turn...
+    assert _runtime_should_create_board(None, trivial, "user", "set_plan", {}) is True
+    # ...while a non-work tool on the same trivial turn does not.
+    assert _runtime_should_create_board(None, trivial, "user", "read_file", {}) is False
+
+
 def test_set_plan_refuses_to_overwrite_owner_protocol_board():
-    # Regression for live mo-1782436480: set_plan clobbered a DEVMODE05 board.
+    # Regression for live mo-1782436480: set_plan clobbered an owner-maintenance board.
     # A protocol board carries a 'final' closeout gate that drives the protocol's
     # completion contract; set_plan must NOT replace it even with model_owned on —
     # MO advances those rows with complete_task instead.
     b = TaskBoard(turn_id="t", session_id="s", source="gateway")
-    b.set_rows("start DEVMODE05", [
+    b.set_rows("start owner maintenance", [
         {"id": "1", "text": "Boot protocol", "status": "active", "completion_gate": "tool"},
         {"id": "2", "text": "Final OWNER_MAINTENANCE report", "status": "pending", "completion_gate": "final"},
     ])

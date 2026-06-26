@@ -96,7 +96,7 @@ class AgentTaskBoard:
         """
         if not self._model_owned_taskboard_enabled():
             return False
-        # Never let set_plan overwrite an owner-protocol board (DEVMODE05 /
+        # Never let set_plan overwrite an owner-protocol board (maintenance /
         # comparison / interface audit). Those are gateway-seeded with a fixed
         # phase structure whose 'final' closeout row drives the protocol's
         # completion contract; MO advances them with complete_task, not set_plan.

@@ -640,6 +640,11 @@ def _runtime_should_create_board(
         return True
     if select_template(text) != "simple_chat":
         return True
+    # set_plan is MO explicitly declaring a multi-step plan (model_owned) — an
+    # explicit work-intent signal, so materialize the board it will populate even
+    # on an otherwise simple_chat turn. (Only exposed when model_owned is on.)
+    if str(tool_name) == "set_plan":
+        return True
     # For simple_chat, still create board if the tool is a real work signal (edit, shell, etc.)
     return tool_is_runtime_work_signal(tool_name, arguments or {})
 

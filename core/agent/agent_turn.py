@@ -854,7 +854,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                                     self.switch_to_vision_provider()
                         # Auto-advance only when the tool plausibly satisfies the active row.
                         # Final/report rows wait for the actual final answer.
-                        if task_board and task_board.tasks and not self._tool_result_is_error(result):
+                        # set_plan must run even on an EMPTY board — it is what
+                        # populates the board MO owns (model_owned). Every other
+                        # tool only advances EXISTING rows, so they still require a
+                        # non-empty board. (set_plan is only ever exposed when
+                        # model_owned is on, so this is inert by default.)
+                        if task_board and (task_board.tasks or name == "set_plan") and not self._tool_result_is_error(result):
                             before_board = _task_board_change_fingerprint(task_board)
                             advanced = self._advance_task_board_after_tool(task_board, name, arguments, monitor=monitor)
                             if advanced or _task_board_change_fingerprint(task_board) != before_board:
