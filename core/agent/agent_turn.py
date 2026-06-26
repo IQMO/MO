@@ -28,15 +28,7 @@ from ..backend_monitor import (
 )
 from ..session.handoff import context_pressure
 from ..tool_compress import compress as tool_compress
-from ..final_gates import (
-    run_claim_gates,
-    run_contract_gate,
-    run_done_claim_gate,
-    run_lsp_diagnostics_gate,
-    run_owner_integrity_audit_reporting_gate,
-    run_self_protocol_truth_gate,
-    run_verify_edits_gate,
-)
+from ..context_bridge import ContextSource, build_active_context_bridge
 from ..learning.feedback_learning import record_feedback_learning
 from .agent_turn_dispatch import AgentTurnDispatchMixin
 from .agent_turn_recovery import AgentTurnRecoveryMixin
@@ -50,27 +42,12 @@ from .agent_utils import (
     _usage_tokens,
 )
 from ..graph.code_graph import build_code_graph_context, should_include_code_graph_context
-from ..context_bridge import ContextSource, build_active_context_bridge
 from ..coordination_state import build_main_coordination_context
 from ..mo_control_context import build_mo_control_context, should_include_mo_control_context
 from ..owner_protocols import (
     is_owner_maintenance_activation,
     is_owner_interface_audit_activation,
     is_owner_comparison_activation,
-    is_owner_integrity_audit_activation,
-)
-from ..self_maintenance.owner_integrity_audit_ground_truth import (
-    normalize_owner_integrity_audit_report_text,
-    owner_integrity_audit_source_corpus_count,
-    reconcile_latest_owner_integrity_audit_report,
-)
-from ..self_maintenance.devmode_closeout import (
-    owner_maintenance_continuation_instruction,
-    owner_maintenance_final_allows_stop,
-    owner_interface_audit_continuation_instruction,
-    owner_interface_audit_final_allows_stop,
-    owner_comparison_continuation_instruction,
-    owner_comparison_final_allows_stop,
 )
 from ..self_maintenance.preflight import (
     build_self_capability_preflight_context,
@@ -84,18 +61,23 @@ from interface.ghost import sanitize_proposal_for_context
 from interface.task_board_view import render_plain
 
 # ---------------------------------------------------------------------------
-# Post-provider gate pipeline — declarative gate/action sequence
+# Post-provider gate pipeline — extracted to core/gates/post_provider_pipeline.py
 # ---------------------------------------------------------------------------
-# Each pipeline entry is (name, kind, fn) where fn(agent, ctx) returns
-# _CONTINUE (the gate fired — continue the provider loop) or None (pass).
-# Actions always return None.
+from ..gates.post_provider_pipeline import _CONTINUE, _GateContext, _run_post_provider_pipeline
 
-_CONTINUE = object()
+# Re-export for backward compat (tests)
+from ..gates.post_provider_pipeline import _no_tool_evidence_continuation
+from ..self_maintenance.devmode_closeout import owner_maintenance_final_allows_stop  # test monkeypatch target
 
-# Maximum corrective re-prompts for owner-protocol terminal-stop gates and the
-# contract/self-protocol-truth gates. Contract-gate exhaustion becomes a blocked
-# final answer instead of allowing an unresolved contradiction to close as clean.
-PROTOCOL_STOP_GATE_MAX = 2
+def _emit_security_check(turn_modified_files, monitor, final_text=None):
+    """Emit a turn-end security check on modified files (and optionally final_text)."""
+    if not turn_modified_files:
+        return
+    sec_result = (run_turn_security_check(turn_modified_files, final_text)
+                  if final_text is not None
+                  else run_turn_security_check(turn_modified_files))
+    if sec_result.findings and monitor:
+        monitor.emit("security_check", sec_result.as_dict())
 
 
 _CONTEXT_SOURCE_SPECS = (
@@ -161,287 +143,6 @@ def _context_char_counts(parts: dict[str, str]) -> dict[str, int]:
     return {field: len(parts.get(key, "")) for key, field in _CONTEXT_CHAR_FIELDS.items()}
 
 
-class _GateContext:
-    """Mutable state threaded through the post-provider gate/action pipeline.
-    
-    Holds all the variables the gates and actions read or mutate, so the
-    pipeline entries are pure functions of (agent, ctx).
-    """
-    __slots__ = (
-        "user_input", "content", "final_text", "reasoning", "notes",
-        "task_board", "monitor", "on_activity", "on_board_update", "on_board_event",
-        "final_gates_fired", "protocol_stop_gate_continuations",
-        "contract_gate_continuations", "self_protocol_truth_continuations",
-        "owner_integrity_audit_reporting_truth_continuations",
-        "turn_initial_completed_ids", "turn_modified_files",
-        "tool_call_counts", "tool_error_counts",
-        "owner_maintenance_active", "owner_comparison_active",
-        "owner_interface_audit_active", "no_evidence",
-        "devmode_monitor_path", "devmode_run_ids",
-        "devmode_frozen_errs", "devmode_session_dir",
-        "total_tool_calls", "boundary_report", "response",
-    )
-
-
-def _run_post_provider_pipeline(agent, ctx: _GateContext) -> str:
-    """Run the post-provider gate/action pipeline. Returns ctx.final_text on pass,
-    or _CONTINUE when a gate fires (caller must ``continue`` the provider loop).
-    """
-    for _name, _kind, fn in _POST_PROVIDER_PIPELINE:
-        result = fn(agent, ctx)
-        if result is _CONTINUE:
-            return _CONTINUE
-    return ctx.final_text
-
-
-# -- Pipeline entry functions (pure: (agent, ctx) -> _CONTINUE | None) ----------
-
-def _pipeline_no_tool_evidence(agent, ctx):
-    if ctx.no_evidence is not None:
-        if ctx.on_activity:
-            ctx.on_activity(ctx.no_evidence[0])
-        agent.session.add_assistant(ctx.no_evidence[1])
-        return _CONTINUE
-    return None
-
-
-def _protocol_stop_blocked(label: str, ctx) -> None:
-    ctx.content = (
-        f"[{label} BLOCKED] Cannot honestly close this protocol turn because the "
-        "protocol stop gate still rejects the final report after bounded recovery. "
-        "Fix the missing closeout evidence or terminal marker and rerun verification."
-    )
-    ctx.final_text = ""
-
-
-def _pipeline_owner_interface_audit_stop(agent, ctx):
-    if not owner_interface_audit_final_allows_stop(ctx.user_input, ctx.content):
-        if ctx.protocol_stop_gate_continuations.get("owner_interface_audit", 0) < PROTOCOL_STOP_GATE_MAX:
-            ctx.protocol_stop_gate_continuations["owner_interface_audit"] = ctx.protocol_stop_gate_continuations.get("owner_interface_audit", 0) + 1
-            if ctx.on_activity:
-                ctx.on_activity("continuing OWNER_INTERFACE_AUDIT...")
-            agent.session.add_assistant(owner_interface_audit_continuation_instruction(ctx.user_input, ctx.content))
-            return _CONTINUE
-        if ctx.on_activity:
-            ctx.on_activity("OWNER_INTERFACE_AUDIT stop-gate blocked after cap")
-        _protocol_stop_blocked("OWNER_INTERFACE_AUDIT", ctx)
-    return None
-
-
-def _pipeline_owner_comparison_stop(agent, ctx):
-    if not owner_comparison_final_allows_stop(ctx.user_input, ctx.content):
-        if ctx.protocol_stop_gate_continuations.get("owner_comparison", 0) < PROTOCOL_STOP_GATE_MAX:
-            ctx.protocol_stop_gate_continuations["owner_comparison"] = ctx.protocol_stop_gate_continuations.get("owner_comparison", 0) + 1
-            if ctx.on_activity:
-                ctx.on_activity("continuing OWNER_COMPARISON...")
-            agent.session.add_assistant(owner_comparison_continuation_instruction(ctx.user_input, ctx.content))
-            return _CONTINUE
-        if ctx.on_activity:
-            ctx.on_activity("OWNER_COMPARISON stop-gate blocked after cap")
-        _protocol_stop_blocked("OWNER_COMPARISON", ctx)
-    return None
-
-
-def _pipeline_devmode_economy(agent, ctx):
-    """Write the economy ledger BEFORE the OWNER_MAINTENANCE closeout gate evaluates."""
-    if ctx.owner_maintenance_active:
-        agent._write_devmode_economy_record()
-        agent._reconcile_devmode_summary_marker(ctx.content)
-    return None
-
-
-def _pipeline_owner_maintenance_stop(agent, ctx):
-    if not owner_maintenance_final_allows_stop(
-        ctx.user_input, ctx.content,
-        monitor_path=ctx.devmode_monitor_path,
-        session_ids=ctx.devmode_run_ids or None,
-        frozen_error_count=ctx.devmode_frozen_errs,
-        session_dir=ctx.devmode_session_dir,
-    ):
-        if ctx.protocol_stop_gate_continuations.get("owner_maintenance", 0) < PROTOCOL_STOP_GATE_MAX:
-            ctx.protocol_stop_gate_continuations["owner_maintenance"] = ctx.protocol_stop_gate_continuations.get("owner_maintenance", 0) + 1
-            if ctx.on_activity:
-                ctx.on_activity("continuing OWNER_MAINTENANCE...")
-            agent.session.add_assistant(owner_maintenance_continuation_instruction(
-                ctx.user_input, ctx.content,
-                monitor_path=ctx.devmode_monitor_path,
-                session_ids=ctx.devmode_run_ids or None,
-                frozen_error_count=ctx.devmode_frozen_errs,
-                session_dir=ctx.devmode_session_dir,
-            ))
-            return _CONTINUE
-        if ctx.on_activity:
-            ctx.on_activity("OWNER_MAINTENANCE stop-gate blocked after cap")
-        _protocol_stop_blocked("OWNER_MAINTENANCE", ctx)
-    return None
-
-
-def _pipeline_critique(agent, ctx):
-    """Finalize the response text (secrets-only critique) and record learning."""
-    if ctx.on_activity:
-        ctx.on_activity("finalizing response...")
-    critique_result = agent._review_final_answer(ctx.content, monitor=ctx.monitor)
-    ctx.final_text = critique_result.text
-    ctx.reasoning = getattr(ctx.response, "reasoning_content", None) or getattr(ctx.response, "reasoning", None)
-    ctx.notes = agent._record_turn_memory_and_learning(ctx.user_input, ctx.final_text)
-    ctx.final_text = agent._append_after_turn_notes(ctx.final_text, ctx.notes)
-    return None
-
-
-def _pipeline_board_finalization(agent, ctx):
-    """Activate final report row, finalize self-protocol and task boards."""
-    agent._activate_final_report_row(ctx.task_board, on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
-    if ctx.task_board and ctx.task_board.tasks:
-        protocol_closed = agent._finalize_self_protocol_task_board_for_answer(ctx.user_input, ctx.final_text, ctx.task_board)
-        if protocol_closed or (not protocol_closed and agent._finalize_task_board_for_answer(ctx.task_board)):
-            record_snapshot(ctx.task_board, "completed" if ctx.task_board.open_count() == 0 else "updated")
-            _emit_task_board_update(ctx.task_board, update="completed" if ctx.task_board.open_count() == 0 else "updated", on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
-    return None
-
-
-def _pipeline_contract_gate(agent, ctx):
-    result = run_contract_gate(
-        agent, ctx.task_board, ctx.user_input, ctx.turn_initial_completed_ids,
-        count=ctx.contract_gate_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
-        on_activity=ctx.on_activity,
-    )
-    ctx.contract_gate_continuations = result.count
-    if result.blocked_text:
-        ctx.final_text = result.blocked_text
-        if ctx.task_board:
-            record_snapshot(ctx.task_board, "blocked", state="blocked")
-            _emit_task_board_update(ctx.task_board, update="blocked", on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
-        return None
-    if result.instruction:
-        agent.session.add_assistant(result.instruction)
-        return _CONTINUE
-    return None
-
-
-def _pipeline_consistency_boundary(agent, ctx):
-    ctx.boundary_report = agent._run_consistency_boundary(
-        "turn_final", user_text=ctx.user_input, final_text=ctx.final_text,
-        learning_notes=ctx.notes, task_board=ctx.task_board,
-    )
-    return None
-
-
-def _pipeline_self_protocol_truth(agent, ctx):
-    result = run_self_protocol_truth_gate(
-        agent, ctx.user_input, ctx.final_text, ctx.boundary_report,
-        count=ctx.self_protocol_truth_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
-        on_activity=ctx.on_activity,
-    )
-    ctx.self_protocol_truth_continuations = result.count
-    if result.blocked_text:
-        ctx.final_text = result.blocked_text
-        if ctx.task_board:
-            record_snapshot(ctx.task_board, "blocked", state="blocked")
-            _emit_task_board_update(ctx.task_board, update="blocked", on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
-        return None
-    if result.instruction:
-        agent.session.add_assistant(result.instruction)
-        return _CONTINUE
-    return None
-
-
-def _pipeline_done_claim(agent, ctx):
-    _done_claim_instruction = run_done_claim_gate(
-        agent, ctx.boundary_report, fired=ctx.final_gates_fired, on_activity=ctx.on_activity,
-    )
-    if _done_claim_instruction:
-        agent.session.add_assistant(_done_claim_instruction)
-        return _CONTINUE
-    return None
-
-
-def _pipeline_verify_edits(agent, ctx):
-    _verify_instr = run_verify_edits_gate(
-        agent, ctx.turn_modified_files, fired=ctx.final_gates_fired, on_activity=ctx.on_activity,
-    )
-    if _verify_instr:
-        agent.session.add_assistant(_verify_instr)
-        return _CONTINUE
-    return None
-
-
-def _pipeline_lsp_diagnostics(agent, ctx):
-    _lsp_instr = run_lsp_diagnostics_gate(
-        agent, ctx.turn_modified_files, fired=ctx.final_gates_fired, on_activity=ctx.on_activity,
-    )
-    if _lsp_instr:
-        agent.session.add_assistant(_lsp_instr)
-        return _CONTINUE
-    return None
-
-
-def _pipeline_iam_normalize(agent, ctx):
-    """Normalize quantitative truth BEFORE the IAM reporting gate evaluates."""
-    if is_owner_integrity_audit_activation(ctx.user_input):
-        _iam_tool_calls = sum((ctx.tool_call_counts or {}).values())
-        _iam_tool_errors = sum((ctx.tool_error_counts or {}).values())
-        _iam_corpus = owner_integrity_audit_source_corpus_count()
-        ctx.final_text = normalize_owner_integrity_audit_report_text(
-            ctx.final_text, tool_calls=_iam_tool_calls,
-            tool_errors=_iam_tool_errors, corpus=_iam_corpus,
-        )
-        try:
-            reconcile_latest_owner_integrity_audit_report(
-                tool_calls=_iam_tool_calls, tool_errors=_iam_tool_errors,
-                corpus=_iam_corpus, report_text=ctx.final_text,
-            )
-        except Exception:
-            traceback.print_exc()
-    return None
-
-
-def _pipeline_iam_reporting(agent, ctx):
-    _owner_integrity_audit_reporting_instruction = run_owner_integrity_audit_reporting_gate(
-        ctx.user_input, ctx.final_text, ctx.tool_call_counts, ctx.tool_error_counts,
-        fired=ctx.final_gates_fired,
-        continuations=ctx.owner_integrity_audit_reporting_truth_continuations,
-        max_continuations=3, monitor=ctx.monitor, on_activity=ctx.on_activity,
-    )
-    if _owner_integrity_audit_reporting_instruction:
-        ctx.owner_integrity_audit_reporting_truth_continuations += 1
-        agent.session.add_assistant(_owner_integrity_audit_reporting_instruction)
-        return _CONTINUE
-    return None
-
-
-def _pipeline_claim_gates(agent, ctx):
-    _claim_instruction = run_claim_gates(
-        agent, ctx.final_text, ctx.tool_call_counts,
-        fired=ctx.final_gates_fired, monitor=ctx.monitor, on_activity=ctx.on_activity,
-    )
-    if _claim_instruction:
-        agent.session.add_assistant(_claim_instruction)
-        return _CONTINUE
-    return None
-
-
-# -- The pipeline: ordered list of (name, kind, entry_fn) -----------------------
-
-_POST_PROVIDER_PIPELINE = [
-    ("no_tool_evidence", "gate", _pipeline_no_tool_evidence),
-    ("owner_interface_audit_stop", "gate", _pipeline_owner_interface_audit_stop),
-    ("owner_comparison_stop", "gate", _pipeline_owner_comparison_stop),
-    ("devmode_economy", "action", _pipeline_devmode_economy),
-    ("owner_maintenance_stop", "gate", _pipeline_owner_maintenance_stop),
-    ("critique", "action", _pipeline_critique),
-    ("board_finalization", "action", _pipeline_board_finalization),
-    ("contract_gate", "gate", _pipeline_contract_gate),
-    ("consistency_boundary", "action", _pipeline_consistency_boundary),
-    ("self_protocol_truth", "gate", _pipeline_self_protocol_truth),
-    ("done_claim", "gate", _pipeline_done_claim),
-    ("verify_edits", "gate", _pipeline_verify_edits),
-    ("lsp_diagnostics", "gate", _pipeline_lsp_diagnostics),
-    ("iam_normalize", "action", _pipeline_iam_normalize),
-    ("iam_reporting", "gate", _pipeline_iam_reporting),
-    ("claim_gates", "gate", _pipeline_claim_gates),
-]
-
-
 def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
     if not task_board:
         return ""
@@ -459,49 +160,6 @@ def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
     except Exception:
         traceback.print_exc()
         return ""
-
-
-def _no_tool_evidence_continuation(
-    *,
-    owner_maintenance_active: bool,
-    owner_comparison_active: bool,
-    owner_interface_audit_active: bool,
-    total_tool_calls: int,
-    devmode_taskboard_completed: bool,
-) -> tuple[str, str] | None:
-    """Owner-protocol no-tool-evidence gate.
-
-    When an owner protocol is active and the turn produced ZERO tool calls, even a
-    correctly-prefixed completion is fabrication — there is no real evidence behind it.
-    Returns ``(on_activity label, continuation message)`` to inject before re-looping,
-    or ``None`` to proceed. OWNER_MAINTENANCE is exempt once its taskboard is already completed
-    (a clean closeout turn legitimately needs no new tools). Precedence matches the
-    original inline order: OWNER_MAINTENANCE, then OWNER_COMPARISON, then OWNER_INTERFACE_AUDIT.
-    """
-    if total_tool_calls != 0:
-        return None
-    if owner_maintenance_active and not devmode_taskboard_completed:
-        return (
-            "OWNER_MAINTENANCE: no tool evidence — continuing...",
-            "[OWNER_MAINTENANCE AUTONOMY] No tool evidence gathered this turn. "
-            "You must call tools (read_file, shell, grep, etc.) to produce real evidence before claiming completion. "
-            "Do not fabricate reports. Run the protocol steps with actual tools.",
-        )
-    if owner_comparison_active:
-        return (
-            "OWNER_COMPARISON: no tool evidence - continuing...",
-            "[OWNER_COMPARISON CONTINUATION] No tool evidence gathered this turn. "
-            "Read the OWNER_COMPARISON protocol, capture source roles, inspect structured evidence surfaces, "
-            "and build the comparison matrix from actual files/traces before any closeout.",
-        )
-    if owner_interface_audit_active:
-        return (
-            "OWNER_INTERFACE_AUDIT: no tool evidence - continuing...",
-            "[OWNER_INTERFACE_AUDIT CONTINUATION] No tool evidence gathered this turn. "
-            "Read the OWNER_INTERFACE_AUDIT protocol and inspect the real interface code (read_file on "
-            "interface/*.py) and live UX behavior before any UX-audit closeout.",
-        )
-    return None
 
 
 class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
@@ -874,10 +532,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     final_text = self._append_after_turn_notes(final_text, notes)
                     self.session.add_assistant(final_text)
                     # Turn-end security check on modified files
-                    if turn_modified_files and monitor:
-                        sec_result = run_turn_security_check(turn_modified_files)
-                        if sec_result.findings:
-                            monitor.emit("security_check", sec_result.as_dict())
+                    _emit_security_check(turn_modified_files, monitor)
                     return final_text
 
                 batch_signature = self._tool_call_batch_signature(tool_calls_data)
@@ -910,10 +565,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     notes = self._record_turn_memory_and_learning(user_input, final_text)
                     final_text = self._append_after_turn_notes(final_text, notes)
                     self.session.add_assistant(final_text)
-                    if turn_modified_files and monitor:
-                        sec_result = run_turn_security_check(turn_modified_files)
-                        if sec_result.findings:
-                            monitor.emit("security_check", sec_result.as_dict())
+                    _emit_security_check(turn_modified_files, monitor)
                     return final_text
 
                 # Surface interim prose that accompanies tool calls. Providers
@@ -1140,10 +792,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 final_text = self._append_after_turn_notes(final_text, notes)
                 self.session.add_assistant(final_text)
                 # Turn-end security check on modified files
-                if turn_modified_files and monitor:
-                    sec_result = run_turn_security_check(turn_modified_files)
-                    if sec_result.findings:
-                        monitor.emit("security_check", sec_result.as_dict())
+                _emit_security_check(turn_modified_files, monitor)
                 return final_text
 
 
@@ -1210,20 +859,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             reasoning = ctx.reasoning
             self.session.add_assistant(final_text, reasoning_content=str(reasoning) if reasoning else None)
             # Turn-end security check on modified files and response text
-            if turn_modified_files:
-                sec_result = run_turn_security_check(turn_modified_files, final_text)
-                if sec_result.findings and monitor:
-                    monitor.emit("security_check", sec_result.as_dict())
+            _emit_security_check(turn_modified_files, monitor, final_text)
             return final_text
 
         if monitor:
             diag = self._build_turn_limit_diagnostics(tool_rounds, provider_requests, tool_call_counts, turn_files_modified, turn_provider_errors, turn_provider_fallbacks)
             monitor.emit("turn_limit", {"kind": "max_provider_requests", "limit": self.max_provider_requests, "diagnostics": diag})
         # Turn-end security check on modified files before limit-exhaustion return
-        if turn_modified_files and monitor:
-            sec_result = run_turn_security_check(turn_modified_files)
-            if sec_result.findings:
-                monitor.emit("security_check", sec_result.as_dict())
+        _emit_security_check(turn_modified_files, monitor)
         return self._finalize_limit_exhaustion(
             kind="max_provider_requests",
             limit=self.max_provider_requests,

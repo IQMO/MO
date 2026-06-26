@@ -129,7 +129,7 @@ def test_protocol_stop_gate_does_not_loop_to_budget(tmp_path, monkeypatch):
     """A owner_maintenance final gate that always rejects must NOT burn the whole
     provider budget — it is capped at a few corrective rounds then returns blocked.
     """
-    monkeypatch.setattr("core.agent.agent_turn.owner_maintenance_final_allows_stop", lambda *a, **k: False)
+    monkeypatch.setattr("core.gates.post_provider_pipeline.owner_maintenance_final_allows_stop", lambda *a, **k: False)
 
     calls = {"n": 0}
 
