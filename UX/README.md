@@ -36,6 +36,20 @@ Run the Windows launcher in live mode:
 UX\run_ux.bat
 ```
 
+Run the same live UX through the normal MO entrypoint without replacing the
+default interface:
+
+```bash
+python mo.py --ux
+```
+
+Or opt in for the current shell:
+
+```bat
+set MO_NEXT_UX=1
+python mo.py
+```
+
 The live launcher defaults to live runtime mode. This sends one live message and
 exits:
 
@@ -103,12 +117,13 @@ remaining promotion path to a final product surface.
 ## Mode Status
 
 - Phase 1 interactive shell: `python -m UX` opens a fullscreen prompt-toolkit
-  TUI with a focused composer and transcript updates.
+  TUI with a focused multiline composer, command palette, transcript updates,
+  and animated landing surface.
 - Phase 2 read-only runtime: `python -m UX --read-only` creates Agent/Gateway and
   renders a snapshot without sending messages.
 - Phase 3 controlled actions: `python -m UX --live` sends messages through
-  `Gateway.run_turn` and renders the resulting snapshot. `--message` provides a
-  non-interactive smoke path.
+  `Gateway.run_turn` from a background submit worker and renders the resulting
+  snapshot. `--message` provides a non-interactive smoke path.
 - Phase 4 comparison/coverage: `tests/test_ux_contract.py` and
   `tests/test_ux_controller.py` lock isolation, rendering, controller, and
   adapter behavior.

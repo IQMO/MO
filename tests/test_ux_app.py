@@ -49,6 +49,7 @@ def test_preview_landing_snapshot_starts_without_demo_transcript():
 
     assert snapshot.transcript == ()
     assert snapshot.board == ()
+    assert snapshot.lanes == ()
     assert snapshot.notice == ""
 
 

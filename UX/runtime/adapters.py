@@ -60,6 +60,31 @@ def rows_from_gateway_board(board: Any) -> tuple[BoardRow, ...]:
 def lanes_from_runtime(agent: Any, gateway: Any) -> tuple[LaneSnapshot, ...]:
     provider = _safe_str(getattr(agent, "provider_name", ""))
     model = _safe_str(getattr(agent, "model", ""))
+    reported = getattr(gateway, "lanes", None) or getattr(agent, "lanes", None) or getattr(agent, "runtime_lanes", None)
+    if reported and not isinstance(reported, (str, bytes)):
+        lanes: list[LaneSnapshot] = []
+        for item in list(reported)[:6]:
+            if isinstance(item, dict):
+                lanes.append(
+                    LaneSnapshot(
+                        _safe_str(item.get("name")) or _safe_str(item.get("lane")) or "lane",
+                        _safe_str(item.get("status")) or "idle",
+                        _safe_str(item.get("detail")),
+                        _safe_str(item.get("model")),
+                    )
+                )
+                continue
+            lanes.append(
+                LaneSnapshot(
+                    _safe_str(getattr(item, "name", "")) or _safe_str(getattr(item, "lane", "")) or "lane",
+                    _safe_str(getattr(item, "status", "")) or "idle",
+                    _safe_str(getattr(item, "detail", "")),
+                    _safe_str(getattr(item, "model", "")),
+                )
+            )
+        if lanes:
+            return tuple(lanes)
+
     board = getattr(gateway, "last_task_board", None)
     open_count = 0
     if board is not None:
@@ -67,11 +92,12 @@ def lanes_from_runtime(agent: Any, gateway: Any) -> tuple[LaneSnapshot, ...]:
             open_count = int(board.open_count())
         except Exception:
             open_count = 0
-    return (
-        LaneSnapshot("thinking", "ready", "planning lane available", model or provider),
-        LaneSnapshot("execution", "running" if open_count else "idle", f"{open_count} open runtime task(s)", model),
-        LaneSnapshot("compaction", "idle", "context pressure hidden until runtime reports it", "local"),
-    )
+    active_lane = _safe_str(getattr(agent, "active_lane", "")) or _safe_str(getattr(agent, "_active_lane", ""))
+    if active_lane:
+        return (LaneSnapshot(active_lane, "running" if open_count else "ready", f"{open_count} open runtime task(s)", model or provider),)
+    if open_count:
+        return (LaneSnapshot("taskboard", "running", f"{open_count} open runtime task(s)", model or provider),)
+    return (LaneSnapshot("runtime", "ready", "no active lanes reported", model or provider),)
 
 
 def snapshot_from_runtime(agent: Any, gateway: Any) -> SessionSnapshot:

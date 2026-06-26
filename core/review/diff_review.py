@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING, Any
 import traceback
 
 from ..agent.agent_utils import prune_jsonl_log
-from ..env_utils import int_env
 from ..path_defaults import resolve_state_path
 
 

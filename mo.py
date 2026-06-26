@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 
@@ -44,7 +45,6 @@ from core.provider.provider import ConfigLoadError, ProviderError, clean_provide
 from core.state_migration import apply_state_migration, parse_migration_request, plan_state_migration, render_state_migration_report
 from core.instance import render_existing_instances_notice
 from core.runtime_lock import acquire_runtime_lock
-from interface.terminal_loop import run_main_loop
 
 
 def _acquire_lock() -> bool:
@@ -99,6 +99,20 @@ def _run_one_shot(prompt: str, config_path: str) -> str:
     return gateway.run_turn(prompt, route_source="user")
 
 
+def _next_ux_requested(args: list[str]) -> bool:
+    env_value = os.environ.get("MO_NEXT_UX", "").strip().lower()
+    return "--ux" in args or env_value in {"1", "true", "yes", "on"}
+
+
+def _run_next_ux(args: list[str]) -> None:
+    ux_args = [arg for arg in args if arg != "--ux"]
+    explicit_mode = any(arg in {"--live", "--read-only", "--smoke", "--help", "-h"} for arg in ux_args)
+    if not explicit_mode:
+        ux_args.insert(0, "--live")
+    module = importlib.import_module("UX.shell.app")
+    module.main(ux_args)
+
+
 def _print_cli_help() -> None:
     from interface.command_registry import SLASH_COMMAND_HELP
 
@@ -106,6 +120,7 @@ def _print_cli_help() -> None:
     print()
     print("Usage:")
     print("  mo                                  # interactive TUI")
+    print("  mo --ux                             # interactive next UX preview, live runtime")
     print("  mo -p \"prompt\" | --prompt \"prompt\"  # run one non-interactive turn (scriptable)")
     print("  mo [--init]")
     print("  mo [--migrate-state [dry-run|apply|move] [--confirm]]")
@@ -150,6 +165,9 @@ def main(argv: list[str] | None = None):
         if text:
             print(text)
         return
+    if _next_ux_requested(args):
+        _run_next_ux(args)
+        return
     try:
         agent = create_agent(config_path)
     except ConfigLoadError as exc:
@@ -191,6 +209,8 @@ def main(argv: list[str] | None = None):
         companion = None
     console = Console() if HAS_RICH else None
     try:
+        from interface.terminal_loop import run_main_loop
+
         run_main_loop(agent, gateway, console, HAS_RICH)
     finally:
         if companion and hasattr(companion, "stop"):

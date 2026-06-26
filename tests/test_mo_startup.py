@@ -76,6 +76,23 @@ def test_prompt_flag_without_value_is_usage_error(monkeypatch, capsys):
     assert "Usage: mo -p" in capsys.readouterr().err
 
 
+def test_main_ux_flag_lazy_loads_next_ux_without_legacy_agent(monkeypatch):
+    called = []
+
+    class FakeUxModule:
+        @staticmethod
+        def main(args):
+            called.append(args)
+
+    monkeypatch.setattr(mo.os.path, "exists", lambda _path: True)
+    monkeypatch.setattr(mo.importlib, "import_module", lambda name: FakeUxModule if name == "UX.shell.app" else None)
+    monkeypatch.setattr(mo, "create_agent", lambda _config: (_ for _ in ()).throw(AssertionError("legacy agent built")))
+
+    mo.main(["--ux", "--message", "hello"])
+
+    assert called == [["--live", "--message", "hello"]]
+
+
 def test_main_provider_error_is_mo_native_without_traceback(monkeypatch, capsys):
     monkeypatch.setattr(mo.os.path, "exists", lambda _path: True)
     monkeypatch.setattr(mo, "_acquire_lock", lambda: True)

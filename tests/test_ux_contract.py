@@ -87,11 +87,12 @@ def test_render_layer_has_no_runtime_or_product_imports():
     assert offenders == []
 
 
-def test_production_entrypoint_does_not_import_experimental_ux():
+def test_production_entrypoint_only_lazy_loads_experimental_ux():
     mo_text = (REPO / "mo.py").read_text(encoding="utf-8")
     terminal_loop = (REPO / "interface" / "terminal_loop.py").read_text(encoding="utf-8")
     assert "import UX" not in mo_text
     assert "from UX" not in mo_text
+    assert 'importlib.import_module("UX.shell.app")' in mo_text
     assert "import UX" not in terminal_loop
     assert "from UX" not in terminal_loop
 

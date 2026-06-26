@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import threading
+
 from UX.controller import PreviewBackend, UxController
 from UX.shell import tui
+from UX.models import BoardRow, LaneSnapshot, SessionSnapshot, TranscriptItem
 
 
 def test_run_tui_builds_fullscreen_prompt_toolkit_app(monkeypatch):
@@ -23,6 +26,8 @@ def test_run_tui_builds_fullscreen_prompt_toolkit_app(monkeypatch):
     assert created["paste_mode"] is True
     assert created["refresh_interval"] == tui.ANIMATION_INTERVAL_SECONDS
     assert created["layout"].current_buffer is not None
+    assert created["layout"].current_buffer.multiline() is True
+    assert created["layout"].current_buffer.enable_history_search() is True
 
 
 def test_tui_landing_contract_is_prompt_first_not_dashboard():
@@ -47,6 +52,74 @@ def test_tui_main_fragments_show_landing_before_transcript(monkeypatch):
     assert "MO UX" in text
     assert "Type a message" not in text
     assert "Build the next interface" not in text
+
+
+def test_tui_work_fragments_show_compact_runtime_truth(monkeypatch):
+    monkeypatch.setattr(tui, "_terminal_width", lambda default=120: 120)
+    snapshot = SessionSnapshot(
+        project="repo",
+        provider="provider",
+        model="model",
+        lanes=(LaneSnapshot("execution", "running", "turn active", "model"),),
+        board=(BoardRow("1", "Verify task board rendering", "active", kind="verify"),),
+        transcript=(TranscriptItem("user", "hello"), TranscriptItem("mo", "working on it")),
+    )
+    controller = UxController(PreviewBackend(snapshot))
+
+    text = "".join(fragment for _style, fragment in tui._main_fragments(controller, tui.TuiAnimation(), tui.TuiSessionState()))
+
+    assert "AGENTS" in text
+    assert "TASKS" in text
+    assert "TRANSCRIPT" in text
+    assert "Verify task board rendering" in text
+    assert "Ops Rail" not in text
+
+
+def test_tui_command_palette_visible_for_slash_input(monkeypatch):
+    monkeypatch.setattr(tui, "_terminal_width", lambda default=120: 120)
+    fragments = tui._command_palette_fragments("/sta", tui.TuiSessionState())
+    text = "".join(fragment for _style, fragment in fragments)
+
+    assert "Command Palette" in text
+    assert "/status" in text
+
+
+def test_tui_submit_runs_backend_in_background():
+    started = threading.Event()
+    release = threading.Event()
+    invalidations = []
+
+    class SlowBackend:
+        name = "slow"
+
+        def snapshot(self):
+            return SessionSnapshot()
+
+        def submit(self, text, callbacks=None):
+            started.set()
+            release.wait(timeout=2)
+            callbacks.on_activity("done")
+            return f"done:{text}"
+
+    ui_state = tui.TuiSessionState()
+    controller = UxController(SlowBackend())
+
+    thread = tui._submit_in_background(
+        controller,
+        ui_state,
+        "hello",
+        invalidate=lambda: invalidations.append("invalidate"),
+        exit_app=lambda: None,
+    )
+
+    assert thread is not None
+    assert started.wait(timeout=2)
+    assert ui_state.turn_running is True
+    release.set()
+    thread.join(timeout=2)
+    assert ui_state.turn_running is False
+    assert controller.last_result == "done:hello"
+    assert invalidations
 
 
 def test_tui_signal_animation_changes_between_frames():

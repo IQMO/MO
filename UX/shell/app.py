@@ -65,7 +65,7 @@ def _run_tui(controller: UxController) -> None:
 
 
 def preview_landing_snapshot() -> SessionSnapshot:
-    return replace(demo_snapshot(), busy=False, notice="", board=(), transcript=())
+    return replace(demo_snapshot(), busy=False, notice="", lanes=(), board=(), transcript=())
 
 
 def run_smoke(width: int = 100) -> str:

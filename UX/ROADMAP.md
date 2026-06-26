@@ -12,27 +12,26 @@ taskboard, and adapters; this folder owns presentation only.
 - Windows launchers for preview and live runs.
 - Prompt-first fullscreen TUI with centered landing surface, composer, status
   rail, and animated idle signal.
+- Stronger OpenDev-style idle motion with animated signal field and status rail.
+- Compact work surface for transcript, real taskboard rows, and reported runtime
+  lanes.
+- Background submit worker so live turns do not run on the render/input thread.
+- Composer affordances: multiline input, history search, command palette, context
+  token chips, busy read-only state, and plan-lens toggle.
+- Conservative runtime lane adapter: reported lanes are rendered; absent lane
+  truth falls back to a neutral runtime row.
+- Explicit promotion hook: `mo --ux` or `MO_NEXT_UX=1`, with no default behavior
+  change and no top-level `UX` import in `mo.py`.
 - Contract tests for isolation, launch behavior, controller behavior, runtime
   adapters, and TUI animation.
 
-## Remaining To Final Product
+## Remaining Before Default Replacement
 
-1. Visual polish pass: make idle, busy, transcript, and task states feel like one
-   coherent high-contrast product instead of separate prototype screens.
-2. Composer pass: command palette, multiline editing affordance, history search,
-   file/context chips, and clear busy/blocked input states.
-3. Runtime event pass: stream live agent events into the UI without blocking
-   input or faking task ownership.
-4. Taskboard pass: render the real MO-owned taskboard when runtime supplies it,
-   with compact progress, blockers, and evidence state.
-5. Agent-lane pass: show thinking, execution, compaction, and background work as
-   live rails only when the runtime reports them.
-6. Transcript pass: improve density, wrapping, tool/result grouping, and failure
-   states for real coding turns.
-7. Mode/control pass: model/provider display, autonomy controls, read-only/live
-   indicators, and safe operator-only command hiding.
-8. Verification pass: screenshot or terminal-frame smoke checks, live runtime
-   smoke path, narrow regression tests, then broader pytest before promotion.
-9. Promotion pass: wire `mo.py`/current launcher to the new UX behind an explicit
-   flag, keep rollback to `interface/`, and remove no old interface code until
-   parity is proven.
+1. Operator visual acceptance from `UX\run_preview.bat` and `python mo.py --ux`.
+2. Approved live-provider smoke turn through `python mo.py --ux --message ...`
+   or `UX\run_ux.bat --message ...`; this intentionally is not run by default
+   because it can spend provider quota.
+3. Default switch: make `mo` use the new UX by default only after acceptance,
+   keeping an explicit rollback to the current `interface/`.
+4. Old-interface deprecation/removal only after parity is proven in real daily
+   use.
