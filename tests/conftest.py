@@ -1,7 +1,9 @@
+import hashlib
 import os
 import shutil
 import sys
 import tempfile
+import time
 import pytest
 from pathlib import Path
 
@@ -11,6 +13,88 @@ from pathlib import Path
 # every module on every `pytest` invocation; a stable out-of-tree prefix caches
 # across runs, so the suite starts far faster while the checkout stays cache-free.
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), "mo-test-pycache")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _shared_repo_code_graph_cache():
+    """Build the repo code/structural graph ONCE per run into a stable shared
+    cache so every test and every xdist worker LOADS it instead of rebuilding.
+
+    The graph cache keys off mo_home(), which the per-test state isolation resets
+    every test, so every run_turn/handoff test re-parsed the whole repo (~14s of
+    AST compile). Under -n auto the FIRST graph test in each test file triggered a
+    cold build, and those builds ran concurrently across workers at startup —
+    thrashing the CPU so each ballooned to 40-60s. Building once (one worker holds
+    an exclusive lock, the rest wait for the ready marker and load) replaces that
+    storm with a single ~25s build. The on-disk graph self-validates by file
+    fingerprint, so the shared cache is safe.
+
+    Scope is the REPO ROOT only — tests that build graphs on their own tmp project
+    trees keep their real per-test paths, so staleness/incremental tests are
+    unaffected. The cache dir is keyed by the repo's file fingerprints: any edit
+    yields a fresh dir (a stale graph is never served) and an unchanged tree across
+    runs reuses it (warm = no build at all)."""
+    from core.path_defaults import repo_root
+    from core.graph import code_graph
+    from core.graph import structural_graph as sg
+
+    root = Path(repo_root()).resolve()
+    try:
+        files = code_graph._discover_files(root)
+    except Exception:
+        yield
+        return
+    if not files or len(files) > code_graph._max_files():
+        yield  # too large / nothing to index: leave production paths untouched
+        return
+
+    sig = code_graph._fps_signature(code_graph._fingerprints(root, files))
+    digest = hashlib.sha256(root.as_posix().lower().encode("utf-8", "replace")).hexdigest()[:16]
+    cache_dir = Path(tempfile.gettempdir()) / "mo-test-graph-cache" / f"{digest}-{sig[:16]}"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cg_file = cache_dir / "knowledge-graph.json"
+    native_file = cache_dir / sg.STRUCTURAL_GRAPH_FILE
+    ready = cache_dir / ".ready"
+
+    real_cg_path = code_graph._graph_path
+    real_native_path = sg.native_graph_path
+
+    def _cg_path(root_, config=None):
+        return cg_file if Path(root_).resolve() == root else real_cg_path(root_, config=config)
+
+    def _native_path(root_=None, *, config=None):
+        return native_file if root_ is not None and Path(root_).resolve() == root else real_native_path(root_, config=config)
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(code_graph, "_graph_path", _cg_path, raising=True)
+    mp.setattr(sg, "native_graph_path", _native_path, raising=True)
+
+    if not ready.exists():
+        lock = cache_dir / ".build.lock"
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+        except FileExistsError:
+            for _ in range(1200):  # ~120s: another worker is building
+                if ready.exists():
+                    break
+                time.sleep(0.1)
+        else:
+            try:
+                fps = code_graph._fingerprints(root, files)
+                code_graph._save_graph(cg_file, code_graph._build_graph(root, files, fps))
+                try:
+                    sg.build_structural_graph(root)  # writes to the patched native path
+                except Exception:
+                    pass  # handoff tests fall back to on-demand build if this skips
+                ready.write_text("ok", encoding="utf-8")
+            finally:
+                try:
+                    lock.unlink()
+                except OSError:
+                    pass
+    yield
+    mp.undo()
 
 
 # State must live under ~/.mo (or MO_STATE_HOME), NEVER the project checkout.
