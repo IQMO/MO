@@ -28,6 +28,12 @@ def test_runtime_unavailable_exits_cleanly(monkeypatch):
     assert console.messages == ["UX runtime unavailable: missing config"]
 
 
+def test_width_defaults_to_terminal_auto():
+    args = app.parse_args([])
+
+    assert args.width is None
+
+
 def test_once_snapshot_render_preserves_read_only_hint():
     console = Console(record=True, width=90, color_system=None)
     snapshot = SessionSnapshot(project="repo", composer_hint="read-only mode; no messages are sent")

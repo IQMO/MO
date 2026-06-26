@@ -6,9 +6,8 @@ chcp 65001 >nul 2>nul
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 set "EXIT_CODE=0"
-if not defined UX_WIDTH set "UX_WIDTH=120"
 
-mode con: cols=%UX_WIDTH% lines=40 >nul 2>nul
+if defined UX_WIDTH mode con: cols=%UX_WIDTH% lines=40 >nul 2>nul
 
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
@@ -47,16 +46,28 @@ for %%A in (%*) do (
 )
 
 if "%~1"=="" (
-  set "UX_ARGS=--live --width %UX_WIDTH%"
+  if defined UX_WIDTH (
+    set "UX_ARGS=--live --width %UX_WIDTH%"
+  ) else (
+    set "UX_ARGS=--live"
+  )
 ) else if "%HAS_MODE%"=="0" (
   if "%HAS_WIDTH%"=="0" (
-    set "UX_ARGS=--live --width %UX_WIDTH% %*"
+    if defined UX_WIDTH (
+      set "UX_ARGS=--live --width %UX_WIDTH% %*"
+    ) else (
+      set "UX_ARGS=--live %*"
+    )
   ) else (
     set "UX_ARGS=--live %*"
   )
 ) else (
   if "%HAS_WIDTH%"=="0" (
-    set "UX_ARGS=%* --width %UX_WIDTH%"
+    if defined UX_WIDTH (
+      set "UX_ARGS=%* --width %UX_WIDTH%"
+    ) else (
+      set "UX_ARGS=%*"
+    )
   ) else (
     set "UX_ARGS=%*"
   )

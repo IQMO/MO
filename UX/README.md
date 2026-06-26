@@ -17,6 +17,13 @@ runtime:
 UX\run_preview.bat
 ```
 
+The preview launcher renders one clean screen by default. To use the temporary
+raw input loop while the real composer is still being built:
+
+```bat
+UX\run_preview.bat --interactive
+```
+
 Run the Windows launcher in live mode:
 
 ```bat
@@ -36,6 +43,8 @@ Override the default launcher width:
 set UX_WIDTH=140
 UX\run_ux.bat
 ```
+
+If `UX_WIDTH` is not set, both launchers use the terminal's current width.
 
 Run the local smoke path:
 

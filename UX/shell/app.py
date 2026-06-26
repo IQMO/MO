@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import io
 import sys
+from typing import Any
 
 from rich.console import Console
 from rich.live import Live
@@ -16,13 +17,20 @@ from UX.state.models import SessionSnapshot, demo_snapshot
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MO Agent's isolated next-generation terminal UX.")
-    parser.add_argument("--width", type=int, default=110, help="render width for the preview")
+    parser.add_argument("--width", type=int, help="render width; defaults to the terminal width")
     parser.add_argument("--once", action="store_true", help="render once and exit")
     parser.add_argument("--read-only", action="store_true", help="load MO runtime state without sending messages")
     parser.add_argument("--live", action="store_true", help="send messages through MO Gateway.run_turn")
+    parser.add_argument("--interactive", action="store_true", help="keep the preview input loop open")
     parser.add_argument("--smoke", action="store_true", help="run local UX smoke checks and exit")
     parser.add_argument("--message", help="send one message through the selected mode, render the result, and exit")
     return parser.parse_args(argv)
+
+
+def _console_for_width(width: int | None = None, **kwargs: Any) -> Console:
+    if width:
+        return Console(width=max(60, int(width)), **kwargs)
+    return Console(**kwargs)
 
 
 def _prompt(console: Console) -> str:
@@ -57,13 +65,13 @@ def run_smoke(width: int = 100) -> str:
     after = controller.snapshot()
     if len(after.transcript) <= len(before.transcript):
         raise RuntimeError("preview transcript did not advance")
-    console = Console(record=True, width=max(60, width), color_system=None, file=io.StringIO())
+    console = _console_for_width(width, record=True, color_system=None, file=io.StringIO())
     console.print(build_screen(after, width=console.width))
     return console.export_text(clear=False)
 
 
 def render_snapshot_text(snapshot: SessionSnapshot, *, width: int = 100) -> str:
-    console = Console(record=True, width=max(60, width), color_system=None, file=io.StringIO())
+    console = _console_for_width(width, record=True, color_system=None, file=io.StringIO())
     console.print(build_screen(snapshot, width=console.width))
     return console.export_text(clear=False)
 
@@ -128,7 +136,7 @@ class UxPreviewApp:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    console = Console(width=max(60, int(args.width or 110)))
+    console = _console_for_width(args.width)
     if args.smoke:
         console.print(run_smoke(width=args.width), markup=False)
         return
@@ -144,12 +152,12 @@ def main(argv: list[str] | None = None) -> None:
         handle = _create_runtime_or_exit(console)
         controller = UxController(RuntimeBackend(handle))
         if args.message:
-            console.print(run_single_message(controller, args.message, width=args.width), markup=False)
+            console.print(run_single_message(controller, args.message, width=console.width), markup=False)
             return
         UxPreviewApp(console).run(once=bool(args.once), controller=controller)
         return
     if args.message:
-        console.print(run_single_message(UxController(PreviewBackend()), args.message, width=args.width), markup=False)
+        console.print(run_single_message(UxController(PreviewBackend()), args.message, width=console.width), markup=False)
         return
     UxPreviewApp(console).run(once=bool(args.once))
 
