@@ -17,7 +17,11 @@ from UX.state.controller import UxController
 from UX.state.models import TranscriptItem
 
 Fragment = tuple[str, str]
-ANIMATION_INTERVAL_SECONDS = 0.16
+ANIMATION_INTERVAL_SECONDS = 0.10
+SIGNAL_FIELD_HEIGHT = 9
+SIGNAL_FIELD_MAX_WIDTH = 86
+SIGNAL_FIELD_MIN_WIDTH = 52
+SPINNER_FRAMES: tuple[str, ...] = ("◜", "◠", "◝", "◞", "◡", "◟")
 
 LOGO_LINES: tuple[str, ...] = (
     "        M         M      OOOOOOO       ",
@@ -26,15 +30,6 @@ LOGO_LINES: tuple[str, ...] = (
     "        M  M   M  M     OO     OO      ",
     "        M   M M   M     OO     OO      ",
     "        M    M    M      OOOOOOO       ",
-)
-
-SIGNAL_LINES: tuple[str, ...] = (
-    "    .   :       ::      .       :   .       ::      .   ",
-    "      ::   ░░    :        ▓▓        :    ░░   ::       ",
-    "  ░░    :      ▓▓   .           .   ▓▓      :    ░░    ",
-    "       ▓▓        :       MO       :        ▓▓          ",
-    "  :       ░░       .    AGENT    .       ░░       :    ",
-    "     .       :      ▓▓           ▓▓      :       .     ",
 )
 
 
@@ -87,24 +82,6 @@ def _trim(value: str, limit: int) -> str:
     return text[: max(0, limit - 3)].rstrip() + "..."
 
 
-def _rotate_line(line: str, offset: int) -> str:
-    if not line:
-        return line
-    offset = offset % len(line)
-    if offset == 0:
-        return line
-    return line[offset:] + line[:offset]
-
-
-def _animated_signal_lines(frame: int) -> tuple[str, ...]:
-    lines: list[str] = []
-    for index, line in enumerate(SIGNAL_LINES):
-        direction = 1 if index % 2 == 0 else -1
-        offset = direction * ((frame + index * 3) % max(1, len(line)))
-        lines.append(_rotate_line(line, offset))
-    return tuple(lines)
-
-
 def _centered_lines(lines: tuple[str, ...], width: int, style: str) -> list[Fragment]:
     fragments: list[Fragment] = []
     for line in lines:
@@ -113,16 +90,57 @@ def _centered_lines(lines: tuple[str, ...], width: int, style: str) -> list[Frag
     return fragments
 
 
+def _spinner(frame: int) -> str:
+    return SPINNER_FRAMES[frame % len(SPINNER_FRAMES)]
+
+
+def _signal_field_width(width: int) -> int:
+    return min(SIGNAL_FIELD_MAX_WIDTH, max(SIGNAL_FIELD_MIN_WIDTH, width - 18))
+
+
+def _signal_cell(row: int, column: int, frame: int, field_width: int) -> Fragment:
+    center = field_width // 2
+    left_sweep = (frame * 3 + row * 4) % field_width
+    right_sweep = (field_width - 1 - ((frame * 2 + row * 5) % field_width))
+    pulse = (column * 7 + row * 11 + frame * 5) % 41
+    wake = abs(column - left_sweep) + abs(row - (frame + column // 6) % SIGNAL_FIELD_HEIGHT)
+
+    if row == SIGNAL_FIELD_HEIGHT // 2 and abs(column - center) <= 2:
+        return ("class:signal-core", "█")
+    if column in {left_sweep, right_sweep}:
+        return ("class:signal-hot", "█")
+    if wake <= 1:
+        return ("class:signal-hot", "▓")
+    if pulse in {0, 1}:
+        return ("class:signal-mid", "◆")
+    if pulse in {2, 3, 4, 5}:
+        return ("class:signal-dim", "·")
+    if abs(column - center) <= 9 and abs(row - SIGNAL_FIELD_HEIGHT // 2) <= 2:
+        return ("class:signal-mid", "▒")
+    return ("class:signal-faint", " ")
+
+
+def _signal_field_fragments(frame: int, width: int) -> list[Fragment]:
+    field_width = _signal_field_width(width)
+    left = " " * max(0, (width - field_width) // 2)
+    fragments: list[Fragment] = []
+    for row in range(SIGNAL_FIELD_HEIGHT):
+        fragments.append(("", left))
+        for column in range(field_width):
+            fragments.append(_signal_cell(row, column, frame, field_width))
+        fragments.append(("", "\n"))
+    return fragments
+
+
 def _hero_fragments(controller: UxController, animation: TuiAnimation | None = None) -> list[Fragment]:
     snapshot = controller.snapshot()
     width = _terminal_width()
-    signal_lines = _animated_signal_lines(animation.frame if animation else 0)
+    frame = animation.frame if animation else 0
     fragments: list[Fragment] = [("", "\n")]
-    fragments.extend(_centered_lines(signal_lines[:3], width, "class:signal-dim"))
+    fragments.extend(_signal_field_fragments(frame, width))
     fragments.extend(_centered_lines(LOGO_LINES, width, "class:logo"))
-    fragments.extend(_centered_lines(signal_lines[3:], width, "class:signal-dim"))
     fragments.append(("", "\n"))
-    title = f"══  MO UX  {snapshot.model_label}  ══"
+    title = f"{_spinner(frame)}  MO UX  {snapshot.model_label}  {_spinner(frame + 3)}"
     hints = "/help   |   /models   |   Shift+Tab plan mode   |   @file context"
     box_width = min(width - 10, max(72, len(hints) + 8))
     left = " " * max(0, (width - box_width) // 2)
@@ -171,22 +189,24 @@ def _main_fragments(controller: UxController, animation: TuiAnimation | None = N
     return _hero_fragments(controller, animation)
 
 
-def _mode_line_fragments(controller: UxController) -> list[Fragment]:
+def _mode_line_fragments(controller: UxController, animation: TuiAnimation | None = None) -> list[Fragment]:
     snapshot = controller.snapshot()
     width = _terminal_width()
+    frame = animation.frame if animation else 0
     state = "Busy" if snapshot.busy else "Normal"
-    left = f" >  {state} (Shift+Tab)"
+    left = f" > {_spinner(frame)} {state} (Shift+Tab)"
     rule = "─" * max(1, width - len(left) - 2)
     return [("class:blue", left), ("class:rule", f" {rule}")]
 
 
-def _status_fragments(controller: UxController) -> list[Fragment]:
+def _status_fragments(controller: UxController, animation: TuiAnimation | None = None) -> list[Fragment]:
     snapshot = controller.snapshot()
+    frame = animation.frame if animation else 0
     model = snapshot.model or snapshot.provider or "model not configured"
     thinking = "High" if snapshot.lanes else "Ready"
     context = "100.0%" if not snapshot.busy else "working"
     return [
-        ("class:brand", f" ◆ {model} "),
+        ("class:brand", f" {_spinner(frame + 1)} {model} "),
         ("class:muted", "|"),
         ("class:muted", " Autonomy: "),
         ("class:amber", "Manual "),
@@ -205,7 +225,11 @@ def _build_root(controller: UxController, input_buffer: Buffer, animation: TuiAn
     return HSplit(
         [
             Window(content=FormattedTextControl(lambda: _main_fragments(controller, animation)), wrap_lines=False),
-            Window(height=1, content=FormattedTextControl(lambda: _mode_line_fragments(controller)), dont_extend_height=True),
+            Window(
+                height=1,
+                content=FormattedTextControl(lambda: _mode_line_fragments(controller, animation)),
+                dont_extend_height=True,
+            ),
             Window(
                 height=1,
                 content=BufferControl(
@@ -218,7 +242,11 @@ def _build_root(controller: UxController, input_buffer: Buffer, animation: TuiAn
                 dont_extend_height=True,
                 wrap_lines=False,
             ),
-            Window(height=1, content=FormattedTextControl(lambda: _status_fragments(controller)), dont_extend_height=True),
+            Window(
+                height=1,
+                content=FormattedTextControl(lambda: _status_fragments(controller, animation)),
+                dont_extend_height=True,
+            ),
         ]
     )
 
@@ -227,7 +255,11 @@ def _style() -> Style:
     return Style.from_dict(
         {
             "logo": "#8ccfff bold",
+            "signal-faint": "#06151d",
             "signal-dim": "#0a5d74",
+            "signal-mid": "#1b8aa6",
+            "signal-hot": "#8ccfff bold",
+            "signal-core": "#f6ad55 bold",
             "border": "#255f9f",
             "title": "#42a5ff bold",
             "hint": "#2f8cff bold",
@@ -283,6 +315,7 @@ def run_tui(controller: UxController) -> None:
         full_screen=True,
         mouse_support=False,
         paste_mode=True,
+        refresh_interval=ANIMATION_INTERVAL_SECONDS,
         style=_style(),
     )
     app_ref["app"] = app

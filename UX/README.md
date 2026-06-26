@@ -97,7 +97,8 @@ python -m UX --live --message "who are you?"
 - Root modules such as `app.py`, `models.py`, and `controller.py` are
   compatibility shims only.
 
-See `ARCHITECTURE.md` before adding new UX code.
+See `ARCHITECTURE.md` before adding new UX code. See `ROADMAP.md` for the
+remaining promotion path to a final product surface.
 
 ## Mode Status
 
