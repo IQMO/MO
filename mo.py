@@ -88,33 +88,12 @@ def _prompt_arg(args: list[str]) -> str | None:
 
 
 def _run_one_shot(prompt: str, config_path: str) -> str:
-    """Run ONE non-interactive turn and return its final text.
+    """Run ONE non-interactive turn in-process and return its final text.
 
-    Fast path: a warm daemon (`mo_service.py --warm`) already holds the agent — the
-    turn streams over local IPC and this process never constructs an agent or loads
-    the TUI. Fallback: no daemon reachable, so build the agent in-process and run the
-    turn here (same cost as a normal launch — never worse than no daemon). Activity
-    is shown on stderr only when it is a TTY, so stdout stays a clean, pipeable answer.
+    Builds the agent, runs a single turn, returns the answer — same cost as a normal
+    launch but without the TUI. Used by `mo -p`/`--prompt` for scripting and piping;
+    stdout carries only the answer.
     """
-    from core.ipc import IpcUnavailable
-    from core.ipc_service import request_turn
-
-    show_activity = sys.stderr.isatty()
-
-    def _on_event(frame: dict) -> None:
-        if show_activity and frame.get("kind") == "activity":
-            sys.stderr.write(f"\r\033[K… {frame.get('text', '')}")
-            sys.stderr.flush()
-
-    try:
-        text = request_turn(prompt, on_event=_on_event)
-        if show_activity:
-            sys.stderr.write("\r\033[K")
-            sys.stderr.flush()
-        return text
-    except IpcUnavailable:
-        pass  # no warm daemon — fall back to a normal in-process turn
-
     agent = create_agent(config_path)
     gateway = Gateway(agent)
     return gateway.run_turn(prompt, route_source="user")
@@ -127,7 +106,7 @@ def _print_cli_help() -> None:
     print()
     print("Usage:")
     print("  mo                                  # interactive TUI")
-    print("  mo -p \"prompt\" | --prompt \"prompt\"  # one non-interactive turn (uses a warm daemon if running)")
+    print("  mo -p \"prompt\" | --prompt \"prompt\"  # run one non-interactive turn (scriptable)")
     print("  mo [--init]")
     print("  mo [--migrate-state [dry-run|apply|move] [--confirm]]")
     print("  mo [--help|--version]")
