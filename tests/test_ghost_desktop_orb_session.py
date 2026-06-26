@@ -144,6 +144,35 @@ def test_recorder_auto_stops_after_trailing_silence():
     assert fired[4] is True
 
 
+def test_launch_ghost_desktop_detached_spawns_standalone(monkeypatch):
+    import subprocess
+    from interface.ghost_desktop.companion import launch_ghost_desktop_detached
+    calls = {}
+
+    class _FakePopen:
+        def __init__(self, args, **kw):
+            calls["args"] = list(args)
+            calls["kw"] = kw
+
+    monkeypatch.setattr(subprocess, "Popen", _FakePopen)
+    msg = launch_ghost_desktop_detached({"desktop_companion": {"enabled": True}})
+    assert "interface.ghost_desktop" in " ".join(calls["args"])
+    assert "--show" in calls["args"]
+    assert "own process" in msg.lower()
+
+
+def test_launch_ghost_desktop_detached_refuses_when_disabled(monkeypatch):
+    import subprocess
+    from interface.ghost_desktop.companion import launch_ghost_desktop_detached
+
+    def _boom(*_a, **_k):
+        raise AssertionError("must not spawn when Ghost Desktop is disabled")
+
+    monkeypatch.setattr(subprocess, "Popen", _boom)
+    msg = launch_ghost_desktop_detached({"desktop_companion": {"enabled": False}})
+    assert "disabled" in msg.lower()
+
+
 def test_recorder_returns_1d_mono_waveform():
     """faster-whisper needs 1-D mono; a (samples, 1) array blows up its mel alloc
     (the 127 GiB crash). stop() must flatten the captured chunks."""

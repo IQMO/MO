@@ -762,7 +762,7 @@ class AgentSlashCommands:
         if rest.lower() == "off":
             return "[GHOST_OFF]"
         low = rest.lower()
-        if low in {"window", "desktop"} or low.startswith(("window ", "desktop ")):
+        if low in {"window", "desktop", "launch", "start"} or low.startswith(("window ", "desktop ", "launch ", "start ")):
             parts = rest.split(None, 1)
             return self._ghost_desktop_control(parts[1] if len(parts) > 1 else "toggle")
         if not rest or rest.lower() == "help":
@@ -770,9 +770,10 @@ class AgentSlashCommands:
                 "Ghost:\n"
                 "  Alt+G opens/hides the current Ghost/PRT panel in the TUI.\n"
                 "  Ctrl+O expands/collapses; Esc hides the panel.\n"
-                "  /ghost window   show/hide the desktop Ghost window (same as /companion).\n"
+                "  /ghost launch   start Ghost Desktop as its own process (Win+Alt+M to summon).\n"
+                "  /ghost window   show/hide it, or launch it if not running (same as /companion).\n"
+                "  Ghost Desktop runs separately and survives this terminal closing.\n"
                 "  Ghost is side-check/planning only; send real work to MO when ready.\n"
-                "  MO keeps task progress aligned with real work.\n"
             )
         # Quick slash Ghost side-question: provider-side tools stay disabled.
         live_context = build_ghost_context(self, getattr(self, "gateway", None), question=rest)
@@ -805,20 +806,25 @@ class AgentSlashCommands:
             return result
 
     def _ghost_desktop_control(self, action: str) -> str:
-        """Show/hide/toggle the desktop Ghost window. Shared by `/ghost window` and
-        the back-compat `/companion` alias."""
-        window = getattr(self, "_companion", None)
-        if window is None:
-            return "Ghost desktop window not started. Enable `ghost.enabled` (or legacy `desktop_companion.enabled`) in config."
+        """Control the desktop Ghost. If it's co-hosted in this process
+        (run_in_terminal: true) show/hide/toggle it; otherwise launch it as its own
+        detached process so it survives this terminal."""
         action = (action or "").strip().lower()
-        if action == "show":
-            window.show()
-            return "[GHOST WINDOW SHOWN]"
+        window = getattr(self, "_companion", None)
+        if window is not None:
+            if action == "show":
+                window.show()
+                return "[GHOST WINDOW SHOWN]"
+            if action == "hide":
+                window.hide()
+                return "[GHOST WINDOW HIDDEN]"
+            window.toggle()
+            return "[GHOST WINDOW TOGGLED]"
+        # Decoupled default: no in-thread companion → launch the separate process.
         if action == "hide":
-            window.hide()
-            return "[GHOST WINDOW HIDDEN]"
-        window.toggle()
-        return "[GHOST WINDOW TOGGLED]"
+            return "Ghost Desktop runs as its own process — hide it with Esc or from its tray icon."
+        from interface.ghost_desktop.companion import launch_ghost_desktop_detached
+        return launch_ghost_desktop_detached(getattr(self, "config", None))
 
     def _cmd_companion(self, rest: str) -> str:
         """Back-compat alias for `/ghost window` — toggle the desktop Ghost window."""

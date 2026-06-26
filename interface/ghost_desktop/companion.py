@@ -1081,6 +1081,36 @@ def ghost_surface_config(config: Any) -> dict:
     return block if isinstance(block, dict) else {}
 
 
+def launch_ghost_desktop_detached(config: Any) -> str:
+    """Spawn Ghost Desktop as its OWN detached process that outlives the caller
+    (e.g. the terminal). The ghost.lock makes a duplicate launch a no-op, so this is
+    safe to call when one is already running. Returns a user-facing status string."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    block = ghost_surface_config(config)
+    if not block.get("enabled", False):
+        return ("Ghost Desktop is disabled. Set desktop_companion.enabled: true "
+                "(or ghost.enabled) in your config, then try again.")
+    repo_root = Path(__file__).resolve().parents[2]
+    popen_kw: dict = dict(
+        cwd=str(repo_root),
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        close_fds=True,
+    )
+    if os.name == "nt":
+        # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP → survives this terminal.
+        popen_kw["creationflags"] = 0x00000008 | 0x00000200
+    try:
+        subprocess.Popen([sys.executable, "-m", "interface.ghost_desktop", "--show"], **popen_kw)
+    except Exception as exc:
+        return f"Could not launch Ghost Desktop: {type(exc).__name__}: {exc}"
+    return ("Launching Ghost Desktop as its own process — Win+Alt+M to summon, a tray "
+            "icon will appear. It keeps running after you close this terminal.")
+
+
 def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | None:
     """Start the desktop companion if config says so and deps are present.
 
