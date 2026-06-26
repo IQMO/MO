@@ -107,7 +107,7 @@ def test_main_does_not_take_global_runtime_lock(monkeypatch):
     monkeypatch.delenv("MO_OPEN_BACKEND_MONITOR", raising=False)
     monkeypatch.setattr(builtins, "input", lambda _prompt="": (_ for _ in ()).throw(EOFError()))
 
-    mo.main()
+    mo.main([])
 
 
 def test_main_does_not_open_runtime_monitor_without_opt_in(monkeypatch):
@@ -122,7 +122,7 @@ def test_main_does_not_open_runtime_monitor_without_opt_in(monkeypatch):
     monkeypatch.delenv("MO_OPEN_BACKEND_MONITOR", raising=False)
     monkeypatch.setattr(builtins, "input", lambda _prompt="": (_ for _ in ()).throw(EOFError()))
 
-    mo.main()
+    mo.main([])
 
     assert DummyMonitor.opened is False
     assert DummyMonitor.closed is False
@@ -140,7 +140,7 @@ def test_main_opens_runtime_monitor_with_bat_opt_in(monkeypatch):
     monkeypatch.setenv("MO_SKIP_LOCK", "1")
     monkeypatch.setattr(builtins, "input", lambda _prompt="": (_ for _ in ()).throw(EOFError()))
 
-    mo.main()
+    mo.main([])
 
     assert DummyMonitor.opened is True
     assert DummyMonitor.closed is True
