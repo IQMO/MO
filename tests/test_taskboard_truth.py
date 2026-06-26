@@ -201,20 +201,20 @@ def test_owner_comparison_preliminary_answer_continues_until_terminal_closeout()
             finish_reason="tool_calls",
         ),
         SimpleNamespace(content="OWNER_COMPARISON activated. Initial capture only.", tool_calls=[], usage=None, finish_reason="stop"),
-        SimpleNamespace(content="[OWNER_COMPARISON COMPLETE] Target: current MO workspace. Matrix done; adoption: none; reject: duplicate", tool_calls=[], usage=None, finish_reason="stop"),
+        SimpleNamespace(content="[OWNER_COMPARISON COMPLETE] Target: current MO workspace. Matrix done; implementation: none; reject: duplicate", tool_calls=[], usage=None, finish_reason="stop"),
     ])
     agent._call_provider = lambda **_kwargs: next(responses)
     board = TaskBoard(tasks=[
         TaskItem("1", "Capture current-MO target, reference roles, scope, and read-only boundary", "active", kind="inspect", completion_gate="tool"),
         TaskItem("2", "Build current-MO baseline from structured evidence before broad reads", "pending", kind="inspect", completion_gate="tool", depends_on=["1"]),
         TaskItem("3", "Build comparison matrix against current MO with reference evidence", "pending", kind="verify", completion_gate="verification", depends_on=["2"]),
-        TaskItem("4", "Classify adopt, reject, defer, by-design, and unknown items", "pending", kind="verify", completion_gate="verification", depends_on=["3"]),
+        TaskItem("4", "Classify implement, reject, defer, by-design, and unknown items", "pending", kind="verify", completion_gate="verification", depends_on=["3"]),
         TaskItem("5", "Write OWNER_COMPARISON artifacts and approval-ready closeout", "pending", kind="report", completion_gate="final", depends_on=["4"]),
     ])
 
     result = agent.run_turn("start OWNER_COMPARISON E:\\ref-a E:\\ref-b", task_board=board)
 
-    assert result == "[OWNER_COMPARISON COMPLETE] Target: current MO workspace. Matrix done; adoption: none; reject: duplicate"
+    assert result == "[OWNER_COMPARISON COMPLETE] Target: current MO workspace. Matrix done; implementation: none; reject: duplicate"
     assert sum("[OWNER_COMPARISON CONTINUATION]" in msg for msg in assistant_messages) == 1
     assert board.open_count() == 0
     assert captured["task_board"] is board
@@ -241,7 +241,7 @@ def test_owner_comparison_completion_with_open_taskboard_forces_continuation():
 
     assert Agent._owner_maintenance_completion_boundary_requires_continuation(
         "start OWNER_COMPARISON E:\\ref-a E:\\ref-b",
-        "[OWNER_COMPARISON COMPLETE]\n\nTarget: current MO workspace.\nMatrix done; adoption: none; reject: duplicate.",
+        "[OWNER_COMPARISON COMPLETE]\n\nTarget: current MO workspace.\nMatrix done; implementation: none; reject: duplicate.",
         report,
     ) is True
 

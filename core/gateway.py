@@ -910,7 +910,7 @@ def _owner_comparison_gateway_phase_rows() -> list[dict[str, object]]:
         },
         {
             "id": "4",
-            "text": "Classify adopt, reject, defer, by-design, and unknown items",
+            "text": "Classify implement, reject, defer, by-design, and unknown items",
             "status": "pending",
             "kind": "verify",
             "completion_gate": "tool",

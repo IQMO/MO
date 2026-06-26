@@ -97,7 +97,7 @@ repeatedly rediscovering the repository.
 ### Lean by default, not thin by default
 
 MO tries to avoid spending provider tokens on work that should not exist. For
-build, fix, audit, and adoption turns, its internal work pattern asks whether
+build, fix, audit, comparison, and workflow-learning turns, its internal work pattern asks whether
 the behavior is already present, whether existing project utilities, Python
 stdlib, or platform-native behavior can solve it, and whether deletion or reuse
 is better than adding code. This is a quality gate, not a shortcut: validation,
@@ -229,7 +229,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Content safety | Refuses to write malware/attack tooling (dual-use-aware: authorized pentest/CTF/defensive work passes) and blocks writing hardcoded secret literals into files — both before execution, on any provider |
 | Skills | Local read-before-acting best-practice packs (`~/.mo/skills`; project `skills/` only when opted in); relevant authored and approved learned packs load per task. Exact-trigger packs are contract-validated, and file-glob conventions surface only for matching code. No public `/skills`, marketplace, or install flow |
 | Adaptive reasoning | Per-turn reasoning level (deep for real work, light for chatter) plus an opt-in per-provider `reasoning_effort` |
-| Lean-build work patterns | Build/fix/audit/review/adoption guidance checks reuse, deletion, stdlib/native options, and existing helpers before adding code or abstractions |
+| Lean-build work patterns | Build/fix/audit/review/comparison guidance checks reuse, deletion, stdlib/native options, and existing helpers before adding code or abstractions |
 | Recoverable code skeletons | Old completed Python source reads compact to imports/signatures/docstrings during session momentum, with full originals archived under private runtime state |
 | Private runtime home | Profile, memory, sessions, logs, config, and keys stay under `~/.mo` |
 | DeepSeek / OpenAI providers | Default is the official DeepSeek API (`api.deepseek.com`, OpenAI-compatible); OpenCode automatic fallback; Codex/OpenAI fallback support. When the official DeepSeek API is active, the footer shows live account balance |
@@ -242,7 +242,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
 | PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings, including proven overengineering/duplication as maintainability risk; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |
-| Learning loop | Recurring-pattern and adoption suggestions stay pending until you confirm; approved reusable guidance becomes local skill packs, scoped conventions can persist to matching code areas, and direct corrections/term definitions apply to your local profile |
+| Learning loop | Recurring-pattern and workflow suggestions stay pending until you confirm; approved reusable guidance becomes local skill packs, scoped conventions can persist to matching code areas, and direct corrections/term definitions apply to your local profile |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Desktop Ghost | Optional local text/tray surface (presents as **Ghost**, with its own persona on an isolated session): summon with `Win+Alt+M`, use a small MO window near the cursor, Guide/Do mode, tray, action log, panic-stop, and optional local STT/TTS. Off by default; requires `ghost.enabled: true` (legacy `desktop_companion.enabled` still honored); voice deps are needed only when voice is enabled. Screen/cursor pointing stays on-demand through `capture_screen` and `point_on_screen`, not continuous watching |

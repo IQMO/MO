@@ -51,7 +51,7 @@ _PROJECT_AUDIT_RE = re.compile(
 _REFERENCE_COMPARISON_RE = re.compile(
     r"\b(?:compare|comparison|benchmark)\b.{0,80}\b(?:against|with|to|vs\.?|versus)\b"
     r"|\b(?:against|vs\.?|versus)\b.{0,60}\b(?:reference|repo|repository|project|framework|library)\b"
-    r"|\bwhat\s+(?:should|could|can)\s+(?:i|we|it|my\s+\w+)\s+(?:adopt|learn|take)\s+from\b",
+    r"|\bwhat\s+(?:should|could|can)\s+(?:i|we|it|my\s+\w+)\s+(?:learn|take)\s+from\b",
     re.I | re.S,
 )
 
@@ -203,12 +203,12 @@ def build_work_pattern_context(user_input: str) -> str:
             "Read-only first: gather real evidence about the reference (fetch/read it) and the current project before judging. "
             "Compare outcomes, not feature lists. Classify each dimension: stronger-here, equal, missing, "
             "reference-stronger, or different-by-design — with evidence per row. "
-            "Recommend adopting ONLY what is proven better and fits the project's direction; translating an idea into the "
+            "Recommend implementing ONLY proven improvements that fit the project's direction; translating an idea into the "
             "project's own patterns beats copying the reference's architecture. "
-            "If adoption is approved, use MO's lean-build ladder instead of copying whole foreign structures. "
-            "For token, cost, performance, or compression claims, run a project-local baseline-vs-adopt measurement before closeout; "
+            "If implementation is approved, use MO's lean-build ladder instead of copying whole foreign structures. "
+            "For token, cost, performance, or compression claims, run a project-local baseline-vs-candidate measurement before closeout; "
             "record current behavior, candidate behavior, recoverability/fallback, and the measured win or mark it as unproven. "
-            "Zero-adoption is a valid, honest outcome. No source edits until the operator approves specific items."
+            "Zero-change is a valid, honest outcome. No source edits until the operator approves specific items."
         )
     return build_dna_context(design=False)
 
@@ -248,8 +248,8 @@ def build_ghost_work_guidance(user_input: str) -> str:
         )
     if pattern.name == "reference_comparison":
         return (
-            "For this comparison request, shape intent and guard scope only. Keep it read-only until the operator approves adoptions; "
-            "require real reference evidence and per-dimension classification. Zero-adoption is a valid outcome."
+            "For this comparison request, shape intent and guard scope only. Keep it read-only until the operator approves implementations; "
+            "require real reference evidence and per-dimension classification. Zero-change is a valid outcome."
         )
     return (
         "For this work request, require a real verify/check step as a process guardrail. Do not invent concrete taskboard items. "

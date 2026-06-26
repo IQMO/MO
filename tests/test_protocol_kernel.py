@@ -31,10 +31,10 @@ def test_owner_maintenance_artifacts_are_consumed_from_protocol_kernel():
 
 
 def test_owner_comparison_missing_terms_are_kernel_defined():
-    assert required_closeout_terms(OWNER_COMPARISON_PROTOCOL) == ("target", "matrix", "adoption", "reject")
+    assert required_closeout_terms(OWNER_COMPARISON_PROTOCOL) == ("target", "matrix", "implementation", "reject")
 
     missing = closeout._owner_comparison_missing_closeout_terms(
-        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO\nMatrix: done\nAdoption: none"
+        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO\nMatrix: done\nImplementation: none"
     )
 
     assert missing == ["reject"]

@@ -171,13 +171,13 @@ def test_reference_comparison_pattern_triggers_on_compare_requests():
     for text in (
         "compare my project against the aider repo",
         "benchmark this codebase with that reference framework",
-        "what should I adopt from that library?",
+        "what should I learn from that library?",
     ):
         pattern = select_work_pattern(text)
         assert pattern is not None and pattern.name == "reference_comparison", text
         ctx = build_work_pattern_context(text)
         assert "reference comparison" in ctx
-        assert "Zero-adoption is a valid" in ctx
+        assert "Zero-change is a valid" in ctx
 
 
 def test_reference_comparison_requires_measurement_for_economy_claims():
@@ -185,7 +185,7 @@ def test_reference_comparison_requires_measurement_for_economy_claims():
 
     ctx = build_work_pattern_context("compare MO token compression against that reference repo")
 
-    assert "baseline-vs-adopt measurement" in ctx
+    assert "baseline-vs-candidate measurement" in ctx
     assert "current behavior" in ctx
     assert "candidate behavior" in ctx
     assert "recoverability/fallback" in ctx

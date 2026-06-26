@@ -13,8 +13,8 @@ presentation only.
 - Windows launchers for preview and live runs.
 - Prompt-first fullscreen TUI with centered landing surface, composer, and status
   rail.
-- OpenDev-style landing motion with animated signal field; idle rails remain
-  quiet and busy/running state owns spinner motion.
+- Animated landing motion with a signal field; idle rails remain quiet and
+  busy/running state owns spinner motion.
 - Compact work surface for transcript, real taskboard rows, and reported runtime
   lanes.
 - Background submit worker so live turns do not run on the render/input thread.

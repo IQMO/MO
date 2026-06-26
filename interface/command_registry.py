@@ -278,11 +278,11 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
     ),
     SlashCommandSpec(
         name="/owner_comparison",
-        description="OWNER_COMPARISON comparison/adoption mode",
+        description="OWNER_COMPARISON comparison/improvement mode",
         category="Tasks",
         palette_description="compare MO against a reference system",
         help_lines=(
-            "/owner_comparison             OWNER_COMPARISON comparison/adoption mode",
+            "/owner_comparison             OWNER_COMPARISON comparison/improvement mode",
             "                  /owner_comparison <current-path> <reference-path>",
         ),
         # Operator-only protocol: dispatchable for all, but hidden from

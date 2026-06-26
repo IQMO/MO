@@ -153,7 +153,7 @@ _PROCEDURES: dict[str, WorkProcedure] = {
                      expected_evidence=("reference + current evidence captured",)),
             WorkStep("Build the comparison matrix with per-row evidence", "verify",
                      expected_evidence=("matrix with evidence per row",)),
-            WorkStep("Classify adopt/reject/defer/by-design and report MO-native minimal adoptions", "report", "final"),
+            WorkStep("Classify implement/reject/defer/by-design and report MO-native minimal changes", "report", "final"),
         ),
     ),
     "prd_planning": WorkProcedure(

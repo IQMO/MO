@@ -53,7 +53,7 @@ def protocol_contract(key: str) -> ProtocolContract:
             key=OWNER_COMPARISON_PROTOCOL,
             complete_marker="[OWNER_COMPARISON COMPLETE]",
             blocked_marker="[OWNER_COMPARISON BLOCKED]",
-            required_closeout_terms=("target", "matrix", "adoption", "reject"),
+            required_closeout_terms=("target", "matrix", "implementation", "reject"),
         )
     if normalized == OWNER_INTERFACE_AUDIT_PROTOCOL:
         return ProtocolContract(

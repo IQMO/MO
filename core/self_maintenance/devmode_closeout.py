@@ -343,10 +343,10 @@ def owner_comparison_continuation_instruction(user_input: str, final_text: str) 
     base = (
         "[OWNER_COMPARISON CONTINUATION] Do not stop at initial capture or preliminary comparison. "
         "Continue the read-only OWNER_COMPARISON protocol until source roles, structured evidence usage, "
-        "comparison matrix, adoption/reject/defer dispositions, artifact path, and exact next "
+        "comparison matrix, implementation/reject/defer dispositions, artifact path, and exact next "
         "approval decision are complete. Finalize only with [OWNER_COMPARISON COMPLETE] or [OWNER_COMPARISON BLOCKED] "
         "for a real tool/provider/timeout/sandbox/permission/safety boundary. Preferred final "
-        "labels: Target, Matrix, Adoption, Reject, Defer/Recheck, Artifacts, Approval."
+        "labels: Target, Matrix, Implementation, Reject, Defer/Recheck, Artifacts, Approval."
     )
     if not is_owner_comparison_activation(user_input):
         return base
@@ -360,9 +360,9 @@ def owner_comparison_continuation_instruction(user_input: str, final_text: str) 
     if text.startswith("[OWNER_COMPARISON COMPLETE]") and _owner_comparison_reports_default_target_drift(user_input, text):
         return (
             "[OWNER_COMPARISON CONTINUATION] Your OWNER_COMPARISON closeout drifted from the default target. Current MO "
-            "workspace is the adoption target; operator-supplied paths are read-only references "
+            "workspace is the implementation target; operator-supplied paths are read-only references "
             "unless the operator explicitly named another target. Rewrite/continue the matrix and "
-            "adoption plan for current MO, not for a reference path. The closeout must include "
+            "implementation plan for current MO, not for a reference path. The closeout must include "
             "Target: current MO workspace."
         )
     if text.startswith("[OWNER_COMPARISON COMPLETE]"):
@@ -371,7 +371,7 @@ def owner_comparison_continuation_instruction(user_input: str, final_text: str) 
             return (
                 "[OWNER_COMPARISON CONTINUATION] Your [OWNER_COMPARISON COMPLETE] report is missing required closeout "
                 f"terms: {', '.join(missing)}. Continue and produce the final report with these "
-                "literal labels before final closeout: Target, Matrix, Adoption, Reject, Defer/Recheck, "
+                "literal labels before final closeout: Target, Matrix, Implementation, Reject, Defer/Recheck, "
                 "Artifacts, Approval. Do not repeat a summary-only closeout."
             )
     if text.startswith("[OWNER_COMPARISON BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
@@ -446,7 +446,7 @@ def owner_interface_audit_continuation_instruction(user_input: str, final_text: 
     """Explain why an OWNER_INTERFACE_AUDIT stop claim was rejected and what must happen next."""
     base = (
         "[OWNER_INTERFACE_AUDIT CONTINUATION] Do not stop at a checkpoint, partial UX audit, or approval "
-        "question. Continue the interface diagnosis/adoption protocol with the next "
+        "question. Continue the interface diagnosis/implementation protocol with the next "
         "evidence-backed action. Finalize only with [OWNER_INTERFACE_AUDIT COMPLETE] when the protocol is "
         "complete or [OWNER_INTERFACE_AUDIT BLOCKED] for a real tool/provider/timeout/sandbox/permission/safety "
         "boundary."
@@ -459,7 +459,7 @@ def owner_interface_audit_continuation_instruction(user_input: str, final_text: 
             "[OWNER_INTERFACE_AUDIT CONTINUATION] Your last answer claimed [OWNER_INTERFACE_AUDIT COMPLETE] while also "
             "reporting actionable open/failed UX work. That is not a terminal state. "
             "Continue from the named open findings now: fix the actionable ones with verification, "
-            "adopt/reject the comparison candidates. Items that are genuinely the operator's call "
+            "implement/reject the comparison candidates. Items that are genuinely the operator's call "
             "may remain if classified EXPLICITLY as operator-decision pending / supervised fix-lane "
             "/ recorded observation / accepted deferred (do NOT rewrite a real deferred item as "
             "RESOLVED). Finalize with: 'No actionable UX work remains; operator-decision items "
@@ -491,7 +491,7 @@ def _owner_comparison_missing_closeout_terms(text: str) -> list[str]:
 
     The gate accepts the preferred literal label ``Matrix`` and the common
     semantic form ``Status: 7 MO-STRONGER ...`` because both are matrix-count
-    evidence. It still requires explicit adoption and rejection disposition
+    evidence. It still requires explicit implementation and rejection disposition
     language before OWNER_COMPARISON may stop.
     """
     lowered = str(text or "").lower()
@@ -512,7 +512,7 @@ def _owner_comparison_missing_closeout_terms(text: str) -> list[str]:
     checks_by_term = {
         "target": "target" in lowered or "current mo" in lowered,
         "matrix": has_matrix,
-        "adoption": "adoption" in lowered or "adopt" in lowered,
+        "implementation": "implementation" in lowered or "implement" in lowered,
         "reject": "reject" in lowered or "by-design" in lowered,
     }
     checks = tuple((term, bool(checks_by_term.get(term))) for term in required_closeout_terms(OWNER_COMPARISON_PROTOCOL))

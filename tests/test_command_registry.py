@@ -169,7 +169,7 @@ def test_owner_comparison_is_operator_only_dispatchable_but_hidden_from_users(mo
         "core.owner_protocols.operator_protocols_installed", lambda: True
     )
     assert "/owner_comparison" in slash_command_names()
-    assert "OWNER_COMPARISON comparison/adoption mode" in build_help_text()
+    assert "OWNER_COMPARISON comparison/improvement mode" in build_help_text()
     assert _palette_has_owner_comparison()
 
     # Public build (no pack) — hidden from all user-facing surfaces.

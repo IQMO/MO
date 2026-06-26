@@ -138,19 +138,17 @@ state/CPD, and `ROADMAP.md` for the remaining promotion path.
 
 ## UX Direction
 
-Verified inspiration used for this phase:
+Verified design inputs used for this phase:
 
-- Crush: polished terminal presence, model/session awareness, MCP/LSP-oriented
-  surfaces.
-- Ox: multi-pane agent command center, sessions, command palette, themes.
-- OpenCode: command/model surface and agent mode separation.
-- OpenDev paper: planning/execution separation, routing lanes, context
-  compaction as first-class interface concepts.
-- OpenDev demo GIF: fullscreen brand landing, compact command strip, prompt
-  lane, and bottom model/status rail.
+- Polished terminal presence, model/session awareness, and LSP-oriented surfaces.
+- Multi-pane command center shape, sessions, command palette, and theme support.
+- Command/model surface separation and explicit agent modes.
+- Planning/execution separation, routing lanes, and context compaction as
+  first-class interface concepts.
+- Fullscreen brand landing, compact command strip, prompt lane, and bottom
+  model/status rail.
 
-Unverified names from the external note (`CodeWhale`, `Pilotty`) are intentionally
-not treated as implementation facts without a concrete repository or source.
+This folder documents MO-owned behavior and verified implementation details only.
 
 Future dependency option:
 

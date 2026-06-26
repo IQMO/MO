@@ -140,13 +140,13 @@ def test_owner_comparison_final_stop_requires_terminal_closeout():
     assert (
         owner_comparison_final_allows_stop(
             "start OWNER_COMPARISON",
-            "[OWNER_COMPARISON COMPLETE] Target: current MO. Matrix done; adoption: none; reject: duplicate",
+            "[OWNER_COMPARISON COMPLETE] Target: current MO. Matrix done; implementation: none; reject: duplicate",
         )
         is True
     )
     assert owner_comparison_final_allows_stop(
         "start OWNER_COMPARISON",
-        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO workspace.\nStatus: 7 MO-STRONGER | 10 REFERENCE-STRONGER | 3 MISSING.\nAdopt now: none.\nReject: duplicate.",
+        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO workspace.\nStatus: 7 MO-STRONGER | 10 REFERENCE-STRONGER | 3 MISSING.\nImplement now: none.\nReject: duplicate.",
     ) is True
     assert owner_comparison_final_allows_stop("normal request", "initial capture only") is True
 
@@ -156,15 +156,15 @@ def test_owner_comparison_continuation_names_matrix_and_dispositions():
 
     assert "[OWNER_COMPARISON CONTINUATION]" in instruction
     assert "comparison matrix" in instruction
-    assert "adoption/reject/defer" in instruction
-    assert "Target, Matrix, Adoption, Reject" in instruction
+    assert "implementation/reject/defer" in instruction
+    assert "Target, Matrix, Implementation, Reject" in instruction
 
 
 def test_owner_comparison_complete_continuation_uses_terminal_template():
-    instruction = owner_comparison_continuation_instruction("start OWNER_COMPARISON", "[OWNER_COMPARISON COMPLETE] adoption only")
+    instruction = owner_comparison_continuation_instruction("start OWNER_COMPARISON", "[OWNER_COMPARISON COMPLETE] implementation only")
 
     assert "missing required closeout terms" in instruction
-    assert "Target, Matrix, Adoption, Reject, Defer/Recheck, Artifacts, Approval" in instruction
+    assert "Target, Matrix, Implementation, Reject, Defer/Recheck, Artifacts, Approval" in instruction
 
 
 def test_devmode_final_stop_requires_terminal_boundary():
@@ -209,7 +209,7 @@ def test_cross_gate_owner_maintenance_does_not_block_owner_comparison_completion
     # is_owner_maintenance_activation returns True (mentions OWNER_MAINTENANCE), is_owner_comparison_activation returns True
     assert owner_maintenance_final_allows_stop(
         user_input,
-        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nAdoption: none.\nReject: duplicate.\nArtifacts: ~/.mo/memory/comparisons/owner_comparison/run.\nApproval: required.",
+        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nImplementation: none.\nReject: duplicate.\nArtifacts: ~/.mo/memory/comparisons/owner_comparison/run.\nApproval: required.",
     ) is True
     assert owner_maintenance_final_allows_stop(user_input, "[OWNER_COMPARISON BLOCKED] sandbox blocked") is True
     # But OWNER_MAINTENANCE gate still enforces its own completions
@@ -227,7 +227,7 @@ Target: current MO workspace.
 Reference: `E:\\ref-a` vs `E:\\ref-b`.
 Scope: read-only comparison.
 Matrix: MO-STRONGER 7, REFERENCE-STRONGER 1, EQUIVALENT 2.
-Adoption: none without operator approval.
+Implementation: none without operator approval.
 Reject: duplicate/provider-owned items rejected.
 Defer/Recheck: none active.
 Artifacts: ~/.mo/memory/comparisons/owner_comparison/2026-06-07T2121/.
@@ -236,7 +236,7 @@ Approval: required before source edits.
     assert owner_comparison_final_allows_stop("START OWNER_COMPARISON E:\\ref-a E:\\ref-b", text) is True
     assert owner_comparison_final_allows_stop(
         "START OWNER_COMPARISON E:\\ref-a E:\\ref-b",
-        "Summary: [OWNER_COMPARISON COMPLETE] Target current MO; Matrix done; adoption none; reject duplicate.",
+        "Summary: [OWNER_COMPARISON COMPLETE] Target current MO; Matrix done; implementation none; reject duplicate.",
     ) is False
 
 
@@ -246,7 +246,7 @@ Target: E:\\ref-b.
 Reference: E:\\ref-a.
 Scope: source-pair comparison.
 Matrix: MO-STRONGER 7, REFERENCE-STRONGER 1.
-Adoption: six items scoped for ref-b.
+Implementation: six items scoped for ref-b.
 Reject: duplicate legacy items.
 Artifacts: ~/.mo/memory/comparisons/owner_comparison/run.
 Approval: Operator approval required before source edits in E:\\ref-b.
@@ -254,7 +254,7 @@ Approval: Operator approval required before source edits in E:\\ref-b.
     assert owner_comparison_final_allows_stop("START OWNER_COMPARISON E:\\ref-a E:\\ref-b", text) is False
 
     instruction = owner_comparison_continuation_instruction("START OWNER_COMPARISON E:\\ref-a E:\\ref-b", text)
-    assert "Current MO workspace is the adoption target" in instruction
+    assert "Current MO workspace is the implementation target" in instruction
     assert "not for a reference path" in instruction
 
 
@@ -270,7 +270,7 @@ Artifacts: ~/.mo/memory/comparisons/owner_comparison/run.
     instruction = owner_comparison_continuation_instruction("START OWNER_COMPARISON E:\\ref-a E:\\ref-b", text)
 
     assert "missing required closeout terms" in instruction
-    assert "adoption" in instruction
+    assert "implementation" in instruction
     assert "reject" in instruction
 
 
@@ -695,7 +695,7 @@ def test_clean_complete_stops_without_committing_artifacts(tmp_path, monkeypatch
     ) is True
     assert owner_comparison_final_allows_stop(
         "start OWNER_COMPARISON",
-        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nAdoption: none.\n"
+        "[OWNER_COMPARISON COMPLETE]\nTarget: current MO workspace.\nMatrix: done.\nImplementation: none.\n"
         "Reject: duplicate.\nArtifacts: ~/.mo/memory/comparisons/owner_comparison/run.\nApproval: required.",
     ) is True
 

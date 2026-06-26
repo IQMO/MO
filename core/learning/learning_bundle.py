@@ -2,8 +2,7 @@
 
 The operator runs more than one MO (e.g. local + server). Profile prose,
 confirmed learning suggestions, and promoted workflows should travel between
-them as one reviewed bundle instead of hand-copied files (adopted from the ECC
-second-pass comparison, 2026-06-10T1737).
+them as one reviewed bundle instead of hand-copied files.
 
 Safety contract:
 - Export refuses when any bundled text trips the secret detector.
