@@ -131,7 +131,7 @@ def test_tui_signal_animation_changes_between_frames():
     assert frame_0.count("\n") == tui.SIGNAL_FIELD_HEIGHT
 
 
-def test_tui_status_rail_animates_between_frames():
+def test_tui_status_rail_is_static_when_idle():
     controller = UxController(PreviewBackend())
     first = tui.TuiAnimation()
     second = tui.TuiAnimation()
@@ -139,6 +139,19 @@ def test_tui_status_rail_animates_between_frames():
 
     frame_0 = "".join(fragment for _style, fragment in tui._status_fragments(controller, first))
     frame_1 = "".join(fragment for _style, fragment in tui._status_fragments(controller, second))
+
+    assert frame_0 == frame_1
+
+
+def test_tui_status_rail_animates_only_when_busy():
+    controller = UxController(PreviewBackend())
+    first = tui.TuiAnimation()
+    second = tui.TuiAnimation()
+    second.advance()
+    busy = tui.TuiSessionState(turn_running=True)
+
+    frame_0 = "".join(fragment for _style, fragment in tui._status_fragments(controller, first, busy))
+    frame_1 = "".join(fragment for _style, fragment in tui._status_fragments(controller, second, busy))
 
     assert frame_0 != frame_1
 

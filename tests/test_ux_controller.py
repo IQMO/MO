@@ -12,10 +12,10 @@ def test_preview_controller_captures_input_without_runtime():
     result = controller.handle_input("hello from preview")
     snapshot = controller.snapshot()
 
-    assert "not sent to the MO runtime" in result
+    assert "UX preview captured locally" in result
     assert snapshot.busy is False
     assert snapshot.transcript[-2].speaker == "user"
-    assert snapshot.transcript[-1].speaker == "mo"
+    assert snapshot.transcript[-1].speaker == "ux"
 
 
 def test_controller_on_change_callback_is_used():

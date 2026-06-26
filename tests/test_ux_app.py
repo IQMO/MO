@@ -81,7 +81,19 @@ def test_single_message_renders_result_and_advances_preview():
     text = app.run_single_message(UxController(PreviewBackend()), "hello", width=90)
 
     assert "hello" in text
-    assert "Preview only" in text
+    assert "UX preview captured locally" in text
+
+
+def test_preview_message_cli_starts_from_landing_snapshot(monkeypatch):
+    console = Console(record=True, width=90, color_system=None)
+    monkeypatch.setattr(app, "_console_for_width", lambda width=None, **kwargs: console)
+
+    app.main(["--message", "hi"])
+
+    text = console.export_text(clear=False)
+    assert "hi" in text
+    assert "UX preview captured locally" in text
+    assert "Build the next interface" not in text
 
 
 def test_read_only_rejects_message(monkeypatch):

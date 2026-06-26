@@ -162,7 +162,7 @@ def test_command_center_render_places_major_panes_on_one_screen():
 def test_local_smoke_path_advances_preview_transcript():
     text = run_smoke(width=90)
     assert "smoke input" in text
-    assert "Preview only" in text
+    assert "UX preview captured locally" in text
     assert text.count("Session") == 1
     assert "Idle - task board appears for work turns" in text
 

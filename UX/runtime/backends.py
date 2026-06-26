@@ -28,7 +28,7 @@ class PreviewBackend:
             busy=self._busy,
             notice=self._notice,
             transcript=tuple(self._transcript[-12:]),
-            composer_hint="preview only; /exit closes",
+            composer_hint="preview local; run `python mo.py --ux` for live",
         )
 
     def submit(self, text: str, callbacks: UxCallbacks | None = None) -> str:
@@ -43,10 +43,10 @@ class PreviewBackend:
         if clean.startswith("/"):
             reply = local_command_response(clean)
         else:
-            reply = "Preview only: this message was not sent to the MO runtime. Use --live to run real turns."
-        self._transcript.append(TranscriptItem("mo", reply))
+            reply = "UX preview captured locally. Start live mode with `python mo.py --ux` or `UX\\run_ux.bat`."
+        self._transcript.append(TranscriptItem("ux", reply))
         self._busy = False
-        self._notice = "Preview only - input was not sent to MO runtime"
+        self._notice = "Preview mode - local only"
         if callbacks:
             callbacks.on_activity("")
         return reply

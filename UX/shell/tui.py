@@ -146,6 +146,10 @@ def _spinner(frame: int) -> str:
     return SPINNER_FRAMES[frame % len(SPINNER_FRAMES)]
 
 
+def _activity_glyph(active: bool, frame: int) -> str:
+    return _spinner(frame) if active else " "
+
+
 def _signal_field_width(width: int) -> int:
     return min(SIGNAL_FIELD_MAX_WIDTH, max(SIGNAL_FIELD_MIN_WIDTH, width - 18))
 
@@ -192,7 +196,7 @@ def _hero_fragments(controller: UxController, animation: TuiAnimation | None = N
     fragments.extend(_signal_field_fragments(frame, width))
     fragments.extend(_centered_lines(LOGO_LINES, width, "class:logo"))
     fragments.append(("", "\n"))
-    title = f"{_spinner(frame)}  MO UX  {snapshot.model_label}  {_spinner(frame + 3)}"
+    title = f"MO UX  {snapshot.model_label}"
     hints = "/help   |   /models   |   Shift+Tab plan mode   |   @file context"
     box_width = min(width - 10, max(72, len(hints) + 8))
     left = " " * max(0, (width - box_width) // 2)
@@ -289,8 +293,15 @@ def _transcript_fragments(items: tuple[TranscriptItem, ...], *, limit: int = 10)
     fragments: list[Fragment] = [("", "\n"), ("class:section", f"{margin}TRANSCRIPT"), ("", "\n")]
     for item in items[-limit:]:
         speaker = item.speaker.strip().lower() or "system"
-        style = "class:mo" if speaker in {"mo", "assistant"} else "class:user"
-        label = "MO" if speaker in {"mo", "assistant"} else "USER"
+        if speaker in {"mo", "assistant"}:
+            style = "class:mo"
+            label = "MO"
+        elif speaker in {"ux", "system"}:
+            style = "class:ux"
+            label = "UX"
+        else:
+            style = "class:user"
+            label = "USER"
         wrapped = _wrap_lines(item.text, max_text)
         for index, line in enumerate(wrapped):
             fragments.append(("", margin))
@@ -317,10 +328,11 @@ def _top_bar_fragments(controller: UxController, animation: TuiAnimation | None,
     width = _terminal_width()
     frame = animation.frame if animation else 0
     mode = "PLAN LENS" if ui_state.plan_lens else str(getattr(controller.backend, "name", "ux")).upper()
-    state = "BUSY" if snapshot.busy or ui_state.turn_running else "READY"
+    active = snapshot.busy or ui_state.turn_running
+    state = "BUSY" if active else "READY"
     project = _trim(snapshot.project or "project not set", max(18, width // 3))
     model = _trim(snapshot.model_label, max(20, width // 3))
-    left = f" {_spinner(frame)} MO  {project}"
+    left = f" {_activity_glyph(active, frame)} MO  {project}"
     right = f"{mode}  {model}  {state} "
     middle = " " * max(1, width - len(left) - len(right))
     return [
@@ -365,9 +377,11 @@ def _mode_line_fragments(
     width = _terminal_width()
     frame = animation.frame if animation else 0
     current_ui = ui_state or TuiSessionState()
-    state = "Busy" if snapshot.busy or current_ui.turn_running else "Normal"
+    active = snapshot.busy or current_ui.turn_running
+    state = "Busy" if active else "Normal"
     lens = "plan lens" if current_ui.plan_lens else str(getattr(controller.backend, "name", "ux"))
-    left = f" > {_spinner(frame)} {state} / {lens} / Ctrl+P commands / Shift+Tab lens"
+    marker = f"{_spinner(frame)} " if active else ""
+    left = f" > {marker}{state} / {lens} / Ctrl+P commands / Shift+Tab lens"
     rule = "─" * max(1, width - len(left) - 2)
     return [("class:blue", left), ("class:rule", f" {rule}")]
 
@@ -382,10 +396,12 @@ def _status_fragments(
     current_ui = ui_state or TuiSessionState()
     model = snapshot.model or snapshot.provider or "model not configured"
     lane_state = "reported" if snapshot.lanes else "quiet"
-    context = "working" if snapshot.busy or current_ui.turn_running else "idle"
+    active = snapshot.busy or current_ui.turn_running
+    context = "working" if active else "idle"
     activity = controller.callbacks.activity or current_ui.notice or snapshot.notice or "ready"
+    brand = f" {_spinner(frame + 1)} {model} " if active else f" {model} "
     return [
-        ("class:brand", f" {_spinner(frame + 1)} {model} "),
+        ("class:brand", brand),
         ("class:muted", "|"),
         ("class:muted", " Mode: "),
         ("class:amber" if current_ui.plan_lens else "class:blue", "Plan lens " if current_ui.plan_lens else f"{getattr(controller.backend, 'name', 'ux')} "),
@@ -521,6 +537,7 @@ def _style() -> Style:
             "yellow": "#ffe45c bold",
             "red": "#fc8181 bold",
             "mo": "#39d0c8 bold",
+            "ux": "#f6ad55 bold",
             "user": "#7aa2ff bold",
             "text": "#d7dee8",
             "muted": "#7d8996",

@@ -170,7 +170,10 @@ def main(argv: list[str] | None = None) -> None:
             _run_tui(controller)
         return
     if args.message:
-        console.print(run_single_message(UxController(PreviewBackend()), args.message, width=console.width), markup=False)
+        console.print(
+            run_single_message(UxController(PreviewBackend(preview_landing_snapshot())), args.message, width=console.width),
+            markup=False,
+        )
         return
     controller = UxController(PreviewBackend(preview_landing_snapshot()))
     if args.once:
