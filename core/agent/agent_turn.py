@@ -32,6 +32,7 @@ from ..final_gates import (
     run_claim_gates,
     run_contract_gate,
     run_done_claim_gate,
+    run_lsp_diagnostics_gate,
     run_owner_integrity_audit_reporting_gate,
     run_self_protocol_truth_gate,
     run_verify_edits_gate,
@@ -364,6 +365,16 @@ def _pipeline_verify_edits(agent, ctx):
     return None
 
 
+def _pipeline_lsp_diagnostics(agent, ctx):
+    _lsp_instr = run_lsp_diagnostics_gate(
+        agent, ctx.turn_modified_files, fired=ctx.final_gates_fired, on_activity=ctx.on_activity,
+    )
+    if _lsp_instr:
+        agent.session.add_assistant(_lsp_instr)
+        return _CONTINUE
+    return None
+
+
 def _pipeline_iam_normalize(agent, ctx):
     """Normalize quantitative truth BEFORE the IAM reporting gate evaluates."""
     if is_owner_integrity_audit_activation(ctx.user_input):
@@ -424,6 +435,7 @@ _POST_PROVIDER_PIPELINE = [
     ("self_protocol_truth", "gate", _pipeline_self_protocol_truth),
     ("done_claim", "gate", _pipeline_done_claim),
     ("verify_edits", "gate", _pipeline_verify_edits),
+    ("lsp_diagnostics", "gate", _pipeline_lsp_diagnostics),
     ("iam_normalize", "action", _pipeline_iam_normalize),
     ("iam_reporting", "gate", _pipeline_iam_reporting),
     ("claim_gates", "gate", _pipeline_claim_gates),

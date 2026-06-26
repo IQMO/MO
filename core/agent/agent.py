@@ -264,6 +264,20 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         except Exception:
             traceback.print_exc()
 
+        # LSP — operator-configured language servers for live diagnostics; inert
+        # until `lsp.servers` is listed. The lsp_diagnostics final-gate consumes it
+        # to block "fixed/clean" claims on files the server still reports errors on.
+        self.lsp_manager = None
+        try:
+            from core.lsp import LspManager
+            lsp_mgr = LspManager.from_config(getattr(self, "config", None) or {}, root_path=project_cwd())
+            self.lsp_manager = lsp_mgr
+            if lsp_mgr.enabled:
+                import atexit
+                atexit.register(lsp_mgr.stop_all)
+        except Exception:
+            traceback.print_exc()
+
         try:
             from ..tool_registry import DeferredToolRegistry
             self._tool_registry = DeferredToolRegistry(self.tool_definitions)

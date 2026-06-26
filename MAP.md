@@ -14,7 +14,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `core/tasking/` — `core/tasking/task_board.py`, contract gate, task manager, evidence, and procedure rows seeded from work patterns.
 - `core/review/` — diff review pipeline, scorer, iteration, finding patterns; PRT can flag proven overengineering as maintainability risk.
 - `core/goal/` — goal runner and goal auditor.
-- `core/graph/` — `core/graph/structural_graph.py`, code graph, code-map HTML; `core/lsp/` — local language-server diagnostics bridge (`lsp.servers`), off by default, not yet wired into the turn loop.
+- `core/graph/` — `core/graph/structural_graph.py`, code graph, code-map HTML; `core/lsp/` — local language-server diagnostics bridge (`lsp.servers`), off by default; the `lsp_diagnostics` final-gate blocks "fixed/clean" claims on files the server still flags.
 - `core/learning/` — memory, knowledge store, workflow/feedback/trace learning.
 - `core/session/` — session, closeout, momentum; old completed tool chains can compact Python source reads to recoverable structure skeletons.
 - `core/code_skeleton.py` — Python AST skeleton compressor for session momentum only; keeps imports/signatures/docstrings, drops bodies, and returns empty on no-gain/non-Python so callers keep existing behavior.

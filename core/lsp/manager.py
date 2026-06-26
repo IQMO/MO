@@ -76,6 +76,16 @@ class LspManager:
         self._clients: dict[str, LspClient] = {}
         self._lock = threading.Lock()
 
+    @classmethod
+    def from_config(cls, config: dict | None, root_path: str | None = None) -> "LspManager":
+        """Build from `config.lsp` (mirrors McpManager.from_config). Off by default:
+        no `lsp.servers` → enabled is False and every call is a clean no-op."""
+        lsp_cfg = ((config or {}).get("lsp") or {}) if isinstance(config, dict) else {}
+        if lsp_cfg.get("enabled") is False:
+            return cls({}, root_path=root_path)
+        servers = lsp_cfg.get("servers") if isinstance(lsp_cfg.get("servers"), dict) else {}
+        return cls(servers, root_path=root_path, timeout=float(lsp_cfg.get("timeout", 30.0) or 30.0))
+
     @property
     def enabled(self) -> bool:
         return bool(self._servers)

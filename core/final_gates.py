@@ -224,6 +224,54 @@ def run_verify_edits_gate(
     return instruction
 
 
+def run_lsp_diagnostics_gate(
+    agent: Any,
+    turn_modified_files: Any,
+    *,
+    fired: set,
+    on_activity: Callable[[str], None] | None = None,
+) -> str | None:
+    """Re-prompt when a language server still reports ERRORS in files edited this
+    turn, so the model fixes them before claiming the work is clean — else None.
+
+    This is the LSP evidence gate: diagnostics become blocking evidence instead of passive context.
+    Fail-open by design — a no-op when no `lsp.servers` is configured (the default),
+    when nothing was edited, or when no errors remain. Once-per-turn (marked only
+    after it fires), so it nudges at most once and can never loop.
+    """
+    if "lsp_diagnostics" in fired:
+        return None
+    mgr = getattr(agent, "lsp_manager", None)
+    if mgr is None or not getattr(mgr, "enabled", False) or not turn_modified_files:
+        return None
+    from .lsp import summarize_diagnostics  # local: keep LSP off the default gate path
+
+    flagged: list[tuple[str, int]] = []
+    seen: set[str] = set()
+    for entry in turn_modified_files:
+        path = str(entry[0] if isinstance(entry, (list, tuple)) else entry)
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            errs = int(summarize_diagnostics(mgr.file_diagnostics(path)).get("error", 0))
+        except Exception:
+            continue
+        if errs:
+            flagged.append((path, errs))
+    if not flagged:
+        return None
+    fired.add("lsp_diagnostics")
+    if on_activity:
+        on_activity("language server reports errors - fixing before finishing...")
+    detail = "; ".join(f"{p}: {n} error(s)" for p, n in flagged[:6])
+    return (
+        "The language server reports unresolved error(s) in files you edited this turn: "
+        f"{detail}. Inspect and fix them, or state explicitly why they are acceptable, "
+        "before claiming the work is clean or done."
+    )
+
+
 def run_owner_integrity_audit_reporting_gate(
     user_input: str,
     final_text: str,

@@ -172,6 +172,19 @@ mcp:
     #   enabled: true
     #   timeout: 30
 
+lsp:
+  # Language Server Protocol — live, multi-language diagnostics for MO's edits.
+  # INERT until you list a server per language under `servers` (a map keyed by
+  # language). Each is a local subprocess (the same engine behind your editor's
+  # error squiggles), read-only analysis: MO never applies server edits. The
+  # `lsp_diagnostics` gate then BLOCKS a "fixed/clean" claim while the server still
+  # reports errors in files MO edited this turn — so MO enforces diagnostics, not
+  # just sees them. Off by default; configure the servers you have installed.
+  servers: {}
+    # python:     {command: pylsp,                       args: []}
+    # typescript: {command: typescript-language-server,  args: ["--stdio"]}
+    # go:         {command: gopls,                        args: []}
+
 taskboard:
   # Phase 1 (default off): when true, MO owns the taskboard — it sets the board to
   # its OWN plan via the set_plan tool and advances rows with complete_task, instead

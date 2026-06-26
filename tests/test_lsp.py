@@ -1,9 +1,11 @@
 import sys
 import textwrap
+import types
 
 import pytest
 
 from core import lsp
+from core.final_gates import run_lsp_diagnostics_gate
 from core.lsp.client import LspClient
 from core.lsp.manager import LspManager, language_for, summarize_diagnostics
 
@@ -135,3 +137,63 @@ def test_manager_unconfigured_language_returns_empty(tmp_path, fake_server):
 
 def test_package_exports():
     assert hasattr(lsp, "LspClient") and hasattr(lsp, "LspManager")
+
+
+def test_from_config_off_by_default_and_enabled_with_servers(tmp_path, fake_server):
+    assert LspManager.from_config({}).enabled is False
+    assert LspManager.from_config({"lsp": {"enabled": False, "servers": {"python": {}}}}).enabled is False
+    mgr = LspManager.from_config(
+        {"lsp": {"servers": {"python": {"command": sys.executable, "args": [fake_server]}}}},
+        root_path=str(tmp_path),
+    )
+    assert mgr.enabled is True
+
+
+# --- the LSP evidence GATE (the part that makes MO enforce, not just show) ----
+
+
+def test_gate_noop_when_lsp_unconfigured(tmp_path):
+    # No manager, and disabled manager -> both must no-op (default behavior unchanged).
+    f = [(str(tmp_path / "x.py"), "x = BUG\n")]
+    assert run_lsp_diagnostics_gate(types.SimpleNamespace(lsp_manager=None), f, fired=set()) is None
+    disabled = types.SimpleNamespace(lsp_manager=LspManager({}, root_path=str(tmp_path)))
+    assert run_lsp_diagnostics_gate(disabled, f, fired=set()) is None
+
+
+def test_gate_blocks_claim_on_residual_errors(tmp_path, fake_server):
+    target = tmp_path / "broken.py"
+    target.write_text("z = BUG\n", encoding="utf-8")
+    mgr = LspManager({"python": {"command": sys.executable, "args": [fake_server]}}, root_path=str(tmp_path))
+    agent = types.SimpleNamespace(lsp_manager=mgr)
+    fired = set()
+    try:
+        instr = run_lsp_diagnostics_gate(agent, [(str(target), "z = BUG\n")], fired=fired)
+    finally:
+        mgr.stop_all()
+    assert instr is not None
+    assert "broken.py" in instr and "error" in instr
+    assert "lsp_diagnostics" in fired  # marked fired -> nudges once, cannot loop
+
+
+def test_gate_passes_clean_files(tmp_path, fake_server):
+    target = tmp_path / "ok.py"
+    target.write_text("z = 1\n", encoding="utf-8")
+    mgr = LspManager({"python": {"command": sys.executable, "args": [fake_server]}}, root_path=str(tmp_path))
+    agent = types.SimpleNamespace(lsp_manager=mgr)
+    fired = set()
+    try:
+        instr = run_lsp_diagnostics_gate(agent, [(str(target), "z = 1\n")], fired=fired)
+    finally:
+        mgr.stop_all()
+    assert instr is None
+    assert "lsp_diagnostics" not in fired  # clean -> not marked, can re-check later
+
+
+def test_gate_once_per_turn(tmp_path, fake_server):
+    mgr = LspManager({"python": {"command": sys.executable, "args": [fake_server]}}, root_path=str(tmp_path))
+    agent = types.SimpleNamespace(lsp_manager=mgr)
+    try:
+        # already fired this turn -> immediate None, no server work
+        assert run_lsp_diagnostics_gate(agent, [(str(tmp_path / "a.py"), "BUG")], fired={"lsp_diagnostics"}) is None
+    finally:
+        mgr.stop_all()
