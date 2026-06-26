@@ -11,6 +11,8 @@ PRIVATE_OWNER_TERMS = tuple(
         ("vs", "05"),
         ("if", "dev", "05"),
         ("iam", "05"),
+        ("open", "dev"),
+        ("cr", "ush"),
     )
 )
 
@@ -38,3 +40,28 @@ def test_private_owner_codenames_do_not_ship_in_tracked_files():
         if any(term in text for term in PRIVATE_OWNER_TERMS):
             offenders.append(rel)
     assert offenders == []
+
+
+def test_secret_and_local_only_paths_are_gitignored():
+    root = Path(__file__).resolve().parents[1]
+    candidates = [
+        ".env",
+        ".env.local",
+        "operator.token",
+        "deploy.pem",
+        "deploy.key",
+        "docs/local-note.md",
+        "tmp/scratch.txt",
+        "operator/private.md",
+        "memory/session.json",
+        "logs/runtime.log",
+    ]
+    proc = subprocess.run(
+        ["git", "check-ignore", "-z", "--stdin"],
+        cwd=root,
+        input=("\0".join(candidates) + "\0").encode(),
+        capture_output=True,
+        check=True,
+    )
+    ignored = {item.decode() for item in proc.stdout.split(b"\0") if item}
+    assert ignored == set(candidates)

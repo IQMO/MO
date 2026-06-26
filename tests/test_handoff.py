@@ -125,7 +125,7 @@ def test_handoff_document_is_temp_redacted_and_reference_based():
     text = path.read_text(encoding="utf-8")
     assert "MO HANDSOFF CONTEXT" in text
     assert "sk-secret123" not in text
-    assert "docs/interface/INTERFACE-CLEANUP-PRD.md" in text
+    assert "AGENTS.md" in text
 
 
 def test_handoff_document_prunes_old_temp_capsules(tmp_path, monkeypatch):

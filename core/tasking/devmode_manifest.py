@@ -5,7 +5,7 @@ its own counts.
 This is NOT a protocol report and NOT model-authored: it is built only from runtime truth
 (backend monitor, economy summary, taskboard, the session's own files). Model-authored
 artifacts should cite or be reconciled against it; it is an index/projection, never a
-second source of truth. See docs/proposals/devmode-runtime-output-manifest-plan.md.
+second source of truth.
 """
 from __future__ import annotations
 

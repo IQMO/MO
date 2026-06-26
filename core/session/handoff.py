@@ -843,12 +843,8 @@ def _artifact_references(
 ) -> list[str]:
     candidates: list[str] = []
     static_names = [
-        "docs/interface/INTERFACE-CLEANUP-PRD.md",
-        "docs/research/HANDSOFF-COMPACTION-RESEARCH.md",
-        "docs/product/MO-PRD.md",
-        "docs/audit/AUDIT.md",
-        "docs/status/PROMPT-BOUNDARY.md",
         "README.md",
+        "AGENTS.md",
         "MAP.md",
         "core/prompts/system.md",
         "config.example.yaml",
