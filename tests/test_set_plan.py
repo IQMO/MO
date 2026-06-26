@@ -42,6 +42,23 @@ def test_set_plan_owns_board_when_flag_on():
     assert all(t.status == "pending" for t in b.tasks[1:])
 
 
+def test_set_plan_refuses_to_overwrite_owner_protocol_board():
+    # Regression for live mo-1782436480: set_plan clobbered a DEVMODE05 board.
+    # A protocol board carries a 'final' closeout gate that drives the protocol's
+    # completion contract; set_plan must NOT replace it even with model_owned on —
+    # MO advances those rows with complete_task instead.
+    b = TaskBoard(turn_id="t", session_id="s", source="gateway")
+    b.set_rows("start DEVMODE05", [
+        {"id": "1", "text": "Boot protocol", "status": "active", "completion_gate": "tool"},
+        {"id": "2", "text": "Final OWNER_MAINTENANCE report", "status": "pending", "completion_gate": "final"},
+    ])
+    changed = _Agent(model_owned=True)._advance_task_board_after_tool(
+        b, "set_plan", {"tasks": ["my", "own", "plan"]}
+    )
+    assert changed is False
+    assert [t.title for t in b.tasks] == ["Boot protocol", "Final OWNER_MAINTENANCE report"]  # untouched
+
+
 def test_set_plan_no_usable_tasks_is_noop_even_when_on():
     b = _ghost_board()
     changed = _Agent(model_owned=True)._advance_task_board_after_tool(b, "set_plan", {"tasks": ["", "   "]})

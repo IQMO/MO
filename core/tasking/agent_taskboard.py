@@ -96,6 +96,17 @@ class AgentTaskBoard:
         """
         if not self._model_owned_taskboard_enabled():
             return False
+        # Never let set_plan overwrite an owner-protocol board (DEVMODE05 /
+        # comparison / interface audit). Those are gateway-seeded with a fixed
+        # phase structure whose 'final' closeout row drives the protocol's
+        # completion contract; MO advances them with complete_task, not set_plan.
+        # Under model_owned only protocol boards carry a 'final' gate — MO's own
+        # set_plan rows are all 'tool'-gated — so a 'final' row means hands off.
+        existing = getattr(task_board, "tasks", None) or []
+        if any(getattr(t, "completion_gate", "") == "final" for t in existing):
+            if monitor:
+                monitor.emit("taskboard", {"update": "set_plan_skipped_protocol_board"})
+            return False
         raw = arguments.get("tasks") or arguments.get("plan") or []
         if not isinstance(raw, list):
             return False
