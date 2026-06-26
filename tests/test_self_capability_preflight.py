@@ -320,24 +320,40 @@ Session report:
 
 
 def test_closeout_requires_session_artifacts_exist(tmp_path):
-    """A [OWNER_MAINTENANCE COMPLETE] with a bound session dir missing summary/economy/manifest is
-    an INCOMPLETE closeout and must be blocked (live mo-1782208099: the completed-board guard
-    ended the turn before they were written). All three present → no violation; no dir → pass."""
+    """A COMPLETE closeout with a bound session dir missing any manifest-required
+    session artifact is incomplete and must be blocked."""
     import core.self_maintenance.devmode_closeout as scp
+    from core.tasking.devmode_manifest import SESSION_ARTIFACT_NAMES
     text = "[OWNER_MAINTENANCE COMPLETE] HEALTHY. 0 tool errors."
     sd = tmp_path / "2026-01-11T0000"
     sd.mkdir()
     # none present → blocked
     assert scp._owner_maintenance_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd) is not None
-    # 2 of 3 → still blocked, naming the missing one
-    (sd / "summary.md").write_text("x", encoding="utf-8")
-    (sd / "economy.md").write_text("x", encoding="utf-8")
+    # all except capability-matrix.md → still blocked, naming the missing artifact
+    for name in SESSION_ARTIFACT_NAMES:
+        if name != "capability-matrix.md":
+            (sd / name).write_text("x", encoding="utf-8")
     v = scp._owner_maintenance_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd)
-    assert v is not None and "manifest.json" in v
-    # all three → no artifact violation; and no bound dir → not enforced
-    (sd / "manifest.json").write_text("{}", encoding="utf-8")
+    assert v is not None and "capability-matrix.md" in v
+    # all required artifacts → no artifact violation; and no bound dir → not enforced
+    (sd / "capability-matrix.md").write_text("x", encoding="utf-8")
     assert scp._owner_maintenance_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd) is None
     assert scp._owner_maintenance_closeout_evidence_violation(text, frozen_error_count=0, session_dir=None) is None
+
+
+def test_closeout_blocks_missing_capability_matrix_artifact(tmp_path):
+    """The matrix may be summarized elsewhere, but the standalone artifact is required."""
+    import core.self_maintenance.devmode_closeout as scp
+    text = "[OWNER_MAINTENANCE COMPLETE] HEALTHY. 0 tool errors."
+    sd = tmp_path / "2026-01-11T0001"
+    sd.mkdir()
+    (sd / "summary.md").write_text("x", encoding="utf-8")
+    (sd / "workflow.md").write_text("x", encoding="utf-8")
+    (sd / "catalog.md").write_text("## Capability Coverage Matrix\nx", encoding="utf-8")
+    (sd / "economy.md").write_text("x", encoding="utf-8")
+    (sd / "manifest.json").write_text("{}", encoding="utf-8")
+    v = scp._owner_maintenance_closeout_evidence_violation(text, frozen_error_count=0, session_dir=sd)
+    assert v is not None and "capability-matrix.md" in v
 
 
 def test_closeout_gate_uses_frozen_error_count_not_moving_live():
@@ -379,7 +395,7 @@ def test_closeout_blocks_stale_capability_matrix(tmp_path):
     text = "[OWNER_MAINTENANCE COMPLETE] HEALTHY. 0 tool errors."
     sd = tmp_path / "2026-01-11T0000"
     sd.mkdir()
-    for n in ("summary.md", "economy.md", "manifest.json"):
+    for n in ("summary.md", "workflow.md", "catalog.md", "economy.md", "manifest.json"):
         (sd / n).write_text("x", encoding="utf-8")
     (sd / "capability-matrix.md").write_text(
         "| 1 | preflight | core/this_does_not_exist_zzz.py | EXISTING/ACTIVE | ENHANCED |\n",
@@ -427,7 +443,7 @@ def test_closeout_blocks_t2206_summary_shape_wrong_error_tools_and_stale_matrix(
     )
     sd = tmp_path / "2026-06-23T2206"
     sd.mkdir()
-    for n in ("summary.md", "economy.md", "manifest.json"):
+    for n in ("summary.md", "workflow.md", "catalog.md", "economy.md", "manifest.json"):
         (sd / n).write_text("x", encoding="utf-8")
     (sd / "capability-matrix.md").write_text(
         "| 23 | preflight | core/this_does_not_exist_zzz.py | EXISTING/ACTIVE | ENHANCED |\n",
@@ -484,7 +500,7 @@ def test_closeout_blocks_late_marker_stale_matrix_even_without_tool_errors(tmp_p
 
     sd = tmp_path / "2026-06-23T2206"
     sd.mkdir()
-    for n in ("summary.md", "economy.md", "manifest.json"):
+    for n in ("summary.md", "workflow.md", "catalog.md", "economy.md", "manifest.json"):
         (sd / n).write_text("x", encoding="utf-8")
     (sd / "capability-matrix.md").write_text(
         "| 23 | preflight | core/this_does_not_exist_zzz.py | EXISTING/ACTIVE | ENHANCED |\n",

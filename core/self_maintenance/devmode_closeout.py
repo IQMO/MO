@@ -9,6 +9,12 @@ from ..owner_protocols import (
     is_owner_interface_audit_activation,
     is_owner_comparison_activation,
 )
+from ..protocol_kernel import (
+    OWNER_COMPARISON_PROTOCOL,
+    OWNER_MAINTENANCE_PROTOCOL,
+    required_artifacts,
+    required_closeout_terms,
+)
 
 def _owner_maintenance_future_stamp_violation() -> str | None:
     """Block when the active session dir's stamp is implausibly far from the real session
@@ -65,6 +71,21 @@ def _owner_maintenance_future_stamp_violation() -> str | None:
 
 
 _MATRIX_REPO_PATH_RE = re.compile(r"(?:core|interface|tools|tests)/[\w./-]+\.py")
+
+
+def _owner_maintenance_required_artifacts() -> tuple[str, ...]:
+    """Session-local artifacts required before a DEVMODE closeout can be terminal."""
+    try:
+        return required_artifacts(OWNER_MAINTENANCE_PROTOCOL)
+    except Exception:
+        return (
+            "summary.md",
+            "workflow.md",
+            "catalog.md",
+            "capability-matrix.md",
+            "economy.md",
+            "manifest.json",
+        )
 
 
 def _capability_matrix_missing_paths(text: str) -> list[str]:
@@ -161,15 +182,15 @@ def _owner_maintenance_closeout_evidence_violation(
                     )
             except Exception:
                 pass
-        # 2. the closeout artifacts must actually EXIST in the bound session dir. A
-        #    [OWNER_MAINTENANCE COMPLETE] with no summary.md/economy.md/manifest.json is an
-        #    incomplete closeout — observed live mo-1782208099, where the completed-board
-        #    tool guard ended the turn before they were written. Only enforced when a dir
-        #    is bound (early states with no dir yet are not blocked here).
+        # 2. the closeout artifacts must actually EXIST in the bound session dir. The
+        #    manifest defines the session-local artifact contract; if the stop gate only
+        #    checks a subset, a run can close with an explicitly missing expected file
+        #    (observed live: capability-matrix.md was missing while manifest.status was
+        #    complete). Only enforced when a dir is bound.
         if session_dir is not None:
             try:
                 sd = Path(session_dir)
-                missing = [n for n in ("summary.md", "economy.md", "manifest.json")
+                missing = [n for n in _owner_maintenance_required_artifacts()
                            if not (sd / n).is_file()]
                 if missing:
                     return (
@@ -488,12 +509,13 @@ def _owner_comparison_missing_closeout_terms(text: str) -> list[str]:
             )
         )
     )
-    checks = (
-        ("target", "target" in lowered or "current mo" in lowered),
-        ("matrix", has_matrix),
-        ("adoption", "adoption" in lowered or "adopt" in lowered),
-        ("reject", "reject" in lowered or "by-design" in lowered),
-    )
+    checks_by_term = {
+        "target": "target" in lowered or "current mo" in lowered,
+        "matrix": has_matrix,
+        "adoption": "adoption" in lowered or "adopt" in lowered,
+        "reject": "reject" in lowered or "by-design" in lowered,
+    }
+    checks = tuple((term, bool(checks_by_term.get(term))) for term in required_closeout_terms(OWNER_COMPARISON_PROTOCOL))
     return [name for name, present in checks if not present]
 
 

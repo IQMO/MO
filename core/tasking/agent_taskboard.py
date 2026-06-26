@@ -56,12 +56,31 @@ class AgentTaskBoard:
         # rejection of empty rows loops; see the contract-gate history). Only backfills
         # when the active row has none of its own AND the session gathered real evidence.
         active_row = tasks[idx]
+        active_gate = str(getattr(active_row, "completion_gate", "") or "").lower().strip()
+        active_kind = str(getattr(active_row, "kind", "") or "").lower().strip()
+        if active_gate == "final" or active_kind == "report":
+            if monitor:
+                monitor.emit("board_complete_rejected", {
+                    "task": active,
+                    "tool": tool_name,
+                    "reason": "final_row_requires_final_answer",
+                })
+            return False
+
         row_has_real = any(not str(e).startswith("final:") for e in (active_row.evidence or []))
         if not row_has_real:
             carried = self._session_gathered_evidence(task_board)
-            task_board.complete(active, evidence=carried or None)
+            completed = task_board.complete(active, evidence=carried or None)
         else:
-            task_board.complete(active)
+            completed = task_board.complete(active)
+        if not completed:
+            if monitor:
+                monitor.emit("board_complete_rejected", {
+                    "task": active,
+                    "tool": tool_name,
+                    "reason": getattr(completed, "reason", "completion_rejected"),
+                })
+            return False
 
         # Activate next ready task
         next_id = None
@@ -204,14 +223,17 @@ class AgentTaskBoard:
             target = self._ensure_devmode_session_dir()
             if target is None:
                 return ""
+            from .devmode_manifest import SESSION_ARTIFACT_NAMES
+            required_files = ", ".join(
+                f"`{target / name}`" for name in SESSION_ARTIFACT_NAMES
+            )
             return (
                 "### OWNER_MAINTENANCE Runtime Output Directory\n"
                 "The runtime already created and owns this OWNER_MAINTENANCE session directory. "
                 "Write all session artifacts here and do not create another "
                 "`memory/devmode/<stamp>` folder.\n"
                 f"- active_session_dir: `{target}`\n"
-                f"- required closeout files: `{target / 'summary.md'}`, "
-                f"`{target / 'economy.md'}`, `{target / 'manifest.json'}`\n"
+                f"- required closeout files: {required_files}\n"
                 "If any older protocol text says to run mkdir or hand-roll a timestamp, "
                 "ignore that older text and use active_session_dir exactly."
             )
@@ -290,7 +312,9 @@ class AgentTaskBoard:
         task = task_board.task(active)
         if not self._final_should_complete_task(task):
             return False
-        task_board.complete(active, evidence="final:assistant_response")
+        completed = task_board.complete(active, evidence="final:assistant_response")
+        if not completed:
+            return False
         ready_id = task_board.first_ready_pending_id()
         if ready_id and task_board.dependencies_satisfied(ready_id):
             task_board.activate(ready_id)
@@ -587,6 +611,24 @@ class AgentTaskBoard:
                 new_text = re.sub(rf"\b\d+(?=[ \t]+(?:{phrase})\b)", v, new_text, flags=re.IGNORECASE)
                 # "<metric>: N" / "<metric> N"  e.g. "Provider requests: 74"
                 new_text = re.sub(rf"((?:{phrase})\b[: \t]+)\d+", rf"\g<1>{v}", new_text, flags=re.IGNORECASE)
+            tool_errors = int(summary.get("tool_errors", 0) or 0)
+            has_ledger = re.search(r"(?im)^#{1,6}\s*Tool Error Ledger\s*$", new_text)
+            is_devmode_summary = re.search(r"(?i)\b(?:OWNER_MAINTENANCE|DEVMODE\d*)\b", new_text)
+            if tool_errors > 0 and is_devmode_summary and not has_ledger:
+                tools = sorted(
+                    str(t).strip()
+                    for t in (summary.get("error_tools") or [])
+                    if str(t).strip()
+                )
+                tools_text = ", ".join(tools) if tools else "not recorded"
+                error_word = "error" if tool_errors == 1 else "errors"
+                new_text = (
+                    new_text.rstrip()
+                    + "\n\n## Tool Error Ledger\n"
+                    + f"- Tool errors: {tool_errors} {error_word} recorded by the runtime monitor.\n"
+                    + f"- Error tools: {tools_text}.\n"
+                    + "- Source: economy.md / manifest.json runtime truth.\n"
+                )
             if new_text != text:
                 atomic_write_text(summary_path, new_text, encoding="utf-8")
         except Exception:

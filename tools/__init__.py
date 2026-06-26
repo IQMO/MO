@@ -1,8 +1,9 @@
 """MO Agent — tool implementations and provider-facing definitions.
 
 Code-search and caller/callee tools expose MO's graph as first-class tools
-instead of shell one-liners. The full tool list is sent to the provider each
-turn, with sandbox gates enforced at dispatch time via core.sandbox.guard_tool_call().
+instead of shell one-liners. The agent keeps the full catalog locally and sends
+a small active subset to the provider; tool_search activates deferred schemas.
+Sandbox gates still enforce every dispatch via core.sandbox.guard_tool_call().
 """
 
 import os
@@ -77,6 +78,26 @@ def _iter_unskipped_files(root_path: Path):
 # ── Tool Definitions ───────────────────────────────────────────────
 
 TOOL_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "tool_search",
+            "description": "Search MO's local tool catalog and activate matching deferred tool schemas for the next provider request. Use this before calling tools that are not currently available, such as editing, shell/test execution, web, browser, desktop, or memory-recording tools.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Capability or exact tool name to search for, e.g. 'edit files', 'run tests', 'browser click', or 'shell'."},
+                    "tools": {
+                        "type": "array",
+                        "description": "Optional exact tool names to activate.",
+                        "items": {"type": "string"},
+                    },
+                    "max_results": {"type": "integer", "description": "Maximum result rows to return (default 8, max 20)."},
+                    "activate_limit": {"type": "integer", "description": "Maximum matching deferred tools to activate (default 4, max 8)."},
+                },
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -1172,6 +1193,20 @@ def execute_open_url(arguments: dict[str, Any]) -> str:
     return f"Requested to open {url}, but no default browser handler confirmed success."
 
 
+def execute_tool_search(arguments: dict[str, Any]) -> str:
+    """Fallback catalog search for non-Agent dispatch contexts.
+
+    Agent dispatch replaces this with a per-turn registry so activations affect
+    the next provider request.  This fallback still returns the same result shape
+    for tests, diagnostics, and standalone tool contexts.
+    """
+    try:
+        from core.tool_registry import DeferredToolRegistry
+        return DeferredToolRegistry(TOOL_DEFINITIONS).search(arguments or {})
+    except Exception as exc:
+        return f"Error running tool_search: {exc}"
+
+
 def execute_complete_task(arguments: dict[str, Any]) -> str:
     task_id = str(arguments.get("task_id", "") or "").strip()
     if task_id:
@@ -1273,6 +1308,7 @@ def execute_set_plan(arguments: dict[str, Any]) -> str:
 
 
 TOOL_EXECUTORS = {
+    "tool_search": execute_tool_search,
     "record_profile_fact": execute_record_profile_fact,
     "set_plan": execute_set_plan,
     "capture_screen": execute_capture_screen,

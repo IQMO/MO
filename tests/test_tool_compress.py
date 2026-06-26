@@ -507,8 +507,8 @@ def test_agent_counts_truncation_as_context_savings():
         def emit(self, event_type, payload):
             events.append((event_type, payload))
 
-    # Use a tool subject to the fallback cap (shell). Read-family tools (read_file,
-    # grep, find_files) are intentionally exempt — see _READ_FAMILY_TOOLS.
+    # Use a tool subject to the fallback cap (shell). Self-bounded file
+    # inspection tools are intentionally exempt by execution policy.
     result = agent._cap_tool_result_for_context("x" * 100, monitor=Monitor(), tool_name="shell")
 
     assert result.endswith("[...truncated...]")
@@ -534,6 +534,11 @@ def test_read_family_tools_exempt_from_result_cap():
     for tool in ("read_file", "grep", "find_files"):
         out = agent._cap_tool_result_for_context(big, tool_name=tool)
         assert out == big, f"{tool} output must not be capped"
+    # Parallel-prefetch eligibility is separate from result-cap exemption:
+    # git_status can prefetch, but oversized output is still capped.
+    capped_git = agent._cap_tool_result_for_context(big, tool_name="git_status")
+    assert capped_git.endswith("[...truncated...]")
+    assert len(capped_git) < len(big)
     # shell (unbounded external output) is still capped
     capped = agent._cap_tool_result_for_context(big, tool_name="shell")
     assert capped.endswith("[...truncated...]")

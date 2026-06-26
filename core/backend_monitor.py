@@ -449,7 +449,7 @@ def _monitor_surface_keys(payload: dict[str, Any], event: dict[str, Any]) -> set
 def format_economy_record(summary: dict[str, Any] | None = None) -> str:
     """Markdown economy block from `economy_summary()` — the canonical Gate 2f record."""
     s = summary or economy_summary()
-    return (
+    lines = [
         "### Economy Record (Gate 2f — runtime/monitor, authoritative)\n"
         f"- Source: {s.get('source')}\n"
         f"- Provider requests: {s.get('provider_requests', 0)} "
@@ -457,4 +457,11 @@ def format_economy_record(summary: dict[str, Any] | None = None) -> str:
         f"- Tool calls: {s.get('tool_calls', 0)} "
         f"(errors: {s.get('tool_errors', 0)}, sandbox-blocked: {s.get('sandbox_blocked', 0)})\n"
         f"- Compression events: {s.get('compression_events', 0)}\n"
-    )
+    ]
+    error_tools = [str(t).strip() for t in (s.get("error_tools") or []) if str(t).strip()]
+    blocked_tools = [str(t).strip() for t in (s.get("blocked_tools") or []) if str(t).strip()]
+    if error_tools:
+        lines.append(f"- Error tools: {', '.join(sorted(error_tools))}\n")
+    if blocked_tools:
+        lines.append(f"- Blocked tools: {', '.join(sorted(blocked_tools))}\n")
+    return "".join(lines)

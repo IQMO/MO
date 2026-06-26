@@ -58,6 +58,42 @@ def test_agent_blocks_raw_tool_payload_text_and_reasks():
     assert not any("old_text" in m.get("content", "") and "new_text" in m.get("content", "") for m in messages if m.get("role") == "assistant")
 
 
+def test_agent_blocks_repeated_identical_tool_batch_before_budget(tmp_path):
+    messages = []
+    agent = _minimal_agent(messages)
+    agent.max_provider_requests = 10
+    agent.max_tool_rounds = 10
+    agent.doom_loop_tool_batch_threshold = 3
+    agent.project_cwd = str(tmp_path)
+    agent.allowed_roots = [str(tmp_path)]
+    calls = {"dispatch": 0, "provider": 0}
+
+    def response():
+        calls["provider"] += 1
+        return SimpleNamespace(
+            content="",
+            tool_calls=[{
+                "id": f"call-{calls['provider']}",
+                "function": {
+                    "name": "read_file",
+                    "arguments": '{"path":"same.py"}',
+                },
+            }],
+            usage=None,
+            finish_reason="tool_calls",
+        )
+
+    agent._call_provider = lambda **_kw: response()
+    agent._dispatch_tool = lambda name, args: calls.__setitem__("dispatch", calls["dispatch"] + 1) or "same result"
+
+    result = agent.run_turn("keep inspecting")
+
+    assert result.startswith("[DOOM LOOP BLOCKED]")
+    assert calls["provider"] == 3
+    assert calls["dispatch"] == 2
+    assert calls["provider"] < agent.max_provider_requests
+
+
 def test_provider_retry_guidance_is_audited_for_raw_tool_payload(tmp_path, monkeypatch):
     from core.provider import provider_audit
 

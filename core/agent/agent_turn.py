@@ -92,9 +92,72 @@ from interface.task_board_view import render_plain
 _CONTINUE = object()
 
 # Maximum corrective re-prompts for owner-protocol terminal-stop gates and the
-# contract/self-protocol-truth gates. After the cap, allow the stop with a logged
-# disagreement note — must not loop to max_provider_requests.
+# contract/self-protocol-truth gates. Contract-gate exhaustion becomes a blocked
+# final answer instead of allowing an unresolved contradiction to close as clean.
 PROTOCOL_STOP_GATE_MAX = 2
+
+
+_CONTEXT_SOURCE_SPECS = (
+    ("coordination", "Active worker coordination warning", 1, "runtime coordination warning; avoid conflicting edits and verify current state", 1200),
+    ("datetime", "Current date", 1, "today's actual date; use it for recency/version reasoning, not a training cutoff", 80),
+    ("environment", "Active surface environment", 1, "current surface, OS, CWD, and shell; always verify live state", 300),
+    ("heartbeat", "Surface heartbeat continuity", 1, "surface continuity; re-check live state before claims", 900),
+    ("profile", "Current operator profile", 2, "profile guidance; current user request, system contract, and evidence requirements win", 3000),
+    ("ghost_proposal", "Ghost intent guardrails for this turn", 3, "scope guardrail only; not proof of completion", 1400),
+    ("work_pattern", "Active work pattern", 3, "process guidance for this turn; verify before claims", 1800),
+    ("skills", "Relevant MO skills", 3, "authored, promoted, and confirmed local skill guidance for this task; follow before acting and verify with tools", 2600),
+    ("conventions", "MO conventions for the code in scope", 2, "location-scoped rules/conventions for the files in scope this turn; follow where they apply, verify with tools", 2000),
+    ("workspace", "Workspace / worker awareness", 3, "coordination context only; not proof of code correctness", 1600),
+    ("project_context", "Project-local instructions (current working directory)", 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", 3200),
+    ("mo_control", "MO control workspace authority", 3, "active policy/orientation for cross-repo/server work; live checks still win", 2600),
+    ("self_capability", "MO self-capability preflight", 1, "hard gate for MO self/OWNER_MAINTENANCE work; inventory existing capabilities before edits/builds", 7200),
+    ("devmode_output", "OWNER_MAINTENANCE runtime-owned output directory", 1, "authoritative private artifact directory for this OWNER_MAINTENANCE run; never hand-roll a memory/devmode timestamp", 1200),
+    ("pending_interrupted", "Paused interrupted work", 3, "continuity context only; do not resume unless relevant to current request", 1100),
+    ("reasoning", "Runtime reasoning preference", 4, "runtime preference only; evidence and current task still win", 400),
+    ("memory", "Recalled past interactions", 5, "orientation only; not tool receipts or current proof", 2400),
+    ("code_graph", "Code map", 5, "orientation only; graph hints must be verified with files/tools/tests", 1800),
+)
+
+
+_CONTEXT_CHAR_FIELDS = {
+    "profile": "profile_chars",
+    "memory": "memory_chars",
+    "ghost_proposal": "proposal_chars",
+    "coordination": "coordination_chars",
+    "work_pattern": "work_pattern_chars",
+    "skills": "skills_chars",
+    "conventions": "conventions_chars",
+    "workspace": "workspace_chars",
+    "project_context": "project_context_chars",
+    "mo_control": "mo_control_chars",
+    "self_capability": "self_capability_chars",
+    "devmode_output": "devmode_output_chars",
+    "code_graph": "code_graph_chars",
+    "pending_interrupted": "pending_interrupted_chars",
+    "heartbeat": "heartbeat_chars",
+    "environment": "environment_chars",
+    "datetime": "datetime_chars",
+    "reasoning": "reasoning_chars",
+}
+
+
+def _context_sources(parts: dict[str, str]) -> tuple[ContextSource, ...]:
+    return tuple(
+        ContextSource(key, title, value, priority, guidance, max_chars=max_chars)
+        for key, title, priority, guidance, max_chars in _CONTEXT_SOURCE_SPECS
+        if (value := parts.get(key, ""))
+    )
+
+
+def _context_flags(parts: dict[str, str]) -> dict[str, bool]:
+    flags = {key: bool(parts.get(key, "")) for key, *_ in _CONTEXT_SOURCE_SPECS}
+    flags["workflow_learning"] = False
+    flags["proactive_learning"] = False
+    return flags
+
+
+def _context_char_counts(parts: dict[str, str]) -> dict[str, int]:
+    return {field: len(parts.get(key, "")) for key, field in _CONTEXT_CHAR_FIELDS.items()}
 
 
 class _GateContext:
@@ -141,6 +204,15 @@ def _pipeline_no_tool_evidence(agent, ctx):
     return None
 
 
+def _protocol_stop_blocked(label: str, ctx) -> None:
+    ctx.content = (
+        f"[{label} BLOCKED] Cannot honestly close this protocol turn because the "
+        "protocol stop gate still rejects the final report after bounded recovery. "
+        "Fix the missing closeout evidence or terminal marker and rerun verification."
+    )
+    ctx.final_text = ""
+
+
 def _pipeline_owner_interface_audit_stop(agent, ctx):
     if not owner_interface_audit_final_allows_stop(ctx.user_input, ctx.content):
         if ctx.protocol_stop_gate_continuations.get("owner_interface_audit", 0) < PROTOCOL_STOP_GATE_MAX:
@@ -150,7 +222,8 @@ def _pipeline_owner_interface_audit_stop(agent, ctx):
             agent.session.add_assistant(owner_interface_audit_continuation_instruction(ctx.user_input, ctx.content))
             return _CONTINUE
         if ctx.on_activity:
-            ctx.on_activity("OWNER_INTERFACE_AUDIT stop-gate disagreement — allowing stop after cap")
+            ctx.on_activity("OWNER_INTERFACE_AUDIT stop-gate blocked after cap")
+        _protocol_stop_blocked("OWNER_INTERFACE_AUDIT", ctx)
     return None
 
 
@@ -163,7 +236,8 @@ def _pipeline_owner_comparison_stop(agent, ctx):
             agent.session.add_assistant(owner_comparison_continuation_instruction(ctx.user_input, ctx.content))
             return _CONTINUE
         if ctx.on_activity:
-            ctx.on_activity("OWNER_COMPARISON stop-gate disagreement — allowing stop after cap")
+            ctx.on_activity("OWNER_COMPARISON stop-gate blocked after cap")
+        _protocol_stop_blocked("OWNER_COMPARISON", ctx)
     return None
 
 
@@ -196,7 +270,8 @@ def _pipeline_owner_maintenance_stop(agent, ctx):
             ))
             return _CONTINUE
         if ctx.on_activity:
-            ctx.on_activity("OWNER_MAINTENANCE stop-gate disagreement — allowing stop after cap")
+            ctx.on_activity("OWNER_MAINTENANCE stop-gate blocked after cap")
+        _protocol_stop_blocked("OWNER_MAINTENANCE", ctx)
     return None
 
 
@@ -224,14 +299,20 @@ def _pipeline_board_finalization(agent, ctx):
 
 
 def _pipeline_contract_gate(agent, ctx):
-    _contract_instr, new_count = run_contract_gate(
+    result = run_contract_gate(
         agent, ctx.task_board, ctx.user_input, ctx.turn_initial_completed_ids,
         count=ctx.contract_gate_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
         on_activity=ctx.on_activity,
     )
-    ctx.contract_gate_continuations = new_count
-    if _contract_instr:
-        agent.session.add_assistant(_contract_instr)
+    ctx.contract_gate_continuations = result.count
+    if result.blocked_text:
+        ctx.final_text = result.blocked_text
+        if ctx.task_board:
+            record_snapshot(ctx.task_board, "blocked", state="blocked")
+            _emit_task_board_update(ctx.task_board, update="blocked", on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
+        return None
+    if result.instruction:
+        agent.session.add_assistant(result.instruction)
         return _CONTINUE
     return None
 
@@ -245,14 +326,20 @@ def _pipeline_consistency_boundary(agent, ctx):
 
 
 def _pipeline_self_protocol_truth(agent, ctx):
-    _sp_instr, new_count = run_self_protocol_truth_gate(
+    result = run_self_protocol_truth_gate(
         agent, ctx.user_input, ctx.final_text, ctx.boundary_report,
         count=ctx.self_protocol_truth_continuations, max_continuations=PROTOCOL_STOP_GATE_MAX,
         on_activity=ctx.on_activity,
     )
-    ctx.self_protocol_truth_continuations = new_count
-    if _sp_instr:
-        agent.session.add_assistant(_sp_instr)
+    ctx.self_protocol_truth_continuations = result.count
+    if result.blocked_text:
+        ctx.final_text = result.blocked_text
+        if ctx.task_board:
+            record_snapshot(ctx.task_board, "blocked", state="blocked")
+            _emit_task_board_update(ctx.task_board, update="blocked", on_board_update=ctx.on_board_update, on_board_event=ctx.on_board_event)
+        return None
+    if result.instruction:
+        agent.session.add_assistant(result.instruction)
         return _CONTINUE
     return None
 
@@ -432,6 +519,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         if start.get("final_text") is not None:
             return str(start.get("final_text") or "")
         pre_handoff = bool(start.get("pre_handoff"))
+        reset_deferred_tools = getattr(self, "_reset_deferred_tools_for_turn", None)
+        if callable(reset_deferred_tools):
+            reset_deferred_tools()
 
         # B2. PRT Feedback Learning Hook
         if hasattr(self, "_prt_last_report") and self._prt_last_report:
@@ -460,6 +550,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         raw_tool_payload_fallback_attempted = False
         empty_response_fallback_attempted = False
         context_overflow_retry_attempted = False
+        last_tool_batch_signature = ""
+        repeated_tool_batch_count = 0
         final_gates_fired: set = set()  # once-per-turn guards for final-phase gates
         self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
         contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
@@ -534,14 +626,32 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             )
             if monitor:
                 request_messages = self.session.get_messages(extra_context=extra_context, consume_handoff=False)
-                monitor.emit("provider_request", {
+                provider_tools = (
+                    self._provider_tool_definitions()
+                    if hasattr(self, "_provider_tool_definitions")
+                    else list(getattr(self, "tool_definitions", []) or [])
+                )
+                registry_snapshot = (
+                    self._deferred_tool_registry_snapshot()
+                    if hasattr(self, "_deferred_tool_registry_snapshot")
+                    else {}
+                )
+                payload = {
                     "request": provider_requests,
                     "provider": self.provider_name,
                     "model": self.model,
                     "messages": len(self.session.messages),
-                    "tools": len(self.tool_definitions),
+                    "tools": len(provider_tools),
                     "preview": preview_provider_messages(request_messages),
-                })
+                }
+                if registry_snapshot:
+                    payload.update({
+                        "tool_catalog_total": registry_snapshot.get("total", 0),
+                        "tool_catalog_active": registry_snapshot.get("active", 0),
+                        "tool_catalog_active_tools": registry_snapshot.get("active_tools", []),
+                        "tool_catalog_activated_tools": registry_snapshot.get("activated_tools", []),
+                    })
+                monitor.emit("provider_request", payload)
 
             def checked_on_token(token: str):
                 if getattr(cancel_event, "is_set", lambda: False)():
@@ -758,6 +868,36 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                             monitor.emit("security_check", sec_result.as_dict())
                     return final_text
 
+                batch_signature = self._tool_call_batch_signature(tool_calls_data)
+                if batch_signature and batch_signature == last_tool_batch_signature:
+                    repeated_tool_batch_count += 1
+                else:
+                    last_tool_batch_signature = batch_signature
+                    repeated_tool_batch_count = 1 if batch_signature else 0
+                doom_threshold = max(2, int(getattr(self, "doom_loop_tool_batch_threshold", 3) or 3))
+                if batch_signature and repeated_tool_batch_count >= doom_threshold:
+                    if monitor:
+                        diag = self._build_turn_limit_diagnostics(
+                            tool_rounds, provider_requests, tool_call_counts,
+                            turn_files_modified, turn_provider_errors, turn_provider_fallbacks,
+                        )
+                        diag["repeat_count"] = repeated_tool_batch_count
+                        diag["tool_batch_size"] = len(tool_calls_data)
+                        monitor.emit("turn_limit", {
+                            "kind": "tool_doom_loop",
+                            "limit": doom_threshold,
+                            "diagnostics": diag,
+                        })
+                    final_text = self._doom_loop_block_text(tool_calls_data, repeated_tool_batch_count)
+                    notes = self._record_turn_memory_and_learning(user_input, final_text)
+                    final_text = self._append_after_turn_notes(final_text, notes)
+                    self.session.add_assistant(final_text)
+                    if turn_modified_files and monitor:
+                        sec_result = run_turn_security_check(turn_modified_files)
+                        if sec_result.findings:
+                            monitor.emit("security_check", sec_result.as_dict())
+                    return final_text
+
                 # Surface interim prose that accompanies tool calls. Providers
                 # often answer the user's question in prose AND call a tool in
                 # the same response. That prose used to reach only the livelog
@@ -787,10 +927,10 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     msg["reasoning_content"] = reasoning
                 self.session.add_message(msg)
 
-                # Pre-execute independent read-only calls concurrently (no-op
-                # unless this response carried >=2 reads). The loop below stays
-                # the single authority for gating/board/audit/ordering.
-                prefetched_reads = self._prefetch_read_family_results(tool_calls_data, user_input)
+                # Pre-execute independent read-only inspection calls concurrently.
+                # The loop below stays the single authority for gating/board/
+                # audit/ordering; this only removes avoidable wall-clock waits.
+                prefetched_results = self._prefetch_read_family_results(tool_calls_data, user_input)
 
                 # Dispatch each tool call through the sandbox
                 for idx, tc_data in enumerate(tool_calls_data):
@@ -836,9 +976,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         # blocked tool attempts do not appear as active work.
                         if not task_board and on_first_tool:
                             task_board = _call_on_first_tool(on_first_tool, name, arguments)
-                        # Reuse the concurrently-prefetched read result when present
+                        # Reuse the concurrently-prefetched inspection result when present
                         # (gate already passed identically here); else execute inline.
-                        result = prefetched_reads[idx] if idx in prefetched_reads else self._dispatch_tool(name, arguments)
+                        result = prefetched_results[idx] if idx in prefetched_results else self._dispatch_tool(name, arguments)
                         # Computer-use vision: lift a capture_screen screenshot out of
                         # the temp file into an image part for the model to SEE.
                         if name == "capture_screen":
@@ -1266,86 +1406,56 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 )
         except Exception:
             traceback.print_exc()
-        self._last_turn_context_flags = {
-            "profile": bool(profile_context),
-            "memory": bool(recalled_context),
-            "ghost_proposal": bool(proposal_context),
-            "coordination": bool(coordination_context),
-            "work_pattern": bool(work_pattern_context),
-            "workflow_learning": False,
-            "proactive_learning": False,
-            "skills": bool(skills_context),
-            "conventions": bool(conventions_context),
-            "workspace": bool(workspace_context),
-            "project_context": bool(project_context),
-            "mo_control": bool(mo_control_context),
-            "self_capability": bool(self_capability_context),
-            "devmode_output": bool(devmode_output_context),
-            "code_graph": bool(code_graph_context),
-            "pending_interrupted": bool(pending_interrupted_context),
-            "heartbeat": bool(heartbeat_context),
-            "environment": bool(environment_context),
-            "reasoning": bool(reasoning_context),
+        context_parts = {
+            "profile": profile_context,
+            "memory": recalled_context,
+            "ghost_proposal": proposal_context,
+            "coordination": coordination_context,
+            "work_pattern": work_pattern_context,
+            "skills": skills_context,
+            "conventions": conventions_context,
+            "workspace": workspace_context,
+            "project_context": project_context,
+            "mo_control": mo_control_context,
+            "self_capability": self_capability_context,
+            "devmode_output": devmode_output_context,
+            "code_graph": code_graph_context,
+            "pending_interrupted": pending_interrupted_context,
+            "heartbeat": heartbeat_context,
+            "environment": environment_context,
+            "datetime": datetime_context,
+            "reasoning": reasoning_context,
         }
+        self._last_turn_context_flags = _context_flags(context_parts)
         self._pending_turn_proposal = ""
-        bridge = build_active_context_bridge(
-            user_input,
-            (
-                ContextSource("coordination", "Active worker coordination warning", coordination_context, 1, "runtime coordination warning; avoid conflicting edits and verify current state", max_chars=1200),
-                ContextSource("datetime", "Current date", datetime_context, 1, "today's actual date; use it for recency/version reasoning, not a training cutoff", max_chars=80),
-                ContextSource("environment", "Active surface environment", environment_context, 1, "current surface, OS, CWD, and shell; always verify live state", max_chars=300),
-                ContextSource("heartbeat", "Surface heartbeat continuity", heartbeat_context, 1, "surface continuity; re-check live state before claims", max_chars=900),
-                ContextSource("profile", "Current operator profile", profile_context, 2, "profile guidance; current user request, system contract, and evidence requirements win", max_chars=3000),
-                ContextSource("ghost_proposal", "Ghost intent guardrails for this turn", proposal_context, 3, "scope guardrail only; not proof of completion", max_chars=1400),
-                ContextSource("work_pattern", "Active work pattern", work_pattern_context, 3, "process guidance for this turn; verify before claims", max_chars=1800),
-                ContextSource("skills", "Relevant MO skills", skills_context, 3, "authored, promoted, and confirmed local skill guidance for this task; follow before acting and verify with tools", max_chars=2600),
-                ContextSource("conventions", "MO conventions for the code in scope", conventions_context, 2, "location-scoped rules/conventions for the files in scope this turn; follow where they apply, verify with tools", max_chars=2000),
-                ContextSource("workspace", "Workspace / worker awareness", workspace_context, 3, "coordination context only; not proof of code correctness", max_chars=1600),
-                ContextSource("project_context", "Project-local instructions (current working directory)", project_context, 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", max_chars=3200),
-                ContextSource("mo_control", "MO control workspace authority", mo_control_context, 3, "active policy/orientation for cross-repo/server work; live checks still win", max_chars=2600),
-                ContextSource("self_capability", "MO self-capability preflight", self_capability_context, 1, "hard gate for MO self/OWNER_MAINTENANCE work; inventory existing capabilities before edits/builds", max_chars=7200),
-                ContextSource("devmode_output", "OWNER_MAINTENANCE runtime-owned output directory", devmode_output_context, 1, "authoritative private artifact directory for this OWNER_MAINTENANCE run; never hand-roll a memory/devmode timestamp", max_chars=1200),
-                ContextSource("pending_interrupted", "Paused interrupted work", pending_interrupted_context, 3, "continuity context only; do not resume unless relevant to current request", max_chars=1100),
-                ContextSource("reasoning", "Runtime reasoning preference", reasoning_context, 4, "runtime preference only; evidence and current task still win", max_chars=400),
-                ContextSource("memory", "Recalled past interactions", recalled_context, 5, "orientation only; not tool receipts or current proof", max_chars=2400),
-                ContextSource("code_graph", "Code map", code_graph_context, 5, "orientation only; graph hints must be verified with files/tools/tests", max_chars=1800),
-            ),
-        )
+        bridge = build_active_context_bridge(user_input, _context_sources(context_parts))
         extra_context = bridge.text
         monitor = get_monitor()
         if monitor:
-            monitor.emit("turn_context", {
+            payload = {
                 "flags": dict(self._last_turn_context_flags),
                 "extra_context_chars": len(extra_context),
                 "context_bridge_chars": len(extra_context),
                 "context_bridge_sources": list(bridge.included_keys),
-                "profile_chars": len(profile_context),
-                "memory_chars": len(recalled_context),
-                "proposal_chars": len(proposal_context),
-                "coordination_chars": len(coordination_context),
-                "work_pattern_chars": len(work_pattern_context),
-                "skills_chars": len(skills_context),
-                "workspace_chars": len(workspace_context),
-                "project_context_chars": len(project_context),
-                "mo_control_chars": len(mo_control_context),
-                "self_capability_chars": len(self_capability_context),
-                "code_graph_chars": len(code_graph_context),
-                "pending_interrupted_chars": len(pending_interrupted_context),
-                "heartbeat_chars": len(heartbeat_context),
-                "environment_chars": len(environment_context),
-                "reasoning_chars": len(reasoning_context),
-            })
+            }
+            payload.update(_context_char_counts(context_parts))
+            monitor.emit("turn_context", payload)
         return extra_context
 
     def _call_provider(self, on_token: object = None, extra_context: str | None = None):
-        """Call the active provider with current session messages and full tools."""
+        """Call the active provider with current session messages and active tools."""
         messages = self.session.get_messages(extra_context=extra_context, consume_handoff=False)
         handoff_seed = str(getattr(self.session, "_handoff_context", "") or "")
         p = self.active_provider
+        provider_tools = (
+            self._provider_tool_definitions()
+            if hasattr(self, "_provider_tool_definitions")
+            else list(getattr(self, "tool_definitions", []) or [])
+        )
 
         response = p.complete(
             messages=messages,
-            tools=self.tool_definitions,
+            tools=provider_tools,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             on_token=on_token,

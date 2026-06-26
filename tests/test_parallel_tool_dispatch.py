@@ -1,4 +1,4 @@
-"""A1 — independent read-family tool calls execute concurrently before the
+"""A1 — independent inspection tool calls execute concurrently before the
 serial dispatch loop, while gating/ordering stay the loop's authority.
 
 Verifies: real concurrency (barrier), index→result mapping, <2-read serial
@@ -63,6 +63,32 @@ def test_prefetch_preserves_index_mapping_with_interleaved_non_reads():
     out = a._prefetch_read_family_results(tcs, "mixed")
     # Only the read indices are prefetched, mapped to their original positions.
     assert out == {0: "R:a", 2: "R:c"}
+
+
+def test_prefetch_policy_includes_graph_git_and_project_inspection_tools():
+    def dispatch(name, args):
+        return f"R:{name}:{args['p']}"
+
+    a = _agent(dispatch)
+    tcs = [
+        _tc(0, "git_status", p="repo"),
+        _tc(1, "project_bridge", p="agents"),
+        _tc(2, "code_search", p="graph"),
+        _tc(3, "find_callers", p="callers"),
+        _tc(4, "find_callees", p="callees"),
+        _tc(5, "tool_search", query="edit"),  # mutates activation state, never prefetch
+        _tc(6, "edit_file", path="x"),        # mutating, never prefetch
+    ]
+
+    out = a._prefetch_read_family_results(tcs, "inspect several surfaces")
+
+    assert out == {
+        0: "R:git_status:repo",
+        1: "R:project_bridge:agents",
+        2: "R:code_search:graph",
+        3: "R:find_callers:callers",
+        4: "R:find_callees:callees",
+    }
 
 
 def test_single_read_falls_back_to_serial():

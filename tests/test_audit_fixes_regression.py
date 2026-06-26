@@ -114,8 +114,8 @@ class TestTaskboardEvidence:
         assert b.tasks[0].status == "completed"
 
     def test_closing_gate_audits_completions_across_rounds(self):
-        # H1: the turn-start snapshot makes the closing gate catch an evidence-gated
-        # row completed in an EARLIER round with no evidence (the prior scoping hole).
+        # H1: direct completion now rejects evidence-free rows at the mutation
+        # boundary, while the closing gate still catches corrupted/legacy state.
         from core.tasking.contract import enforce_contract_gate
         b = TaskBoard()
         b.set_rows("w", [
@@ -123,7 +123,10 @@ class TestTaskboardEvidence:
             {"id": "2", "title": "report", "kind": "report", "status": "pending"},
         ])
         turn_initial = {t.id for t in b.tasks if t.status == "completed"}  # empty at turn start
-        b.complete("1")  # round 1: closed with no evidence
+        result = b.complete("1")
+        assert result.ok is False
+        assert result.reason == "missing_required_evidence"
+        b.task("1").status = "completed"  # simulate persisted/corrupted old state
         b.complete("2", evidence="final: summary")  # later round closes the board
         just = {t.id for t in b.tasks if t.status == "completed"} - turn_initial
         ok, reasons, _ = enforce_contract_gate(b, persisted_tasks=None, board_closing=True, task_ids=just)

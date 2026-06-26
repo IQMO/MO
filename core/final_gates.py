@@ -36,6 +36,32 @@ from .self_maintenance.owner_integrity_audit_ground_truth import owner_integrity
 from .tasking.contract import enforce_contract_gate, load_persisted_tasks_for_contract
 
 
+@dataclass
+class ContractGateResult:
+    """Result from the closing-board contract gate."""
+
+    instruction: str | None
+    count: int
+    blocked_text: str | None = None
+
+    @property
+    def blocked(self) -> bool:
+        return bool(self.blocked_text)
+
+
+@dataclass
+class SelfProtocolTruthGateResult:
+    """Result from the self-protocol completion-truth gate."""
+
+    instruction: str | None
+    count: int
+    blocked_text: str | None = None
+
+    @property
+    def blocked(self) -> bool:
+        return bool(self.blocked_text)
+
+
 _TOOL_CALL_CLAIM_RE = re.compile(
     r"\b(?:tool[- ]?calls?(?:\s+count)?\s*[:=]\s*(\d+)|(\d+)\s+tool calls?)\b",
     re.IGNORECASE,
@@ -338,24 +364,24 @@ def run_contract_gate(
     count: int,
     max_continuations: int,
     on_activity: Callable[[str], None] | None = None,
-) -> tuple[str | None, int]:
-    """Return ``(instruction, updated_count)`` for the closing-board contract gate.
+) -> ContractGateResult:
+    """Return the closing-board contract gate result.
 
     ``instruction`` is a corrective re-prompt when a board with no open rows fails the
-    contract gate (closed rows lack evidence), else None. Migrated verbatim from
-    ``run_turn``'s inline block, preserving exactly: the board-closing condition
+    contract gate (closed rows lack evidence), else None. ``blocked_text`` is a terminal
+    blocked answer when the bounded continuation cap is exhausted and the contradiction
+    still remains. The gate preserves the board-closing condition
     (tasks present AND ``open_count() == 0``); the OWNER_MAINTENANCE/OWNER_INTERFACE_AUDIT *whole-board*
     enforcement vs the normal *turn-scoped* (``task_ids`` = rows completed THIS turn)
     branch; the ``enforce_contract_gate`` call; the counter bounded by
-    ``max_continuations``; and the disagreement-after-cap behavior (once the cap is hit
-    it logs and allows the close, returning None).
+    ``max_continuations``; and the disagreement-after-cap behavior.
 
     The counter is threaded through (``count`` in, updated count out) instead of held
     here, so it stays a ``run_turn`` local and this gate stays decoupled from the other
     counter-bearing gates.
     """
     if not (task_board and task_board.tasks and task_board.open_count() == 0):
-        return None, count
+        return ContractGateResult(None, count)
     persisted = load_persisted_tasks_for_contract(task_board)
     if is_owner_maintenance_activation(user_input) or is_owner_interface_audit_activation(user_input):
         contract_task_ids = None  # enforce the whole board
@@ -366,14 +392,26 @@ def run_contract_gate(
         task_board, persisted_tasks=persisted, board_closing=True, task_ids=contract_task_ids,
     )
     if contract_ok:
-        return None, count
+        return ContractGateResult(None, count)
     if count < max_continuations:
         if on_activity:
             on_activity(f"contract gate blocked: {'; '.join(contract_reasons[:3])}")
-        return contract_instruction, count + 1
+        return ContractGateResult(contract_instruction, count + 1)
+    blocked_text = _contract_gate_blocked_text(contract_reasons)
     if on_activity:
-        on_activity("contract gate disagreement — allowing close after cap")
-    return None, count
+        on_activity(f"contract gate blocked after cap: {'; '.join(contract_reasons[:3])}")
+    return ContractGateResult(None, count, blocked_text)
+
+
+def _contract_gate_blocked_text(reasons: list[str]) -> str:
+    shown = "; ".join(str(reason) for reason in (reasons or [])[:5] if str(reason or "").strip())
+    if not shown:
+        shown = "taskboard contract failed"
+    return (
+        "[TASKBOARD CONTRACT BLOCKED] Cannot honestly close this turn because the "
+        f"taskboard contract still fails after bounded recovery: {shown}. "
+        "Fix the task evidence/state and rerun verification."
+    )
 
 
 def run_self_protocol_truth_gate(
@@ -385,23 +423,31 @@ def run_self_protocol_truth_gate(
     count: int,
     max_continuations: int,
     on_activity: Callable[[str], None] | None = None,
-) -> tuple[str | None, int]:
-    """Return ``(instruction, updated_count)`` for the self-protocol completion-truth gate.
+) -> SelfProtocolTruthGateResult:
+    """Return the self-protocol completion-truth gate result.
 
     Forces a continuation when an owner-protocol turn (OWNER_MAINTENANCE/OWNER_COMPARISON/OWNER_INTERFACE_AUDIT) emits its
     ``[…COMPLETE]`` marker while the consistency boundary still reports a task-truth
-    conflict. Migrated verbatim from ``run_turn``'s inline block, same position (after the
-    contract gate, before done-claim). Counter-bounded by ``max_continuations``; the count
-    check **short-circuits** the boundary check exactly as the original
-    ``count < MAX and requires(...)`` — when capped, the boundary predicate is NOT called
-    and the gate falls through (returns ``(None, count)``). The instruction comes from the
+    conflict. Counter-bounded by ``max_continuations``; when capped, a conflict becomes a
+    blocked terminal result instead of falling through as a clean close. The instruction comes from the
     agent's protocol-specific dispatcher; the counter is threaded through, decoupled from
     the contract gate's counter.
     """
+    requires = agent._self_protocol_completion_boundary_requires_continuation(user_input, final_text, boundary_report)
+    if not requires:
+        return SelfProtocolTruthGateResult(None, count)
     if count >= max_continuations:
-        return None, count
-    if not agent._self_protocol_completion_boundary_requires_continuation(user_input, final_text, boundary_report):
-        return None, count
+        if on_activity:
+            on_activity("self protocol truth blocked after cap")
+        return SelfProtocolTruthGateResult(None, count, _self_protocol_truth_blocked_text())
     if on_activity:
         on_activity("self protocol: completion conflicted with open work - continuing...")
-    return agent._self_protocol_task_truth_continuation_instruction(user_input), count + 1
+    return SelfProtocolTruthGateResult(agent._self_protocol_task_truth_continuation_instruction(user_input), count + 1)
+
+
+def _self_protocol_truth_blocked_text() -> str:
+    return (
+        "[SELF PROTOCOL TRUTH BLOCKED] Cannot honestly close this self-protocol turn "
+        "because the completion marker still conflicts with task truth after bounded "
+        "recovery. Fix the open-work/evidence contradiction and rerun verification."
+    )

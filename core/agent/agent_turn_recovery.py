@@ -95,6 +95,42 @@ class AgentTurnRecoveryMixin:
         )
 
     @staticmethod
+    def _tool_call_batch_signature(tool_calls_data: list[dict]) -> str:
+        rows: list[dict[str, Any]] = []
+        for tc_data in tool_calls_data or []:
+            fn = tc_data.get("function") if isinstance(tc_data, dict) else {}
+            if not isinstance(fn, dict):
+                fn = {}
+            name = str(fn.get("name") or "").strip()
+            raw_args = str(fn.get("arguments") or "{}")
+            try:
+                parsed_args = json.loads(raw_args or "{}")
+            except json.JSONDecodeError:
+                parsed_args = raw_args
+            rows.append({"name": name, "arguments": parsed_args})
+        if not rows:
+            return ""
+        return json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+    @staticmethod
+    def _doom_loop_block_text(tool_calls_data: list[dict], repeat_count: int) -> str:
+        names: list[str] = []
+        for tc_data in tool_calls_data or []:
+            fn = tc_data.get("function") if isinstance(tc_data, dict) else {}
+            if not isinstance(fn, dict):
+                fn = {}
+            name = str(fn.get("name") or "tool").strip() or "tool"
+            if name not in names:
+                names.append(name)
+        tool_list = ", ".join(names) if names else "tool call"
+        return (
+            "[DOOM LOOP BLOCKED] The provider requested the exact same tool batch "
+            f"{repeat_count} times in a row ({tool_list}). I stopped before burning the "
+            "turn budget. Change approach, use the evidence already returned, or ask for "
+            "a smaller next step."
+        )
+
+    @staticmethod
     def _build_turn_limit_diagnostics(
         tool_rounds: int,
         provider_requests: int,

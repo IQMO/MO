@@ -368,23 +368,27 @@ def test_contract_gate_silent_when_board_not_closing(monkeypatch):
     _patch_contract(monkeypatch, (False, ["r"], "FIX"))
     # open rows remain -> not a closing board -> no enforcement, count untouched.
     board = _Board([_Task("1", "active")], open_count=1)
-    assert run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2) == (None, 0)
+    result = run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == (None, 0, None)
     # empty / no board -> silent too.
-    assert run_contract_gate(object(), None, "do x", set(), count=0, max_continuations=2) == (None, 0)
+    result = run_contract_gate(object(), None, "do x", set(), count=0, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == (None, 0, None)
 
 
 def test_contract_gate_passes_when_contract_ok(monkeypatch):
     _patch_contract(monkeypatch, (True, [], ""))
     board = _Board([_Task("1", "completed")], open_count=0)
-    assert run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2) == (None, 0)
+    result = run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == (None, 0, None)
 
 
 def test_contract_gate_fires_and_increments(monkeypatch):
     _patch_contract(monkeypatch, (False, ["row 1 lacks evidence"], "CLOSE-WITH-EVIDENCE"))
     board = _Board([_Task("1", "completed")], open_count=0)
-    out, count = run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2)
-    assert out == "CLOSE-WITH-EVIDENCE"
-    assert count == 1
+    result = run_contract_gate(object(), board, "do x", set(), count=0, max_continuations=2)
+    assert result.instruction == "CLOSE-WITH-EVIDENCE"
+    assert result.count == 1
+    assert result.blocked_text is None
 
 
 def test_contract_gate_counter_bounds_and_does_not_loop(monkeypatch):
@@ -392,13 +396,18 @@ def test_contract_gate_counter_bounds_and_does_not_loop(monkeypatch):
     board = _Board([_Task("1", "completed")], open_count=0)
     count = 0
     # Fires while count < max (2): 0 -> 1 -> 2.
-    out, count = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
-    assert (out, count) == ("FIX", 1)
-    out, count = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
-    assert (out, count) == ("FIX", 2)
-    # At the cap: disagreement, allow close (None), count unchanged -> no infinite loop.
-    out, count = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
-    assert (out, count) == (None, 2)
+    result = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == ("FIX", 1, None)
+    count = result.count
+    result = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == ("FIX", 2, None)
+    count = result.count
+    # At the cap: disagreement becomes a terminal blocked result, not a clean close.
+    result = run_contract_gate(object(), board, "do x", set(), count=count, max_continuations=2)
+    assert result.instruction is None
+    assert result.count == 2
+    assert result.blocked_text.startswith("[TASKBOARD CONTRACT BLOCKED]")
+    assert "r" in result.blocked_text
 
 
 def test_contract_gate_normal_turn_is_turn_scoped(monkeypatch):
@@ -434,41 +443,48 @@ def _sp_agent(requires, instruction="SP-INSTRUCTION", *, calls=None):
 
 
 def test_self_protocol_gate_silent_when_no_conflict():
-    out, count = run_self_protocol_truth_gate(_sp_agent(False), "u", "t", object(), count=0, max_continuations=2)
-    assert (out, count) == (None, 0)
+    result = run_self_protocol_truth_gate(_sp_agent(False), "u", "t", object(), count=0, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == (None, 0, None)
 
 
 def test_self_protocol_gate_fires_and_increments():
-    out, count = run_self_protocol_truth_gate(_sp_agent(True, "DO-TASK-TRUTH"), "u", "t", object(), count=0, max_continuations=2)
-    assert out == "DO-TASK-TRUTH"
-    assert count == 1
+    result = run_self_protocol_truth_gate(_sp_agent(True, "DO-TASK-TRUTH"), "u", "t", object(), count=0, max_continuations=2)
+    assert result.instruction == "DO-TASK-TRUTH"
+    assert result.count == 1
+    assert result.blocked_text is None
 
 
-def test_self_protocol_gate_caps_and_short_circuits_boundary_check():
-    # At the cap, the boundary predicate must NOT be called (mirrors the original
-    # `count < MAX and requires(...)` short-circuit) and the gate falls through.
+def test_self_protocol_gate_caps_to_blocked_when_conflict_remains():
     calls = []
-    out, count = run_self_protocol_truth_gate(_sp_agent(True, calls=calls), "u", "t", object(), count=2, max_continuations=2)
-    assert (out, count) == (None, 2)
-    assert calls == []
+    result = run_self_protocol_truth_gate(_sp_agent(True, calls=calls), "u", "t", object(), count=2, max_continuations=2)
+    assert result.instruction is None
+    assert result.count == 2
+    assert result.blocked_text.startswith("[SELF PROTOCOL TRUTH BLOCKED]")
+    assert len(calls) == 1
+    assert calls[0][0] == "u"
+    assert calls[0][1] == "t"
 
 
 def test_self_protocol_gate_counter_bounds_no_loop():
     agent = _sp_agent(True, "FIX")
     count = 0
-    out, count = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
-    assert (out, count) == ("FIX", 1)
-    out, count = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
-    assert (out, count) == ("FIX", 2)
-    out, count = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
-    assert (out, count) == (None, 2)  # capped -> no further fire -> no loop
+    result = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == ("FIX", 1, None)
+    count = result.count
+    result = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
+    assert (result.instruction, result.count, result.blocked_text) == ("FIX", 2, None)
+    count = result.count
+    result = run_self_protocol_truth_gate(agent, "u", "t", object(), count=count, max_continuations=2)
+    assert result.instruction is None
+    assert result.count == 2
+    assert result.blocked_text.startswith("[SELF PROTOCOL TRUTH BLOCKED]")
 
 
 def test_self_protocol_gate_instruction_comes_from_dispatcher():
     # The returned text is exactly what the agent's protocol dispatcher produced.
     agent = _sp_agent(True, "PROTOCOL-SPECIFIC-TEXT")
-    out, _ = run_self_protocol_truth_gate(agent, "start owner_maintenance", "t", object(), count=0, max_continuations=2)
-    assert out == "PROTOCOL-SPECIFIC-TEXT"
+    result = run_self_protocol_truth_gate(agent, "start owner_maintenance", "t", object(), count=0, max_continuations=2)
+    assert result.instruction == "PROTOCOL-SPECIFIC-TEXT"
 
 
 def test_self_protocol_gate_is_counter_based_independent_of_fired_set():
@@ -476,8 +492,10 @@ def test_self_protocol_gate_is_counter_based_independent_of_fired_set():
     # counter-threaded and never touches the shared `fired` set used by the
     # done-claim / claim gates.
     fired = set()
-    _, c = run_self_protocol_truth_gate(_sp_agent(True), "u", "t", object(), count=0, max_continuations=2)
-    _, c = run_self_protocol_truth_gate(_sp_agent(True), "u", "t", object(), count=c, max_continuations=2)
+    result = run_self_protocol_truth_gate(_sp_agent(True), "u", "t", object(), count=0, max_continuations=2)
+    c = result.count
+    result = run_self_protocol_truth_gate(_sp_agent(True), "u", "t", object(), count=c, max_continuations=2)
+    c = result.count
     assert fired == set()  # untouched by the counter-based gate
     # fired-based gates still operate independently afterward:
     assert run_done_claim_gate(_done_claim_agent(True), {}, fired=fired) == "DONE-CLAIM-INSTRUCTION"

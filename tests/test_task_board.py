@@ -73,18 +73,41 @@ def test_snapshot_dict_includes_contract_diagnostics():
 def test_board_complete_mutates_status_without_render_side_effects():
     """Completion changes row state; separate owners decide when to call it."""
     board = TaskBoard(tasks=[TaskItem("1", "Inspect files", "active")])
-    board.complete("1")
+    result = board.complete("1")
+    assert result.ok is True
     assert board.task("1").status == "completed"
 
 
 def test_board_complete_can_record_evidence_once():
     board = TaskBoard(tasks=[TaskItem("1", "Inspect files", "active")])
 
-    board.complete("1", evidence="read_file:core/task_board.py")
+    result = board.complete("1", evidence="read_file:core/task_board.py")
     board.append_evidence("1", "read_file:core/task_board.py")
 
+    assert result.ok is True
     assert board.task("1").status == "completed"
     assert board.task("1").evidence == ["read_file:core/task_board.py"]
+
+
+def test_board_complete_rejects_evidence_required_task_without_evidence():
+    board = TaskBoard(tasks=[TaskItem("1", "Inspect files", "active", kind="inspect", completion_gate="tool")])
+
+    result = board.complete("1")
+
+    assert result.ok is False
+    assert result.reason == "missing_required_evidence"
+    assert board.task("1").status == "active"
+
+
+def test_board_complete_rejects_final_only_evidence_for_tool_gated_task():
+    board = TaskBoard(tasks=[TaskItem("1", "Verify fix", "active", kind="verify", completion_gate="verification")])
+
+    result = board.complete("1", evidence="final:assistant_response")
+
+    assert result.ok is False
+    assert result.reason == "missing_required_evidence"
+    assert board.task("1").status == "active"
+    assert board.task("1").evidence == ["final:assistant_response"]
 
 
 def test_board_append_evidence_returns_false_for_unknown_task():

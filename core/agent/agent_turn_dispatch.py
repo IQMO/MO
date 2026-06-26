@@ -6,6 +6,7 @@ import re
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..sandbox import guard_tool_call, redact_provider_tokens, redact_sensitive_text, shell_command_is_mutating
@@ -36,13 +37,43 @@ from ..path_defaults import mo_home, operator_pack_root, repo_root
 from ..tasking.task_evidence import taskboard_tool_summary
 
 
-# Read-family tools return data the model EXPLICITLY requested and are already
-# self-bounded by their own limits (read_file caps at 2000 lines / 50k chars;
-# grep/find_files cap output at 50k and take explicit match limits). They are
-# exempt from the fallback tool-result cap so MO never has the back of a file it
-# chose to read silently severed. Only unbounded EXTERNAL output (shell, web_*)
-# still needs the cap.
-_READ_FAMILY_TOOLS = frozenset({"read_file", "grep", "find_files"})
+@dataclass(frozen=True)
+class ToolExecutionPolicy:
+    """Local execution metadata for prefetch and context-result handling."""
+
+    parallel_prefetch: bool = False
+    result_cap_exempt: bool = False
+    reason: str = ""
+
+
+_TOOL_EXECUTION_POLICIES = {
+    # Self-bounded filesystem reads. They can prefetch in parallel and must not
+    # be truncated by the fallback cap, otherwise MO can silently lose the back
+    # of files it explicitly chose to inspect.
+    "read_file": ToolExecutionPolicy(parallel_prefetch=True, result_cap_exempt=True, reason="bounded filesystem read"),
+    "grep": ToolExecutionPolicy(parallel_prefetch=True, result_cap_exempt=True, reason="bounded filesystem search"),
+    "find_files": ToolExecutionPolicy(parallel_prefetch=True, result_cap_exempt=True, reason="bounded filesystem listing"),
+    # Additional read-only, side-effect-free inspection tools. These are safe to
+    # pre-execute when independent, but they remain subject to the fallback cap.
+    "git_status": ToolExecutionPolicy(parallel_prefetch=True, reason="read-only git status"),
+    "project_bridge": ToolExecutionPolicy(parallel_prefetch=True, reason="read-only project instruction lookup"),
+    "code_search": ToolExecutionPolicy(parallel_prefetch=True, reason="read-only code graph search"),
+    "find_callers": ToolExecutionPolicy(parallel_prefetch=True, reason="read-only code graph traversal"),
+    "find_callees": ToolExecutionPolicy(parallel_prefetch=True, reason="read-only code graph traversal"),
+}
+
+
+_READ_FAMILY_TOOLS = frozenset(
+    name for name, policy in _TOOL_EXECUTION_POLICIES.items() if policy.result_cap_exempt
+)
+
+
+def _tool_execution_policy(name: str) -> ToolExecutionPolicy:
+    return _TOOL_EXECUTION_POLICIES.get(str(name or "").strip().lower(), ToolExecutionPolicy())
+
+
+def _tool_allows_parallel_prefetch(name: str) -> bool:
+    return _tool_execution_policy(name).parallel_prefetch
 
 
 class AgentTurnDispatchMixin:
@@ -408,7 +439,7 @@ class AgentTurnDispatchMixin:
         keeps `/usage`, goal-finish, closeout, and session metadata honest.
         """
         text = redact_provider_tokens(str(result or ""))  # strip leaked secret tokens before context/provider
-        if str(tool_name or "").strip().lower() in _READ_FAMILY_TOOLS:
+        if _tool_execution_policy(str(tool_name or "").strip().lower()).result_cap_exempt:
             return text  # self-bounded, model-requested data — never severed here
         limit = max(0, int(getattr(self, "tool_result_max_chars", 0) or 0))
         if not limit or len(text) <= limit:
@@ -574,24 +605,21 @@ class AgentTurnDispatchMixin:
         return approval and (target or explicit_work)
 
     def _prefetch_read_family_results(self, tool_calls_data: list, user_input: str) -> dict[int, str]:
-        """Execute independent read-only tool calls concurrently before the serial
-        dispatch loop, returning {index: result} for read-family calls.
+        """Execute independent read-only inspection tools concurrently.
 
-        Only ``read_file``/``grep``/``find_files`` qualify — they are pure
-        filesystem reads with no shared-state side effects (verified: ``_dispatch_tool``
-        for these skips SSH tracking and only reads). The serial loop stays the
-        single authority for gating, abuse detection, board, audit, compression,
-        and ordered ``add_tool_result``; it just reuses these precomputed results
-        instead of running the read inline. Running reads in parallel changes only
-        wall-clock, never the outcome or ordering of any bookkeeping.
+        Compatibility name retained for older tests/callers. Eligibility is now
+        metadata-driven by ``_TOOL_EXECUTION_POLICIES`` instead of a hardcoded
+        read-file-only set. The serial loop remains the single authority for
+        gating, abuse detection, board, audit, compression, and ordered
+        ``add_tool_result``; it just reuses these precomputed results.
 
-        A gate pre-filter guarantees a read the sandbox would block never executes
-        here; the loop re-evaluates the same deterministic gate as the authority.
-        Returns ``{}`` (full serial fallback) unless ≥2 independent reads qualify.
+        A gate pre-filter guarantees a tool the sandbox would block never
+        executes here; the loop re-evaluates the same deterministic gate as the
+        authority. Returns ``{}`` unless at least two independent tools qualify.
         """
         indices = [
             i for i, tc in enumerate(tool_calls_data)
-            if (tc.get("function") or {}).get("name") in _READ_FAMILY_TOOLS
+            if _tool_allows_parallel_prefetch((tc.get("function") or {}).get("name"))
         ]
         if len(indices) < 2:
             return {}
@@ -627,6 +655,11 @@ class AgentTurnDispatchMixin:
     def _dispatch_tool(self, name: str, arguments: dict) -> str:
         """Execute a tool and return the result. Sandbox already approved it."""
         from tools import TOOL_EXECUTORS
+
+        if name == "tool_search":
+            executor = getattr(self, "_execute_tool_search", None)
+            if callable(executor):
+                return executor(arguments or {})
 
         # Dead-end guard: stop retrying SSH after repeated failures
         ssh_dead = self._check_ssh_dead_end(name, arguments)

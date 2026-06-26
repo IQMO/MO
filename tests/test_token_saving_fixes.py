@@ -2,6 +2,7 @@
 
 #1 provider cache-hit instrumentation (measure, don't estimate)
 #4 code graph exposed as first-class tools (code_search/find_callers/find_callees)
+#5 tool catalog exposed through deferred tool_search activation
 #6 owner-only protocol stop-gates are bounded (no loop to max_provider_requests)
 #7 pure greetings skip episodic recall + project-file reads
 
@@ -48,12 +49,12 @@ def test_record_usage_accumulates_cache_counters():
 # ── #4 code graph as first-class tools ──────────────────────────────
 
 def test_graph_tools_registered():
-    for name in ("code_search", "find_callers", "find_callees"):
+    for name in ("tool_search", "code_search", "find_callers", "find_callees"):
         assert name in tools.TOOL_EXECUTORS
         assert any(d["function"]["name"] == name for d in tools.TOOL_DEFINITIONS)
     # 16 base + computer-use (open_url + capture_screen + 6 browser_* + 6 desktop) = 30,
-    # + record_convention + record_profile_fact + set_plan = 33
-    assert len(tools.TOOL_DEFINITIONS) == len(tools.TOOL_EXECUTORS) == 33
+    # + record_convention + record_profile_fact + set_plan + tool_search = 34
+    assert len(tools.TOOL_DEFINITIONS) == len(tools.TOOL_EXECUTORS) == 34
 
 
 def test_graph_tool_executors_return_strings_without_raising():
@@ -126,7 +127,7 @@ def _loop_mock_agent(max_provider_requests=20):
 
 def test_protocol_stop_gate_does_not_loop_to_budget(tmp_path, monkeypatch):
     """A owner_maintenance final gate that always rejects must NOT burn the whole
-    provider budget — it is capped at a few corrective rounds then allowed to stop.
+    provider budget — it is capped at a few corrective rounds then returns blocked.
     """
     monkeypatch.setattr("core.agent.agent_turn.owner_maintenance_final_allows_stop", lambda *a, **k: False)
 
@@ -141,7 +142,7 @@ def test_protocol_stop_gate_does_not_loop_to_budget(tmp_path, monkeypatch):
 
     result = agent.run_turn("summarize the report", monitor=BackendMonitor(tmp_path / "m.jsonl"))
 
-    assert result  # the turn ended with an answer instead of [MAX PROVIDER REQUESTS]
+    assert result.startswith("[OWNER_MAINTENANCE BLOCKED]")
     # 1 initial + PROTOCOL_STOP_GATE_MAX (2) corrective continuations = 3, well under budget.
     assert calls["n"] <= 4, f"stop-gate looped {calls['n']} times — should be bounded"
 

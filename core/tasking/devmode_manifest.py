@@ -24,7 +24,7 @@ SCHEMA_VERSION = 1
 # absence. NOTE: `longitudinal.md` is deliberately excluded — it is a GLOBAL cross-session
 # record (`~/.mo/memory/devmode/longitudinal.md`, one level up), not a session artifact, so
 # listing it here reported a false "missing" (it never lives in the session dir).
-_ARTIFACT_NAMES = (
+SESSION_ARTIFACT_NAMES = (
     "summary.md",
     "workflow.md",
     "catalog.md",
@@ -32,6 +32,7 @@ _ARTIFACT_NAMES = (
     "economy.md",
     MANIFEST_NAME,
 )
+_ARTIFACT_NAMES = SESSION_ARTIFACT_NAMES
 _RUNTIME_OWNED = {"economy.md", MANIFEST_NAME}
 
 

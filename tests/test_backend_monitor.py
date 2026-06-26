@@ -331,14 +331,14 @@ def _legacy_state_lane(monkeypatch, tmp_path):
 def test_economy_summary_counts_tool_result_errors(tmp_path):
     """A failed-then-recovered tool shows up as tool_result.error, NOT a tool_error
     event — the economy count must catch it (else a swallowed error reads as 0)."""
-    from core.backend_monitor import economy_summary
+    from core.backend_monitor import economy_summary, format_economy_record
     mon = tmp_path / "backend_monitor-x.jsonl"
     rows = [
         {"type": "provider_request", "payload": {}},
         {"type": "provider_response", "payload": {}},
         {"type": "tool_call", "payload": {}},
-        {"type": "tool_result", "payload": {"error": True}},   # failed edit_file, later recovered
-        {"type": "tool_result", "payload": {"blocked": True}},
+        {"type": "tool_result", "payload": {"tool": "edit_file", "error": True}},
+        {"type": "tool_result", "payload": {"tool": "read_file", "blocked": True}},
         {"type": "tool_compress", "payload": {}},
     ]
     mon.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
@@ -348,6 +348,11 @@ def test_economy_summary_counts_tool_result_errors(tmp_path):
     assert s["tool_errors"] == 1
     assert s["sandbox_blocked"] == 1
     assert s["compression_events"] == 1
+    assert s["error_tools"] == ["edit_file"]
+    assert s["blocked_tools"] == ["read_file"]
+    record = format_economy_record(s)
+    assert "Error tools: edit_file" in record
+    assert "Blocked tools: read_file" in record
 
 
 def test_economy_summary_counts_provider_errors(tmp_path):
@@ -540,6 +545,7 @@ def _devmode_board_agent():
 def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatch):
     """DEVMODE output dirs are runtime-owned before the model writes any artifact."""
     import core.tasking.agent_taskboard as atb
+    from core.tasking.devmode_manifest import SESSION_ARTIFACT_NAMES
     from datetime import datetime as real_datetime
 
     class FixedDatetime:
@@ -560,6 +566,8 @@ def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatc
     ctx = agent._devmode_runtime_output_context("start OWNER_MAINTENANCE")
     assert str(target) in ctx
     assert "do not create another" in ctx.lower()
+    for name in SESSION_ARTIFACT_NAMES:
+        assert str(target / name) in ctx
 
 
 def test_devmode_output_blocks_wrong_session_dir(tmp_path, monkeypatch):

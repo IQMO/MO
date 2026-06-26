@@ -332,10 +332,10 @@ def test_self_protocol_truth_continuation_is_bounded():
 
     result = agent.run_turn("fix the failing test", task_board=board)
 
-    # Fired at most twice (bounded), then fell through and terminated cleanly —
-    # NOT looped to max_provider_requests.
+    # Fired at most twice (bounded), then returned blocked instead of cleanly
+    # closing through an unresolved conflict.
     assert sum("[SELF-PROTO TRUTH]" in msg for msg in assistant_messages) == 2
-    assert result.startswith("answer")
+    assert result.startswith("[SELF PROTOCOL TRUTH BLOCKED]")
 
 
 def test_owner_maintenance_completed_taskboard_rejects_post_completion_tool_calls():
@@ -397,7 +397,7 @@ def test_taskboard_does_not_complete_final_report_row_before_final_answer():
     board = TaskBoard(tasks=[
         TaskItem("1", "Locate PRT output file", "active"),
         TaskItem("2", "Read and summarize results", "pending"),
-        TaskItem("3", "Deliver report to user", "pending"),
+        TaskItem("3", "Deliver report to user", "pending", kind="report", completion_gate="final"),
     ])
 
     assert agent._advance_task_board_after_tool(board, "complete_task") is True
@@ -408,13 +408,13 @@ def test_taskboard_does_not_complete_final_report_row_before_final_answer():
     assert board.task("2").status == "completed"
     assert board.task("3").status == "active"
 
-    # Report rows do not advance even if agent calls complete_task prematurely (or at all, really)
-    # Actually, complete_task WILL advance them under the new logic, but wait, `_advance_task_board_after_tool`
-    # might just complete them if complete_task is called. 
-    # But wait, final report is completed during final boundary.
-    # The previous logic relied on `_tool_should_advance_task` returning False for report rows.
-    # Let's adjust this test to just verify manual completion works up to the final row.
-    pass
+    assert agent._advance_task_board_after_tool(board, "complete_task") is False
+    assert board.task("3").status == "active"
+    assert board.open_count() == 1
+
+    assert agent._finalize_task_board_for_answer(board) is True
+    assert board.task("3").status == "completed"
+    assert board.open_count() == 0
 
 
 def test_terminal_closeout_carries_real_evidence_not_hollow_token(monkeypatch):
@@ -519,12 +519,13 @@ def test_complete_task_never_closes_a_row_with_zero_evidence():
     # Task 1 runs a real tool (accrues its own evidence), then completes → task 2 active.
     agent._advance_task_board_after_tool(board, "read_file", {"path": "core/atomic_write.py"})
     agent._advance_task_board_after_tool(board, "complete_task", {})
-    # Tasks 2 and 3 are completed back-to-back via complete_task with NO tools of their own
-    # (the exact live pattern). Neither may close empty.
+    # Task 2 completes via complete_task with NO tool of its own (the exact live pattern).
+    # It must carry session evidence. The final/report row must not close via complete_task;
+    # it closes only at final-answer boundary.
     agent._advance_task_board_after_tool(board, "complete_task", {})
-    agent._advance_task_board_after_tool(board, "complete_task", {})
-    for tid in ("2", "3"):
-        row = board.task(tid)
-        assert row.status == "completed"
-        nonfinal = [e for e in (row.evidence or []) if not str(e).startswith("final:")]
-        assert nonfinal, f"task {tid} closed with zero real evidence: {row.evidence!r}"
+    assert agent._advance_task_board_after_tool(board, "complete_task", {}) is False
+    row = board.task("2")
+    assert row.status == "completed"
+    nonfinal = [e for e in (row.evidence or []) if not str(e).startswith("final:")]
+    assert nonfinal, f"task 2 closed with zero real evidence: {row.evidence!r}"
+    assert board.task("3").status == "active"

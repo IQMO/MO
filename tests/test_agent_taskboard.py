@@ -20,6 +20,13 @@ def _mock_task(task_id, status="active", title="test"):
     m.id = task_id
     m.status = status
     m.title = title
+    m.evidence = []
+    m.kind = ""
+    m.completion_gate = ""
+    m.depends_on = []
+    m.parent_id = ""
+    m.expected_evidence = []
+    m.blocker = ""
     return m
 
 

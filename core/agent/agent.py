@@ -25,6 +25,11 @@ from ..provider.provider import (
     prt_review_provider_chain,
     first_vision_provider_index,
 )
+from ..model_slots import (
+    main_model_selectors,
+    provider_matches_selector,
+    resolve_model_slot,
+)
 from ..provider.provider_capacity import get_capacity
 from ..session.session import Session, _session_ended_clean
 from ..system_prompt import load_system_prompt
@@ -92,6 +97,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         agent_cfg = self.config.get("agent", {})
         self.max_tool_rounds: int = agent_cfg.get("max_tool_rounds", 80)
         self.max_provider_requests: int = agent_cfg.get("max_provider_requests", 300)
+        self.doom_loop_tool_batch_threshold: int = max(2, int(agent_cfg.get("doom_loop_tool_batch_threshold", 3) or 3))
         self.tool_result_max_chars: int = agent_cfg.get("tool_result_max_chars", 6000)
         self.tool_compress_enabled: bool = bool(agent_cfg.get("tool_compress_enabled", True))
         self.tool_compress_min_bytes: int = int(agent_cfg.get("tool_compress_min_bytes", 500) or 500)
@@ -102,6 +108,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self.context_budget_source: str = context_budget_source(self.context_budget_config, provider=self.provider_name, model=self.model)
         self.context_handoff_enabled: bool = bool(agent_cfg.get("context_handoff_enabled", True))
         self.context_handoff_threshold: float = float(agent_cfg.get("context_handoff_threshold", 0.70) or 0.70)
+        self.deferred_tool_registry_enabled: bool = bool(agent_cfg.get("deferred_tool_registry_enabled", True))
 
         # Sandbox config
         sandbox_cfg = self.config.get("sandbox", {})
@@ -257,6 +264,13 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         except Exception:
             traceback.print_exc()
 
+        try:
+            from ..tool_registry import DeferredToolRegistry
+            self._tool_registry = DeferredToolRegistry(self.tool_definitions)
+        except Exception:
+            self._tool_registry = None
+            traceback.print_exc()
+
         # Best-effort structural graph refresh on startup (no-op if up-to-date)
         try:
             from core.graph.structural_graph import maybe_update_graph_async
@@ -325,109 +339,67 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
 
         return sorted(list(definitions), key=key)
 
+    def _reset_deferred_tools_for_turn(self) -> None:
+        registry = getattr(self, "_tool_registry", None)
+        if registry is not None:
+            registry.reset_turn()
+
+    def _provider_tool_definitions(self) -> list[dict]:
+        definitions = list(getattr(self, "tool_definitions", []) or [])
+        if not getattr(self, "deferred_tool_registry_enabled", False):
+            return definitions
+        registry = getattr(self, "_tool_registry", None)
+        if registry is None:
+            return definitions
+        # Compatibility: tests/review loops may temporarily replace
+        # ``agent.tool_definitions`` with an explicit restricted set.  Treat that
+        # override as authoritative instead of hiding non-core allowed tools.
+        if not registry.matches_catalog(definitions):
+            return definitions
+        return registry.active_definitions()
+
+    def _deferred_tool_registry_snapshot(self) -> dict:
+        registry = getattr(self, "_tool_registry", None)
+        if registry is None or not getattr(self, "deferred_tool_registry_enabled", False):
+            return {}
+        return registry.snapshot()
+
+    def _execute_tool_search(self, arguments: dict) -> str:
+        registry = getattr(self, "_tool_registry", None)
+        if registry is None or not getattr(self, "deferred_tool_registry_enabled", False):
+            try:
+                from tools import execute_tool_search
+                return execute_tool_search(arguments or {})
+            except Exception as exc:
+                return f"Error running tool_search: {exc}"
+        return registry.search(arguments or {})
+
     def providers_for_surface(self, surface: str) -> list[BaseProvider]:
         """Return ordered provider candidates for a runtime surface."""
-        if str(surface or "").startswith("ghost"):
-            return self._ghost_provider_chain()
-        if str(surface or "").startswith("review"):
-            return self._review_provider_chain()
-        return [self.active_provider]
+        return list(self._resolve_model_slot(surface).providers)
+
+    def _resolve_model_slot(self, surface: str):
+        resolution = resolve_model_slot(
+            surface,
+            list(getattr(self, "providers", []) or []),
+            active_provider=self.active_provider if getattr(self, "providers", None) else None,
+            config=getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {},
+            review_chain_builder=prt_review_provider_chain,
+        )
+        self._last_model_slot_resolution = resolution
+        return resolution
 
     def _review_provider_chain(self) -> list[BaseProvider]:
         """Review provider order: DeepSeek Pro, then Codex."""
-        providers = list(getattr(self, "providers", []) or [])
-        cfg = getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}
-        prt_cfg = cfg.get("prt", {}) if isinstance(cfg.get("prt", {}), dict) else {}
-        active = self.active_provider if providers else None
-        return prt_review_provider_chain(
-            providers,
-            active_provider=active,
-            default_model=str(prt_cfg.get("default_model") or "deepseek-v4-pro"),
-            fallback_model=str(prt_cfg.get("fallback_model") or "codex"),
-        )
+        return list(self._resolve_model_slot("review").providers)
 
     def _ghost_provider_chain(self) -> list[BaseProvider]:
         """Ghost provider order: Flash, DeepSeek Pro, then Codex."""
-        chain: list[BaseProvider] = []
-
-        def add(provider: BaseProvider | None) -> None:
-            if provider is None:
-                return
-            if any(existing is provider for existing in chain):
-                return
-            chain.append(provider)
-
-        providers = list(getattr(self, "providers", []) or [])
-        configured = self._configured_ghost_provider()
-        # An explicitly configured ghost provider is the operator's deliberate
-        # choice — honor it regardless of model name. The flash→pro→codex
-        # predicates below are only the NO-CONFIG fallback chain; gating the
-        # configured provider behind "flash" silently dropped a valid config
-        # (e.g. a haiku/mini ghost) and ran the expensive main model instead.
-        if configured is not None:
-            add(configured)
-        for provider in providers:
-            if self._is_non_free_flash_provider(provider):
-                add(provider)
-        for provider in providers:
-            if self._is_deepseek_pro_provider(provider):
-                add(provider)
-        for provider in providers:
-            if self._is_codex_provider(provider):
-                add(provider)
-        return chain or [self.active_provider]
-
-    @staticmethod
-    def _provider_name_model(provider: BaseProvider | None) -> tuple[str, str, str]:
-        if provider is None:
-            return "", "", ""
-        return (
-            str(getattr(provider, "name", "") or "").strip().lower(),
-            str(getattr(provider, "model", "") or "").strip().lower(),
-            str(getattr(provider, "api_mode", "") or "").strip().lower(),
-        )
-
-    @classmethod
-    def _is_non_free_flash_provider(cls, provider: BaseProvider | None) -> bool:
-        name, model, _api_mode = cls._provider_name_model(provider)
-        return "flash" in model and "free" not in model and "free" not in name
-
-    @classmethod
-    def _is_deepseek_pro_provider(cls, provider: BaseProvider | None) -> bool:
-        _name, model, _api_mode = cls._provider_name_model(provider)
-        return "deepseek" in model and "pro" in model
-
-    @classmethod
-    def _is_codex_provider(cls, provider: BaseProvider | None) -> bool:
-        name, _model, api_mode = cls._provider_name_model(provider)
-        return "codex" in name or "codex" in api_mode
+        return list(self._resolve_model_slot("ghost").providers)
 
     @staticmethod
     def _provider_matches_config_selector(provider: BaseProvider | None, selector: str) -> bool:
-        if provider is None:
-            return False
-        value = str(selector or "").strip().lower()
-        if not value:
-            return False
-        name, model, _api_mode = Agent._provider_name_model(provider)
-        return value in {name, model, f"{name}/{model}"}
-
-    def _configured_ghost_provider(self) -> BaseProvider | None:
-        cfg = getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}
-        agent_cfg = cfg.get("agent", {}) if isinstance(cfg.get("agent", {}), dict) else {}
-        want_provider = str(agent_cfg.get("ghost_provider") or "").strip().lower()
-        want_model = str(agent_cfg.get("ghost_model") or "").strip().lower()
-        if not want_provider and not want_model:
-            return None
-        for provider in getattr(self, "providers", []) or []:
-            provider_name = str(getattr(provider, "name", "") or "").lower()
-            model_name = str(getattr(provider, "model", "") or "").lower()
-            if want_provider and provider_name != want_provider:
-                continue
-            if want_model and model_name != want_model:
-                continue
-            return provider
-        return None
+        return provider_matches_selector(provider, selector)
 
     def complete_ghost_no_tools(
         self,
@@ -917,13 +889,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         return notice
 
     def _main_provider_selectors(self) -> list[str]:
-        cfg = getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}
-        model_cfg = cfg.get("model", {}) if isinstance(cfg.get("model", {}), dict) else {}
-        return [
-            str(selector).strip()
-            for selector in (model_cfg.get("default"), model_cfg.get("fallback"))
-            if str(selector or "").strip()
-        ]
+        return list(main_model_selectors(getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}))
 
     def _next_provider_index_for_surface(self) -> int | None:
         surface = self._provider_surface()

@@ -14,7 +14,7 @@ def _agent() -> Agent:
 
 def test_taskboard_mixin_complete_task_advances_next_ready_and_emits_monitor(tmp_path):
     board = TaskBoard(tasks=[
-        TaskItem("1", "Inspect", "active", kind="inspect", completion_gate="tool"),
+        TaskItem("1", "Inspect", "active", evidence=["grep:core"], kind="inspect", completion_gate="tool"),
         TaskItem("2", "Report", "pending", kind="report", completion_gate="final", depends_on=["1"]),
     ])
     monitor = BackendMonitor(tmp_path / "monitor.jsonl")

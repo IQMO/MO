@@ -75,6 +75,39 @@ def test_pure_narration_untouched(tmp_path):
     assert _reconcile(tmp_path, text) == text
 
 
+def test_devmode_summary_gets_runtime_tool_error_ledger_when_missing(tmp_path):
+    p = tmp_path / "summary.md"
+    p.write_text(
+        "# DEVMODE" "05 Session Summary\n"
+        "## Verification\n"
+        "- Git: clean\n"
+        "## Closeout\n"
+        "- **[DEVMODE" "05 COMPLETE]** clean.\n",
+        encoding="utf-8",
+    )
+    summary = dict(AUTH, tool_errors=3, error_tools=["shell", "read_file"])
+    AgentTaskBoard._reconcile_summary_economy_counts(p, summary)
+    out = p.read_text(encoding="utf-8")
+    assert "## Tool Error Ledger" in out
+    assert "Tool errors: 3 errors recorded by the runtime monitor." in out
+    assert "Error tools: read_file, shell." in out
+
+
+def test_existing_tool_error_ledger_is_not_duplicated(tmp_path):
+    p = tmp_path / "summary.md"
+    p.write_text(
+        "# DEVMODE" "05 Session Summary\n"
+        "## Tool Error Ledger\n"
+        "- Tool errors: 2 errors recorded.\n",
+        encoding="utf-8",
+    )
+    summary = dict(AUTH, tool_errors=3, error_tools=["shell"])
+    AgentTaskBoard._reconcile_summary_economy_counts(p, summary)
+    out = p.read_text(encoding="utf-8")
+    assert out.count("## Tool Error Ledger") == 1
+    assert "Tool errors: 3 errors recorded." in out
+
+
 def test_idempotent_when_already_correct(tmp_path):
     text = ("Economy: 90 provider requests, 119 tool calls, 6 tool errors, "
             "2 sandbox-blocked, 6 compression events")

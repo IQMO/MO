@@ -104,6 +104,18 @@ class TaskBoardContractResult:
 
 
 @dataclass
+class TaskCompletionResult:
+    """Result of an attempted task completion state transition."""
+
+    ok: bool
+    task_id: str
+    reason: str = ""
+
+    def __bool__(self) -> bool:
+        return bool(self.ok)
+
+
+@dataclass
 class TaskBoard:
     """Task board container. Stores state; rendering/consumers do not judge."""
 
@@ -398,16 +410,21 @@ class TaskBoard:
             self._touch()
         return added
 
-    def complete(self, task_id: str, *, evidence: Any = None) -> None:
+    def complete(self, task_id: str, *, evidence: Any = None) -> TaskCompletionResult:
         row = self._get(task_id)
-        if row:
-            if not self.dependencies_satisfied(task_id):
-                return
-            if evidence is not None:
-                self.append_evidence(task_id, evidence)
-            row.status = "completed"
-            row.blocker = ""
-            self._touch()
+        task_id = str(task_id or "")
+        if not row:
+            return TaskCompletionResult(False, task_id, "task_missing")
+        if not self.dependencies_satisfied(task_id):
+            return TaskCompletionResult(False, task_id, "dependencies_unsatisfied")
+        if evidence is not None:
+            self.append_evidence(task_id, evidence)
+        if _task_requires_evidence(row) and not _task_has_qualifying_completion_evidence(row):
+            return TaskCompletionResult(False, task_id, "missing_required_evidence")
+        row.status = "completed"
+        row.blocker = ""
+        self._touch()
+        return TaskCompletionResult(True, task_id)
 
     def block(self, task_id: str, reason: str) -> None:
         row = self._get(task_id)
@@ -674,7 +691,7 @@ def check_task_board_contract(
     for task in board.tasks:
         if task.status == "blocked":
             reasons.append(f"blocked_task:{task.id}")
-        if require_evidence and task.status == "completed" and _task_requires_evidence(task) and not task.evidence:
+        if require_evidence and task.status == "completed" and _task_requires_evidence(task) and not _task_has_qualifying_completion_evidence(task):
             reasons.append(f"missing_evidence:{task.id}")
 
     # ── persisted-task ↔ board-row sync ─────────────────────
@@ -705,6 +722,15 @@ def _task_requires_evidence(task: TaskItem) -> bool:
     if task.completion_gate in {"tool", "verification"}:
         return True
     return task.kind in {"inspect", "edit", "test", "verify"}
+
+
+def _task_has_qualifying_completion_evidence(task: TaskItem) -> bool:
+    evidence = [str(item or "").strip() for item in (task.evidence or [])]
+    if not evidence:
+        return False
+    if task.completion_gate in {"tool", "verification"} or task.kind in {"inspect", "edit", "test", "verify"}:
+        return any(item and not item.startswith("final:") for item in evidence)
+    return True
 
 
 def snapshot_dict(board: TaskBoard, *, event: str, state: str | None = None, source: str | None = None) -> dict[str, Any]:
