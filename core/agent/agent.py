@@ -247,22 +247,12 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 if (d.get("function", {}).get("name") if "function" in d else d.get("name")) != "set_plan"
             ]
 
-        # MCP (Model Context Protocol) — operator-configured and inert until
-        # servers are listed; configured tools are sandbox-gated.
+        # MCP (Model Context Protocol) — operator-configured and sandbox-gated.
+        # Keep startup light: configured servers are started lazily before the
+        # first provider tool set is built, so dynamic MCP schemas are still
+        # visible to the model without spawning subprocesses during Agent init.
         self.mcp_manager = None
-        try:
-            from core.mcp import McpManager
-            mgr = McpManager.from_config(getattr(self, "config", None) or {})
-            mcp_defs = mgr.tool_definitions()
-            if mcp_defs:
-                self.mcp_manager = mgr
-                self.tool_definitions = self.tool_definitions + mcp_defs
-                import atexit
-                atexit.register(mgr.shutdown)
-            else:
-                mgr.shutdown()  # disabled / no tools — release any subprocesses
-        except Exception:
-            traceback.print_exc()
+        self._mcp_manager_initialized = False
 
         # LSP — operator-configured language servers for live diagnostics; inert
         # until `lsp.servers` is listed. The lsp_diagnostics final-gate consumes it
@@ -283,13 +273,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             self._tool_registry = DeferredToolRegistry(self.tool_definitions)
         except Exception:
             self._tool_registry = None
-            traceback.print_exc()
-
-        # Best-effort structural graph refresh on startup (no-op if up-to-date)
-        try:
-            from core.graph.structural_graph import maybe_update_graph_async
-            maybe_update_graph_async(profile=getattr(self, "profile", None), reason="startup")
-        except Exception:
             traceback.print_exc()
 
     def _load_system_message(self, path: str | None) -> tuple[str, str]:
@@ -358,7 +341,29 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         if registry is not None:
             registry.reset_turn()
 
+    def _ensure_mcp_manager(self) -> None:
+        if getattr(self, "_mcp_manager_initialized", False):
+            return
+        self._mcp_manager_initialized = True
+        try:
+            from core.mcp import McpManager
+            mgr = McpManager.from_config(getattr(self, "config", None) or {})
+            mcp_defs = mgr.tool_definitions()
+            if mcp_defs:
+                self.mcp_manager = mgr
+                self.tool_definitions = list(getattr(self, "tool_definitions", []) or []) + mcp_defs
+                registry = getattr(self, "_tool_registry", None)
+                if registry is not None:
+                    registry.set_definitions(self.tool_definitions)
+                import atexit
+                atexit.register(mgr.shutdown)
+            else:
+                mgr.shutdown()  # disabled / no tools — release any subprocesses
+        except Exception:
+            traceback.print_exc()
+
     def _provider_tool_definitions(self) -> list[dict]:
+        self._ensure_mcp_manager()
         definitions = list(getattr(self, "tool_definitions", []) or [])
         if not getattr(self, "deferred_tool_registry_enabled", False):
             return definitions

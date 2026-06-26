@@ -20,15 +20,31 @@ import tempfile
 import time
 from typing import Any
 
-import httpx
-
-try:
-    import websocket as _ws  # websocket-client (sync)
-except Exception:  # pragma: no cover
-    _ws = None
-
 DEBUG_PORT = 9222
 DEBUG_HOST = "127.0.0.1"
+_HTTPX: Any | None = None
+_WS: Any | None = None
+_WS_LOADED = False
+
+
+def _httpx() -> Any:
+    global _HTTPX
+    if _HTTPX is None:
+        import httpx as httpx_mod
+        _HTTPX = httpx_mod
+    return _HTTPX
+
+
+def _websocket() -> Any | None:
+    global _WS, _WS_LOADED
+    if not _WS_LOADED:
+        _WS_LOADED = True
+        try:
+            import websocket as websocket_mod  # websocket-client (sync)
+            _WS = websocket_mod
+        except Exception:  # pragma: no cover
+            _WS = None
+    return _WS
 
 # JS that tags every interactive element with a stable ref and returns a compact
 # list. Stored on window.__mo_refs so click/type can re-find an element by ref.
@@ -85,12 +101,16 @@ class BrowserManager:
 
     def _debug_alive(self) -> bool:
         try:
-            httpx.get(f"http://{DEBUG_HOST}:{DEBUG_PORT}/json/version", timeout=2.0)
+            _httpx().get(f"http://{DEBUG_HOST}:{DEBUG_PORT}/json/version", timeout=2.0)
             return True
         except Exception:
             return False
 
     def ensure_chrome(self) -> str | None:
+        try:
+            _httpx()
+        except Exception as exc:
+            return f"browser HTTP client not available: {exc}"
         if self._debug_alive():
             return None
         chrome = self._chrome_path()
@@ -116,27 +136,28 @@ class BrowserManager:
     # ── CDP plumbing ────────────────────────────────────────────────────
     def _active_page_ws_url(self) -> str | None:
         try:
-            targets = httpx.get(f"http://{DEBUG_HOST}:{DEBUG_PORT}/json", timeout=3.0).json()
+            targets = _httpx().get(f"http://{DEBUG_HOST}:{DEBUG_PORT}/json", timeout=3.0).json()
         except Exception:
             return None
         pages = [t for t in targets if t.get("type") == "page" and t.get("webSocketDebuggerUrl")]
         return pages[0]["webSocketDebuggerUrl"] if pages else None
 
     def _connect(self) -> str | None:
-        if _ws is None:
+        ws_mod = _websocket()
+        if ws_mod is None:
             return "websocket-client not available."
         url = self._active_page_ws_url()
         if not url:
             # open a fresh tab
             try:
-                httpx.put(f"http://{DEBUG_HOST}:{DEBUG_PORT}/json/new?about:blank", timeout=3.0)
+                _httpx().put(f"http://{DEBUG_HOST}:{DEBUG_PORT}/json/new?about:blank", timeout=3.0)
             except Exception:
                 pass
             url = self._active_page_ws_url()
         if not url:
             return "No DevTools page target available."
         try:
-            self.ws = _ws.create_connection(url, timeout=20)
+            self.ws = ws_mod.create_connection(url, timeout=20)
             return None
         except Exception as exc:
             return f"CDP connect failed: {exc}"

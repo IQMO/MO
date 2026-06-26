@@ -8,8 +8,17 @@ import traceback
 from typing import Any
 
 from . import input as _input_module
-from .main_terminal import MoTui
 from .native_terminal import record_session, run_native_terminal_loop
+
+MoTui: Any | None = None
+
+
+def _tui_class() -> Any:
+    global MoTui
+    if MoTui is None:
+        from .main_terminal import MoTui as loaded_tui
+        MoTui = loaded_tui
+    return MoTui
 
 
 def set_terminal_title(title: str) -> None:
@@ -84,7 +93,7 @@ def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool) -> Non
     # Prompt-toolkit TUI is the default MO design. It avoids alternate-screen
     # fullscreen mode and owns its own transcript scrolling.
     if _input_module.HAS_PROMPT_TOOLKIT and sys.stdin.isatty() and os.environ.get("MO_NATIVE_SCROLL") != "1":
-        tui = MoTui(agent, gateway)
+        tui = _tui_class()(agent, gateway)
         try:
             tui.run()
         finally:

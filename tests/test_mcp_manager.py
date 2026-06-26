@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import sys
+import atexit
 from pathlib import Path
 
+from core.agent.agent import Agent
 from core.mcp import McpManager
+from core.tool_registry import DeferredToolRegistry
 
 MOCK = str(Path(__file__).parent / "fixtures" / "mock_mcp_server.py")
 
@@ -86,3 +89,52 @@ def test_bad_server_is_degraded_not_crash():
         assert "broken" in mgr.degraded
     finally:
         mgr.shutdown()
+
+
+def test_agent_starts_mcp_lazily_when_provider_tools_are_requested(monkeypatch):
+    calls = []
+    registered = []
+    mcp_def = {
+        "type": "function",
+        "function": {"name": "mcp__mock__echo", "description": "[MCP:mock] echo", "parameters": {"type": "object"}},
+    }
+
+    class FakeManager:
+        degraded = []
+
+        def tool_definitions(self):
+            return [mcp_def]
+
+        def shutdown(self):
+            calls.append("shutdown")
+
+    fake_manager = FakeManager()
+
+    def fake_from_config(cls, config):
+        calls.append(config)
+        return fake_manager
+
+    monkeypatch.setattr(McpManager, "from_config", classmethod(fake_from_config))
+    monkeypatch.setattr(atexit, "register", lambda fn: registered.append(fn))
+
+    agent = Agent.__new__(Agent)
+    agent.config = _cfg()
+    agent.tool_definitions = [
+        {
+            "type": "function",
+            "function": {"name": "read_file", "description": "read", "parameters": {"type": "object"}},
+        }
+    ]
+    agent.deferred_tool_registry_enabled = True
+    agent._tool_registry = DeferredToolRegistry(agent.tool_definitions)
+    agent.mcp_manager = None
+    agent._mcp_manager_initialized = False
+
+    assert agent.mcp_manager is None
+    defs = Agent._provider_tool_definitions(agent)
+
+    assert defs
+    assert "mcp__mock__echo" in agent._tool_registry.catalog_names()
+    assert agent.mcp_manager is fake_manager
+    assert registered == [fake_manager.shutdown]
+    assert calls == [agent.config]

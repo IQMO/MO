@@ -30,14 +30,36 @@ from .desktop import (
     execute_type_text,
     execute_press_key,
 )
-from .browser import (
-    execute_browser_open,
-    execute_browser_snapshot,
-    execute_browser_click,
-    execute_browser_type,
-    execute_browser_eval,
-    execute_browser_close,
-)
+
+
+def execute_browser_open(arguments: dict[str, Any]) -> str:
+    from .browser import execute_browser_open as _execute
+    return _execute(arguments)
+
+
+def execute_browser_snapshot(arguments: dict[str, Any]) -> str:
+    from .browser import execute_browser_snapshot as _execute
+    return _execute(arguments)
+
+
+def execute_browser_click(arguments: dict[str, Any]) -> str:
+    from .browser import execute_browser_click as _execute
+    return _execute(arguments)
+
+
+def execute_browser_type(arguments: dict[str, Any]) -> str:
+    from .browser import execute_browser_type as _execute
+    return _execute(arguments)
+
+
+def execute_browser_eval(arguments: dict[str, Any]) -> str:
+    from .browser import execute_browser_eval as _execute
+    return _execute(arguments)
+
+
+def execute_browser_close(arguments: dict[str, Any]) -> str:
+    from .browser import execute_browser_close as _execute
+    return _execute(arguments)
 
 
 SKIP_PATH_PARTS = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "node_modules", ".venv", "venv", "logs", "memory"}

@@ -26,6 +26,27 @@ def test_init_provider_supports_explicit_mock_config():
     assert result["api_mode"] == "mock"
 
 
+def test_init_provider_mock_config_does_not_load_openai(monkeypatch):
+    config = {
+        "providers": [{"name": "mock-local", "type": "mock", "model": "mock-model"}],
+        "model": {"default": "mock-model"},
+        "agent": {},
+    }
+
+    monkeypatch.setattr(provider_module, "OpenAI", None)
+    monkeypatch.setattr(provider_module, "HAS_OPENAI", None)
+
+    def fail_openai_load():
+        raise AssertionError("mock provider should not load OpenAI SDK")
+
+    monkeypatch.setattr(provider_module, "_ensure_openai", fail_openai_load)
+
+    result = init_provider(config)
+
+    assert result["provider_name"] == "mock-local"
+    assert result["api_mode"] == "mock"
+
+
 def test_init_provider_respects_default_and_fallback_model_selectors():
     config = {
         "providers": [

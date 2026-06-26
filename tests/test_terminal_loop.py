@@ -1,5 +1,8 @@
 import os
+import subprocess
+import sys
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import interface.terminal_loop as terminal_loop
@@ -44,6 +47,19 @@ def test_startup_identity_lines_never_raises_on_bare_agent():
     # Bare agent (no attributes) must still produce a banner, not crash.
     lines = terminal_loop.startup_identity_lines(object())
     assert lines and lines[0] == "MO Agent"
+
+
+def test_terminal_loop_import_does_not_load_main_tui():
+    repo = Path(__file__).resolve().parents[1]
+    code = "import sys; import interface.terminal_loop; raise SystemExit(1 if 'interface.main_terminal' in sys.modules else 0)"
+    proc = subprocess.run(
+        [sys.executable, "-B", "-c", code],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
 def test_run_main_loop_uses_prompt_toolkit_tui_when_available(monkeypatch):

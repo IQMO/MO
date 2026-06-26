@@ -1,4 +1,7 @@
 import builtins
+import subprocess
+import sys
+from pathlib import Path
 
 import mo
 import interface.input as input_module
@@ -51,6 +54,33 @@ def test_main_version_is_noninteractive(monkeypatch, capsys):
 
     assert "MO v1.0" in capsys.readouterr().out
     assert called["agent"] is False
+
+
+def test_cli_version_does_not_import_agent_runtime():
+    repo = Path(__file__).resolve().parents[1]
+    code = "import sys; import mo; mo.main(['--version']); raise SystemExit(1 if 'core.agent.agent' in sys.modules else 0)"
+    proc = subprocess.run(
+        [sys.executable, "-B", "-c", code],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MO v1.0" in proc.stdout
+
+
+def test_agent_import_does_not_import_structural_graph_module():
+    repo = Path(__file__).resolve().parents[1]
+    code = "import sys; import core.agent.agent; raise SystemExit(1 if 'core.graph.structural_graph' in sys.modules else 0)"
+    proc = subprocess.run(
+        [sys.executable, "-B", "-c", code],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
 def test_prompt_flag_runs_oneshot_without_building_agent(monkeypatch, capsys):

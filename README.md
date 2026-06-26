@@ -247,7 +247,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Desktop Ghost | Optional local text/tray surface (presents as **Ghost**, with its own persona on an isolated session): summon with `Win+Alt+M`, use a small MO window near the cursor, Guide/Do mode, tray, action log, panic-stop, and optional local STT/TTS. Off by default; requires `ghost.enabled: true` (legacy `desktop_companion.enabled` still honored); voice deps are needed only when voice is enabled. Screen/cursor pointing stays on-demand through `capture_screen` and `point_on_screen`, not continuous watching |
 | Hooks | Optional local `~/.mo/hooks.yaml` lifecycle hooks for trusted shell commands |
-| MCP tools | Connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments. Enabled by default but inert until you list a server (an empty `servers:` spawns nothing) |
+| MCP tools | Connect operator-configured MCP servers; their tools appear as `mcp__<server>__<tool>`, sandbox-gated with sanitized subprocess environments. Enabled by default but inert until you list a server, and listed servers start lazily when MO builds the provider tool catalog for a turn |
 | Open in your browser | `open_url` opens a page in the operator's **default** browser, visibly (their own profile and logins) — the right tool for "open / show me / pull up X". Uses the OS default-browser handler (no hardcoded browser, no shell). Distinct from the autonomous browser-automation tools below |
 | Screen vision | `capture_screen` lets MO see the operator's display (on-demand screenshot) and reason over it with a vision-capable provider — read an error dialog, a diagram, or a running UI. Image rides MO's normal tool/provider flow; non-vision providers degrade to text |
 | Browser automation | For autonomous web *tasks* (MO operates a page itself, not for you to watch): native Chrome DevTools Protocol control (no third-party framework) — `browser_open` / `browser_snapshot` (numbered interactive elements) / `browser_click` / `browser_type` / `browser_eval` / `browser_close`. Runs an isolated debug Chrome, sandbox-gated. For just viewing a page, use `open_url` |
@@ -263,7 +263,7 @@ local Piper voice model.
 
 ## MCP (Model Context Protocol)
 
-MO can use tools from operator-configured MCP servers — local-first and **enabled by default, but inert until you list a server** (an empty `servers:` spawns nothing, so MO gains no MCP tools until you add one). Add servers to `~/.mo/config.yaml`:
+MO can use tools from operator-configured MCP servers — local-first and **enabled by default, but inert until you list a server** (an empty `servers:` spawns nothing, so MO gains no MCP tools until you add one). Listed servers start lazily when MO prepares the provider tool catalog for a turn, not during process construction. Add servers to `~/.mo/config.yaml`:
 
 ```yaml
 mcp:
@@ -274,7 +274,7 @@ mcp:
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
 ```
 
-Each server is spawned as a local subprocess (stdio JSON-RPC); its tools appear to MO as
+Each listed server is spawned as a local subprocess (stdio JSON-RPC) when the tool catalog is needed; its tools appear to MO as
 `mcp__<server>__<tool>` and pass the same sandbox gate as native tools. MCP subprocesses
 inherit only MO's safe environment allowlist plus explicit server `env` entries, so ambient
 tokens and private shell credentials are not forwarded by default. Dynamic MCP tools are

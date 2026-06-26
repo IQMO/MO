@@ -136,8 +136,10 @@ class ChatCompletionsProvider(BaseProvider):
         # so providers that reject unknown params (unverified support) are unaffected.
         # Operators enable it only for providers known to accept it (o-series, etc.).
         self.reasoning_effort = str(reasoning_effort).strip().lower() if reasoning_effort else None
-        _ensure_openai()
-        self.client = OpenAI(api_key=api_key, base_url=base_url, default_headers=headers or None, timeout=self.timeout, max_retries=0)
+        openai_cls = _ensure_openai()
+        if openai_cls is None:
+            raise RuntimeError("openai package not installed. Run: pip install -r requirements.txt")
+        self.client = openai_cls(api_key=api_key, base_url=base_url, default_headers=headers or None, timeout=self.timeout, max_retries=0)
 
     @staticmethod
     def _image_urls(content: list) -> list[str]:
@@ -411,8 +413,10 @@ class CodexOAuthProvider(BaseProvider):
         headers = self._codex_headers(access_token)
         self.access_token = access_token
         self.default_headers = headers
-        _ensure_openai()
-        self.client = OpenAI(
+        openai_cls = _ensure_openai()
+        if openai_cls is None:
+            raise RuntimeError("openai package not installed. Run: pip install -r requirements.txt")
+        self.client = openai_cls(
             api_key=access_token,
             base_url=self.base_url,
             default_headers=headers,
@@ -960,8 +964,6 @@ def _order_provider_chain(providers: list[BaseProvider], model_cfg: dict) -> lis
 
 def init_provider(config: dict = None):
     """Initialize provider chain from config."""
-    if _ensure_openai() is None:
-        raise RuntimeError("openai package not installed. Run: pip install -r requirements.txt")
     if config is None:
         config = load_config()
     _load_runtime_env(config)

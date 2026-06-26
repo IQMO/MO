@@ -174,6 +174,20 @@ def test_structural_graph_migrates_v1_graph_on_load(tmp_path):
     assert all("file_type" in node for node in data["nodes"])
 
 
+def test_load_or_build_graph_data_refreshes_stale_graph_on_demand(tmp_path, monkeypatch):
+    _write_graph(tmp_path)
+    from core.graph import structural_graph as sg
+
+    calls = []
+    monkeypatch.setattr(sg, "graph_status", lambda _root: {"stale": True})
+    monkeypatch.setattr(sg, "maybe_update_graph_async", lambda **kwargs: calls.append(kwargs) or True)
+
+    data = sg.load_or_build_graph_data(tmp_path)
+
+    assert data is not None
+    assert calls and calls[0]["reason"] == "on-demand-stale"
+
+
 def test_fuzzy_search_ranks_nodes_by_relevance(tmp_path):
     _write_graph(tmp_path)
 

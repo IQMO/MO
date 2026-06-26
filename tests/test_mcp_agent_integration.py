@@ -1,4 +1,4 @@
-"""End-to-end: a real MO agent exposes and dispatches MCP tools when configured."""
+"""End-to-end: a real MO agent lazily exposes and dispatches MCP tools when configured."""
 from __future__ import annotations
 
 import sys
@@ -46,6 +46,9 @@ mcp:
 
     agent = create_agent(str(home / "config.yaml"))
     try:
+        assert agent.mcp_manager is None
+        agent._provider_tool_definitions()
+
         assert agent.mcp_manager is not None
         names = {d["function"]["name"] for d in agent.tool_definitions}
         assert "mcp__mock__echo" in names

@@ -233,7 +233,15 @@ def load_or_build_graph_data(root: str | Path | None = None) -> dict[str, Any] |
     """Load the active graph, building MO's native map when allowed and missing."""
     root_path = project_root(root)
     data = load_graph_data(root_path)
-    if data or not structural_graph_enabled() or not auto_build_enabled():
+    if data:
+        try:
+            status = graph_status(root_path)
+            if status.get("stale"):
+                maybe_update_graph_async(root=root_path, reason="on-demand-stale")
+        except Exception:
+            traceback.print_exc()
+        return data
+    if not structural_graph_enabled() or not auto_build_enabled():
         return data
     result = build_structural_graph(root_path)
     if not result.get("built"):

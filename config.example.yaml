@@ -161,9 +161,10 @@ telegram:
 mcp:
   # Model Context Protocol — connect MO to operator-configured local tool servers.
   # Enabled, but INERT until you list at least one server below — with servers: []
-  # nothing is spawned. Each server you add is started as a local subprocess (stdio
-  # JSON-RPC); its tools appear to MO as `mcp__<name>__<tool>`, gated by the sandbox
-  # like any native tool. No marketplace, no model-side install — you list servers here.
+  # nothing is spawned. Listed servers start lazily when MO prepares the provider
+  # tool catalog for a turn, then expose tools as `mcp__<name>__<tool>`, gated by
+  # the sandbox like any native tool. No marketplace, no model-side install — you
+  # list servers here.
   enabled: true
   servers: []
     # - name: filesystem

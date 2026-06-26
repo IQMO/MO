@@ -1,9 +1,10 @@
 """MCP manager — lifecycle + tool bridging for operator-configured MCP servers.
 
-Reads `config.mcp`, starts enabled servers, aggregates their tools under a
-namespaced id (`mcp__<server>__<tool>`), exposes them as MO tool definitions, and
-routes calls. A server that fails to start is reported degraded and skipped — it
-never crashes MO. Explicit `mcp.enabled: false` disables the bridge.
+Reads `config.mcp`, starts enabled servers when the agent asks for the MCP tool
+catalog, aggregates their tools under a namespaced id
+(`mcp__<server>__<tool>`), exposes them as MO tool definitions, and routes
+calls. A server that fails to start is reported degraded and skipped — it never
+crashes MO. Explicit `mcp.enabled: false` disables the bridge.
 """
 from __future__ import annotations
 
