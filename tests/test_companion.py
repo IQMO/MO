@@ -379,10 +379,17 @@ def test_gui_status_updates_drain_on_gui_thread():
 
 
 def test_companion_geometry_opens_near_pointer_and_flips_at_edges():
-    from interface.ghost_desktop.companion import companion_geometry_near_pointer
+    from interface.ghost_desktop.companion import (
+        WINDOW_WIDTH as W, WINDOW_HEIGHT as H, WINDOW_OFFSET as O,
+        companion_geometry_near_pointer,
+    )
 
-    assert companion_geometry_near_pointer(100, 100, 1920, 1080) == "440x200+124+124"
-    assert companion_geometry_near_pointer(1900, 1060, 1920, 1080) == "440x200+1436+836"
+    # Near the top-left: offset down-right from the pointer.
+    assert companion_geometry_near_pointer(100, 100, 1920, 1080) == f"{W}x{H}+{100 + O}+{100 + O}"
+    # Near the bottom-right: flip so the window stays on-screen.
+    flip_x = 1900 - W - O
+    flip_y = 1060 - H - O
+    assert companion_geometry_near_pointer(1900, 1060, 1920, 1080) == f"{W}x{H}+{flip_x}+{flip_y}"
 
 
 def test_voice_input_is_hidden_when_not_configured():

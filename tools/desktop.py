@@ -48,6 +48,15 @@ def execute_point_on_screen(arguments: dict[str, Any]) -> str:
         return "Error: point_on_screen requires integer 'x' and 'y'."
     label = str(arguments.get("label", "") or "here")
     seconds = float(arguments.get("seconds", 4) or 4)
+    # Prefer the live desktop Ghost orb: MO points with its own animated moon
+    # (clicky-style) rather than spawning a one-shot bubble. Falls through to the
+    # subprocess overlay when no orb is running (e.g. terminal-only Guide mode).
+    try:
+        from core.ghost.desktop_pointer import point_with_desktop_orb
+        if point_with_desktop_orb(x, y, label, seconds):
+            return f"Pointing at ({x},{y}): {label}"
+    except Exception:
+        pass
     try:
         subprocess.Popen(
             [sys.executable, "-m", "interface.screen_overlay", str(x), str(y), label, str(seconds)],

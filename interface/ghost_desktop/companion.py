@@ -24,20 +24,30 @@ import time
 import traceback
 from typing import Any, Callable
 
+from core.ghost.desktop_pointer import set_desktop_pointer
 from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
 from core.sandbox import redact_sensitive_text
 from core.tasking.task_board import attach_taskboard_to_text
+from interface.ghost_desktop.orb import GhostOrb
 from interface.ghost_desktop.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
 from interface.ghost_desktop.tray import CompanionTray, start_tray_if_enabled
 
 CYAN = "#00cccc"
-CARD = "#04141a"
+CARD = "#0b1418"
 TEXT = "#dff6f6"
 GLYPH = "◐"  # ◐ half-moon = MO mark
-_ENTRY_BG = "#0a2028"
-WINDOW_WIDTH = 440
-WINDOW_HEIGHT = 200
+_ENTRY_BG = "#10242b"
+_MUTED = "#5a8899"
+_BORDER = "#123038"
+_LISTEN = "#bb86fc"  # voice-listening accent (matches the orb)
+WINDOW_WIDTH = 380
+WINDOW_HEIGHT = 184
 WINDOW_OFFSET = 24
+
+# Desktop Ghost keeps its OWN persisted session slot (never "main"): isolated from
+# Main MO, but durable across restarts so Ghost stays concise about what it already
+# did on the desktop in earlier sessions.
+GHOST_DESKTOP_SESSION_SLOT = "ghost-desktop"
 
 
 def companion_geometry_near_pointer(
@@ -93,6 +103,8 @@ class CompanionSurface:
         self._hotkey_listener: Any = None
         self._voice_btn: Any = None
         self._mode_label: Any = None
+        self._listen_label: Any = None  # voice-listening indicator in the window header
+        self._orb: GhostOrb | None = None  # MO's on-screen moon pointer (clicky-style)
         self._tts_warned = False  # surface a TTS-unavailable note at most once per session
         self._stopped = False  # set once the GUI loop has torn down — no late queueing
         self._visible = False
@@ -133,6 +145,7 @@ class CompanionSurface:
     def stop(self) -> None:
         """Shut down the companion GUI and unregister the hotkey."""
         self._unregister_hotkey()
+        self._persist_ghost_session()
         if self._tray:
             self._tray.stop()
         if not self._post_gui_event("<<CompanionStop>>"):
@@ -313,19 +326,21 @@ class CompanionSurface:
             self._set_status(self._voice_input_unavailable_message(), "#ffcc44")
             return
         if self._recording_voice:
-            # second click → stop, transcribe, submit
+            # second tap → stop, transcribe, submit
             self._recording_voice = False
+            self._orb_set_listening(False)
             self._set_voice_btn_color(CYAN)  # mic no longer hot
             self._finish_voice_capture(voice)
             return
-        # first click → start (don't start over a running turn)
+        # first tap → start (don't start over a running turn)
         if self._turn_thread is not None and self._turn_thread.is_alive():
             self._set_status("Still working on the previous request…", "#ffcc44")
             return
         if voice.start_recording():
             self._recording_voice = True
+            self._orb_set_listening(True)  # the moon breathes while Ghost hears you
             self._set_voice_btn_color("#ff4444")  # visible hot-mic cue
-            self._set_status("Recording… click 🎤 again to stop", CYAN)
+            self._set_status("Listening… Win+Alt+M again to stop", _LISTEN)
         else:
             rec = getattr(voice, "recorder", None)
             reason = (getattr(rec, "last_error", "") or "").strip() if rec else ""
@@ -376,6 +391,7 @@ class CompanionSurface:
         if rec is None or getattr(rec, "_recording", False):
             return
         self._recording_voice = False
+        self._orb_set_listening(False)
         self._set_voice_btn_color(CYAN)
         self._finish_voice_capture(self._voice)
 
@@ -396,6 +412,16 @@ class CompanionSurface:
         root.withdraw()  # hidden until summoned
         self._root = root
 
+        # MO's on-screen moon pointer. Register it as the desktop pointer so
+        # point_on_screen drives the moon (not the bare Windows cursor). Best-effort:
+        # if the orb can't build (odd Tk backend) the surface still works text-first.
+        try:
+            self._orb = GhostOrb(root)
+            set_desktop_pointer(self._point_with_orb)
+        except Exception:
+            self._orb = None
+            traceback.print_exc()
+
         # --- build the window ---
         win = tk.Toplevel(root)
         win.withdraw()
@@ -406,76 +432,90 @@ class CompanionSurface:
         except Exception:
             pass
 
-        # cyan border = outer frame; dark card = inner
-        win.configure(bg=CYAN)
-        border = tk.Frame(win, bg=CYAN)
+        # Modern, voice-first one-sided surface: a hairline accent border, a dark
+        # card, Ghost's reply as the primary area, and a slim manual input bar.
+        win.configure(bg=_BORDER)
+        border = tk.Frame(win, bg=_BORDER)
         border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=CARD)
-        card.pack(fill="both", expand=True, padx=2, pady=2)
+        card.pack(fill="both", expand=True, padx=1, pady=1)
 
-        # header: glyph + title
+        # header (drag handle): glyph + title on the left; listening dot + mode badge
         header = tk.Frame(card, bg=CARD)
-        header.pack(fill="x", padx=10, pady=(8, 4))
-        tk.Label(header, text=GLYPH, fg=CYAN, bg=CARD,
-                 font=("Segoe UI", 16, "bold")).pack(side="left", padx=(0, 8))
-        tk.Label(header, text="Ghost", fg=CYAN, bg=CARD,
-                 font=("Segoe UI", 12, "bold")).pack(side="left")
+        header.pack(fill="x", padx=14, pady=(10, 6))
+        glyph_lbl = tk.Label(header, text=GLYPH, fg=CYAN, bg=CARD,
+                             font=("Segoe UI", 15, "bold"))
+        glyph_lbl.pack(side="left", padx=(0, 8))
+        title_lbl = tk.Label(header, text="Ghost", fg=TEXT, bg=CARD,
+                             font=("Segoe UI Semibold", 12))
+        title_lbl.pack(side="left")
         # Mode indicator: the user must be able to SEE whether MO will drive the
         # desktop (Do) or only explain (Guide) — mode was previously tray-only.
         self._mode_label = tk.Label(header, text="", bg=CARD,
-                                    font=("Segoe UI", 9, "bold"))
+                                    font=("Segoe UI", 8, "bold"))
         self._mode_label.pack(side="right")
+        # Listening dot — lights up while the mic is hot (orb is the primary cue).
+        self._listen_label = tk.Label(header, text="", fg=_LISTEN, bg=CARD,
+                                      font=("Segoe UI", 8, "bold"))
+        self._listen_label.pack(side="right", padx=(0, 10))
 
-        # status line
-        self._status_label = tk.Label(card, text="Ask anything — press Enter",
-                                      fg="#5a8899", bg=CARD, font=("Segoe UI", 9),
-                                      anchor="w")
-        self._status_label.pack(fill="x", padx=10, pady=(0, 4))
-
-        # text entry + voice button
-        entry_frame = tk.Frame(card, bg=CARD)
-        entry_frame.pack(fill="x", padx=10, pady=(0, 6))
-
-        if self._voice_input_configured():
-            # Grey the mic when STT is configured but the backend isn't actually
-            # ready, so the affordance reflects capability, not just intent. The
-            # click handler still explains why it's unavailable.
-            stt_ready = bool(self._voice and self._voice.stt_available)
-            self._voice_btn = tk.Label(entry_frame, text="🎤",
-                                       fg=CYAN if stt_ready else "#555f66", bg=CARD,
-                                       font=("Segoe UI", 14), cursor="hand2")
-            self._voice_btn.pack(side="right", padx=(6, 0))
-            self._voice_btn.bind("<Button-1>", lambda _e: self._on_voice_input())
-
-        self._entry = tk.Entry(entry_frame, font=("Segoe UI", 11),
-                               fg=TEXT, bg=_ENTRY_BG,
-                               insertbackground=CYAN, relief="flat",
-                               borderwidth=4)
-        self._entry.pack(side="left", fill="x", expand=True)
-        self._entry.bind("<Return>", self._on_submit)
-        self._entry.bind("<Escape>", lambda _e: self.hide())
-
-        # response area — scrollable read-only Text so long replies are never
-        # silently clipped by the fixed-height window (they scroll instead).
+        # Ghost's reply / explanation — the primary, one-sided area (scrollable).
         resp_frame = tk.Frame(card, bg=CARD)
-        resp_frame.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        resp_frame.pack(fill="both", expand=True, padx=14, pady=(0, 6))
         resp_scroll = tk.Scrollbar(resp_frame)
         resp_scroll.pack(side="right", fill="y")
         self._response = tk.Text(resp_frame, fg=TEXT, bg=CARD,
                                  font=("Segoe UI", 10), wrap="word",
-                                 height=5, relief="flat", borderwidth=0,
+                                 height=6, relief="flat", borderwidth=0,
                                  highlightthickness=0, cursor="arrow",
+                                 spacing1=2, spacing3=3,
                                  yscrollcommand=resp_scroll.set, state="disabled")
         self._response.pack(side="left", fill="both", expand=True)
         resp_scroll.config(command=self._response.yview)
 
+        # status line (thin, between reply and input)
+        self._status_label = tk.Label(card, text="Win+Alt+M to speak", anchor="w",
+                                      fg=_MUTED, bg=CARD, font=("Segoe UI", 8))
+        self._status_label.pack(fill="x", padx=14, pady=(0, 2))
+
+        # slim manual input bar (secondary to voice) with a leading prompt mark
+        entry_frame = tk.Frame(card, bg=_ENTRY_BG)
+        entry_frame.pack(fill="x", padx=14, pady=(0, 6))
+        tk.Label(entry_frame, text="›", fg=CYAN, bg=_ENTRY_BG,
+                 font=("Segoe UI", 11, "bold")).pack(side="left", padx=(8, 2))
+        self._entry = tk.Entry(entry_frame, font=("Segoe UI", 10),
+                               fg=TEXT, bg=_ENTRY_BG,
+                               insertbackground=CYAN, relief="flat",
+                               borderwidth=6)
+        self._entry.pack(side="left", fill="x", expand=True)
+        self._entry.bind("<Return>", self._on_submit)
+        self._entry.bind("<Escape>", lambda _e: self.hide())
+
         # bottom hint
-        hint = "Esc to hide  ·  Win+Alt+M to summon"
-        if self._voice_input_configured():
-            hint += "  ·  🎤 for voice"
+        hint = "Win+Alt+M speak  ·  type to ask  ·  Esc hide"
         tk.Label(card, text=hint,
                  fg="#3a6677", bg=CARD, font=("Segoe UI", 8)).pack(
-                     fill="x", padx=10, pady=(0, 6))
+                     fill="x", padx=14, pady=(0, 8))
+
+        # Drag-to-move from the header (borderless windows have no titlebar).
+        def _start_drag(event: Any) -> None:
+            self._drag_origin = (event.x_root, event.y_root)
+            try:
+                self._drag_win_origin = (win.winfo_x(), win.winfo_y())
+            except Exception:
+                self._drag_win_origin = (0, 0)
+
+        def _on_drag(event: Any) -> None:
+            ox, oy = getattr(self, "_drag_origin", (event.x_root, event.y_root))
+            wx, wy = getattr(self, "_drag_win_origin", (0, 0))
+            try:
+                win.geometry(f"+{wx + (event.x_root - ox)}+{wy + (event.y_root - oy)}")
+            except Exception:
+                pass
+
+        for _drag_widget in (header, glyph_lbl, title_lbl):
+            _drag_widget.bind("<Button-1>", _start_drag)
+            _drag_widget.bind("<B1-Motion>", _on_drag)
 
         # --- geometry (near pointer; recomputed on every summon) ---
         win.update_idletasks()
@@ -531,14 +571,26 @@ class CompanionSurface:
                 if not self._running:
                     break
                 self._poll_voice_autostop()
+                if self._orb is not None:
+                    try:
+                        self._orb.tick()
+                    except Exception:
+                        pass
                 root.update()
                 root.update_idletasks()
-                time.sleep(0.05)  # ~20fps; blocking yield so the loop never busy-spins
+                time.sleep(0.03)  # ~33fps; smooth orb glide, still a blocking yield
         except Exception:
             if self._running:
                 traceback.print_exc()
         finally:
             self._running = False
+            set_desktop_pointer(None)
+            if self._orb is not None:
+                try:
+                    self._orb.destroy()
+                except Exception:
+                    pass
+                self._orb = None
             try:
                 if win.winfo_exists():
                     win.destroy()
@@ -589,7 +641,43 @@ class CompanionSurface:
             # The desktop Ghost runs the Main-MO agent on its OWN isolated session, but
             # with the Ghost desktop-presence persona so it speaks/acts AS Ghost.
             self._ghost_session = Session(ghost_desktop_system_message(base_sys))
+            self._load_ghost_session(self._ghost_session)
         return self._ghost_session
+
+    def _load_ghost_session(self, session: Any) -> None:
+        """Restore the persisted desktop transcript into ``session`` so Ghost keeps
+        continuity across restarts. No-op when nothing was saved yet."""
+        sessions = getattr(self._agent, "_sessions", None)
+        if not sessions:
+            return
+        try:
+            data = sessions.load(GHOST_DESKTOP_SESSION_SLOT)
+        except Exception:
+            data = None
+        if not isinstance(data, dict):
+            return
+        try:
+            session.session_id = data.get("session_id", session.session_id)
+            session.turn_count = int(data.get("turn_count", 0) or 0)
+            session.messages = data.get("messages", []) or []
+            session.total_tokens = int(data.get("total_tokens", 0) or 0)
+            session.output_tokens = int(data.get("output_tokens", 0) or 0)
+            session.token_log = list(data.get("token_log", []) or [])
+            session.sanitize_for_provider()
+        except Exception:
+            traceback.print_exc()
+
+    def _persist_ghost_session(self) -> None:
+        """Save the desktop transcript to its own slot (never touches Main MO's
+        current slot — uses ``save_snapshot``)."""
+        session = self._ghost_session
+        sessions = getattr(self._agent, "_sessions", None)
+        if session is None or not sessions or not getattr(session, "messages", None):
+            return
+        try:
+            sessions.save_snapshot(GHOST_DESKTOP_SESSION_SLOT, session)
+        except Exception:
+            traceback.print_exc()
 
     def _run_turn(self, user_input: str) -> None:
         if self._panic_stop_requested:
@@ -631,6 +719,8 @@ class CompanionSurface:
             self._set_status(f"Error: {safe_error}", "#ff4444")
             self._log_action("turn_error", safe_error[:200])
             sys.stderr.write(f"[ghost-desktop] turn error: {safe_error}\n")
+        finally:
+            self._persist_ghost_session()
 
     # ------------------------------------------------------------------
     # Callbacks (called from Gateway thread)
@@ -723,6 +813,9 @@ class CompanionSurface:
             summary = summary[:3997] + "..."
         self._set_response(summary)
         self._set_status("Done — Esc to hide", "#44cc88")
+        # Surface the reply: a voice turn keeps the window hidden while listening,
+        # so reveal Ghost's answer when it lands (the one-sided reply is the point).
+        self.show()
 
     def _voice_input_configured(self) -> bool:
         return bool(self._voice_cfg.get("stt_enabled", False))
@@ -784,6 +877,35 @@ class CompanionSurface:
     # Global hotkey (optional)
     # ------------------------------------------------------------------
 
+    def _on_hotkey(self) -> None:
+        """Win+Alt+M is voice-first: tap to start hearing (orb pulses, no text
+        window), tap again to stop and run the spoken request. If voice isn't
+        available, fall back to toggling the reply window so the key is never dead."""
+        if self._voice_input_configured() and self._voice is not None and self._voice.stt_available:
+            self._on_voice_input()
+            return
+        self.toggle()
+
+    def _orb_set_listening(self, on: bool) -> None:
+        orb = self._orb
+        if orb is not None:
+            self._post_gui_call(lambda: orb.set_listening(on))
+        self._post_gui_call(lambda: self._apply_listening_indicator(on))
+
+    def _apply_listening_indicator(self, on: bool) -> None:
+        if self._listen_label is not None:
+            self._listen_label.config(text="● hearing" if on else "")
+
+    def _point_with_orb(self, x: int, y: int, label: str = "here", seconds: float = 4.0) -> bool:
+        """MO's desktop pointer: glide the moon to a target. Called from the
+        Gateway/tool thread, so it marshals the move onto the GUI thread. Returns
+        True once queued (the orb owns the point); False lets the caller fall back
+        to the one-shot overlay bubble."""
+        orb = self._orb
+        if orb is None:
+            return False
+        return self._post_gui_call(lambda: orb.point_to(x, y, label, seconds))
+
     def _try_register_hotkey(self) -> None:
         try:
             import keyboard
@@ -795,8 +917,8 @@ class CompanionSurface:
                 "Summon Ghost with `/ghost window` in the meantime.\n")
             return
         try:
-            self._hotkey_listener = keyboard.add_hotkey("win+alt+m", lambda: self.toggle())
-            sys.stderr.write("[companion] ready: Win+Alt+M registered.\n")
+            self._hotkey_listener = keyboard.add_hotkey("win+alt+m", self._on_hotkey)
+            sys.stderr.write("[companion] ready: Win+Alt+M registered (voice-first).\n")
         except Exception:
             sys.stderr.write(
                 "[ghost-desktop] could not register Win+Alt+M (global hotkeys may need "
