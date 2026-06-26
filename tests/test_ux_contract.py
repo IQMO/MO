@@ -16,6 +16,7 @@ UX_ROOT = REPO / "UX"
 EXPECTED_PACKAGE_DIRS = {"state", "runtime", "render", "shell"}
 ROOT_COMPAT_SHIMS = {"app.py", "models.py", "controller.py", "layout.py", "theme.py", "adapters.py"}
 EXPECTED_RENDER_MODULES = {"common.py", "panels.py", "screen.py", "layout.py", "theme.py"}
+EXPECTED_SHELL_MODULES = {"app.py", "tui.py"}
 
 
 def _ux_python_files() -> list[Path]:
@@ -41,6 +42,7 @@ def test_ux_does_not_import_current_interface_package():
 def test_ux_has_layered_package_structure():
     assert {path.name for path in UX_ROOT.iterdir() if path.is_dir()} >= EXPECTED_PACKAGE_DIRS
     assert {path.name for path in (UX_ROOT / "render").glob("*.py")} >= EXPECTED_RENDER_MODULES
+    assert {path.name for path in (UX_ROOT / "shell").glob("*.py")} >= EXPECTED_SHELL_MODULES
     for name in ROOT_COMPAT_SHIMS:
         text = (UX_ROOT / name).read_text(encoding="utf-8")
         assert "Compatibility exports" in text
@@ -109,12 +111,15 @@ def test_windows_launcher_targets_isolated_package():
 def test_windows_preview_launcher_targets_preview_package():
     text = (UX_ROOT / "run_preview.bat").read_text(encoding="utf-8")
     assert "-m UX" in text
-    assert "set \"UX_ARGS=--once --width %UX_WIDTH%\"" in text
-    assert "HAS_INTERACTIVE" in text
+    assert "set \"UX_ARGS=--width %UX_WIDTH%\"" in text
+    assert "--once" not in text
+    assert "HAS_INTERACTIVE" not in text
     assert "if defined UX_WIDTH mode con:" in text
     assert "set \"UX_WIDTH=120\"" not in text
     assert "PYTHONUTF8=1" in text
     assert "--live" not in text
+    assert "Starting MO UX preview" not in text
+    assert 'if /i "%UX_PAUSE%"=="1" pause' in text
     assert "mo.py" not in text
     assert "interface" not in text
 
@@ -158,7 +163,7 @@ def test_local_smoke_path_advances_preview_transcript():
     assert "smoke input" in text
     assert "Preview only" in text
     assert text.count("Session") == 1
-    assert "[x]  Inspect interface contracts" in text
+    assert "Idle - task board appears for work turns" in text
 
 
 def test_ux_statuses_are_display_defined_and_stable():

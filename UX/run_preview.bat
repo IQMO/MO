@@ -35,45 +35,30 @@ if not defined PY_CMD (
 )
 
 set "HAS_WIDTH=0"
-set "HAS_INTERACTIVE=0"
 for %%A in (%*) do (
   if /i "%%~A"=="--width" set "HAS_WIDTH=1"
-  if /i "%%~A"=="--interactive" set "HAS_INTERACTIVE=1"
 )
 
 if "%~1"=="" (
   if defined UX_WIDTH (
-    set "UX_ARGS=--once --width %UX_WIDTH%"
+    set "UX_ARGS=--width %UX_WIDTH%"
   ) else (
-    set "UX_ARGS=--once"
+    set "UX_ARGS="
   )
 ) else if "%HAS_WIDTH%"=="0" (
   if defined UX_WIDTH (
-    if "%HAS_INTERACTIVE%"=="0" (
-      set "UX_ARGS=--once --width %UX_WIDTH% %*"
-    ) else (
-      set "UX_ARGS=--width %UX_WIDTH% %*"
-    )
-  ) else (
-    if "%HAS_INTERACTIVE%"=="0" (
-      set "UX_ARGS=--once %*"
-    ) else (
-      set "UX_ARGS=%*"
-    )
-  )
-) else (
-  if "%HAS_INTERACTIVE%"=="0" (
-    set "UX_ARGS=--once %*"
+    set "UX_ARGS=--width %UX_WIDTH% %*"
   ) else (
     set "UX_ARGS=%*"
   )
+) else (
+  set "UX_ARGS=%*"
 )
 
-echo Starting MO UX preview: python -m UX %UX_ARGS%
 %PY_CMD% -m UX %UX_ARGS%
 set "EXIT_CODE=%ERRORLEVEL%"
 
 :end
-if /i not "%UX_NO_PAUSE%"=="1" pause
+if /i "%UX_PAUSE%"=="1" pause
 endlocal
 exit /b %EXIT_CODE%

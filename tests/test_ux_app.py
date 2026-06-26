@@ -34,6 +34,37 @@ def test_width_defaults_to_terminal_auto():
     assert args.width is None
 
 
+def test_preview_default_runs_real_tui(monkeypatch):
+    called = []
+
+    monkeypatch.setattr(app, "_run_tui", lambda controller: called.append(controller.snapshot().project))
+
+    app.main([])
+
+    assert called == ["E:\\MO-clean"]
+
+
+def test_preview_landing_snapshot_starts_without_demo_transcript():
+    snapshot = app.preview_landing_snapshot()
+
+    assert snapshot.transcript == ()
+    assert snapshot.board == ()
+    assert snapshot.notice == ""
+
+
+def test_preview_once_uses_static_render(monkeypatch):
+    called = []
+    console = Console(record=True, width=90, color_system=None)
+
+    monkeypatch.setattr(app, "_run_tui", lambda controller: called.append("tui"))
+    monkeypatch.setattr(app, "_console_for_width", lambda width=None, **kwargs: console)
+
+    app.main(["--once"])
+
+    assert called == []
+    assert "Composer" in console.export_text(clear=False)
+
+
 def test_once_snapshot_render_preserves_read_only_hint():
     console = Console(record=True, width=90, color_system=None)
     snapshot = SessionSnapshot(project="repo", composer_hint="read-only mode; no messages are sent")

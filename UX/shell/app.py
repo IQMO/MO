@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import io
 import sys
+from dataclasses import replace
 from typing import Any
 
 from rich.console import Console
@@ -21,7 +22,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--once", action="store_true", help="render once and exit")
     parser.add_argument("--read-only", action="store_true", help="load MO runtime state without sending messages")
     parser.add_argument("--live", action="store_true", help="send messages through MO Gateway.run_turn")
-    parser.add_argument("--interactive", action="store_true", help="keep the preview input loop open")
     parser.add_argument("--smoke", action="store_true", help="run local UX smoke checks and exit")
     parser.add_argument("--message", help="send one message through the selected mode, render the result, and exit")
     return parser.parse_args(argv)
@@ -58,8 +58,18 @@ def _create_runtime_or_exit(console: Console):
         raise SystemExit(2) from exc
 
 
+def _run_tui(controller: UxController) -> None:
+    from UX.shell.tui import run_tui
+
+    run_tui(controller)
+
+
+def preview_landing_snapshot() -> SessionSnapshot:
+    return replace(demo_snapshot(), busy=False, notice="", board=(), transcript=())
+
+
 def run_smoke(width: int = 100) -> str:
-    controller = UxController(PreviewBackend())
+    controller = UxController(PreviewBackend(preview_landing_snapshot()))
     before = controller.snapshot()
     controller.handle_input("smoke input")
     after = controller.snapshot()
@@ -154,12 +164,19 @@ def main(argv: list[str] | None = None) -> None:
         if args.message:
             console.print(run_single_message(controller, args.message, width=console.width), markup=False)
             return
-        UxPreviewApp(console).run(once=bool(args.once), controller=controller)
+        if args.once:
+            UxPreviewApp(console).run(once=True, controller=controller)
+        else:
+            _run_tui(controller)
         return
     if args.message:
         console.print(run_single_message(UxController(PreviewBackend()), args.message, width=console.width), markup=False)
         return
-    UxPreviewApp(console).run(once=bool(args.once))
+    controller = UxController(PreviewBackend(preview_landing_snapshot()))
+    if args.once:
+        UxPreviewApp(console).run(once=True, controller=controller)
+    else:
+        _run_tui(controller)
 
 
 if __name__ == "__main__":

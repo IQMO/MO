@@ -4,24 +4,30 @@
 into `mo.py`, does not import the current `interface/` package, and does not own
 task truth.
 
-Run the preview:
+Run the static preview smoke render:
 
 ```bash
 python -m UX --once
 ```
 
-Run the safe Windows preview launcher to inspect the UI without touching the MO
-runtime:
+Run the safe Windows preview launcher to inspect the interactive UI without
+touching the MO runtime:
 
 ```bat
 UX\run_preview.bat
 ```
 
-The preview launcher renders one clean screen by default. To use the temporary
-raw input loop while the real composer is still being built:
+The preview launcher opens a real fullscreen TUI by default. The composer is the
+focused input field; type there and press Enter.
 
 ```bat
-UX\run_preview.bat --interactive
+UX\run_preview.bat
+```
+
+For a static one-screen render used by smoke checks:
+
+```bat
+UX\run_preview.bat --once
 ```
 
 Run the Windows launcher in live mode:
@@ -30,8 +36,8 @@ Run the Windows launcher in live mode:
 UX\run_ux.bat
 ```
 
-The launcher defaults to `--live --width 120`, so this also sends one live
-message and exits:
+The live launcher defaults to live runtime mode. This sends one live message and
+exits:
 
 ```bat
 UX\run_ux.bat --message "who are you?"
@@ -78,8 +84,8 @@ python -m UX --live --message "who are you?"
 - Gateway/taskboard/runtime own truth; UX renders snapshots only.
 - No owner profile, private operator paths, secrets, or local maintainer defaults
   are product behavior.
-- No new dependency is introduced in this phase. The preview uses `rich`, already
-  declared in `requirements.txt`.
+- No new dependency is introduced in this phase. The preview uses
+  `prompt-toolkit` and `rich`, both already declared in `requirements.txt`.
 
 ## Structure
 
@@ -95,8 +101,8 @@ See `ARCHITECTURE.md` before adding new UX code.
 
 ## Mode Status
 
-- Phase 1 interactive shell: `python -m UX` accepts local input and renders
-  transcript updates.
+- Phase 1 interactive shell: `python -m UX` opens a fullscreen prompt-toolkit
+  TUI with a focused composer and transcript updates.
 - Phase 2 read-only runtime: `python -m UX --read-only` creates Agent/Gateway and
   renders a snapshot without sending messages.
 - Phase 3 controlled actions: `python -m UX --live` sends messages through
@@ -116,6 +122,8 @@ Verified inspiration used for this phase:
 - OpenCode: command/model surface and agent mode separation.
 - OpenDev paper: planning/execution separation, routing lanes, context
   compaction as first-class interface concepts.
+- OpenDev demo GIF: fullscreen brand landing, compact command strip, prompt
+  lane, and bottom model/status rail.
 
 Unverified names from the external note (`CodeWhale`, `Pilotty`) are intentionally
 not treated as implementation facts without a concrete repository or source.
