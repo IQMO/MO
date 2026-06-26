@@ -107,6 +107,11 @@ class BaseProvider:
     # (computer-use capture_screen)? False by default — a provider opts in only
     # when its API path delivers image parts to a vision-capable model.
     supports_vision = False
+    # Ghost chain participation priority (0=excluded, 1=low, 3=high).
+    # Providers with ghost_preference > 0 are auto-included in the ghost slot
+    # resolution chain in descending-preference order, replacing the old
+    # hardcoded name-based predicates.
+    ghost_preference: int = 0
 
     def __init__(self, model: str):
         self.model = model
@@ -124,12 +129,13 @@ class ChatCompletionsProvider(BaseProvider):
 
     api_mode = "chat_completions"
 
-    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None, reasoning_effort: str | None = None, supports_vision: bool = False):
+    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None, reasoning_effort: str | None = None, supports_vision: bool = False, ghost_preference: int = 0):
         super().__init__(model=model)
         self.name = name
         # Opt-in per provider config (`vision: true`). Off by default because most
         # OpenAI-compatible chat endpoints are text-only; the operator declares it.
         self.supports_vision = bool(supports_vision)
+        self.ghost_preference = int(ghost_preference or 0)
         self.base_url = base_url
         self.timeout = float(timeout or 60.0)
         # Optional per-provider OpenAI-style reasoning_effort. Default None → NOT sent,
@@ -797,17 +803,30 @@ def _provider_from_config(provider_cfg: dict, model: str) -> BaseProvider:
         return MockProvider(name=name, model=model or "mock-model")
 
     if name == "openai-codex" or kind == "codex_responses":
-        return CodexOAuthProvider(
+        provider = CodexOAuthProvider(
             model=model,
             auth_path=codex_auth_path(provider_cfg.get("auth_path")),
             timeout=float(provider_cfg.get("timeout", 60.0) or 60.0),
             reasoning_effort=provider_cfg.get("reasoning_effort"),
         )
+        provider.ghost_preference = int(provider_cfg.get("ghost_preference", 3))
+        return provider
 
     api_key_env = provider_cfg.get("api_key_env")
     api_key = provider_cfg.get("_api_key") or _resolve_api_key(provider_cfg)
     if not api_key:
         raise ProviderError(f"API key not found for provider {name}. env={api_key_env or '<none>'}")
+    # Compute ghost_preference default from provider name/model if not explicit
+    ghost_pref = provider_cfg.get("ghost_preference")
+    if ghost_pref is None:
+        model_lower = str(model or "").lower()
+        name_lower = str(name or "").lower()
+        if "flash" in model_lower and "free" not in model_lower and "free" not in name_lower:
+            ghost_pref = 1
+        elif "deepseek" in model_lower and "pro" in model_lower:
+            ghost_pref = 2
+        else:
+            ghost_pref = 0
     return ChatCompletionsProvider(
         name=name,
         base_url=provider_cfg["base_url"],
@@ -817,6 +836,7 @@ def _provider_from_config(provider_cfg: dict, model: str) -> BaseProvider:
         headers=provider_cfg.get("_headers") or provider_cfg.get("headers"),
         reasoning_effort=provider_cfg.get("reasoning_effort"),
         supports_vision=bool(provider_cfg.get("vision", False)),
+        ghost_preference=int(ghost_pref),
     )
 
 
