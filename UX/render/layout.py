@@ -10,6 +10,7 @@ from .panels import (
     composer_panel,
     header,
     lanes_panel,
+    ops_rail_panel,
     task_board_panel,
     transcript_panel,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "composer_panel",
     "header",
     "lanes_panel",
+    "ops_rail_panel",
     "render_text",
     "task_board_panel",
     "transcript_panel",

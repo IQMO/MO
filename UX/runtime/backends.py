@@ -7,6 +7,10 @@ from UX.state.controller import UxCallbacks
 from UX.state.models import BoardRow, LaneSnapshot, SessionSnapshot, TranscriptItem, demo_snapshot
 
 
+def safe_runtime_error(exc: BaseException) -> str:
+    return f"UX runtime error: {type(exc).__name__}. Details hidden from transcript."
+
+
 class PreviewBackend:
     """Local-only backend used for UX development and smoke tests."""
 
@@ -86,7 +90,7 @@ class RuntimeBackend:
             self._notice = "MO runtime turn finished"
             return result
         except Exception as exc:
-            message = f"UX runtime error: {type(exc).__name__}: {exc}"
+            message = safe_runtime_error(exc)
             self._overlay_transcript.append(TranscriptItem("mo", message))
             self._notice = message
             return message

@@ -40,22 +40,23 @@ def header(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) -> Panel:
 
 
 def lanes_panel(lanes: tuple[LaneSnapshot, ...], theme: UxTheme = DEFAULT_THEME) -> Panel:
-    table = Table.grid(expand=True)
-    table.add_column(ratio=1)
-    table.add_column(ratio=1)
-    table.add_column(ratio=2)
-    table.add_column(ratio=1)
-    for lane in lanes:
+    text = Text()
+    for index, lane in enumerate(lanes):
         lane_style = style(theme, LANE_STYLE.get(lane.status, "muted"))
-        table.add_row(
-            Text(lane.name.upper(), style=f"bold {lane_style}"),
-            Text(lane.status, style=lane_style),
-            Text(trim(lane.detail, 72), style=style(theme, "text")),
-            Text(lane.model, style=style(theme, "muted")),
-        )
+        text.append(lane.name.upper(), style=f"bold {lane_style}")
+        text.append("  ")
+        text.append(lane.status, style=lane_style)
+        if lane.model:
+            text.append("  ")
+            text.append(trim(lane.model, 22), style=style(theme, "muted"))
+        if lane.detail:
+            text.append("\n  ")
+            text.append(trim(lane.detail, 72), style=style(theme, "text"))
+        if index < len(lanes) - 1:
+            text.append("\n")
     if not lanes:
-        table.add_row(Text("NO LANES", style=style(theme, "muted")), Text("idle"), Text(""), Text(""))
-    return frame_panel(table, "Agent Lanes", theme)
+        text.append("NO LANES  idle", style=style(theme, "muted"))
+    return frame_panel(text, "Agent Lanes", theme)
 
 
 def task_board_panel(rows: tuple[BoardRow, ...], theme: UxTheme = DEFAULT_THEME) -> Panel:
@@ -118,3 +119,38 @@ def activity_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) ->
     text.append("\n")
     text.append("surface: isolated UX", style=style(theme, "muted"))
     return frame_panel(text, "Activity", theme)
+
+
+def ops_rail_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) -> Panel:
+    text = Text()
+    text.append("Task Board", style=f"bold {style(theme, 'blue')}")
+    text.append("\n")
+    if snapshot.board:
+        for index, row in enumerate(snapshot.board):
+            row_style = style(theme, STATUS_STYLE.get(row.status, "muted"))
+            detail = row.blocker if row.status == "blocked" and row.blocker else row.kind
+            text.append(STATUS_MARKERS.get(row.status, "[ ]"), style=f"bold {row_style}")
+            text.append("  ")
+            text.append(row.title, style=row_style if row.status == "active" else style(theme, "text"))
+            if detail:
+                text.append("  ")
+                text.append(trim(detail, 12), style=style(theme, "muted"))
+            if index < len(snapshot.board) - 1:
+                text.append("\n")
+    else:
+        text.append("[ ]  Idle - task board appears for work turns", style=style(theme, "muted"))
+
+    state = "busy" if snapshot.busy else "ready"
+    state_style = style(theme, "amber" if snapshot.busy else "green")
+    text.append("\n\n")
+    text.append("Activity", style=f"bold {style(theme, 'blue')}")
+    text.append("\n")
+    text.append(state.upper(), style=f"bold {state_style}")
+    if snapshot.notice:
+        text.append("\n")
+        text.append(trim(snapshot.notice, 78), style=style(theme, "amber"))
+    text.append("\n")
+    text.append("runtime truth: Gateway/taskboard", style=style(theme, "muted"))
+    text.append("\n")
+    text.append("surface: isolated UX", style=style(theme, "muted"))
+    return frame_panel(text, "Ops Rail", theme)

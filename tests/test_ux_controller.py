@@ -62,6 +62,26 @@ def test_runtime_backend_uses_handle_run_turn_and_snapshots():
     assert snapshot.transcript[-1].text == "done"
 
 
+def test_runtime_backend_hides_raw_exception_details():
+    class FakeHandle:
+        def snapshot(self):
+            return SessionSnapshot(project="repo")
+
+        def run_turn(self, text, *, callbacks=None):
+            raise PermissionError("C:\\Users\\Admin\\.mo\\memory\\profile\\facts.md")
+
+    backend = RuntimeBackend(FakeHandle())
+    result = backend.submit("real turn", callbacks=UxCallbacks())
+    snapshot = backend.snapshot()
+
+    assert "PermissionError" in result
+    assert "Details hidden" in result
+    assert "C:\\Users" not in result
+    assert ".mo" not in result
+    assert "facts.md" not in result
+    assert snapshot.notice == result
+
+
 def test_read_only_snapshot_fills_empty_board_and_lanes():
     handle = SimpleNamespace(snapshot=lambda: SessionSnapshot(project="repo"))
     snapshot = read_only_snapshot(handle)

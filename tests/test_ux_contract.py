@@ -105,6 +105,17 @@ def test_windows_launcher_targets_isolated_package():
     assert "interface" not in text
 
 
+def test_windows_preview_launcher_targets_preview_package():
+    text = (UX_ROOT / "run_preview.bat").read_text(encoding="utf-8")
+    assert "-m UX" in text
+    assert "set \"UX_ARGS=--width %UX_WIDTH%\"" in text
+    assert "set \"UX_WIDTH=120\"" in text
+    assert "PYTHONUTF8=1" in text
+    assert "--live" not in text
+    assert "mo.py" not in text
+    assert "interface" not in text
+
+
 def test_ux_package_import_is_light_and_isolated():
     code = "import sys; import UX; print('interface' in sys.modules); print('core.agent.agent' in sys.modules)"
     result = subprocess.run([sys.executable, "-c", code], cwd=REPO, text=True, capture_output=True, check=True)
@@ -132,6 +143,11 @@ def test_command_center_render_places_major_panes_on_one_screen():
     assert "Transcript" in text
     assert "Task Board" in text
     assert "Activity" in text
+    assert "THINKING" in text
+    assert "EXECUTION" in text
+    assert "COMPACTION" in text
+    assert "..." not in text
+    assert "\ufffd" not in text
 
 
 def test_local_smoke_path_advances_preview_transcript():
@@ -194,6 +210,7 @@ def test_runtime_snapshot_adapter_uses_duck_typed_public_state():
     snapshot = snapshot_from_runtime(agent, gateway)
 
     assert snapshot.project == "E:\\MO-clean"
+    assert snapshot.runtime == "private runtime state"
     assert snapshot.model_label == "opencode / deepseek-v4-pro"
     assert snapshot.board[0].status == "blocked"
     assert [item.speaker for item in snapshot.transcript] == ["user"]

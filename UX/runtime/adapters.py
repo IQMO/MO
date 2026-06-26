@@ -87,7 +87,8 @@ def snapshot_from_runtime(agent: Any, gateway: Any) -> SessionSnapshot:
             transcript.append(TranscriptItem(role, content))
 
     project = _safe_str(getattr(agent, "project_cwd", "")) or os.environ.get("MO_PROJECT_CWD", "") or os.getcwd()
-    runtime = _safe_str(getattr(agent, "runtime_home", ""))
+    runtime_home = _safe_str(getattr(agent, "runtime_home", ""))
+    runtime = "private runtime state" if runtime_home else ""
     provider = _safe_str(getattr(agent, "provider_name", ""))
     model = _safe_str(getattr(agent, "model", ""))
     return SessionSnapshot(

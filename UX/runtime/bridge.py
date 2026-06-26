@@ -57,16 +57,16 @@ def create_runtime() -> RuntimeHandle:
         from core.provider.provider import ConfigLoadError, ProviderError, clean_provider_error
         from core.text_safety import configure_utf8_stdio
     except Exception as exc:
-        raise RuntimeUnavailable(f"MO runtime imports failed: {type(exc).__name__}: {exc}") from exc
+        raise RuntimeUnavailable(f"MO runtime imports failed: {type(exc).__name__}") from exc
 
     configure_utf8_stdio()
     config_path = default_config_path(agent_root=str(root), caller_cwd=os.environ.get("MO_PROJECT_CWD") or os.getcwd())
     if not os.path.exists(config_path):
-        raise RuntimeUnavailable(f"MO config not found: {config_path}. Run `python mo.py --init` first.")
+        raise RuntimeUnavailable("MO config not found. Run `python mo.py --init` first.")
     try:
         agent = create_agent(config_path)
     except ConfigLoadError as exc:
-        raise RuntimeUnavailable(f"MO config error: {exc.message} ({exc.path})") from exc
+        raise RuntimeUnavailable(f"MO config error: {exc.message}") from exc
     except ProviderError as exc:
         raise RuntimeUnavailable(f"MO provider error: {clean_provider_error(str(exc))}") from exc
     return RuntimeHandle(agent=agent, gateway=Gateway(agent))

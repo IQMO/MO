@@ -10,6 +10,13 @@ Run the preview:
 python -m UX --once
 ```
 
+Run the safe Windows preview launcher to inspect the UI without touching the MO
+runtime:
+
+```bat
+UX\run_preview.bat
+```
+
 Run the Windows launcher in live mode:
 
 ```bat

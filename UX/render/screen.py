@@ -5,7 +5,7 @@ from rich.console import Console, Group
 from rich.layout import Layout
 
 from UX.state.models import SessionSnapshot
-from .panels import activity_panel, composer_panel, header, lanes_panel, task_board_panel, transcript_panel
+from .panels import activity_panel, composer_panel, header, lanes_panel, ops_rail_panel, task_board_panel, transcript_panel
 from .theme import DEFAULT_THEME, UxTheme
 
 COMMAND_CENTER_MIN_WIDTH = 112
@@ -31,11 +31,7 @@ def build_screen(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME, *, w
     root["body"].split_row(
         Layout(lanes_panel(snapshot.lanes, theme), name="lanes", size=34),
         Layout(transcript_panel(snapshot.transcript, theme, limit=12), name="transcript", ratio=1),
-        Layout(name="side", size=40),
-    )
-    root["side"].split_column(
-        Layout(task_board_panel(snapshot.board, theme), name="board", ratio=2),
-        Layout(activity_panel(snapshot, theme), name="activity", ratio=1),
+        Layout(ops_rail_panel(snapshot, theme), name="side", size=40),
     )
     return root
 
