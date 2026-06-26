@@ -19,7 +19,7 @@ These are hard rules. They exist because the opposite behavior has repeatedly wa
 - **One clean pass is the goal.** Diagnose AND fix in the same run wherever possible. Do not hand the operator a list of "remaining" items you could have resolved yourself.
 
 ## Project Rules
-- This is a local Python project. Use `python -m pytest -q` for tests when code behavior needs broad verification; with `pytest-xdist` installed (`requirements-dev.txt`), `python -m pytest -q -n auto` runs the full suite ~2-3x faster.
+- This is a local Python project. Use `python -m pytest -q` for tests when code behavior needs broad verification; with `pytest-xdist` installed (`requirements-dev.txt`), `python -m pytest -q -n auto --dist loadfile` runs the full suite in parallel (~1 min, roughly 2x serial). A session fixture builds the repo code graph once into a shared cache so workers don't each re-parse the tree.
 - Use scoped verification first: affected methods/callers and focused tests. Do not run full pytest for docs-only/markdown-only edits.
 - Node.js is NOT available. Don't suggest npm/node solutions.
 - No new dependencies without operator approval.

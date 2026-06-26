@@ -23,7 +23,7 @@ addopts = "-p no:cacheprovider"
 testpaths = ["tests"]
 norecursedirs = ["tmp", ".git", "__pycache__", ".pytest_cache", ".ruff_cache", "logs", "memory", "operator", "docs", "personal"]
 markers = [
-    "smoke: fast core verification (<3KB test files, typically <5s)",
-    "unit: standard unit tests (3-15KB, typically <30s)",
-    "full: comprehensive tests (>15KB, may be slow)",
+    "smoke: fast core verification — test files under 3KB (auto-tiered by conftest)",
+    "unit: standard unit tests — test files 3-15KB (auto-tiered by conftest)",
+    "full: comprehensive tests — test files over 15KB (auto-tiered by conftest)",
 ]
