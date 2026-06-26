@@ -44,3 +44,21 @@ def test_tui_main_fragments_show_landing_before_transcript(monkeypatch):
     assert "MO UX" in text
     assert "Type a message" not in text
     assert "Build the next interface" not in text
+
+
+def test_tui_signal_animation_changes_between_frames():
+    frame_0 = tui._animated_signal_lines(0)
+    frame_1 = tui._animated_signal_lines(1)
+
+    assert frame_0 != frame_1
+    assert len(frame_0) == len(frame_1)
+    assert [len(line) for line in frame_0] == [len(line) for line in frame_1]
+
+
+def test_tui_animation_advances_frame():
+    animation = tui.TuiAnimation()
+
+    animation.advance()
+    animation.advance()
+
+    assert animation.frame == 2

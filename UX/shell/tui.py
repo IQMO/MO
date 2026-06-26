@@ -1,6 +1,8 @@
 """Prompt-toolkit fullscreen TUI for the isolated UX surface."""
 from __future__ import annotations
 
+import threading
+
 from prompt_toolkit.application import Application, get_app
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.formatted_text import HTML
@@ -15,6 +17,7 @@ from UX.state.controller import UxController
 from UX.state.models import TranscriptItem
 
 Fragment = tuple[str, str]
+ANIMATION_INTERVAL_SECONDS = 0.16
 
 LOGO_LINES: tuple[str, ...] = (
     "        M         M      OOOOOOO       ",
@@ -33,6 +36,14 @@ SIGNAL_LINES: tuple[str, ...] = (
     "  :       ░░       .    AGENT    .       ░░       :    ",
     "     .       :      ▓▓           ▓▓      :       .     ",
 )
+
+
+class TuiAnimation:
+    def __init__(self) -> None:
+        self.frame = 0
+
+    def advance(self) -> None:
+        self.frame += 1
 
 
 class PlaceholderProcessor(Processor):
@@ -76,6 +87,24 @@ def _trim(value: str, limit: int) -> str:
     return text[: max(0, limit - 3)].rstrip() + "..."
 
 
+def _rotate_line(line: str, offset: int) -> str:
+    if not line:
+        return line
+    offset = offset % len(line)
+    if offset == 0:
+        return line
+    return line[offset:] + line[:offset]
+
+
+def _animated_signal_lines(frame: int) -> tuple[str, ...]:
+    lines: list[str] = []
+    for index, line in enumerate(SIGNAL_LINES):
+        direction = 1 if index % 2 == 0 else -1
+        offset = direction * ((frame + index * 3) % max(1, len(line)))
+        lines.append(_rotate_line(line, offset))
+    return tuple(lines)
+
+
 def _centered_lines(lines: tuple[str, ...], width: int, style: str) -> list[Fragment]:
     fragments: list[Fragment] = []
     for line in lines:
@@ -84,13 +113,14 @@ def _centered_lines(lines: tuple[str, ...], width: int, style: str) -> list[Frag
     return fragments
 
 
-def _hero_fragments(controller: UxController) -> list[Fragment]:
+def _hero_fragments(controller: UxController, animation: TuiAnimation | None = None) -> list[Fragment]:
     snapshot = controller.snapshot()
     width = _terminal_width()
+    signal_lines = _animated_signal_lines(animation.frame if animation else 0)
     fragments: list[Fragment] = [("", "\n")]
-    fragments.extend(_centered_lines(SIGNAL_LINES[:3], width, "class:signal-dim"))
+    fragments.extend(_centered_lines(signal_lines[:3], width, "class:signal-dim"))
     fragments.extend(_centered_lines(LOGO_LINES, width, "class:logo"))
-    fragments.extend(_centered_lines(SIGNAL_LINES[3:], width, "class:signal-dim"))
+    fragments.extend(_centered_lines(signal_lines[3:], width, "class:signal-dim"))
     fragments.append(("", "\n"))
     title = f"══  MO UX  {snapshot.model_label}  ══"
     hints = "/help   |   /models   |   Shift+Tab plan mode   |   @file context"
@@ -134,11 +164,11 @@ def _transcript_fragments(items: tuple[TranscriptItem, ...]) -> list[Fragment]:
     return fragments
 
 
-def _main_fragments(controller: UxController) -> list[Fragment]:
+def _main_fragments(controller: UxController, animation: TuiAnimation | None = None) -> list[Fragment]:
     snapshot = controller.snapshot()
     if snapshot.transcript:
         return _transcript_fragments(snapshot.transcript)
-    return _hero_fragments(controller)
+    return _hero_fragments(controller, animation)
 
 
 def _mode_line_fragments(controller: UxController) -> list[Fragment]:
@@ -171,10 +201,10 @@ def _status_fragments(controller: UxController) -> list[Fragment]:
     ]
 
 
-def _build_root(controller: UxController, input_buffer: Buffer) -> HSplit:
+def _build_root(controller: UxController, input_buffer: Buffer, animation: TuiAnimation) -> HSplit:
     return HSplit(
         [
-            Window(content=FormattedTextControl(lambda: _main_fragments(controller)), wrap_lines=False),
+            Window(content=FormattedTextControl(lambda: _main_fragments(controller, animation)), wrap_lines=False),
             Window(height=1, content=FormattedTextControl(lambda: _mode_line_fragments(controller)), dont_extend_height=True),
             Window(
                 height=1,
@@ -226,6 +256,7 @@ def run_tui(controller: UxController) -> None:
     def _exit(event) -> None:
         event.app.exit()
 
+    animation = TuiAnimation()
     app_ref: dict[str, Application] = {}
 
     def _invalidate() -> None:
@@ -247,7 +278,7 @@ def run_tui(controller: UxController) -> None:
 
     input_buffer = Buffer(multiline=False, accept_handler=_accept)
     app = Application(
-        layout=Layout(_build_root(controller, input_buffer), focused_element=input_buffer),
+        layout=Layout(_build_root(controller, input_buffer, animation), focused_element=input_buffer),
         key_bindings=kb,
         full_screen=True,
         mouse_support=False,
@@ -255,4 +286,18 @@ def run_tui(controller: UxController) -> None:
         style=_style(),
     )
     app_ref["app"] = app
-    app.run()
+    stop_animation = threading.Event()
+
+    def _animate() -> None:
+        while not stop_animation.wait(ANIMATION_INTERVAL_SECONDS):
+            animation.advance()
+            if hasattr(app, "invalidate"):
+                app.invalidate()
+
+    thread = threading.Thread(target=_animate, daemon=True)
+    thread.start()
+    try:
+        app.run()
+    finally:
+        stop_animation.set()
+        thread.join(timeout=1.0)
