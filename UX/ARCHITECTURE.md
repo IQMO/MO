@@ -45,11 +45,19 @@ Forbidden directions:
 or rewrite task status. Gateway/taskboard/runtime own truth; adapters only
 convert runtime state into immutable display rows.
 
-## Next Visual Build
+## Current Build Rules
 
-The polished interface work should land in this order:
+- Preview mode is local-only. It can capture input and render a transcript, but
+  it must label local output as `UX`, never as `MO`.
+- Live mode sends turns only through `Gateway.run_turn` via the runtime bridge.
+- Read-only mode can instantiate runtime state and render a snapshot, but sends
+  no turn.
+- Idle rails stay static. Motion is allowed for the landing signal and for
+  actual busy/running activity.
+- Submit work belongs in `shell/` orchestration. Render functions must stay
+  pure snapshot-to-fragments/panels.
+- Promotion toward `mo.py` must remain explicit and lazy until the operator
+  accepts the UX as default.
 
-1. Add proper focus/input affordances around the composer.
-2. Improve live task and transcript density without hiding important text.
-3. Keep live orchestration in `shell/`, not in render functions.
-4. Add parity tests before promoting any behavior toward `mo.py`.
+See `STATUS.md` for current CPD state and `ROADMAP.md` for the default-switch
+gate.

@@ -80,7 +80,7 @@ def demo_snapshot() -> SessionSnapshot:
         provider="opencode",
         model="deepseek-v4-pro",
         busy=True,
-        notice="Preview only - not wired to runtime task ownership",
+        notice="Preview mode - local only",
         lanes=(
             LaneSnapshot("thinking", "ready", "scope, risks, next action", "flash"),
             LaneSnapshot("execution", "running", "gateway turn in progress", "pro"),
@@ -98,5 +98,5 @@ def demo_snapshot() -> SessionSnapshot:
                 "New UX is isolated: model, render, controller, adapter. Runtime truth stays outside display code.",
             ),
         ),
-        composer_hint="preview only; /exit closes",
+        composer_hint="preview local; run `python mo.py --ux` for live",
     )

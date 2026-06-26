@@ -74,7 +74,7 @@ def test_once_snapshot_render_preserves_read_only_hint():
 
     text = console.export_text(clear=False)
     assert "read-only mode; no messages are sent" in text
-    assert "preview only; /exit closes" not in text
+    assert "preview local; run" not in text
 
 
 def test_single_message_renders_result_and_advances_preview():

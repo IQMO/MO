@@ -1,8 +1,9 @@
 # UX Roadmap
 
-This file tracks the isolated next-generation terminal UX until it is ready to
-replace the current `interface/` surface. Runtime truth stays in Gateway,
-taskboard, and adapters; this folder owns presentation only.
+This file tracks the remaining promotion path for the isolated next-generation
+terminal UX. Current state, verification, and CPD history live in `STATUS.md`.
+Runtime truth stays in Gateway, taskboard, and adapters; this folder owns
+presentation only.
 
 ## Done
 
@@ -10,9 +11,10 @@ taskboard, and adapters; this folder owns presentation only.
 - Immutable display models and backend-independent controller.
 - Preview, read-only runtime, live runtime, and one-message smoke modes.
 - Windows launchers for preview and live runs.
-- Prompt-first fullscreen TUI with centered landing surface, composer, status
-  rail, and animated idle signal.
-- Stronger OpenDev-style idle motion with animated signal field and status rail.
+- Prompt-first fullscreen TUI with centered landing surface, composer, and status
+  rail.
+- OpenDev-style landing motion with animated signal field; idle rails remain
+  quiet and busy/running state owns spinner motion.
 - Compact work surface for transcript, real taskboard rows, and reported runtime
   lanes.
 - Background submit worker so live turns do not run on the render/input thread.
@@ -22,6 +24,8 @@ taskboard, and adapters; this folder owns presentation only.
   truth falls back to a neutral runtime row.
 - Explicit promotion hook: `mo --ux` or `MO_NEXT_UX=1`, with no default behavior
   change and no top-level `UX` import in `mo.py`.
+- Preview echo is explicitly local: transcript labels preview output as `UX`,
+  not `MO`, and points to live mode.
 - Contract tests for isolation, launch behavior, controller behavior, runtime
   adapters, and TUI animation.
 

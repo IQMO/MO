@@ -1,8 +1,11 @@
 # UX
 
-`UX/` is a clean-sheet, isolated terminal surface for MO Agent. It is not wired
-into `mo.py`, does not import the current `interface/` package, and does not own
-task truth.
+`UX/` is a clean-sheet, isolated terminal surface for MO Agent. It is opt-in
+through `python mo.py --ux` or `MO_NEXT_UX=1`; default `python mo.py` still uses
+the current `interface/` package. `UX/` does not import `interface/` and does not
+own task truth.
+
+Current status, verification, and CPD history live in `STATUS.md`.
 
 Run the static preview smoke render:
 
@@ -11,7 +14,8 @@ python -m UX --once
 ```
 
 Run the safe Windows preview launcher to inspect the interactive UI without
-touching the MO runtime:
+touching the MO runtime. Preview replies are local `UX` notices, not real `MO`
+answers:
 
 ```bat
 UX\run_preview.bat
@@ -93,9 +97,13 @@ python -m UX --live --message "who are you?"
 ## Phase Contract
 
 - Current production TUI stays in `interface/`.
-- New UX code stays in `UX/` until deliberately promoted.
+- New UX code stays in `UX/` until deliberately promoted. The only current
+  production entrypoint integration is the explicit lazy opt-in hook.
 - Display models are immutable snapshots.
 - Gateway/taskboard/runtime own truth; UX renders snapshots only.
+- Preview mode is local-only and must not label local echoes as `MO`.
+- Idle rails stay quiet; motion is reserved for the landing signal and real
+  busy/running activity.
 - No owner profile, private operator paths, secrets, or local maintainer defaults
   are product behavior.
 - No new dependency is introduced in this phase. The preview uses
@@ -111,14 +119,14 @@ python -m UX --live --message "who are you?"
 - Root modules such as `app.py`, `models.py`, and `controller.py` are
   compatibility shims only.
 
-See `ARCHITECTURE.md` before adding new UX code. See `ROADMAP.md` for the
-remaining promotion path to a final product surface.
+See `ARCHITECTURE.md` before adding new UX code. See `STATUS.md` for current
+state/CPD, and `ROADMAP.md` for the remaining promotion path.
 
 ## Mode Status
 
 - Phase 1 interactive shell: `python -m UX` opens a fullscreen prompt-toolkit
   TUI with a focused multiline composer, command palette, transcript updates,
-  and animated landing surface.
+  animated landing surface, quiet idle rails, and busy-only activity indicators.
 - Phase 2 read-only runtime: `python -m UX --read-only` creates Agent/Gateway and
   renders a snapshot without sending messages.
 - Phase 3 controlled actions: `python -m UX --live` sends messages through
