@@ -901,6 +901,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                             "diagnostics": diag,
                         })
                     final_text = self._doom_loop_block_text(tool_calls_data, repeated_tool_batch_count)
+                    # A doom-loop force-stop returns here directly, bypassing the closeout
+                    # pipeline — so an OWNER_MAINTENANCE run could be left with a false
+                    # [OWNER_MAINTENANCE COMPLETE] summary beside open task rows (live
+                    # mo-1782487827). Convert it to a recoverable [OWNER_MAINTENANCE BLOCKED]
+                    # boundary so the existing reconciler fixes summary.md + manifest.
+                    final_text = self._owner_maintenance_doom_loop_boundary(user_input, final_text)
                     notes = self._record_turn_memory_and_learning(user_input, final_text)
                     final_text = self._append_after_turn_notes(final_text, notes)
                     self.session.add_assistant(final_text)
@@ -1232,6 +1238,33 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             on_board_update=on_board_update,
             on_board_event=on_board_event,
         )
+
+    def _owner_maintenance_doom_loop_boundary(self, user_input: str, final_text: str) -> str:
+        """Turn a doom-loop force-stop into a recoverable OWNER_MAINTENANCE boundary.
+
+        The doom-loop path returns directly, skipping the closeout pipeline; on an
+        OWNER_MAINTENANCE turn that left a false ``[OWNER_MAINTENANCE COMPLETE]`` summary
+        beside open task rows with a stale manifest (live mo-1782487827). Prefixing the
+        stop with ``[OWNER_MAINTENANCE BLOCKED]`` makes the existing reconciler rewrite
+        summary.md and re-project the manifest (status=blocked + live economy/board), and
+        the still-open board is snapshotted blocked. No-op off OWNER_MAINTENANCE.
+        """
+        if not is_owner_maintenance_activation(user_input):
+            return final_text
+        blocked = (
+            "[OWNER_MAINTENANCE BLOCKED] tool doom-loop: the same tool batch repeated past "
+            "the limit and the turn was force-stopped before closeout. Recoverable runtime "
+            "boundary — resume from the active task with fresh evidence; open rows remain and "
+            "the run is NOT complete.\n\n" + str(final_text or "")
+        )
+        try:
+            self._reconcile_devmode_summary_marker(blocked)
+            board = getattr(getattr(self, "gateway", None), "last_task_board", None)
+            if board is not None and board.open_count() > 0:
+                record_snapshot(board, "blocked", state="blocked")
+        except Exception:
+            traceback.print_exc()
+        return blocked
 
     def _affected_test_failure_instruction(self, turn_modified_files: list) -> str | None:
         """Run the affected tests for code files this turn changed;
