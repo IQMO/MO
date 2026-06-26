@@ -15,6 +15,7 @@ stdlib deferred imports are skipped — they can't be verified without importing
 from __future__ import annotations
 
 import ast
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,12 +24,35 @@ ROOT_FILES = ("mo.py", "mo_service.py")
 FIRST_PARTY = ("core", "interface", "tools")
 
 
+def _tracked_files() -> set[Path] | None:
+    """Absolute paths of git-tracked files, or None if git is unavailable.
+
+    Scanning tracked files only keeps this test order-independent: a stray ``.py``
+    that another test writes under core/interface/tools mid-run is untracked and
+    cannot trip the resolver. Only shipped (tracked) code is the contract here.
+    None falls back to the full filesystem walk so a no-git environment still
+    scans rather than silently passing."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-z"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    return {(ROOT / rel).resolve() for rel in out.stdout.split("\0") if rel}
+
+
 def _iter_files():
+    tracked = _tracked_files()
     for d in SHIP_DIRS:
-        yield from (ROOT / d).rglob("*.py")
+        for p in (ROOT / d).rglob("*.py"):
+            if tracked is None or p.resolve() in tracked:
+                yield p
     for name in ROOT_FILES:
         p = ROOT / name
-        if p.is_file():
+        if p.is_file() and (tracked is None or p.resolve() in tracked):
             yield p
 
 
