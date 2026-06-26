@@ -214,7 +214,7 @@ class GhostOrb:
             cx = cy = big / 2.0
             base_r = big * 0.22
             breathe = 0.5 + 0.5 * _sin(now * 2.2)
-            lvl = max(0.0, min(1.0, self._level * 6.0))
+            lvl = max(0.0, min(1.0, self._level * 9.0))
             img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
             d = ImageDraw.Draw(img)
 
@@ -262,7 +262,7 @@ class GhostOrb:
         cx = cy = self._size / 2.0
         breathe = 0.5 + 0.5 * _sin(now * 2.2)        # 0..1 gentle
         base_r = self._size * 0.24
-        lvl = max(0.0, min(1.0, self._level * 6.0))  # normalise mic level to 0..1
+        lvl = max(0.0, min(1.0, self._level * 9.0))  # normalise mic level to 0..1
 
         # Listening: audio-reactive concentric rings — an equalizer-like bloom that
         # grows with how loud you speak, over a steady breathing ring.

@@ -144,6 +144,21 @@ def test_recorder_auto_stops_after_trailing_silence():
     assert fired[4] is True
 
 
+def test_recorder_returns_1d_mono_waveform():
+    """faster-whisper needs 1-D mono; a (samples, 1) array blows up its mel alloc
+    (the 127 GiB crash). stop() must flatten the captured chunks."""
+    import numpy as np
+    from interface.ghost_desktop.voice import PushToTalkRecorder
+    r = PushToTalkRecorder()
+    r._recording = True
+    r._stream = None
+    r._buffer = [np.zeros((100, 1), dtype="float32"), np.ones((50, 1), dtype="float32")]
+    audio = r.stop()
+    assert audio is not None
+    assert audio.ndim == 1
+    assert audio.shape == (150,)
+
+
 def test_ghost_desktop_session_persist_is_noop_without_manager():
     from interface.ghost_desktop.companion import CompanionSurface
 

@@ -78,6 +78,11 @@ class VoiceRecognizer:
         if not self._ensure_model():
             return f"[STT unavailable: {self._load_error}]"
         try:
+            # faster-whisper needs a 1-D mono float32 waveform. A (samples, 1) array
+            # (what mono sounddevice capture yields) makes its feature extractor
+            # explode the mel dims (a multi-GiB alloc), so flatten defensively.
+            import numpy as np
+            audio = np.ascontiguousarray(np.asarray(audio, dtype="float32")).reshape(-1)
             segments, _info = self._model.transcribe(audio, beam_size=5)
             text = " ".join(seg.text.strip() for seg in segments)
             return text.strip()
@@ -277,7 +282,9 @@ class PushToTalkRecorder:
                 self._stream.close()
                 self._stream = None
             if self._buffer:
-                audio = np.concatenate(self._buffer, axis=0)
+                # Flatten (frames, 1) mono chunks to a 1-D waveform — faster-whisper
+                # requires 1-D; a (samples, 1) array blows up its mel allocation.
+                audio = np.concatenate(self._buffer, axis=0).reshape(-1)
                 self._buffer = []
                 # Trim to max_seconds
                 max_samples = int(self._sample_rate * self._max_seconds)

@@ -312,6 +312,7 @@ def test_start_companion_passes_companion_config(monkeypatch):
         "config": {
             "desktop_companion": {
                 "enabled": True,
+                "run_in_terminal": True,  # opt back into terminal co-hosting
                 "tray_enabled": True,
                 "voice": {"stt_enabled": True},
             }
@@ -325,6 +326,22 @@ def test_start_companion_passes_companion_config(monkeypatch):
     assert captured["gateway"] is gateway
     assert captured["voice_config"] == {"stt_enabled": True}
     assert captured["companion_config"]["tray_enabled"] is True
+
+
+def test_terminal_does_not_cohost_ghost_desktop_by_default(monkeypatch):
+    """Ghost Desktop is its own process: the terminal must NOT start it in-thread
+    unless run_in_terminal is explicitly set, so it survives terminal restarts."""
+    from interface.ghost_desktop import companion as companion_module
+
+    started = []
+    monkeypatch.setattr(companion_module, "acquire_runtime_lock",
+                        lambda **_k: started.append(True) or object())
+    agent = type("Agent", (), {
+        "config": {"desktop_companion": {"enabled": True, "tray_enabled": True}}
+    })()
+
+    assert companion_module.start_companion_if_enabled(agent, object()) is None
+    assert started == []  # never even reached for the lock — fully decoupled
 
 
 def test_hotkey_registration_stores_and_removes_handle(monkeypatch):

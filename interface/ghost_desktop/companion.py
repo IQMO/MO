@@ -338,7 +338,8 @@ class CompanionSurface:
             return
         if voice.start_recording():
             self._recording_voice = True
-            self._orb_set_listening(True)  # the moon breathes while Ghost hears you
+            self._orb_wake()               # pop the moon at the cursor immediately
+            self._orb_set_listening(True)  # then keep it up and reactive while hearing
             self._set_voice_btn_color("#ff4444")  # visible hot-mic cue
             self._set_status("Listening… Win+Alt+M again to stop", _LISTEN)
         else:
@@ -1092,6 +1093,13 @@ def start_companion_if_enabled(agent: Any, gateway: Any) -> CompanionSurface | N
         companion_cfg = {}
 
     if not isinstance(companion_cfg, dict) or not companion_cfg.get("enabled", False):
+        return None
+
+    # Ghost Desktop runs as its OWN process by default — `python -m interface.ghost_desktop`
+    # (or the run-at-startup shortcut). That way it survives terminal restarts, doesn't
+    # launch with the terminal, and never blocks terminal boot. The terminal only co-hosts
+    # it in-thread when explicitly opted in with `run_in_terminal: true`.
+    if not companion_cfg.get("run_in_terminal", False):
         return None
 
     resource_lock = acquire_runtime_lock(lock_name="ghost.lock", legacy_lock_names=("mo-companion.lock",), label="MO Ghost")
