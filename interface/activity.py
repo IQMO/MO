@@ -7,7 +7,7 @@ import time
 from typing import Any
 
 from .formatting import activity_label, format_k, idle_status_text, moon_phase_frame, token_status_from_agent
-from .transcript_view import cell_width
+from .transcript_view import cell_width, split_cells
 
 
 def board_summary_text(board_text: str) -> str:
@@ -192,23 +192,53 @@ def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = N
     return frags
 
 
-def footer_fragments(left_frags: list[tuple[str, str]], *, columns: int, right: str = "", right_style: str = "") -> list[tuple[str, str]]:
-    right_text = str(right or "")
-    right_gap = 1 if right_text else 0
-    max_left = max(1, columns - cell_width(right_text) - right_gap)
+def clip_text_to_cells(text: str, max_cells: int) -> str:
+    """Clip text to a display-cell budget, reserving one cell for ellipsis."""
+    limit = max(0, int(max_cells or 0))
+    value = str(text or "")
+    if limit <= 0:
+        return ""
+    if cell_width(value) <= limit:
+        return value
+    if limit == 1:
+        return "…"
+    chunk = split_cells(value, limit - 1)[0].rstrip()
+    while chunk and cell_width(chunk) > limit - 1:
+        chunk = chunk[:-1].rstrip()
+    return f"{chunk}…"
 
-    total_len = 0
-    out = []
-    for style, text in left_frags:
-        if total_len + cell_width(text) > max_left:
-            allowed = max_left - total_len
-            if allowed > 0:
-                out.append((style, text[:max(1, allowed - 1)] + "…"))
+
+def fit_fragments_to_cells(fragments: list[tuple[str, str]], max_cells: int) -> tuple[list[tuple[str, str]], int]:
+    """Return fragments clipped to max_cells and their rendered cell width."""
+    remaining = max(0, int(max_cells or 0))
+    out: list[tuple[str, str]] = []
+    used = 0
+    for style, text in fragments:
+        if remaining <= 0:
             break
-        out.append((style, text))
-        total_len += cell_width(text)
+        clipped = clip_text_to_cells(text, remaining)
+        if not clipped and text:
+            break
+        out.append((style, clipped))
+        clipped_width = cell_width(clipped)
+        used += clipped_width
+        remaining -= clipped_width
+        if clipped != str(text or ""):
+            break
+    return out, used
 
-    pad = max(0, columns - total_len - cell_width(right_text))
+
+def footer_fragments(left_frags: list[tuple[str, str]], *, columns: int, right: str = "", right_style: str = "") -> list[tuple[str, str]]:
+    columns = max(1, int(columns or 1))
+    right_text = str(right or "")
+    right_text = clip_text_to_cells(right_text, columns)
+    right_width = cell_width(right_text)
+    right_gap = 1 if right_text and right_width < columns else 0
+    max_left = max(0, columns - right_width - right_gap)
+
+    out, total_len = fit_fragments_to_cells(left_frags, max_left)
+
+    pad = max(0, columns - total_len - right_width)
     out.append(("class:footer", " " * pad))
     if right_text:
         r_style = right_style if right_style else "class:palette-hint"
@@ -217,10 +247,12 @@ def footer_fragments(left_frags: list[tuple[str, str]], *, columns: int, right: 
 
 
 def status_bar_fragments(left_frags: list[tuple[str, str]], right: str, *, columns: int) -> list[tuple[str, str]]:
-    left_len = sum(cell_width(text) for _, text in left_frags)
-    pad = max(0, columns - left_len - cell_width(right))
-    out = list(left_frags)
-    out.extend([("", " " * pad), ("class:palette-hint", right)])
+    columns = max(1, int(columns or 1))
+    right_text = clip_text_to_cells(right, columns)
+    right_width = cell_width(right_text)
+    out, left_len = fit_fragments_to_cells(left_frags, max(0, columns - right_width))
+    pad = max(0, columns - left_len - right_width)
+    out.extend([("", " " * pad), ("class:palette-hint", right_text)])
     return out
 
 
