@@ -517,7 +517,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         continue
                     final_text = "Provider repeatedly produced malformed/truncated tool calls; stopped before changing files. Try a smaller edit or switch model."
                     notes = self._record_turn_memory_and_learning(user_input, final_text)
-                    final_text = self._append_after_turn_notes(final_text, notes)
+                    final_text = self._maybe_append_after_turn_notes(final_text, notes)
                     self.session.add_assistant(final_text)
                     # Turn-end security check on modified files
                     _emit_security_check(turn_modified_files, monitor)
@@ -548,7 +548,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     if extension_boundary:
                         final_text = extension_boundary
                     notes = self._record_turn_memory_and_learning(user_input, final_text)
-                    final_text = self._append_after_turn_notes(final_text, notes)
+                    final_text = self._maybe_append_after_turn_notes(final_text, notes)
                     self.session.add_assistant(final_text)
                     _emit_security_check(turn_modified_files, monitor)
                     return final_text
@@ -774,7 +774,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     continue
                 final_text = "Provider returned no visible answer after retry; try again or switch model."
                 notes = self._record_turn_memory_and_learning(user_input, final_text)
-                final_text = self._append_after_turn_notes(final_text, notes)
+                final_text = self._maybe_append_after_turn_notes(final_text, notes)
                 self.session.add_assistant(final_text)
                 # Turn-end security check on modified files
                 _emit_security_check(turn_modified_files, monitor)

@@ -1172,6 +1172,9 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                     user=user_input,
                     assistant=final_text,
                 )
+                # Footer-only tick (NOT added to `notes`, so it never appends to
+                # non-TUI replies). Confirms the turn was committed to memory.
+                self.push_status_note("memory noted")
             except Exception:
                 traceback.print_exc()
         try:
@@ -1217,6 +1220,8 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                     notes.append(notice)
         except Exception:
             traceback.print_exc()
+        for _note in notes:
+            self.push_status_note(_note)
         return notes
 
     @staticmethod
@@ -1233,6 +1238,36 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         if not clean:
             return str(text or "")
         return (str(text or "").rstrip() + "\n" + "\n".join(clean)).strip()
+
+    def _maybe_append_after_turn_notes(self, text: str, notes: list[str]) -> str:
+        """Append learning/memory notes to the reply UNLESS a transient status
+        surface (the TUI footer) is showing them — avoids duplicating the
+        confirmation in both the response body and the footer."""
+        if getattr(self, "_status_footer_active", False):
+            return str(text or "")
+        return self._append_after_turn_notes(text, notes)
+
+    def push_status_note(self, text: str) -> None:
+        """Buffer a transient learning/memory confirmation for the TUI footer
+        (e.g. 'Term learned: X', 'Noted: …'). Surface-agnostic; the footer reads
+        recent ones and fades them out."""
+        note = str(text or "").strip()
+        if not note:
+            return
+        buf = getattr(self, "_status_notes", None)
+        if buf is None:
+            from collections import deque
+            buf = deque(maxlen=6)
+            self._status_notes = buf
+        buf.append((note[:80], time.time()))
+
+    def recent_status_notes(self, window: float = 6.0) -> list[str]:
+        """Transient confirmations recorded within the last `window` seconds."""
+        buf = getattr(self, "_status_notes", None)
+        if not buf:
+            return []
+        cutoff = time.time() - max(1.0, float(window))
+        return [t for (t, ts) in buf if ts >= cutoff]
 
     def _emit_session_event(self, monitor: BackendMonitor | None, kind: str, **payload: object) -> None:
         mon = monitor or get_monitor()

@@ -43,6 +43,7 @@ TUI_STYLE_DICT: dict[str, str] = {
     "info": "#00cccc",
     "input-placeholder": "#555555 italic",
     "notification-idle": "#00cccc italic",
+    "notification-learning": "#7fd17f italic",
     "notification-prt": "#bb86fc bold",
     "notification-goal": "#ffae42 bold",
     "notification-worker": "#888888",

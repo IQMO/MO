@@ -123,6 +123,19 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
             pending = self._pending_inputs.qsize()
         except Exception:
             pending = 0
+        # This delegate only renders in the TUI, so mark the footer active: the
+        # agent then routes learning/memory confirmations here (transient) instead
+        # of appending them to the reply body.
+        learning_notes: tuple[str, ...] = ()
+        agent = getattr(self, "agent", None)
+        if agent is not None:
+            try:
+                agent._status_footer_active = True
+                getter = getattr(agent, "recent_status_notes", None)
+                if callable(getter):
+                    learning_notes = tuple(getter())
+            except Exception:
+                learning_notes = ()
         return notification_items(
             ghost_unread_count=self._ghost_unread_count,
             goal_worker_active=bool(self._goal_worker_active),
@@ -130,6 +143,7 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
             pending_count=pending,
             prt_done_unread=bool(getattr(self, "_prt_done_unread", False)),
             goal_progress=goal_progress_text(getattr(self, "agent", None)),
+            learning_notes=learning_notes,
         )
 
     def _goal_elapsed_text(self) -> str:

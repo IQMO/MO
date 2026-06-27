@@ -88,8 +88,14 @@ def activity_fragments(
     return [("class:spinner", f" {frame} "), (mo_style, "MO"), ("class:activity", f" {label}{suffix}")]
 
 
-def notification_items(*, ghost_unread_count: int, goal_worker_active: bool, goal_done_unread: bool, pending_count: int, prt_done_unread: bool = False, goal_progress: str = "") -> list[tuple[str, str]]:
+def notification_items(*, ghost_unread_count: int, goal_worker_active: bool, goal_done_unread: bool, pending_count: int, prt_done_unread: bool = False, goal_progress: str = "", learning_notes: "tuple[str, ...]" = ()) -> list[tuple[str, str]]:
     items: list[tuple[str, str]] = []
+    # Transient learning/memory confirmations (e.g. "Term learned: X", "Noted: …").
+    # Fresh, so they lead the rotation; they fade as the agent's recency window expires.
+    for _note in (learning_notes or ()):
+        _text = str(_note or "").strip()
+        if _text:
+            items.append(("class:notification-learning", _text))
     if prt_done_unread:
         items.append(("class:notification-prt", "PRT ready: Alt+G"))
     if ghost_unread_count:
