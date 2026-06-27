@@ -349,9 +349,14 @@ def owner_maintenance_continuation_instruction(
         )
     if text.startswith("[OWNER_MAINTENANCE BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
         return (
-            "[OWNER_MAINTENANCE AUTONOMY] Your last answer used [OWNER_MAINTENANCE BLOCKED] without a current hard "
-            "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a "
-            "blocker. Continue from the continuation capsule or next unresolved action now."
+            "[OWNER_MAINTENANCE AUTONOMY] You used [OWNER_MAINTENANCE BLOCKED] but there is NO current hard "
+            "tool/provider/timeout/sandbox/permission/safety boundary. A RECOVERED sandbox block or tool error is "
+            "NOT a boundary, and the taskboard being briefly marked 'blocked' while open tasks = 0 is NOT a boundary. "
+            "Do NOT re-assert [OWNER_MAINTENANCE BLOCKED] — re-asserting it is the exact loop that dead-ends this "
+            "run. If the work is finished (open tasks = 0, diff/findings handled, closeout artifacts written, every "
+            "tool error owned as recovered), the honest terminal is [OWNER_MAINTENANCE COMPLETE] — emit it now. Use "
+            "BLOCKED only when you can name a real, CURRENTLY UNRECOVERED hard boundary; otherwise continue the next "
+            "unresolved action and finalize with [OWNER_MAINTENANCE COMPLETE]."
         )
     return base
 
@@ -394,9 +399,11 @@ def owner_comparison_continuation_instruction(user_input: str, final_text: str) 
             )
     if text.startswith("[OWNER_COMPARISON BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
         return (
-            "[OWNER_COMPARISON CONTINUATION] Your last answer used [OWNER_COMPARISON BLOCKED] without a current hard "
-            "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a "
-            "blocker. Continue the comparison from the next evidence-backed action."
+            "[OWNER_COMPARISON CONTINUATION] You used [OWNER_COMPARISON BLOCKED] but there is NO current hard "
+            "tool/provider/timeout/sandbox/permission/safety boundary. A recovered error, or the taskboard being "
+            "briefly marked 'blocked' while open tasks = 0, is NOT a boundary. Do NOT re-assert BLOCKED — that is the "
+            "loop that dead-ends the run. If the comparison is finished, emit [OWNER_COMPARISON COMPLETE]; use BLOCKED "
+            "only for a real, CURRENTLY UNRECOVERED hard boundary."
         )
     return base
 
@@ -492,9 +499,11 @@ def owner_dedup_continuation_instruction(user_input: str, final_text: str) -> st
             )
     if text.startswith("[OWNER_DEDUP BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
         return (
-            "[OWNER_DEDUP CONTINUATION] Your last answer used [OWNER_DEDUP BLOCKED] without a current hard "
-            "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a blocker. "
-            "Continue the deduplication from the next evidence-backed cluster."
+            "[OWNER_DEDUP CONTINUATION] You used [OWNER_DEDUP BLOCKED] but there is NO current hard "
+            "tool/provider/timeout/sandbox/permission/safety boundary. A recovered error, or the taskboard being "
+            "briefly marked 'blocked' while open tasks = 0, is NOT a boundary. Do NOT re-assert BLOCKED — that is the "
+            "loop that dead-ends the run. If the deduplication is finished, emit [OWNER_DEDUP COMPLETE]; use BLOCKED "
+            "only for a real, CURRENTLY UNRECOVERED hard boundary."
         )
     return base
 
@@ -590,9 +599,11 @@ def owner_interface_audit_continuation_instruction(user_input: str, final_text: 
         )
     if text.startswith("[OWNER_INTERFACE_AUDIT BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
         return (
-            "[OWNER_INTERFACE_AUDIT CONTINUATION] Your last answer used [OWNER_INTERFACE_AUDIT BLOCKED] without a current hard "
-            "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a "
-            "blocker. Continue from the next unresolved UX finding now."
+            "[OWNER_INTERFACE_AUDIT CONTINUATION] You used [OWNER_INTERFACE_AUDIT BLOCKED] but there is NO current hard "
+            "tool/provider/timeout/sandbox/permission/safety boundary. A recovered error, or the taskboard being "
+            "briefly marked 'blocked' while open tasks = 0, is NOT a boundary. Do NOT re-assert BLOCKED — that is the "
+            "loop that dead-ends the run. If the UX audit is finished, emit [OWNER_INTERFACE_AUDIT COMPLETE]; use "
+            "BLOCKED only for a real, CURRENTLY UNRECOVERED hard boundary."
         )
     return base
 
