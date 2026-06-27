@@ -133,6 +133,57 @@ def test_preflight_context_user_clone_has_no_protocol_recipe(monkeypatch):
     assert "core/graph/code_graph.py" in text
 
 
+def test_owner_maintenance_preflight_surfaces_latest_blocked_session(
+    tmp_path, monkeypatch, install_operator_protocol_pack
+):
+    """A blocked DEVMODE run must become mandatory root-cause evidence next run."""
+    import json
+    import core.self_maintenance.preflight as scp
+
+    monkeypatch.delenv("MO_HOME", raising=False)
+    monkeypatch.delenv("MO_OPERATOR_PACK", raising=False)
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    install_operator_protocol_pack(tmp_path)
+    monkeypatch.setattr(scp, "_load_owner_preflight_rules", lambda: ["private test rule"])
+
+    session = tmp_path / "memory" / "devmode" / "2026-01-02T0304"
+    session.mkdir(parents=True)
+    (session / "manifest.json").write_text(
+        json.dumps({
+            "status": "blocked",
+            "taskboard": {
+                "state": "blocked",
+                "open_count": 2,
+                "tasks": [
+                    {"id": "1", "title": "Boot protocol", "status": "blocked"},
+                    {"id": "2", "title": "Verify task truth", "status": "pending"},
+                ],
+            },
+            "economy": {
+                "provider_requests": 41,
+                "tool_calls": 72,
+                "tool_errors": 5,
+                "sandbox_blocked": 4,
+            },
+        }),
+        encoding="utf-8",
+    )
+    (session / "summary.md").write_text(
+        "## Closeout\n- **[OWNER_MAINTENANCE BLOCKED]** — open taskboard rows.\n",
+        encoding="utf-8",
+    )
+
+    text = scp.build_self_capability_preflight_context("start OWNER_MAINTENANCE", cwd=".")
+
+    assert "Latest OWNER_MAINTENANCE Blocked Session" in text
+    assert "status=blocked" in text
+    assert "open_count=2" in text
+    assert "tool_errors=5" in text
+    assert "sandbox_blocked=4" in text
+    assert "[OWNER_MAINTENANCE BLOCKED]" in text
+    assert "before cataloging new work, explain why this session blocked" in text
+
+
 def test_owner_comparison_final_stop_requires_terminal_closeout():
     assert owner_comparison_final_allows_stop("start OWNER_COMPARISON E:\\ref-a E:\\ref-b", "initial capture only") is False
     assert owner_comparison_final_allows_stop("start OWNER_COMPARISON", "[OWNER_COMPARISON BLOCKED] provider timeout") is True

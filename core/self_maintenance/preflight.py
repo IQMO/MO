@@ -1,6 +1,7 @@
 """Self-maintenance preflight context for MO's own codebase work."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 
@@ -202,6 +203,8 @@ def build_self_capability_preflight_context(user_input: str, *, cwd: str | None 
     lines.extend(_capability_file_lines(root))
     if owner_rules:
         lines.extend(_runtime_evidence_lines(root))
+        if is_owner_maintenance_activation(user_input):
+            lines.extend(_latest_blocked_devmode_lines())
     # OWNER_INTEGRITY_AUDIT audits arbitrary code, so it needs live-measured ground truth about the audit
     # target (line counts, function spans, symbol references) — not MO's self-capability
     # list. Append it so quantitative/exhaustiveness claims start from disk, not memory.
@@ -212,6 +215,86 @@ def build_self_capability_preflight_context(user_input: str, *, cwd: str | None 
             lines.append("")
             lines.append(ground_truth)
     return "\n".join(lines)
+
+
+def _latest_blocked_devmode_lines() -> list[str]:
+    """Inject the latest blocked OWNER_MAINTENANCE run as mandatory startup evidence.
+
+    A blocked run is not just historical telemetry: it is a self-maintenance failure
+    mode that the next OWNER_MAINTENANCE pass must root-cause before declaring the
+    codebase healthy. The block is emitted only when private owner rules are loaded,
+    so user clones without the operator pack receive no owner-run history.
+    """
+    try:
+        root = mo_home() / "memory" / "devmode"
+        if not root.is_dir():
+            return []
+        sessions = sorted(
+            (path for path in root.iterdir() if path.is_dir()),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        latest = None
+        manifest = None
+        for session in sessions[:20]:
+            manifest_path = session / "manifest.json"
+            if not manifest_path.is_file():
+                continue
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                latest = session
+                manifest = data
+            break
+        if latest is None or manifest is None:
+            return []
+        if str(manifest.get("status") or "").strip().lower() != "blocked":
+            return []
+        taskboard = manifest.get("taskboard") if isinstance(manifest.get("taskboard"), dict) else {}
+        economy = manifest.get("economy") if isinstance(manifest.get("economy"), dict) else {}
+        tasks = taskboard.get("tasks") if isinstance(taskboard.get("tasks"), list) else []
+        open_titles = [
+            str(task.get("title") or task.get("id") or "").strip()
+            for task in tasks
+            if isinstance(task, dict) and str(task.get("status") or "").strip().lower() != "completed"
+        ]
+        marker = _summary_terminal_marker(latest / "summary.md")
+        lines = [
+            "",
+            "### Latest OWNER_MAINTENANCE Blocked Session - mandatory root-cause input",
+            f"- latest_session: `{latest}`",
+            "- manifest: "
+            f"status=blocked, taskboard_state={taskboard.get('state', 'unknown')}, "
+            f"open_count={taskboard.get('open_count', 'unknown')}",
+            "- economy: "
+            f"provider_requests={economy.get('provider_requests', 'unknown')}, "
+            f"tool_calls={economy.get('tool_calls', 'unknown')}, "
+            f"tool_errors={economy.get('tool_errors', 'unknown')}, "
+            f"sandbox_blocked={economy.get('sandbox_blocked', 'unknown')}",
+            f"- summary_marker: {marker or 'not found'}",
+        ]
+        if open_titles:
+            lines.append("- first_open_rows: " + "; ".join(open_titles[:4]))
+        lines.extend([
+            "- Required action: before cataloging new work, explain why this session blocked, "
+            "classify the blocker as already-fixed, product bug, protocol bug, or external boundary, "
+            "and fix any product/protocol cause before [OWNER_MAINTENANCE COMPLETE].",
+            "- Do not treat artifact wording such as `0 findings` or `healthy` as proof when "
+            "manifest status/open_count says blocked.",
+        ])
+        return lines
+    except Exception:
+        return []
+
+
+def _summary_terminal_marker(summary_path: Path) -> str:
+    try:
+        if not summary_path.is_file():
+            return ""
+        text = summary_path.read_text(encoding="utf-8", errors="replace")
+        match = re.search(r"\[OWNER_MAINTENANCE (?:COMPLETE|BLOCKED)\]", text)
+        return match.group(0) if match else ""
+    except Exception:
+        return ""
 
 
 def _runtime_evidence_lines(root: Path) -> list[str]:
