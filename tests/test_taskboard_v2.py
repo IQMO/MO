@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from core.agent.agent import Agent
-from core.tasking.task_board import TaskBoard, TaskItem, clear_current_board_if_empty, read_recent_snapshots, record_snapshot
+from core.tasking.task_board import TaskBoard, TaskItem, clear_current_board_if_empty, read_recent_snapshots, record_snapshot, resume_last_board
 from core.tasking.task_manager import TaskManager
 from core.session.session_closeout import _taskboard_state
 from core.session.handoff import _task_board_summary
@@ -44,6 +44,36 @@ def test_clear_current_board_if_empty_removes_boardless_working_copy(tmp_path):
     assert (ledger.parent / "current.json").exists()
     assert clear_current_board_if_empty(path=ledger) is True
     assert not (ledger.parent / "current.json").exists()
+
+
+def test_empty_snapshot_does_not_replace_current_board_with_tasks(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ledger = tmp_path / "isolated" / "taskboards.jsonl"
+    board = TaskBoard(turn_id="turn-real", session_id="s1", tasks=[TaskItem("1", "Inspect", "active")])
+    empty = TaskBoard(turn_id="turn-empty", session_id="s1")
+
+    record_snapshot(board, "updated", path=ledger)
+    record_snapshot(empty, "updated", path=ledger)
+
+    current = TaskManager(tmp_path, tasks_dir=ledger.parent).load_snapshot()
+    assert current["board_id"] == board.board_id
+    assert [task["title"] for task in current["tasks"]] == ["Inspect"]
+
+
+def test_resume_last_board_skips_empty_snapshots_in_ledger(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ledger = tmp_path / "isolated" / "taskboards.jsonl"
+    board = TaskBoard(turn_id="turn-real", session_id="s1", tasks=[TaskItem("1", "Inspect", "active")])
+    record_snapshot(board, "updated", path=ledger)
+    (ledger.parent / "current.json").unlink()
+    for idx in range(12):
+        record_snapshot(TaskBoard(turn_id=f"turn-empty-{idx}", session_id="s1", objective=str(idx)), "updated", path=ledger)
+
+    resumed = resume_last_board(path=ledger)
+
+    assert resumed is not None
+    assert resumed.board_id == board.board_id
+    assert [task.title for task in resumed.tasks] == ["Inspect"]
 
 
 def test_taskboard_snapshot_ledger_round_trip(tmp_path):

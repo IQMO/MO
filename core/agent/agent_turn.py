@@ -295,7 +295,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 worker_id=self._provider_worker_id(),
             )
             if monitor:
-                request_messages = self.session.get_messages(extra_context=extra_context, consume_handoff=False)
+                request_messages = self.session.get_messages(
+                    extra_context=extra_context,
+                    consume_handoff=False,
+                    include_reasoning_content=self._provider_requires_reasoning_content(),
+                )
                 provider_tools = (
                     self._provider_tool_definitions()
                     if hasattr(self, "_provider_tool_definitions")
@@ -344,6 +348,25 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             try:
                 response = self._call_provider(on_token=checked_on_token if on_token else None, extra_context=extra_context)
             except TurnCancelled:
+                append_provider_audit(
+                    "provider_error",
+                    surface=self._provider_surface(),
+                    provider=self.provider_name,
+                    model=self.model,
+                    request=provider_requests,
+                    session_id=getattr(self.session, "session_id", ""),
+                    worker_id=self._provider_worker_id(),
+                    reason="turn_cancelled",
+                    ok=False,
+                )
+                if monitor:
+                    monitor.emit("provider_error", {
+                        "request": provider_requests,
+                        "provider": self.provider_name,
+                        "reason": "turn_cancelled",
+                        "error": "Provider request cancelled before completion.",
+                    })
+                turn_provider_errors += 1
                 return "[ABORTED] Current turn stopped."
             except Exception as exc:
                 # === Phase 2a: provider error → classify, audit, recover, or fallback ===
@@ -393,8 +416,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     continue
                 return f"MO provider error: {err_msg}"
 
-            if getattr(cancel_event, "is_set", lambda: False)():
-                return "[ABORTED] Current turn stopped."
+            cancelled_after_response = bool(getattr(cancel_event, "is_set", lambda: False)())
 
             # === Phase 2b: track usage tokens & audit response ===
             # Track usage
@@ -432,6 +454,8 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     "content_chars": len(response.content or ""),
                     "preview": preview_provider_response(response.content or "", response.tool_calls or []),
                 })
+            if cancelled_after_response:
+                return "[ABORTED] Current turn stopped."
 
             # === Phase 2c: Handle tool calls ===
             # === Phase 2c: dispatch tool calls or finalize text ===
@@ -1153,7 +1177,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
 
     def _call_provider(self, on_token: object = None, extra_context: str | None = None):
         """Call the active provider with current session messages and active tools."""
-        messages = self.session.get_messages(extra_context=extra_context, consume_handoff=False)
+        messages = self.session.get_messages(
+            extra_context=extra_context,
+            consume_handoff=False,
+            include_reasoning_content=self._provider_requires_reasoning_content(),
+        )
         handoff_seed = str(getattr(self.session, "_handoff_context", "") or "")
         p = self.active_provider
         provider_tools = (
@@ -1172,6 +1200,17 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         if handoff_seed and str(getattr(self.session, "_handoff_context", "") or "") == handoff_seed:
             self.session._handoff_context = ""
         return response
+
+    def _provider_requires_reasoning_content(self) -> bool:
+        """Whether the active chat payload must retain assistant reasoning_content."""
+        values = [getattr(self, "model", "")]
+        try:
+            provider = self.active_provider
+            values.append(getattr(provider, "model", ""))
+        except Exception:
+            pass
+        text = " ".join(str(value or "").lower() for value in values)
+        return "deepseek" in text and any(marker in text for marker in ("v4", "reason", "r1", "thinking"))
 
     def _empty_response_action(self, *, empty_response_prompts: int, empty_response_fallback_attempted: bool,
                                finish_reason: str, provider_requests: int, monitor=None, on_activity=None) -> tuple[str, int, bool]:

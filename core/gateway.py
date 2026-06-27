@@ -377,6 +377,8 @@ class Gateway:
                 if self.last_task_board is not None:
                     event, state = terminal_board_event(self.last_task_board, status)
                     record_terminal_snapshot(self.last_task_board, event, source="gateway", state=state)
+                    if not self.last_task_board.tasks:
+                        clear_current_board_if_empty()
                     self.task_board_registry.record_event(board_slot, self.last_task_board, update=event)
                 self.monitor.emit("turn_end", {
                     "status": status,
@@ -622,10 +624,11 @@ def _runtime_should_create_board(
     *,
     resume_intent: bool = False,
 ) -> bool:
-    """Decide board creation: always yes for work turns, no for research-method questions.
+    """Decide board creation from the first real runtime signal.
 
-    Previously had complex heuristic gates; now simplified: if should_show_task_board
-    passed, and we reached a first tool call, create the board.
+    Model-owned taskboards are materialized only by set_plan; otherwise a
+    preliminary read/search can create a visible empty board and overwrite
+    current.json before MO has declared any plan rows.
     """
     _ = agent, route_source
     text = str(user_input or "")
@@ -639,6 +642,15 @@ def _runtime_should_create_board(
         return True
     if resume_intent:
         return True
+    model_owned = False
+    if agent is not None:
+        try:
+            model_owned = bool(getattr(agent, "_model_owned_taskboard_enabled", lambda: False)())
+        except Exception:
+            traceback.print_exc()
+            model_owned = False
+    if model_owned:
+        return str(tool_name) == "set_plan"
     if select_template(text) != "simple_chat":
         return True
     # set_plan is MO explicitly declaring a multi-step plan (model_owned) — an

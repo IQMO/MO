@@ -66,6 +66,15 @@ def test_runtime_should_create_board_for_set_plan():
     assert _runtime_should_create_board(None, trivial, "user", "read_file", {}) is False
 
 
+def test_model_owned_runtime_waits_for_set_plan_before_creating_board():
+    from core.gateway import _runtime_should_create_board
+
+    agent = _Agent(model_owned=True)
+
+    assert _runtime_should_create_board(agent, "fix the command registry bug", "user", "read_file", {"path": "x.py"}) is False
+    assert _runtime_should_create_board(agent, "fix the command registry bug", "user", "set_plan", {"tasks": ["inspect"]}) is True
+
+
 def test_set_plan_refuses_to_overwrite_owner_protocol_board():
     # Regression for live mo-1782436480: set_plan clobbered an owner-maintenance board.
     # A protocol board carries a 'final' closeout gate that drives the protocol's

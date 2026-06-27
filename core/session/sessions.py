@@ -52,17 +52,43 @@ class SessionManager:
     def save(self, name: str, session: Any, *, extra_meta: dict | None = None) -> str:
         """Save current session to disk."""
         name = str(name or self._current_name).strip() or "main"
-        self._write_session(name, session, extra_meta=extra_meta)
+        data = self._write_session(name, session, extra_meta=extra_meta)
         self._current_name = name
-        _emit_session_event("save", name=name, session_id=str(getattr(session, "session_id", "") or ""), turns=int(getattr(session, "turn_count", 0) or 0), messages=len(getattr(session, "messages", []) or []))
-        return f"Session saved: {name} ({session.turn_count} turns, {len(session.messages)} messages)"
+        saved_messages = len(data.get("messages", []) or [])
+        live_messages = len(getattr(session, "messages", []) or [])
+        clean_meta = data.get("_clean_meta", {}) if isinstance(data.get("_clean_meta", {}), dict) else {}
+        _emit_session_event(
+            "save",
+            name=name,
+            session_id=str(getattr(session, "session_id", "") or ""),
+            turns=int(getattr(session, "turn_count", 0) or 0),
+            messages=saved_messages,
+            saved_messages=saved_messages,
+            live_messages=live_messages,
+            quarantined=bool(clean_meta.get("changed")),
+            dropped_messages=int(clean_meta.get("dropped_messages") or 0),
+        )
+        return f"Session saved: {name} ({session.turn_count} turns, {saved_messages} messages)"
 
     def save_snapshot(self, name: str, session: Any, *, extra_meta: dict | None = None) -> str:
         """Save a session snapshot without changing the current session slot."""
         name = str(name or "snapshot").strip() or "snapshot"
-        self._write_session(name, session, extra_meta=extra_meta)
-        _emit_session_event("save_snapshot", name=name, session_id=str(getattr(session, "session_id", "") or ""), turns=int(getattr(session, "turn_count", 0) or 0), messages=len(getattr(session, "messages", []) or []))
-        return f"Session snapshot saved: {name} ({session.turn_count} turns, {len(session.messages)} messages)"
+        data = self._write_session(name, session, extra_meta=extra_meta)
+        saved_messages = len(data.get("messages", []) or [])
+        live_messages = len(getattr(session, "messages", []) or [])
+        clean_meta = data.get("_clean_meta", {}) if isinstance(data.get("_clean_meta", {}), dict) else {}
+        _emit_session_event(
+            "save_snapshot",
+            name=name,
+            session_id=str(getattr(session, "session_id", "") or ""),
+            turns=int(getattr(session, "turn_count", 0) or 0),
+            messages=saved_messages,
+            saved_messages=saved_messages,
+            live_messages=live_messages,
+            quarantined=bool(clean_meta.get("changed")),
+            dropped_messages=int(clean_meta.get("dropped_messages") or 0),
+        )
+        return f"Session snapshot saved: {name} ({session.turn_count} turns, {saved_messages} messages)"
 
     def prune_handoff_snapshots(self, base_name: str, *, keep: int = 30) -> int:
         """Cap '<base>-pre-handoff-*.json' snapshots at *keep* most-recent.
@@ -87,7 +113,7 @@ class SessionManager:
         except Exception:
             return 0
 
-    def _write_session(self, name: str, session: Any, *, extra_meta: dict | None = None) -> None:
+    def _write_session(self, name: str, session: Any, *, extra_meta: dict | None = None) -> dict[str, Any]:
         cleaned_messages, clean_meta = self._clean_messages_with_meta(session.messages)
         saved_at = time.time()
         data = {
@@ -119,6 +145,8 @@ class SessionManager:
             data["meta"] = meta
         path = self._path(name)
         atomic_write_json(path, data, indent=2, ensure_ascii=False, default=str)
+        data["_clean_meta"] = dict(clean_meta)
+        return data
 
     def load(self, name: str) -> dict | None:
         """Load a session from disk. Returns raw dict or None."""

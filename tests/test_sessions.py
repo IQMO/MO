@@ -109,6 +109,28 @@ class TestSessionManagerSave:
         assert data["turn_count"] == 5
         assert len(data["messages"]) == 2
 
+    def test_save_event_reports_saved_not_live_message_count(self, session_manager, mock_session, monkeypatch):
+        """The monitor count must match disk after unfinished-tail quarantine."""
+        events = []
+        monitor = SimpleNamespace(emit=lambda event_type, payload: events.append((event_type, payload)))
+        monkeypatch.setattr("core.backend_monitor.get_monitor", lambda: monitor)
+        mock_session.messages = [
+            {"role": "user", "content": "stale build"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "call-1", "function": {"name": "read_file"}}]},
+            {"role": "tool", "tool_call_id": "call-1", "content": "file"},
+        ]
+
+        result = session_manager.save("test", mock_session)
+
+        saved = json.loads(session_manager._path("test").read_text(encoding="utf-8"))
+        event = events[-1][1]
+        assert saved["messages"] == []
+        assert event["messages"] == 0
+        assert event["saved_messages"] == 0
+        assert event["live_messages"] == 3
+        assert event["quarantined"] is True
+        assert "0 messages" in result
+
     def test_save_updates_current_name(self, session_manager, mock_session):
         """Test that save updates current session name."""
         session_manager.save("test", mock_session)

@@ -122,7 +122,13 @@ class Session:
         self.cache_miss_tokens += int(cache_miss_tokens or 0)
         return entry
 
-    def get_messages(self, extra_context: str | None = None, *, consume_handoff: bool = True) -> list[dict]:
+    def get_messages(
+        self,
+        extra_context: str | None = None,
+        *,
+        consume_handoff: bool = True,
+        include_reasoning_content: bool = False,
+    ) -> list[dict]:
         """Build the provider payload with a cache-stable prefix.
 
         The static system prompt and stored history must stay byte-identical
@@ -149,16 +155,19 @@ class Session:
                 self._handoff_context = ""  # single-use: consume only for the real provider call
         if extra_context:
             dynamic_parts.append(extra_context)
-        # Drop stored chain-of-thought from the provider payload: prior-turn
+        # Drop stored chain-of-thought from most provider payloads: prior-turn
         # `reasoning_content` is re-billed as input on every call (and some
-        # providers reject the non-standard key). It stays in self.messages for
-        # local display/persistence; stripping here is deterministic so the
-        # cacheable prefix remains byte-stable across turns.
-        history = [
-            {k: v for k, v in m.items() if k != "reasoning_content"}
-            if isinstance(m, dict) and "reasoning_content" in m else m
-            for m in self.messages
-        ]
+        # providers reject the non-standard key). DeepSeek reasoning-mode
+        # compatible providers are the exception: their API requires that the
+        # prior reasoning_content field be passed back with the assistant turn.
+        if include_reasoning_content:
+            history = [dict(m) if isinstance(m, dict) else m for m in self.messages]
+        else:
+            history = [
+                {k: v for k, v in m.items() if k != "reasoning_content"}
+                if isinstance(m, dict) and "reasoning_content" in m else m
+                for m in self.messages
+            ]
         payload = [{"role": "system", "content": self.system_message}] + history
         if dynamic_parts:
             payload.append({"role": "system", "content": "\n\n".join(dynamic_parts)})

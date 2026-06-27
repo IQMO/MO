@@ -790,7 +790,10 @@ def record_snapshot(
             # Root current.json next to the resolved ledger so explicit/tmp
             # ledger paths (tests, env overrides) never touch live memory.
             tm = TaskManager(Path.cwd(), tasks_dir=ledger_path.parent)
-            tm.save(record)
+            if record.get("tasks"):
+                tm.save(record)
+            elif not tm.load_tasks() and tm.current_file.exists():
+                tm.clear()
         except Exception:
             pass  # current.json is best-effort; ledger is the authority
         try:
@@ -906,7 +909,7 @@ def resume_last_board(
         return board
 
     # 2. Fallback: ledger scan
-    recent = read_recent_snapshots(limit=10, path=path)
+    recent = read_recent_snapshots(limit=50, path=path)
     if not recent:
         return None
     now = time.time()
@@ -917,6 +920,8 @@ def resume_last_board(
             continue
         state = str(item.get("state") or "").strip()
         if state == "completed":
+            continue
+        if not item.get("tasks"):
             continue
         return _task_board_from_snapshot(item)
     return None

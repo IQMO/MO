@@ -2,6 +2,8 @@ import json
 from types import SimpleNamespace
 
 from core.agent.agent import Agent
+from core.agent.agent_utils import TurnCancelled
+from core.backend_monitor import BackendMonitor
 from core.tasking.task_board import TaskBoard, TaskItem
 
 
@@ -12,7 +14,7 @@ def _agent_with_boundary_capture(captured: dict) -> Agent:
         add_user=lambda _text: None,
         turn_count=0,
         sanitize_for_provider=lambda **_kwargs: {},
-        get_messages=lambda extra_context=None: [{"role": "system", "content": extra_context or ""}],
+        get_messages=lambda extra_context=None, **_kwargs: [{"role": "system", "content": extra_context or ""}],
         record_usage=lambda *a, **k: None,
         add_assistant=lambda *a, **k: None,
         add_message=lambda *a, **k: None,
@@ -44,6 +46,23 @@ def _agent_with_boundary_capture(captured: dict) -> Agent:
     agent._append_after_turn_notes = lambda text, _notes: text
     agent._run_consistency_boundary = lambda boundary, **kwargs: captured.update({"boundary": boundary, **kwargs})
     return agent
+
+
+def test_provider_cancel_after_request_emits_terminal_error(tmp_path):
+    captured = {}
+    agent = _agent_with_boundary_capture(captured)
+    agent._call_provider = lambda **_kwargs: (_ for _ in ()).throw(TurnCancelled())
+    monitor = BackendMonitor(tmp_path / "monitor.jsonl")
+
+    result = agent.run_turn("stop", monitor=monitor)
+
+    rows = [json.loads(line) for line in (tmp_path / "monitor.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert result.startswith("[ABORTED]")
+    assert any(row["type"] == "provider_request" for row in rows)
+    assert any(
+        row["type"] == "provider_error" and row.get("payload", {}).get("reason") == "turn_cancelled"
+        for row in rows
+    )
 
 
 def test_agent_blocked_first_tool_does_not_materialize_task_board():

@@ -5,6 +5,8 @@ silently return. Grouped by subsystem; see commit message for the finding ids.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from core.critic import AnswerCritic
 from core.review.diff_review import _extract_json_root
 from core.sandbox import guard_tool_call, _guard_mcp_tool, _MCP_MUTATING_NAME_PATTERN
@@ -220,3 +222,44 @@ def test_reasoning_content_stripped_from_payload_but_stored():
     payload = s.get_messages(extra_context="DYN")
     assert not any("reasoning_content" in m for m in payload)
     assert any("reasoning_content" in m for m in s.messages)
+
+
+def test_reasoning_content_can_be_preserved_for_deepseek_reasoning_mode():
+    s = Session("SYS")
+    s.add_user("hi")
+    s.add_assistant("answer", reasoning_content="reasoning required by provider")
+
+    payload = s.get_messages(include_reasoning_content=True)
+
+    assert any(m.get("reasoning_content") == "reasoning required by provider" for m in payload if isinstance(m, dict))
+
+
+def test_deepseek_agent_call_preserves_reasoning_content():
+    from core.agent.agent import Agent
+
+    seen: dict[str, object] = {}
+
+    class _Provider:
+        name = "opencode-pro"
+        model = "deepseek-v4-pro"
+
+        def complete(self, **kwargs):
+            seen.update(kwargs)
+            return SimpleNamespace(content="ok", tool_calls=[], usage=None, finish_reason="stop")
+
+    agent = object.__new__(Agent)
+    agent.session = Session("SYS")
+    agent.session.add_user("hi")
+    agent.session.add_assistant("answer", reasoning_content="reasoning required by provider")
+    agent.providers = [_Provider()]
+    agent.provider_index = 0
+    agent.provider_name = "opencode-pro"
+    agent.model = "deepseek-v4-pro"
+    agent.tool_definitions = []
+    agent.temperature = 0
+    agent.max_tokens = 10
+
+    agent._call_provider()
+
+    messages = seen["messages"]
+    assert any(m.get("reasoning_content") == "reasoning required by provider" for m in messages if isinstance(m, dict))
