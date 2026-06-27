@@ -663,23 +663,39 @@ class AgentTaskBoard:
                 # "<metric>: N" / "<metric> N"  e.g. "Provider requests: 74"
                 new_text = re.sub(rf"((?:{phrase})\b[: \t]+)\d+", rf"\g<1>{v}", new_text, flags=re.IGNORECASE)
             tool_errors = int(summary.get("tool_errors", 0) or 0)
+            if tool_errors >= 0:
+                # Bare "errors" remains ambiguous in general prose, but an Economy line
+                # that also names tool calls is restating the runtime tool-error count
+                # (observed blocked T0416: "60 tool calls, 3 errors" after economy.md
+                # had already refreshed to 4 tool errors).
+                lines = []
+                for line in new_text.splitlines(keepends=True):
+                    if re.search(r"\beconomy\b", line, re.IGNORECASE) and re.search(r"\btool\s+calls?\b", line, re.IGNORECASE):
+                        line = re.sub(r"\b\d+(?=[ \t]+errors?\b)", str(tool_errors), line, flags=re.IGNORECASE)
+                    lines.append(line)
+                new_text = "".join(lines)
             has_ledger = re.search(r"(?im)^#{1,6}\s*Tool Error Ledger\s*$", new_text)
             is_devmode_summary = re.search(r"(?i)\b(?:OWNER_MAINTENANCE|DEVMODE\d*)\b", new_text)
-            if tool_errors > 0 and is_devmode_summary and not has_ledger:
-                tools = sorted(
-                    str(t).strip()
-                    for t in (summary.get("error_tools") or [])
-                    if str(t).strip()
-                )
-                tools_text = ", ".join(tools) if tools else "not recorded"
+            tools = sorted(
+                str(t).strip()
+                for t in (summary.get("error_tools") or [])
+                if str(t).strip()
+            )
+            tools_text = ", ".join(tools) if tools else "not recorded"
+            if tool_errors > 0 and is_devmode_summary:
                 error_word = "error" if tool_errors == 1 else "errors"
-                new_text = (
-                    new_text.rstrip()
-                    + "\n\n## Tool Error Ledger\n"
-                    + f"- Tool errors: {tool_errors} {error_word} recorded by the runtime monitor.\n"
-                    + f"- Error tools: {tools_text}.\n"
-                    + "- Source: economy.md / manifest.json runtime truth.\n"
+                ledger_lines = (
+                    f"- Tool errors: {tool_errors} {error_word} recorded by the runtime monitor.\n"
+                    f"- Error tools: {tools_text}.\n"
+                    "- Source: economy.md / manifest.json runtime truth.\n"
                 )
+                if has_ledger:
+                    start = has_ledger.end()
+                    next_heading = re.search(r"(?m)^#{1,6}\s+", new_text[start:])
+                    end = start + next_heading.start() if next_heading else len(new_text)
+                    new_text = new_text[:start].rstrip() + "\n" + ledger_lines + new_text[end:]
+                else:
+                    new_text = new_text.rstrip() + "\n\n## Tool Error Ledger\n" + ledger_lines
             if new_text != text:
                 atomic_write_text(summary_path, new_text, encoding="utf-8")
         except Exception:
@@ -783,6 +799,8 @@ class AgentTaskBoard:
             economy = self._write_devmode_economy_record(force_live=True)
             artifact_changes = {}
             for name in ("summary.md", "catalog.md", "workflow.md"):
+                if economy is not None:
+                    AgentTaskBoard._reconcile_summary_economy_counts(target / name, economy)
                 changed = AgentTaskBoard._reconcile_blocked_terminal_marker(target / name, blocked=True)
                 artifact_changes[name] = "changed" if changed else "ok"
             # A blocked terminal must leave the manifest status="blocked" — it can never

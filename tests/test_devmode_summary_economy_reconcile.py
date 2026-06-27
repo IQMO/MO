@@ -64,10 +64,10 @@ def test_header_and_section_agree_after(tmp_path):
     assert "117" not in out and "106" not in out and "87 " not in out
 
 
-def test_closeout_tool_calls_normalized_bare_errors_kept(tmp_path):
-    out = _reconcile(tmp_path, "[OWNER_MAINTENANCE COMPLETE] Economy: 106 tool calls, 6 errors (shell x4)")
+def test_economy_line_tool_calls_normalized_with_bare_errors(tmp_path):
+    out = _reconcile(tmp_path, "[OWNER_MAINTENANCE COMPLETE] Economy: 106 tool calls, 5 errors (shell x4)")
     assert "119 tool calls" in out
-    assert "6 errors (shell x4)" in out  # bare 'errors' untouched
+    assert "6 errors (shell x4)" in out  # Economy + tool calls means runtime tool errors
 
 
 def test_pure_narration_untouched(tmp_path):
@@ -105,7 +105,29 @@ def test_existing_tool_error_ledger_is_not_duplicated(tmp_path):
     AgentTaskBoard._reconcile_summary_economy_counts(p, summary)
     out = p.read_text(encoding="utf-8")
     assert out.count("## Tool Error Ledger") == 1
-    assert "Tool errors: 3 errors recorded." in out
+    assert "Tool errors: 3 errors recorded by the runtime monitor." in out
+    assert "Error tools: shell." in out
+
+
+def test_existing_tool_error_ledger_tools_are_reconciled(tmp_path):
+    p = tmp_path / "summary.md"
+    p.write_text(
+        "# OWNER_MAINTENANCE Summary\n"
+        "## Tool Error Ledger\n"
+        "- Tool errors: 2 shell errors -- recovered inline.\n"
+        "## Closeout\n"
+        "- Economy: 52 tool calls, 3 errors (shell), 28 provider requests, 4 compression events\n",
+        encoding="utf-8",
+    )
+    summary = dict(AUTH, tool_errors=4, error_tools=["shell", "edit_file"])
+    AgentTaskBoard._reconcile_summary_economy_counts(p, summary)
+    out = p.read_text(encoding="utf-8")
+    assert out.count("## Tool Error Ledger") == 1
+    assert "Tool errors: 4 errors recorded by the runtime monitor." in out
+    assert "Error tools: edit_file, shell." in out
+    assert "119 tool calls, 4 errors" in out
+    assert "90 provider requests" in out
+    assert "6 compression events" in out
 
 
 def test_idempotent_when_already_correct(tmp_path):

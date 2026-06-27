@@ -732,6 +732,9 @@ def test_blocked_devmode_reconciliation_force_refreshes_terminal_economy(tmp_pat
     active = tmp_path / "memory" / "devmode" / "2026-01-06T0000"
     active.mkdir(parents=True)
     (active / "summary.md").write_text("## Closeout\n- [OWNER_MAINTENANCE COMPLETE]\n", encoding="utf-8")
+    stale = "- Economy: 52 tool calls, 3 errors (shell), 28 provider requests, 4 compression events\n"
+    (active / "catalog.md").write_text("# Catalog\n" + stale, encoding="utf-8")
+    (active / "workflow.md").write_text("# Workflow\n" + stale, encoding="utf-8")
     agent = _devmode_board_agent()
     agent._active_devmode_session_dir = active
     agent._devmode_run_session_ids = {"mo-x"}
@@ -745,6 +748,12 @@ def test_blocked_devmode_reconciliation_force_refreshes_terminal_economy(tmp_pat
 
     assert agent._devmode_closeout_frozen_economy["error_tools"] == ["edit_file", "shell"]
     assert "Error tools: edit_file, shell" in (active / "economy.md").read_text(encoding="utf-8")
+    for name in ("summary.md", "catalog.md", "workflow.md"):
+        text = (active / name).read_text(encoding="utf-8")
+        assert "Runtime Blocked Closeout" in text
+        if name != "summary.md":
+            assert "2 errors" in text
+            assert "3 errors" not in text
     manifest = _json.loads((active / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "blocked"
     assert manifest["economy"]["error_tools"] == ["edit_file", "shell"]
