@@ -27,7 +27,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Multiple terminal instances are allowed: stable `MO_INSTANCE_ID`, default `main-<instance>` session; `runtime.shared_session: true` is the legacy shared-main escape hatch.
 - Singleton surfaces are resource-locked: headless service, Telegram poller, scheduler, desktop Ghost tray/hotkey.
 - Logical profile-state `memory/traces/`, `memory/taskboards/`, `memory/structural_graph/` — trace artifacts, taskboard snapshots, graph/code-map artifacts.
-- Owner-only profile-extension records live under `~/.mo/operator` (or explicit profile env overrides), are gitignored/local only, and are never tracked or shipped.
+- Private profile-extension records live under `~/.mo/operator` (or explicit profile env overrides), are gitignored/local only, and are never tracked or shipped.
 
 ## Verification
 - Maintainer-local tests live in ignored `tests/`; they are used before CPD but must never be tracked or pushed.
@@ -41,4 +41,4 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Prefer existing MO systems over new parallel mechanisms.
 - Keep product guidance split into modules, not oversized root prompts.
 - Never print secrets or credential values.
-- Boundary: owner-only private profile-extension material (`~/.mo/operator`) and maintainer QA live under profile state or ignored local-only paths and never ship; a pre-push guard blocks leaks and tracked `tests/`. Private commands come only from profile extensions. See AGENTS.md "Boundary".
+- Boundary: private profile-extension material (`~/.mo/operator`) and maintainer QA live under profile state or ignored local-only paths and never ship; a pre-push guard blocks leaks and tracked `tests/`. Private commands come only from profile extensions. See AGENTS.md "Boundary".
