@@ -178,7 +178,6 @@ def test_owner_maintenance_validated_closeout_closes_protocol_rows_after_notes(m
     """A stop-gate-approved OWNER_MAINTENANCE terminal report must close the fixed
     protocol board before later answer notes can make the finalizer re-read a
     different closeout view."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     captured = {}
     agent = _agent_with_boundary_capture(captured)
     agent.max_provider_requests = 4
@@ -492,7 +491,6 @@ def test_taskboard_does_not_complete_final_report_row_before_final_answer():
 def test_terminal_closeout_carries_real_evidence_not_hollow_token(monkeypatch):
     """C1: the terminal marker may close phase rows, but each closed row must carry
     the turn's real gathered evidence — not only a hollow `final:` token."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     board = TaskBoard(tasks=[
         TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool",
                  evidence=["read_file:OWNER_MAINTENANCE.md", "shell:git rev-parse HEAD"]),
@@ -516,7 +514,6 @@ def test_owner_maintenance_closeout_updates_workflow_before_final_manifest(monke
     """The final manifest must index the final workflow.md, including the runtime
     closeout section. A complete manifest written before the final workflow update
     leaves stale workflow bytes/hash in manifest.json."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     calls: list[str] = []
 
     def fake_economy(self):
@@ -551,7 +548,6 @@ def test_self_completed_empty_phase_row_is_backfilled_at_closeout(monkeypatch):
     real evidence must be backfilled with the session's gathered evidence at closeout —
     otherwise the whole-board contract gate (no circuit breaker) rejects it every turn
     and loops unbounded (observed live mo-1782079519: CONTRACT GATE loop, 69+ requests)."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     board = TaskBoard(tasks=[
         TaskItem("1", "Boot", "completed", kind="inspect", completion_gate="tool",
                  evidence=["read_file:OWNER_MAINTENANCE.md", "shell:git rev-parse HEAD"]),

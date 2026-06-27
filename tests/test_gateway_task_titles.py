@@ -67,12 +67,11 @@ def test_new_gateway_board_owner_maintenance_no_rows_uses_protocol_phases():
     assert board.task("6").completion_gate == "final"
 
 
-def test_new_gateway_board_owner_integrity_audit_is_boardless(monkeypatch):
+def test_new_gateway_board_owner_integrity_audit_is_boardless():
     """OWNER_INTEGRITY_AUDIT (an owner protocol that is NOT OWNER_MAINTENANCE/OWNER_COMPARISON) must never inherit a generic
     work-procedure board — it stays EMPTY so the done-claim gate can't trip on an open
     board it never advances. Live mo-1782307665: 'Run OWNER_INTEGRITY_AUDIT on …' got a build_verify
     board through the work-procedure fallback even after the ghost proposal was skipped."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     board = _new_gateway_board(
         "t1", "s1",
         "Run OWNER_INTEGRITY_AUDIT on the stop-gate cluster. Verify whether it should stay inline or move",
@@ -82,9 +81,8 @@ def test_new_gateway_board_owner_integrity_audit_is_boardless(monkeypatch):
     assert len(board.tasks) == 0  # boardless — NOT a build_verify procedure board
 
 
-def test_new_gateway_board_normal_turn_unaffected_by_protocol_exclusion(monkeypatch):
+def test_new_gateway_board_normal_turn_unaffected_by_protocol_exclusion():
     """The owner-protocol exclusion must not change normal-turn board seeding."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     fix_board = _new_gateway_board("t1", "s1", "fix the login bug", rows=None)
     assert len(fix_board.tasks) >= 1  # normal work turn still gets a procedure/fallback board
     chat_board = _new_gateway_board("t1", "s1", "hi mo", rows=None)

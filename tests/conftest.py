@@ -244,8 +244,21 @@ def _neutralize_import_time_project_cwd(monkeypatch):
 @pytest.fixture(autouse=True)
 def _operator_protocols_available(monkeypatch):
     """Protocol activation requires the operator's private (untracked) pack;
-    the suite must pass on a clean clone, so tests force installed-state."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    the suite must pass on a clean clone, so the runtime-home fixture installs
+    a minimal temp pack/token instead of using a public env bypass."""
+    monkeypatch.delenv("MO_OPERATOR_PROTOCOLS", raising=False)
+
+
+def _write_test_operator_protocol_pack(state_home: Path) -> None:
+    devmode = state_home / "operator" / "devmode"
+    devmode.mkdir(parents=True, exist_ok=True)
+    (devmode / "OWNER_MAINTENANCE.md").write_text("test private protocol pack\n", encoding="utf-8")
+    (state_home / "operator.token").write_text("test-private-owner-token\n", encoding="utf-8")
+
+
+@pytest.fixture
+def install_operator_protocol_pack():
+    return _write_test_operator_protocol_pack
 
 
 @pytest.fixture(autouse=True)
@@ -259,7 +272,9 @@ def _isolate_runtime_state_home(monkeypatch, tmp_path):
     via the per-module _legacy_state_lane fixture) — that opt-out resolves to cwd, never
     the real ~/.mo, so no global MO_HOME net is needed (and MO_HOME would wrongly
     override a test's own MO_STATE_HOME, since mo_home() prefers MO_HOME)."""
-    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path / "state-home"))
+    state_home = tmp_path / "state-home"
+    monkeypatch.setenv("MO_STATE_HOME", str(state_home))
+    _write_test_operator_protocol_pack(state_home)
     # Agent startup can schedule an async graph refresh. Tests that exercise graph
     # refresh behavior call it directly; the rest of the suite keeps background
     # state writers off so failures are deterministic and never leak into the

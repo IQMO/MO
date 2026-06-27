@@ -16,7 +16,7 @@ from core.owner_protocols import (
 
 @pytest.fixture
 def installed(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    monkeypatch.delenv("MO_OPERATOR_PROTOCOLS", raising=False)
 
 
 CASES = {

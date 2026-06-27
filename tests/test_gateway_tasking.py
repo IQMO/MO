@@ -253,8 +253,7 @@ def test_gateway_does_not_create_board_for_simple_tool_backed_chat(tmp_path):
     assert updates == []
 
 
-def test_gateway_owner_integrity_audit_stays_boardless_on_tool_use(tmp_path, monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+def test_gateway_owner_integrity_audit_stays_boardless_on_tool_use(tmp_path):
     agent = _RuntimeSignalAgent("read_file", {"path": "README.md"})
     gateway = Gateway(agent, monitor=BackendMonitor(tmp_path / "monitor.jsonl"))
 

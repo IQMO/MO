@@ -557,15 +557,15 @@ def test_closeout_blocks_late_marker_stale_matrix_even_without_tool_errors(tmp_p
     assert "core/this_does_not_exist_zzz.py" in v
 
 
-def test_owner_maintenance_operator_owned_deferred_is_valid_terminal(tmp_path, monkeypatch):
+def test_owner_maintenance_operator_owned_deferred_is_valid_terminal(tmp_path, monkeypatch, install_operator_protocol_pack):
     """External-watcher governance fix (2026-06-23): a OWNER_MAINTENANCE closeout may report
     OPERATOR-OWNED remainders (operator-decision pending / supervised fix-lane / recorded
     observation / accepted deferred) without being forced to a false "Remaining: none".
     The model must NOT have to rewrite them to RESOLVED to pass the gate — the exact T0000
     case (B2 supervised fix-lane + OBS-PERF-1 recorded observation)."""
     import core.self_maintenance.devmode_closeout as scp
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    install_operator_protocol_pack(tmp_path)
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "nomon"))  # no tool errors
     ui = "start OWNER_MAINTENANCE"
 
@@ -769,25 +769,27 @@ def test_operator_mode_requires_owner_token(monkeypatch, tmp_path):
 
 def test_protocol_activation_requires_operator_pack(monkeypatch):
     """User clones have no devmode/ pack — the personal protocol terms are
-    inert by absence; MO_OPERATOR_PROTOCOLS=1 (set suite-wide in conftest)
-    or the real files restore them for the operator."""
+    inert by absence; the temp test pack/token restores them for tests."""
     from core.owner_protocols import (
         is_owner_maintenance_activation,
         operator_protocols_installed,
     )
 
-    # Suite-wide env forces installed: terms work
+    # Suite temp pack/token makes terms work without any public env bypass.
     assert operator_protocols_installed() is True
     assert is_owner_maintenance_activation("start OWNER_MAINTENANCE") is True
 
-    # Without env: falls back to the real file check (true on the operator
-    # checkout, false on a user clone) — simulate the user clone explicitly.
+    # A clone with no pack/token stays inert. The old env bypass must not unlock it.
     monkeypatch.delenv("MO_OPERATOR_PROTOCOLS", raising=False)
     import core.owner_protocols as scp
-    monkeypatch.setattr(scp.Path, "exists", lambda self: False)
+    monkeypatch.setattr(scp, "_pack_present", lambda: False)
+    monkeypatch.setattr(scp, "_owner_token_present", lambda: False)
     assert scp.operator_protocols_installed() is False
     assert scp.is_owner_maintenance_activation("start OWNER_MAINTENANCE") is False
     assert scp.is_owner_comparison_activation("OWNER_COMPARISON https://github.com/some/repo") is False
+    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
+    assert scp.operator_protocols_installed() is False
+    assert scp.is_owner_maintenance_activation("start OWNER_MAINTENANCE") is False
 
 
 def test_owner_maintenance_closeout_gate_blocks_unowned_tool_errors(tmp_path, monkeypatch):
@@ -796,7 +798,6 @@ def test_owner_maintenance_closeout_gate_blocks_unowned_tool_errors(tmp_path, mo
     closeout that owns the error finishes."""
     import json
     import core.self_maintenance.devmode_closeout as scp
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path))
     (tmp_path / "backend_monitor-1.jsonl").write_text(
         json.dumps({"type": "tool_result", "payload": {"error": True}}) + "\n", encoding="utf-8"
@@ -816,14 +817,14 @@ def test_owner_maintenance_closeout_gate_blocks_unowned_tool_errors(tmp_path, mo
     assert scp.owner_maintenance_final_allows_stop(ui, "[OWNER_MAINTENANCE COMPLETE] HEALTHY.") is True
 
 
-def test_owner_maintenance_closeout_gate_blocks_future_session_stamp(tmp_path, monkeypatch):
+def test_owner_maintenance_closeout_gate_blocks_future_session_stamp(tmp_path, monkeypatch, install_operator_protocol_pack):
     """A session dir stamped in the FUTURE (hand-typed, session_stamp.py skipped — the
     T1930 bug) blocks the closeout; a normal past-dated stamp does not."""
     import shutil
     from datetime import datetime, timedelta
     import core.self_maintenance.devmode_closeout as scp
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    install_operator_protocol_pack(tmp_path)
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "nomon"))  # no tool errors
     devmode = tmp_path / "memory" / "devmode"
     future = (datetime.now() + timedelta(minutes=40)).strftime("%Y-%m-%dT%H%M")
@@ -837,7 +838,7 @@ def test_owner_maintenance_closeout_gate_blocks_future_session_stamp(tmp_path, m
     assert scp.owner_maintenance_final_allows_stop(ui, "[OWNER_MAINTENANCE COMPLETE] HEALTHY.") is True
 
 
-def test_owner_maintenance_closeout_gate_blocks_past_skewed_stamp(tmp_path, monkeypatch):
+def test_owner_maintenance_closeout_gate_blocks_past_skewed_stamp(tmp_path, monkeypatch, install_operator_protocol_pack):
     """A dir stamped well BEFORE the session actually started (hand-typed, session_stamp.py
     skipped — the mo-1782177115 bug: a `T0112` dir created during an ~0311 session) blocks
     the closeout. Measured against the live monitor's start time, not `now`, so a long-but-
@@ -845,8 +846,8 @@ def test_owner_maintenance_closeout_gate_blocks_past_skewed_stamp(tmp_path, monk
     import shutil
     from datetime import datetime, timedelta
     import core.self_maintenance.devmode_closeout as scp
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    install_operator_protocol_pack(tmp_path)
     mondir = tmp_path / "mon"
     mondir.mkdir()
     monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(mondir))

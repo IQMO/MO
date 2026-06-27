@@ -542,7 +542,7 @@ def _devmode_board_agent():
     return AgentTaskBoard.__new__(AgentTaskBoard)
 
 
-def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatch):
+def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatch, install_operator_protocol_pack):
     """DEVMODE output dirs are runtime-owned before the model writes any artifact."""
     import core.tasking.agent_taskboard as atb
     from core.tasking.devmode_manifest import SESSION_ARTIFACT_NAMES
@@ -553,8 +553,8 @@ def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatc
         def now(cls):
             return real_datetime(2026, 1, 2, 3, 4)
 
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    install_operator_protocol_pack(tmp_path)
     monkeypatch.setattr(atb, "datetime", FixedDatetime)
     agent = _devmode_board_agent()
 
@@ -570,7 +570,7 @@ def test_devmode_runtime_creates_and_advertises_session_dir(tmp_path, monkeypatc
         assert str(target / name) in ctx
 
 
-def test_devmode_output_blocks_wrong_session_dir(tmp_path, monkeypatch):
+def test_devmode_output_blocks_wrong_session_dir(tmp_path, monkeypatch, install_operator_protocol_pack):
     """Wrong DEVMODE artifact dirs are blocked before they can create polluted outputs."""
     import core.tasking.agent_taskboard as atb
     from datetime import datetime as real_datetime
@@ -580,8 +580,8 @@ def test_devmode_output_blocks_wrong_session_dir(tmp_path, monkeypatch):
         def now(cls):
             return real_datetime(2026, 1, 2, 3, 4)
 
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    install_operator_protocol_pack(tmp_path)
     monkeypatch.setattr(atb, "datetime", FixedDatetime)
     agent = _devmode_board_agent()
     active = agent._ensure_devmode_session_dir()

@@ -185,7 +185,6 @@ def test_owner_integrity_audit_reporting_gate_silent_for_non_owner_integrity_aud
 
 def test_owner_integrity_audit_reporting_gate_ignores_tool_count_mismatch_normalized(monkeypatch):
     """Tool-call count mismatches are owned by normalization layer — gate does not block."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
     out = run_owner_integrity_audit_reporting_gate(
         "start OWNER_INTEGRITY_AUDIT",
@@ -199,7 +198,6 @@ def test_owner_integrity_audit_reporting_gate_ignores_tool_count_mismatch_normal
 
 def test_owner_integrity_audit_reporting_gate_normalization_owns_tool_count_corrections(monkeypatch):
     """After normalization fixes tool counts, the gate does not re-block on them."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
     out = run_owner_integrity_audit_reporting_gate(
         "start OWNER_INTEGRITY_AUDIT",
@@ -215,7 +213,6 @@ def test_owner_integrity_audit_reporting_gate_normalization_owns_tool_count_corr
 
 def test_owner_integrity_audit_reporting_gate_reports_qualitative_violations_only(monkeypatch):
     """Tool-count/error mismatches are normalization-owned. Gate reports only qualitative violations."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
     text = (
         _owner_integrity_audit_text(calls=18, errors=0, corpus=30)
@@ -238,7 +235,6 @@ def test_owner_integrity_audit_reporting_gate_reports_qualitative_violations_onl
 
 def test_owner_integrity_audit_reporting_gate_ignores_error_count_mismatch_normalized(monkeypatch):
     """Tool-error count mismatches are owned by normalization layer — gate does not block."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     out = run_owner_integrity_audit_reporting_gate(
         "start OWNER_INTEGRITY_AUDIT",
@@ -251,7 +247,6 @@ def test_owner_integrity_audit_reporting_gate_ignores_error_count_mismatch_norma
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_wrong_scope_denominator(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 369)
     out = run_owner_integrity_audit_reporting_gate(
         "start OWNER_INTEGRITY_AUDIT",
@@ -265,7 +260,6 @@ def test_owner_integrity_audit_reporting_gate_blocks_wrong_scope_denominator(mon
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_date_only_ledger(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     out = run_owner_integrity_audit_reporting_gate(
         "start OWNER_INTEGRITY_AUDIT",
@@ -279,7 +273,6 @@ def test_owner_integrity_audit_reporting_gate_blocks_date_only_ledger(monkeypatc
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_unsupported_zero_dead_code(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " Zero dead code."
     out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
@@ -288,7 +281,6 @@ def test_owner_integrity_audit_reporting_gate_blocks_unsupported_zero_dead_code(
 
 
 def test_owner_integrity_audit_reporting_gate_allows_zero_dead_code_with_analyzer(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " Vulture reported zero dead code."
     out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
@@ -296,7 +288,6 @@ def test_owner_integrity_audit_reporting_gate_allows_zero_dead_code_with_analyze
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_broad_read_coverage(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " Every selected file was read."
     out = run_owner_integrity_audit_reporting_gate("start OWNER_INTEGRITY_AUDIT", text, {"read_file": 4}, {}, fired=set())
@@ -305,7 +296,6 @@ def test_owner_integrity_audit_reporting_gate_blocks_broad_read_coverage(monkeyp
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_stale_function_span(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     monkeypatch.setattr(fg, "owner_integrity_audit_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
     text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 812 lines."
@@ -315,7 +305,6 @@ def test_owner_integrity_audit_reporting_gate_blocks_stale_function_span(monkeyp
 
 
 def test_owner_integrity_audit_reporting_gate_blocks_ambiguous_bare_span(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     monkeypatch.setattr(fg, "owner_integrity_audit_function_span_index", lambda cwd=None: {"run_turn": set()})
     text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " run_turn is 746 lines."
@@ -325,7 +314,6 @@ def test_owner_integrity_audit_reporting_gate_blocks_ambiguous_bare_span(monkeyp
 
 
 def test_owner_integrity_audit_reporting_gate_accepts_exact_report(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     monkeypatch.setattr(fg, "owner_integrity_audit_source_corpus_count", lambda cwd=None: 10)
     monkeypatch.setattr(fg, "owner_integrity_audit_function_span_index", lambda cwd=None: {"_run_turn_impl": {239}})
     text = _owner_integrity_audit_text(calls=4, errors=0, corpus=10) + " _run_turn_impl is 239 lines."
@@ -421,7 +409,6 @@ def test_contract_gate_normal_turn_is_turn_scoped(monkeypatch):
 
 
 def test_contract_gate_devmode_enforces_whole_board(monkeypatch):
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")  # force operator-protocols installed
     capture = {}
     _patch_contract(monkeypatch, (True, [], ""), capture=capture)
     board = _Board([_Task("1", "completed"), _Task("2", "completed")], open_count=0)

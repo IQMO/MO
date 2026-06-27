@@ -22,9 +22,8 @@ from core.self_maintenance.owner_integrity_audit_ground_truth import (
 
 
 @pytest.fixture
-def tree(tmp_path, monkeypatch):
+def tree(tmp_path):
     """A tiny fake repo under the recognized source dirs."""
-    monkeypatch.setenv("MO_OPERATOR_PROTOCOLS", "1")
     (tmp_path / "core").mkdir()
     (tmp_path / "tests").mkdir()
     (tmp_path / "core" / "thing.py").write_text(

@@ -5,7 +5,6 @@ module exposes only the product-side detection seam; it does not ship protocol c
 """
 from __future__ import annotations
 
-import os
 import json
 from pathlib import Path
 import re
@@ -139,10 +138,8 @@ def operator_protocols_installed() -> bool:
     token in ``~/.mo`` (``operator.token``) that a user clone never has — so the
     copyable protocol files alone cannot fake operator mode. On a user clone both are
     absent, so the activation terms are inert by absence — no config, nothing to
-    leak. ``MO_OPERATOR_PROTOCOLS=1`` forces installed-state for tests.
+    leak.
     """
-    if os.environ.get("MO_OPERATOR_PROTOCOLS") == "1":
-        return True
     return _pack_present() and _owner_token_present()
 
 
