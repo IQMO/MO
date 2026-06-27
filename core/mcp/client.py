@@ -14,6 +14,7 @@ import threading
 import time
 from typing import Any
 
+from ..runtime.subprocess_flags import apply_windows_hidden_process_flags
 from ..tooling.sandbox import safe_env
 
 PROTOCOL_VERSION = "2024-11-05"
@@ -46,16 +47,17 @@ class McpClient:
     def start(self) -> "McpClient":
         full_env = safe_env()
         full_env.update({str(k): str(v) for k, v in self._env.items()})
-        self._proc = subprocess.Popen(
-            self._command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-            env=full_env,
-            cwd=self._cwd,
-        )
+        popen_kwargs: dict[str, Any] = {
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.DEVNULL,
+            "text": True,
+            "bufsize": 1,
+            "env": full_env,
+            "cwd": self._cwd,
+        }
+        apply_windows_hidden_process_flags(popen_kwargs)
+        self._proc = subprocess.Popen(self._command, **popen_kwargs)
         threading.Thread(target=self._read_loop, daemon=True).start()
         self._initialize()
         self.tools = self._list_tools()

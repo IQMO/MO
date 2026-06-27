@@ -34,9 +34,10 @@ import fnmatch
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
+
+from .subprocess_flags import apply_windows_hidden_process_flags
 
 PAYLOAD_ENV_LIMIT = 2000
 
@@ -131,15 +132,17 @@ def dispatch_hooks(event_type: str, payload: dict[str, Any], *, path: str | Path
         launched = 0
         for hook in matched:
             try:
-                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+                popen_kwargs = {
+                    "shell": True,
+                    "env": env,
+                    "stdout": subprocess.DEVNULL,
+                    "stderr": subprocess.DEVNULL,
+                    "stdin": subprocess.DEVNULL,
+                }
+                apply_windows_hidden_process_flags(popen_kwargs)
                 subprocess.Popen(
                     hook["run"],
-                    shell=True,
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    stdin=subprocess.DEVNULL,
-                    creationflags=creationflags,
+                    **popen_kwargs,
                 )
                 launched += 1
             except Exception:

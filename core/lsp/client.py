@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..runtime.subprocess_flags import apply_windows_hidden_process_flags
 from ..tooling.sandbox import safe_env
 
 # Cap a single frame so a buggy/hostile server can't OOM MO with one huge message.
@@ -65,14 +66,15 @@ class LspClient:
     def start(self) -> "LspClient":
         full_env = safe_env()
         full_env.update({str(k): str(v) for k, v in self._env.items()})
-        self._proc = subprocess.Popen(
-            self._command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            env=full_env,
-            cwd=self._root_path,
-        )
+        popen_kwargs: dict[str, Any] = {
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.DEVNULL,
+            "env": full_env,
+            "cwd": self._root_path,
+        }
+        apply_windows_hidden_process_flags(popen_kwargs)
+        self._proc = subprocess.Popen(self._command, **popen_kwargs)
         threading.Thread(target=self._read_loop, name=f"lsp-{self.name}", daemon=True).start()
         self._initialize()
         return self

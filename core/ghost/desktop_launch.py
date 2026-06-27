@@ -13,10 +13,15 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
+from core.runtime.subprocess_flags import apply_windows_hidden_process_flags
+
 _UNSET = object()
+_LAUNCH_MARKER_NAME = "ghost-launching.lock"
+_LAUNCH_MARKER_TTL_SECONDS = 8.0
 
 
 def ghost_config_block(config: Any) -> dict:
@@ -45,6 +50,66 @@ def ghost_desktop_running() -> bool:
     return False
 
 
+def _launch_marker_path() -> Path:
+    return Path(tempfile.gettempdir()) / _LAUNCH_MARKER_NAME
+
+
+def _launch_recent(path: Path | None = None, *, now: float | None = None) -> bool:
+    marker = path or _launch_marker_path()
+    try:
+        started = float(marker.read_text(encoding="utf-8", errors="replace").splitlines()[0])
+    except Exception:
+        return False
+    current = time.time() if now is None else float(now)
+    if current - started <= _LAUNCH_MARKER_TTL_SECONDS:
+        return True
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+    return False
+
+
+def _mark_launch_attempt(path: Path | None = None) -> bool:
+    marker = path or _launch_marker_path()
+    if _launch_recent(marker):
+        return False
+    try:
+        fd = os.open(str(marker), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        if _launch_recent(marker):
+            return False
+        try:
+            marker.unlink()
+            fd = os.open(str(marker), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except OSError:
+            return False
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(f"{time.time()}\n{os.getpid()}\n")
+        return True
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        return False
+
+
+def _clear_launch_marker(path: Path | None = None) -> None:
+    try:
+        (path or _launch_marker_path()).unlink()
+    except OSError:
+        pass
+
+
+def _ghost_python_executable() -> str:
+    if os.name != "nt":
+        return sys.executable
+    candidate = Path(sys.executable).with_name("pythonw.exe")
+    return str(candidate) if candidate.exists() else sys.executable
+
+
 def launch_ghost_desktop_detached(config: Any = _UNSET) -> str:
     """Spawn Ghost Desktop as its OWN detached process that outlives the caller.
 
@@ -57,17 +122,21 @@ def launch_ghost_desktop_detached(config: Any = _UNSET) -> str:
     if config is not _UNSET and not ghost_config_block(config).get("enabled", False):
         return ("Ghost Desktop is disabled. Set desktop_companion.enabled: true "
                 "(or ghost.enabled) in your config, then try again.")
+    if ghost_desktop_running():
+        return "Ghost Desktop is already running — Win+Alt+M to summon it."
+    if not _mark_launch_attempt():
+        return "Ghost Desktop is already launching — wait a moment, then summon it with Win+Alt+M."
     repo_root = Path(__file__).resolve().parents[2]
     popen_kw: dict = dict(
         cwd=str(repo_root),
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         close_fds=True,
     )
-    if os.name == "nt":
-        popen_kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | NEW_PROCESS_GROUP
+    apply_windows_hidden_process_flags(popen_kw, detached=True)
     try:
-        subprocess.Popen([sys.executable, "-m", "interface.ghost_desktop", "--show"], **popen_kw)
+        subprocess.Popen([_ghost_python_executable(), "-m", "interface.ghost_desktop", "--show"], **popen_kw)
     except Exception as exc:
+        _clear_launch_marker()
         return f"Could not launch Ghost Desktop: {type(exc).__name__}: {exc}"
     return ("Launching Ghost Desktop as its own process — Win+Alt+M to summon, a tray "
             "icon will appear. It keeps running after you close this terminal.")

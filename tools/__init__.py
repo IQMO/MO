@@ -17,6 +17,7 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+from core.runtime.subprocess_flags import apply_windows_hidden_process_flags
 from core.tooling.sandbox import safe_env, redact_sensitive_text
 from core.tooling.shell_processes import (
     _register_shell_process,
@@ -776,7 +777,6 @@ def execute_shell(arguments: dict[str, Any]) -> str:
     shell_cmd, use_shell, registered_command = _shell_command(command)
 
     try:
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
         env = safe_env() if bool(arguments.get("_clean_env", True)) else os.environ.copy()
         env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
         popen_kwargs: dict[str, Any] = {
@@ -790,7 +790,7 @@ def execute_shell(arguments: dict[str, Any]) -> str:
             "env": env,
         }
         if sys.platform == "win32":
-            popen_kwargs["creationflags"] = creationflags
+            apply_windows_hidden_process_flags(popen_kwargs)
         else:
             popen_kwargs["start_new_session"] = True
         proc = subprocess.Popen(shell_cmd, **popen_kwargs)

@@ -20,6 +20,8 @@ import sys
 import time
 from typing import Any
 
+from core.runtime.subprocess_flags import apply_windows_hidden_process_flags
+
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -58,9 +60,15 @@ def execute_point_on_screen(arguments: dict[str, Any]) -> str:
     except Exception:
         pass
     try:
+        popen_kwargs = {
+            "cwd": _REPO_ROOT,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        apply_windows_hidden_process_flags(popen_kwargs)
         subprocess.Popen(
             [sys.executable, "-m", "interface.screen_overlay", str(x), str(y), label, str(seconds)],
-            cwd=_REPO_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            **popen_kwargs,
         )
     except Exception as exc:  # noqa: BLE001
         return f"Error: overlay failed: {type(exc).__name__}: {exc}"
