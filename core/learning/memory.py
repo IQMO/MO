@@ -203,25 +203,55 @@ class EpisodicMemory:
         if not q:
             return []
 
-        # Semantic recall when an embedder is configured; falls back to keyword recall
-        # (below) when there's no embedder, the embed call fails, or nothing is embedded.
+        # Hybrid recall: when an embedder is configured, FUSE semantic (meaning) and
+        # keyword (bm25) rankings via reciprocal rank fusion instead of using one OR the
+        # other. Fusion recovers lexical-gap paraphrases bm25 alone misses (e.g.
+        # "credential" vs "secret") while keeping bm25's exact-term precision. Falls back
+        # to keyword-only when there is no embedder or nothing has been embedded yet.
         if self.embedder is not None:
             try:
-                sem = self._semantic_recall(q, limit)
+                pool = max(limit * 4, 12)  # widen the candidate pool, then fuse down to `limit`
+                sem = self._semantic_recall(q, pool)
                 if sem is not None:
-                    _emit_memory_event("memory_recall", {"query": q[:80], "results": len(sem), "mode": "semantic"})
-                    return sem
+                    fused = self._rrf_fuse((sem, self._keyword_recall(q, pool)), limit)
+                    _emit_memory_event("memory_recall", {"query": q[:80], "results": len(fused), "mode": "hybrid"})
+                    return fused
             except Exception:
                 traceback.print_exc()
 
+        results = self._keyword_recall(q, limit)
+        _emit_memory_event("memory_recall", {"query": q[:80], "results": len(results), "mode": "bm25"})
+        return results
+
+    @staticmethod
+    def _rrf_fuse(rankings: "tuple[list[dict[str, str]], ...]", limit: int, rrf_k: int = 60) -> list[dict[str, str]]:
+        """Reciprocal Rank Fusion — combine ranked lists by summing 1/(rrf_k + rank).
+
+        An item ranked highly by EITHER ranker, or moderately by BOTH, rises to the top:
+        a semantic-only hit (paraphrase) and a keyword-only hit (exact term) both surface,
+        fused by agreement. Preserves each item's dict; dedupes by turn_id.
+        """
+        scores: dict[str, float] = {}
+        items: dict[str, dict[str, str]] = {}
+        for ranking in rankings:
+            for rank, item in enumerate(ranking or (), start=1):
+                tid = item.get("turn_id")
+                if not tid:
+                    continue
+                scores[tid] = scores.get(tid, 0.0) + 1.0 / (rrf_k + rank)
+                items.setdefault(tid, item)
+        return sorted(items.values(), key=lambda it: -scores[it["turn_id"]])[:limit]
+
+    def _keyword_recall(self, q: str, limit: int) -> list[dict[str, str]]:
+        """bm25 (FTS5) keyword recall, with a substring fallback when FTS5 is disabled."""
         # Sanitize query for FTS5 (strip punctuation to prevent match syntax errors)
         clean_terms = [t for t in q.replace('"', '').replace("'", "").split() if len(t) > 2]
         if not clean_terms:
             return []
-        
+
         fts_query = " OR ".join(f'"{term}"' for term in clean_terms[:8])
-        results = []
-        
+        results: list[dict[str, str]] = []
+
         try:
             with self._connect() as conn:
                 try:
@@ -249,7 +279,7 @@ class EpisodicMemory:
                     for t in clean_terms[:4]:
                         params.extend([f"%{t}%", f"%{t}%"])
                     params.append(limit)
-                    
+
                     rows = conn.execute(sql, tuple(params)).fetchall()
                     for r in rows:
                         results.append({
@@ -260,7 +290,6 @@ class EpisodicMemory:
         except Exception as e:
             _emit_memory_event("memory_recall_error", {"query": q[:80], "error": str(e)[:200]})
 
-        _emit_memory_event("memory_recall", {"query": q[:80], "results": len(results)})
         return results
 
     def record_miss(self, query: str) -> None:

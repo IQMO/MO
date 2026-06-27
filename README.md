@@ -238,7 +238,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Cache-stable context | Byte-stable system+history prefix with per-turn context appended last, so the provider prefix cache covers the conversation; `/status` reports the measured cache-hit ratio |
 | Session continuity | Long work preserves task state, evidence, files, and context orientation |
 | Multiple local instances | Several `mo` terminals can run concurrently; each gets its own `main-<instance>` session by default, while singleton resources stay resource-locked |
-| Memory recall | Past-turn recall ranked by relevance (FTS5 bm25); optional meaning-based (embeddings) recall — either an OpenAI-compatible endpoint (no dependency) or a fully-offline on-device ONNX model (optional `fastembed`). Off by default; never touches the internet, only your own history |
+| Memory recall | Past-turn recall ranked by relevance (FTS5 bm25). When embeddings are enabled, keyword and meaning-based recall are **fused** (reciprocal-rank fusion), so paraphrases that share meaning but not words are still found — embeddings via an OpenAI-compatible endpoint (no dependency) or a fully-offline on-device ONNX model (optional `fastembed`). Off by default; never touches the internet, only your own history. Recall quality is **measured** (`python -m core.learning.recall_benchmark`, recall@K) and guarded by a regression test |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
 | PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings, including proven overengineering/duplication as maintainability risk; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |
