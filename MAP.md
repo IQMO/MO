@@ -30,7 +30,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Private profile-extension records live under `~/.mo/operator` (or explicit profile env overrides), are gitignored/local only, and are never tracked or shipped.
 
 ## Verification
-- Maintainer-local tests live in ignored `tests/`; they are used before CPD but must never be tracked or pushed.
+- Maintainer-local tests live in ignored `tests/`; they are used before maintainer CPD (Commit, Push, Deploy) but must never be tracked or pushed.
 - Run `python -m core.diagnostics.test_preflight --collect` before broad/full local sweeps; `test_runner` does this automatically for broad pytest commands.
 - The local pytest bootstrap repeats the public/private guard before broad collection so privacy/term failures surface first.
 - Focused tests first when the overlay is present: `python -m pytest tests/<target>.py -q`.

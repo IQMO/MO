@@ -36,7 +36,7 @@ _RELEVANT: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("tone", "Keep your answers short and direct, I dislike long hedging explanations",
      "Will keep responses short and direct.",
      ("how do I like you to respond", "what response style do I want")),
-    ("tests", "Run the suite with pytest dash q and use minus n auto for the full parallel run",
+    ("tests", "Run the suite with pytest dash q and use minus n four for the bounded full parallel run",
      "Noted the pytest invocation for the suite.",
      ("how should I run the test suite", "what command runs all the tests")),
     ("python-only", "This project has no node, use python for all scripting tasks",
