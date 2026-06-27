@@ -9,6 +9,7 @@ selection path so Agent context injection has one "skills" source.
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -412,7 +413,9 @@ def write_skill_pack(
         safe_rel = _safe_support_path(rel)
         if not safe_rel:
             continue
-        atomic_write_text(dest / safe_rel, str(content or "")[:_MAX_SOURCE_TEXT_CHARS], encoding="utf-8")
+        support_path = dest / safe_rel
+        support_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(support_path, str(content or "")[:_MAX_SOURCE_TEXT_CHARS], encoding="utf-8")
     return dest / "SKILL.md"
 
 
@@ -977,7 +980,12 @@ def _first_heading(text: str) -> str:
 
 def _slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-")
-    return slug[:80] or "mo-skill"
+    if not slug:
+        return "mo-skill"
+    if len(slug) <= 56:
+        return slug
+    digest = hashlib.sha1(slug.encode("utf-8", "ignore")).hexdigest()[:8]
+    return f"{slug[:47].rstrip('-')}-{digest}"
 
 
 def _title(value: str) -> str:
