@@ -73,6 +73,13 @@ runtime:
   # Set true only if you intentionally want the legacy shared `main` session.
   shared_session: false
 
+update:
+  # Live self-update notice. A throttled background `git fetch` surfaces
+  # "N updates behind" in the TUI footer with no user action; `/update` (or
+  # `mo --update`) fast-forwards the checkout. Best-effort — offline or non-git
+  # (zip) installs simply show nothing, and it never blocks the interface.
+  check: true   # set false to disable the background check entirely (no network)
+
 agent:
   max_tool_rounds: 80
   max_provider_requests: 300
