@@ -128,6 +128,27 @@ def _context_char_counts(parts: dict[str, str]) -> dict[str, int]:
     return {field: len(parts.get(key, "")) for key, field in _CONTEXT_CHAR_FIELDS.items()}
 
 
+def _profile_identity_context(profile: object) -> str:
+    if not profile:
+        return ""
+    try:
+        hydrate = getattr(profile, "_hydrate_identity_from_operator_profile", None)
+        if callable(hydrate):
+            hydrate()
+    except Exception:
+        traceback.print_exc()
+    name = str(getattr(profile, "user_name", "") or "").strip()
+    if not name:
+        return ""
+    alias = str(getattr(profile, "user_alias", "") or "").strip()
+    label = f"{name} ({alias})" if alias else name
+    return (
+        f"Current operator: {label}\n"
+        "Use the operator name naturally in bare greetings. This is identity-only; "
+        "do not infer project, task, repo, deploy, or preference facts from it."
+    )
+
+
 def _task_board_change_fingerprint(task_board: TaskBoard | None) -> str:
     if not task_board:
         return ""
@@ -886,11 +907,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         work pattern guidance, unified local skills, workspace awareness, code graph slice,
         and reasoning level preference.  Used by run_turn.
 
-        Profile context is gated: simple_chat / greeting turns skip the full profile
-        read to save tokens and disk I/O.
+        Profile context is gated: simple_chat / greeting turns get only a tiny
+        identity line so greetings can use the operator name without loading the
+        full profile/project/recall bundle.
         """
         profile_context = ""
-        # Pure greetings/acks ("hi", "thanks") need no profile/recall/project read.
+        # Pure greetings/acks ("hi", "thanks") need no recall/project read.
         # EVERY other real turn loads the operator profile: it is the SOLE home of
         # operator + project/deploy/ownership knowledge since the mo_control bridge
         # was retired, so the old greeting/identity-only gate made MO guess project
@@ -899,10 +921,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         trivial_greeting = _looks_like_trivial_greeting(user_input)
         mo_control_needed = should_include_mo_control_context(user_input, getattr(self, "config", {}))
         include_profile = not trivial_greeting
+        profile = getattr(self, "profile", None)
         if include_profile:
-            profile = getattr(self, "profile", None)
             if profile:
                 profile_context = profile.build_profile_context()
+        elif profile:
+            profile_context = _profile_identity_context(profile)
         recalled_context = ""
         memory = getattr(self, "memory", None)
         if memory and not trivial_greeting:
