@@ -40,6 +40,11 @@ _ENTRY_BG = "#10242b"
 _MUTED = "#5a8899"
 _BORDER = "#123038"
 _LISTEN = "#bb86fc"  # voice-listening accent (matches the orb)
+_WINDOW_CHROMA = "#010101"
+_WINDOW_RADIUS = 18
+_WINDOW_PAD = 3
+_GUI_ACTIVE_FRAME_MS = 16
+_GUI_IDLE_FRAME_MS = 50
 WINDOW_WIDTH = 400
 WINDOW_HEIGHT = 268
 WINDOW_OFFSET = 24
@@ -70,6 +75,48 @@ def companion_geometry_near_pointer(
     x = max(0, min(x, max(0, int(screen_width) - width)))
     y = max(0, min(y, max(0, int(screen_height) - height)))
     return f"{width}x{height}+{x}+{y}"
+
+
+def _draw_rounded_rect(
+    canvas: Any,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    radius: int,
+    *,
+    fill: str,
+    tags: str,
+) -> None:
+    """Draw a filled rounded rectangle on a Tk Canvas."""
+    r = max(1, min(int(radius), max(1, (x2 - x1) // 2), max(1, (y2 - y1) // 2)))
+    canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=fill, outline="", tags=tags)
+    canvas.create_rectangle(x1, y1 + r, x2, y2 - r, fill=fill, outline="", tags=tags)
+    canvas.create_oval(x1, y1, x1 + 2 * r, y1 + 2 * r, fill=fill, outline="", tags=tags)
+    canvas.create_oval(x2 - 2 * r, y1, x2, y1 + 2 * r, fill=fill, outline="", tags=tags)
+    canvas.create_oval(x1, y2 - 2 * r, x1 + 2 * r, y2, fill=fill, outline="", tags=tags)
+    canvas.create_oval(x2 - 2 * r, y2 - 2 * r, x2, y2, fill=fill, outline="", tags=tags)
+
+
+def _apply_windows_rounded_corners(win: Any) -> None:
+    """Best-effort Win11 DWM rounding for borderless Tk windows."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        hwnd = wintypes.HWND(int(win.winfo_id()))
+        attr = wintypes.DWORD(33)  # DWMWA_WINDOW_CORNER_PREFERENCE
+        pref = ctypes.c_int(2)     # DWMWCP_ROUND
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            attr,
+            ctypes.byref(pref),
+            ctypes.sizeof(pref),
+        )
+    except Exception:
+        pass
 
 
 class CompanionSurface:
@@ -226,6 +273,7 @@ class CompanionSurface:
             popup.attributes("-alpha", 0.95)
         except Exception:
             pass
+        _apply_windows_rounded_corners(popup)
 
         border = tk.Frame(popup, bg=CYAN)
         border.pack(fill="both", expand=True)
@@ -438,14 +486,60 @@ class CompanionSurface:
             win.attributes("-alpha", 0.95)
         except Exception:
             pass
+        transparent_shell = True
+        try:
+            win.configure(bg=_WINDOW_CHROMA)
+            win.attributes("-transparentcolor", _WINDOW_CHROMA)
+        except Exception:
+            transparent_shell = False
+            win.configure(bg=_BORDER)
+        _apply_windows_rounded_corners(win)
 
         # Modern, voice-first one-sided surface: a hairline accent border, a dark
         # card, Ghost's reply as the primary area, and a slim manual input bar.
-        win.configure(bg=_BORDER)
-        border = tk.Frame(win, bg=_BORDER)
-        border.pack(fill="both", expand=True)
-        card = tk.Frame(border, bg=CARD)
-        card.pack(fill="both", expand=True, padx=1, pady=1)
+        shell_bg = _WINDOW_CHROMA if transparent_shell else _BORDER
+        shell = tk.Canvas(win, bg=shell_bg, highlightthickness=0, bd=0)
+        shell.pack(fill="both", expand=True)
+        card = tk.Frame(shell, bg=CARD)
+        card_id = shell.create_window(
+            _WINDOW_PAD,
+            _WINDOW_PAD,
+            anchor="nw",
+            window=card,
+        )
+
+        def _draw_shell(event: Any | None = None) -> None:
+            width = int(getattr(event, "width", 0) or shell.winfo_width() or WINDOW_WIDTH)
+            height = int(getattr(event, "height", 0) or shell.winfo_height() or WINDOW_HEIGHT)
+            shell.delete("chrome")
+            _draw_rounded_rect(
+                shell,
+                0,
+                0,
+                max(1, width - 1),
+                max(1, height - 1),
+                _WINDOW_RADIUS,
+                fill=_BORDER,
+                tags="chrome",
+            )
+            _draw_rounded_rect(
+                shell,
+                _WINDOW_PAD,
+                _WINDOW_PAD,
+                max(_WINDOW_PAD + 1, width - _WINDOW_PAD - 1),
+                max(_WINDOW_PAD + 1, height - _WINDOW_PAD - 1),
+                max(1, _WINDOW_RADIUS - _WINDOW_PAD),
+                fill=CARD,
+                tags="chrome",
+            )
+            shell.tag_lower("chrome")
+            shell.itemconfigure(
+                card_id,
+                width=max(1, width - (_WINDOW_PAD * 2)),
+                height=max(1, height - (_WINDOW_PAD * 2)),
+            )
+
+        shell.bind("<Configure>", _draw_shell)
 
         # header (drag handle): glyph + title on the left; listening dot + mode badge
         header = tk.Frame(card, bg=CARD)
@@ -561,23 +655,59 @@ class CompanionSurface:
                 win.winfo_screenwidth(),
                 win.winfo_screenheight(),
             ))
+            _draw_shell()
             self._apply_mode_indicator()
             win.deiconify()
-            self._entry.focus_set()
+            win.lift()
+            try:
+                win.attributes("-topmost", True)
+            except Exception:
+                pass
+            try:
+                win.focus_force()
+            except Exception:
+                pass
+            try:
+                self._entry.focus_set()
+            except Exception:
+                pass
             self._visible = True
 
         def _do_hide(*_args: Any) -> None:
+            if self._recording_voice:
+                self._recording_voice = False
+                rec = getattr(self._voice, "recorder", None)
+                if rec is not None:
+                    try:
+                        rec.stop()
+                    except Exception:
+                        pass
+            self._apply_listening_indicator(False)
+            if self._orb is not None:
+                try:
+                    self._orb.park()
+                except Exception:
+                    pass
             win.withdraw()
             self._visible = False
 
         def _do_stop(*_args: Any) -> None:
             self._running = False
             self._stopped = True
-            win.destroy()
-            root.destroy()
+            try:
+                root.after_idle(root.quit)
+            except Exception:
+                try:
+                    root.quit()
+                except Exception:
+                    pass
 
         def _do_show_log(*_args: Any) -> None:
             self._show_log_popup(root)
+
+        def _hide_and_break(_event: Any | None = None) -> str:
+            _do_hide()
+            return "break"
 
         handlers = {
             "<<CompanionShow>>": _do_show,
@@ -590,13 +720,41 @@ class CompanionSurface:
         root.bind("<<CompanionHide>>", _do_hide)
         root.bind("<<CompanionStop>>", _do_stop)
         root.bind("<<CompanionShowLog>>", _do_show_log)
+        for _esc_widget in (root, win, shell, card, header, self._entry, self._response):
+            try:
+                _esc_widget.bind("<Escape>", _hide_and_break)
+            except Exception:
+                pass
+        try:
+            root.bind_all("<Escape>", _hide_and_break, add="+")
+        except Exception:
+            pass
+        try:
+            win.protocol("WM_DELETE_WINDOW", _do_hide)
+        except Exception:
+            pass
 
         self._gui_ready.set()
-        try:
-            while self._running:
+
+        def _gui_tick() -> None:
+            delay = _GUI_IDLE_FRAME_MS
+            try:
+                if not self._running:
+                    try:
+                        root.quit()
+                    except Exception:
+                        pass
+                    return
                 self._drain_gui_events(handlers)
                 if not self._running:
-                    break
+                    try:
+                        root.after_idle(root.quit)
+                    except Exception:
+                        try:
+                            root.quit()
+                        except Exception:
+                            pass
+                    return
                 self._poll_voice_autostop()
                 if self._orb is not None:
                     try:
@@ -606,9 +764,24 @@ class CompanionSurface:
                         self._orb.tick()
                     except Exception:
                         pass
-                root.update()
-                root.update_idletasks()
-                time.sleep(0.03)  # ~33fps; smooth orb glide, still a blocking yield
+                active = bool(
+                    self._visible
+                    or self._recording_voice
+                    or (self._orb is not None and getattr(self._orb, "_visible", False))
+                )
+                delay = _GUI_ACTIVE_FRAME_MS if active else _GUI_IDLE_FRAME_MS
+            except Exception:
+                if self._running:
+                    traceback.print_exc()
+            if self._running:
+                try:
+                    root.after(delay, _gui_tick)
+                except Exception:
+                    self._running = False
+
+        try:
+            root.after(0, _gui_tick)
+            root.mainloop()
         except Exception:
             if self._running:
                 traceback.print_exc()
