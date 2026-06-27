@@ -87,7 +87,11 @@ def distill(ref: SourceRef, files: dict[str, str], manifest: dict[str, Any],
     candidate = {
         "id": cid,
         "source_kind": ref.kind,
-        "source_label": label,
+        # Use the clean name (basename / owner-repo / host) so the promoted skill
+        # gets a readable short name + slug. The full URL/path lives in the source
+        # manifest (provenance) — never the skill's display name.
+        "source_label": name,
+        "source_origin": label,
         "trigger": name.lower(),
         "behavior": f"Use the imported {name} reference for tasks in its domain; verify against live files.",
         "scope": "",
