@@ -125,15 +125,19 @@ class Profile:
         p = Path(path)
         if not p.exists():
             profile = cls(_path=path)
+            profile._hydrate_identity_from_operator_profile()
             profile.save()
             return profile
         try:
             raw = json.loads(p.read_text(encoding="utf-8"))
             profile = cls(_path=path)
             profile._apply_raw(raw)
+            if profile._hydrate_identity_from_operator_profile():
+                profile.save()
             return profile
         except (json.JSONDecodeError, OSError):
             profile = cls(_path=path)
+            profile._hydrate_identity_from_operator_profile()
             profile.save()
             return profile
 
@@ -226,6 +230,19 @@ class Profile:
             if not path.exists():
                 atomic_write_text(path, template.format(operator_name=name).strip() + "\n", encoding="utf-8")
 
+    def _hydrate_identity_from_operator_profile(self) -> bool:
+        """Backfill the JSON identity from the local markdown profile if needed."""
+        if str(self.user_name or "").strip():
+            return False
+        operator_path = Path(self._path).parent / "profile" / "operator.md"
+        name = _read_operator_profile_name(operator_path)
+        if not name:
+            return False
+        self.user_name = name
+        self._profile_cache_mtimes = None
+        self._profile_cache_text = None
+        return True
+
     def sync_operator_profile_files(self) -> None:
         """Update generated operator identity lines without overwriting custom profile notes."""
         self.ensure_operator_profile()
@@ -261,6 +278,8 @@ class Profile:
         self._profile_cache_text = None
 
     def build_profile_context(self, max_chars: int = 3000) -> str:
+        if self._hydrate_identity_from_operator_profile():
+            self.save()
         self.ensure_operator_profile()
         pdir = Path(self._path).parent / "profile"
 
@@ -500,6 +519,41 @@ def _profile_index_line(path: Path) -> str:
         if term and term not in terms:
             terms.append(term)
     return ", ".join(terms[:10]) if terms else ""
+
+
+def _read_operator_profile_name(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    patterns = (
+        r"(?m)^[ \t]*-[ \t]*\*\*Name:\*\*[ \t]*(.+?)[ \t]*$",
+        r"(?m)^[ \t]*#[ \t]+Operator Profile[ \t]+[\u2013\u2014-][ \t]*(.+?)[ \t]*$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        name = _clean_operator_profile_name(match.group(1))
+        if name:
+            return name
+    return ""
+
+
+def _clean_operator_profile_name(value: str) -> str:
+    name = " ".join(str(value or "").split()).strip(" -:\t")
+    name = re.sub(r"^[`*_#>]+|[`*_#>]+$", "", name).strip(" -:\t")
+    if not name:
+        return ""
+    if name.lower() in {"operator", "unknown", "not set", "none", "user"}:
+        return ""
+    if len(name) > 80 or any(ch in name for ch in "\r\n{}[]="):
+        return ""
+    if re.search(r"(?i)(token|secret|password|api[_ -]?key|-----BEGIN)", name):
+        return ""
+    return name
 
 
 def _cap_profile_text(text: str, limit: int, marker: str) -> str:
