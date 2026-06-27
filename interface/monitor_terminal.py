@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-from core.text_safety import configure_utf8_stdio
+from core.utils.text_safety import configure_utf8_stdio
 
 DEFAULT_LOG_PATH = Path("logs/monitor/backend_monitor.jsonl")
 

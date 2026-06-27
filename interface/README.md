@@ -43,7 +43,7 @@ Any interface cleanup that lets provider prose, callback markup, or display code
 - `layout.py` — prompt-toolkit panel layout construction.
 - `keybindings.py` — prompt-toolkit keybinding construction.
 - `palette_mixin.py` — small command-palette compatibility wrappers.
-- `keybindings.py` + `turn_runner.py` + `core/prompt_enhancer.py` — **Ctrl+E** prompt enhancement rewrites the typed message in place (off-thread, profile-personalized language/tone); **Esc** reverts. Never sends.
+- `keybindings.py` + `turn_runner.py` + `core/context/prompt_enhancer.py` — **Ctrl+E** prompt enhancement rewrites the typed message in place (off-thread, profile-personalized language/tone); **Esc** reverts. Never sends.
 - `queueing.py` — pending input queue/steer mixin.
 - `input_dispatch.py` — TUI slash/input dispatch mixin.
 

@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..sandbox import guard_tool_call, redact_provider_tokens, redact_sensitive_text, shell_command_is_mutating
-from ..backend_monitor import BackendMonitor
+from ..tooling.sandbox import guard_tool_call, redact_provider_tokens, redact_sensitive_text, shell_command_is_mutating
+from ..runtime.backend_monitor import BackendMonitor
 from ..session.handoff import context_pressure
 from ..learning.workflow_learning import (
     promote_workflow_candidate,
@@ -18,7 +18,7 @@ from ..learning.workflow_learning import (
 )
 from ..gates.consistency_boundary import changed_proposal_paths_for_last_commit
 from ..gates.behavior_gates import run_input_gates
-from ..mo_control_context import resolve_mo_control_workspace
+from ..context.mo_control_context import resolve_mo_control_workspace
 from .. import local_extensions
 from .agent_utils import (
     URL_RE,
@@ -28,7 +28,7 @@ from .agent_utils import (
     WORKFLOW_SOURCE_PATH_RE,
     _prune_tool_audit_log,
 )
-from ..path_defaults import repo_root
+from ..state.paths import repo_root
 from ..tasking.task_evidence import taskboard_tool_summary
 
 
@@ -125,7 +125,7 @@ class AgentTurnDispatchMixin:
         text = str(user_input or "").strip()
         if not text.startswith("/init"):
             return None
-        from ..initializer import initialize_mo, render_init_report
+        from ..state.initializer import initialize_mo, render_init_report
 
         report = initialize_mo(home=getattr(self, "runtime_home", None), project_path=getattr(self, "project_cwd", None))
         return render_init_report(report)

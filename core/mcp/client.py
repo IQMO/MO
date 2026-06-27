@@ -14,7 +14,7 @@ import threading
 import time
 from typing import Any
 
-from ..sandbox import safe_env
+from ..tooling.sandbox import safe_env
 
 PROTOCOL_VERSION = "2024-11-05"
 # Cap a single JSON-RPC frame so a buggy/hostile server can't OOM MO with one

@@ -8,11 +8,11 @@ from pathlib import Path
 import traceback
 from typing import Any
 
-from ..env_utils import int_env
-from ..path_defaults import ENV_MO_STATE_HOME, mo_home, private_state_enabled
+from ..utils.env_utils import int_env
+from ..state.paths import ENV_MO_STATE_HOME, mo_home, private_state_enabled
 from ..session.session import Session
 from ..tasking.task_board import TaskBoard, board_update_event
-from ..text_utils import cap_by_tokens, token_aware_truncation_enabled
+from ..utils.text_utils import cap_by_tokens, token_aware_truncation_enabled
 from interface.task_board_view import render_rich
 
 

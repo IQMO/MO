@@ -79,7 +79,7 @@ def route_prt_report(agent: object, report: object):
     text = "\n".join(line for _style, line in styled_lines)
 
     try:
-        from ..backend_monitor import get_monitor
+        from ..runtime.backend_monitor import get_monitor
         monitor = get_monitor()
         if monitor:
             monitor.emit("prt_review", {

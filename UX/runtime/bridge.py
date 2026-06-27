@@ -54,9 +54,9 @@ def create_runtime() -> RuntimeHandle:
     try:
         from core.agent.agent import create_agent
         from core.gateway import Gateway
-        from core.path_defaults import default_config_path
+        from core.state.paths import default_config_path
         from core.provider.provider import ConfigLoadError, ProviderError, clean_provider_error
-        from core.text_safety import configure_utf8_stdio
+        from core.utils.text_safety import configure_utf8_stdio
     except Exception as exc:
         raise RuntimeUnavailable(f"MO runtime imports failed: {type(exc).__name__}") from exc
 

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..atomic_write import atomic_write_json
+from ..utils.atomic_write import atomic_write_json
 
 if TYPE_CHECKING:
     from core.review.diff_review import ReviewFinding
@@ -27,7 +27,7 @@ class FindingPatterns:
             # Resolve under the runtime state home (config OR MO_STATE_HOME) so
             # reviews, the fix-loop learning, and system_health share one patterns
             # file — and it never lands in the project cwd.
-            from ..path_defaults import resolve_state_path
+            from ..state.paths import resolve_state_path
             history_dir = resolve_state_path("memory/review_history")
         self.history_dir = Path(history_dir)
         self.patterns_file = self.history_dir / "patterns.json"

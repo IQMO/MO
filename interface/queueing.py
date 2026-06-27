@@ -98,7 +98,7 @@ class QueueingMixin:
             return False
         event.set()
         try:
-            from core.shell_processes import cleanup_shell_processes
+            from core.tooling.shell_processes import cleanup_shell_processes
 
             cleanup_shell_processes()
         except Exception:

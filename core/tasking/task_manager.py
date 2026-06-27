@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..atomic_write import atomic_write_json
+from ..utils.atomic_write import atomic_write_json
 
 
 class TaskManager:

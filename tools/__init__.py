@@ -3,7 +3,7 @@
 Code-search and caller/callee tools expose MO's graph as first-class tools
 instead of shell one-liners. The agent keeps the full catalog locally and sends
 a small active subset to the provider; tool_search activates deferred schemas.
-Sandbox gates still enforce every dispatch via core.sandbox.guard_tool_call().
+Sandbox gates still enforce every dispatch via core.tooling.sandbox.guard_tool_call().
 """
 
 import os
@@ -16,8 +16,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from core.sandbox import safe_env, redact_sensitive_text
-from core.shell_processes import (
+from core.tooling.sandbox import safe_env, redact_sensitive_text
+from core.tooling.shell_processes import (
     _register_shell_process,
     _unregister_shell_process,
     _kill_process_tree,
@@ -1254,7 +1254,7 @@ def execute_tool_search(arguments: dict[str, Any]) -> str:
     for tests, diagnostics, and standalone tool contexts.
     """
     try:
-        from core.tool_registry import DeferredToolRegistry
+        from core.tooling.tool_registry import DeferredToolRegistry
         return DeferredToolRegistry(TOOL_DEFINITIONS).search(arguments or {})
     except Exception as exc:
         return f"Error running tool_search: {exc}"
@@ -1305,7 +1305,7 @@ def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
     if len(fact) > 200:
         return "Fact NOT recorded: keep it to one short line (<=200 chars)."
     try:
-        from core.text_safety import contains_secret_value
+        from core.utils.text_safety import contains_secret_value
         if contains_secret_value(fact) or contains_secret_value(evidence):
             return ("Fact NOT recorded: it contained a secret value. Record only the LOCATION/"
                     "status of a credential (e.g. 'the API keys live in the profile vault'), never the value.")
@@ -1328,8 +1328,8 @@ def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
         pass
     try:
         from pathlib import Path
-        from core.path_defaults import resolve_state_path
-        from core.atomic_write import atomic_write_text
+        from core.state.paths import resolve_state_path
+        from core.utils.atomic_write import atomic_write_text
         path = Path(resolve_state_path("memory/profile/facts.md"))
         path.parent.mkdir(parents=True, exist_ok=True)
         header = (

@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..backend_monitor import get_monitor, redact_monitor_text
-from ..text_utils import words as _words
-from ..sandbox import guard_tool_call, redact_sensitive_text
+from ..runtime.backend_monitor import get_monitor, redact_monitor_text
+from ..utils.text_utils import words as _words
+from ..tooling.sandbox import guard_tool_call, redact_sensitive_text
 
 GHOST_TOOL_SURFACE = "ghost_panel"
 _READ_ONLY_TOOLS = {"git_status", "find_files", "read_file", "grep", "project_bridge"}

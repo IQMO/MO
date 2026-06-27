@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 import traceback
 
 from ..agent.agent_utils import prune_jsonl_log
-from ..path_defaults import resolve_state_path
+from ..state.paths import resolve_state_path
 
 
 def _prune_review_audit_log(path: Path) -> None:
@@ -409,7 +409,7 @@ def review_diff(agent: "Agent", diff_ref: str = "HEAD") -> ReviewReport:
         return report
 
     # 2.6 Token Compression & Model Limits
-    from core.tool_compress import compress
+    from core.tooling.tool_compress import compress
     diff_text_compressed, compress_stats = compress(diff_text, min_bytes=0)
     compression_saved = 0
     if compress_stats:

@@ -25,8 +25,8 @@ import traceback
 from typing import Any, Callable
 
 from core.ghost.desktop_pointer import set_desktop_pointer
-from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
-from core.sandbox import redact_sensitive_text
+from core.runtime.lock import acquire_runtime_lock, release_runtime_lock
+from core.tooling.sandbox import redact_sensitive_text
 from core.tasking.task_board import attach_taskboard_to_text
 from interface.ghost_desktop.orb import GhostOrb
 from interface.ghost_desktop.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker

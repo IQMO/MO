@@ -43,7 +43,7 @@ def regression_prompt_block() -> str:
 def run_fix_loop(agent: "Agent", report: "ReviewReport"):
     """Starts a goal-driven fix loop to resolve actionable findings."""
     from core.goal import GoalPlan, GoalStep
-    from core.workspace_awareness import prt_safe_to_mutate
+    from core.context.workspace_awareness import prt_safe_to_mutate
     
     is_safe, reason = prt_safe_to_mutate(agent)
     if not is_safe:

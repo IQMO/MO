@@ -11,7 +11,7 @@ import random
 import time
 from pathlib import Path
 
-from core.path_defaults import mo_home
+from core.state.paths import mo_home
 
 HINT_INTERVAL: float = 20.0
 """Seconds between hint rotations on the idle line."""

@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from ..agent.agent_utils import prune_jsonl_log
-from ..backend_monitor import redact_monitor_text
-from ..path_defaults import ENV_MO_STATE_HOME, mo_home, private_state_enabled
+from ..runtime.backend_monitor import redact_monitor_text
+from ..state.paths import ENV_MO_STATE_HOME, mo_home, private_state_enabled
 
 LOG_PATH = Path("logs/ghost_audit.jsonl")
 

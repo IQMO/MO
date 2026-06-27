@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from ..text_safety import contains_secret_value
+from ..utils.text_safety import contains_secret_value
 from .threat_scan import scan_text, ThreatFinding
 
 # ── unsafe shell patterns ──────────────────────────────────────────────

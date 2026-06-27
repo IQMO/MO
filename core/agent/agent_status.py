@@ -94,7 +94,7 @@ class AgentStatusCommands:
 
     def _status_heartbeat_summary(self) -> str:
         try:
-            from ..heartbeat import build_heartbeat_snapshot, read_recent_heartbeats
+            from ..runtime.heartbeat import build_heartbeat_snapshot, read_recent_heartbeats
             item = (read_recent_heartbeats(limit=1) or [None])[-1]
             if not item:
                 item = build_heartbeat_snapshot(

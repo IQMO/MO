@@ -16,10 +16,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..atomic_write import atomic_write_json
-from ..backend_monitor import get_monitor, redact_monitor_text
+from ..utils.atomic_write import atomic_write_json
+from ..runtime.backend_monitor import get_monitor, redact_monitor_text
 from .handoff import context_pressure
-from ..number_utils import as_int as _as_int
+from ..utils.number_utils import as_int as _as_int
 
 
 def _message_chars(messages: list[dict[str, Any]]) -> int:
@@ -157,7 +157,7 @@ def _match_completed_tool_chain(messages: list[dict[str, Any]], start: int, cuto
     # dropped — the original is archived above and read_file-recoverable). On real code
     # this is a ~90% cut while the model keeps a navigable map of what it read; MO's
     # per-format tool compressor does 0% on source files (no consecutive duplicate lines).
-    from ..code_skeleton import code_skeleton
+    from ..tooling.code_skeleton import code_skeleton
     skeletons: list[str] = []
     for m in chain:
         if m.get("role") != "tool":
@@ -322,7 +322,7 @@ def _chain_archive_dir(agent: Any) -> Path | None:
     if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MO_CHAIN_ARCHIVE_FORCE") != "1":
         return None
     try:
-        from ..path_defaults import resolve_state_path
+        from ..state.paths import resolve_state_path
         cfg = getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {}
         resolved = resolve_state_path("logs/compacted_chains", cfg)
         return Path(resolved) if resolved else None

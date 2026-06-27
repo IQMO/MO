@@ -70,7 +70,7 @@ class AgentPRT:
                     )
 
                     # Phase C: Adaptive Gate
-                    from core.work_patterns import estimate_work_complexity
+                    from core.context.work_patterns import estimate_work_complexity
                     complexity = estimate_work_complexity(diff_text)
 
                     from core.graph.code_graph import risk_score, analyze_diff_impact

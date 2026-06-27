@@ -1,6 +1,6 @@
 """MO work procedures: crystallized, evidence-gated step templates.
 
-A ``WorkProcedure`` is the structured form of a ``core.work_patterns.WorkPattern``:
+A ``WorkProcedure`` is the structured form of a ``core.context.work_patterns.WorkPattern``:
 the proven step sequence for a build/reasoning turn, expressed as ordered,
 dependency-linked, evidence-gated rows that seed a ``TaskBoard``. The model still
 fills in the *content* of each step and must satisfy each step's evidence gate

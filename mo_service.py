@@ -17,7 +17,7 @@ import sys
 _MO_HOME = os.environ.get("MO_HOME") or os.path.join(os.path.expanduser("~"), ".mo")
 sys.pycache_prefix = os.path.join(_MO_HOME, "pycache")
 
-from core.text_safety import configure_utf8_stdio
+from core.utils.text_safety import configure_utf8_stdio
 
 configure_utf8_stdio()
 
@@ -28,8 +28,8 @@ os.environ.setdefault("MO_INVOKED_AS", os.path.splitext(os.path.basename(sys.arg
 os.chdir(AGENT_ROOT)
 sys.path.insert(0, AGENT_ROOT)
 
-from core.runtime_lock import acquire_runtime_lock
-from core.service import main as service_main
+from core.runtime.lock import acquire_runtime_lock
+from core.runtime.service import main as service_main
 
 
 def main() -> int:

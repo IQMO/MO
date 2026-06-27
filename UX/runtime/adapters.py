@@ -18,7 +18,7 @@ def _safe_str(value: Any) -> str:
 
 def _redact_display_text(value: str) -> str:
     try:
-        from core.sandbox import redact_sensitive_text
+        from core.tooling.sandbox import redact_sensitive_text
     except Exception:
         return value
     try:

@@ -16,7 +16,7 @@ from .embeddings import cosine
 def _emit_memory_event(event_type: str, payload: dict) -> None:
     """Lazy import to avoid circular dependency."""
     try:
-        from ..backend_monitor import get_monitor
+        from ..runtime.backend_monitor import get_monitor
         monitor = get_monitor()
         if monitor:
             monitor.emit(event_type, payload)
@@ -31,7 +31,7 @@ class EpisodicMemory:
 
     def __init__(self, path: str | Path | None = None,
                  embedder: Callable[[str], list[float]] | None = None):
-        from ..path_defaults import resolve_state_path
+        from ..state.paths import resolve_state_path
         # Route the default through private-state resolution so it lands in
         # ~/.mo (or MO_STATE_HOME), never the project cwd. Explicit paths pass
         # through unchanged (absolute preserved by resolve_state_path).

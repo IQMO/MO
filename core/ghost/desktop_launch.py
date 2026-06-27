@@ -32,7 +32,7 @@ def ghost_config_block(config: Any) -> dict:
 def ghost_desktop_running() -> bool:
     """True if a desktop Ghost process currently holds its runtime lock."""
     try:
-        from core.runtime_lock import _live_owner
+        from core.runtime.lock import _live_owner
     except Exception:
         return False
     tmp = Path(tempfile.gettempdir())

@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..atomic_write import atomic_write_json, atomic_write_text
+from ..utils.atomic_write import atomic_write_json, atomic_write_text
 
 DEFAULT_GRAPH = Path("memory/structural_graph/graph.json")
 HTML_NAME = "code_map.html"
@@ -43,7 +43,7 @@ def generate_code_map(
     iterations: int = 50,
 ) -> dict[str, Any]:
     """Generate the unified map HTML and task annotations from a structural graph."""
-    from ..path_defaults import resolve_state_path
+    from ..state.paths import resolve_state_path
     # Default to the private-state graph location, never cwd/memory.
     graph_path = Path(path) if path is not None else Path(resolve_state_path(str(DEFAULT_GRAPH)))
     data = _load_graph(graph_path)
@@ -412,7 +412,7 @@ def _payload(
 
 def _file_ops_payload() -> dict[str, dict[str, Any]]:
     try:
-        from core.file_operations import accumulated_files
+        from core.tooling.file_operations import accumulated_files
         data = accumulated_files(limit=50)
     except Exception:
         return {}

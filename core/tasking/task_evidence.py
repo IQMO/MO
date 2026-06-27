@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..runtime_work_signals import tool_is_verification_signal
+from ..runtime.work_signals import tool_is_verification_signal
 
 
 TOOL_BACKED_EVIDENCE_TOOLS = {

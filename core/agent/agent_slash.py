@@ -5,8 +5,8 @@ import time
 from pathlib import Path
 import traceback
 
-from ..backend_monitor import get_monitor
-from ..path_defaults import resolve_state_path
+from ..runtime.backend_monitor import get_monitor
+from ..state.paths import resolve_state_path
 from ..ghost.ghost_context import build_ghost_context
 from ..ghost.ghost_audit import append_ghost_audit
 from ..provider.provider_audit import append_provider_audit
@@ -48,6 +48,7 @@ class AgentSlashCommands:
             "/h": self._cmd_help,
             "/init": self._cmd_init,
             "/doctor": self._cmd_doctor,
+            "/update": self._cmd_update,
             "/migrate": self._cmd_migrate,
             "/exit": lambda _: "[EXIT]",
             "/quit": lambda _: "[EXIT]",
@@ -189,7 +190,7 @@ class AgentSlashCommands:
             return self._cmd_learning_review(sub, arg)
         from core.learning.proactive_learning import cluster_suggestions, read_learning_suggestions
         from core.skills import default_skill_roots, load_generated_learning_skills, load_skills
-        from core.system_health import build_health_report
+        from core.diagnostics.system_health import build_health_report
         report = build_health_report(self.runtime_home)
         profile = report.learning.get("profile_learning", {})
         behavior = report.learning.get("behavior_rules", {})
@@ -385,15 +386,20 @@ class AgentSlashCommands:
     def _cmd_help(self, _rest: str) -> str:
         return build_help_text()
 
+    def _cmd_update(self, _rest: str) -> str:
+        from core.update.apply import apply_update
+
+        return apply_update()
+
     def _cmd_init(self, _rest: str) -> str:
-        from ..initializer import initialize_mo, render_init_report
+        from ..state.initializer import initialize_mo, render_init_report
 
         report = initialize_mo(home=getattr(self, "runtime_home", None), project_path=getattr(self, "project_cwd", None))
         return render_init_report(report)
 
     def _cmd_doctor(self, rest: str) -> str:
         """One-shot, offline-safe health check; `/doctor --json` for scripting."""
-        from ..doctor import build_doctor_report, render_doctor_json, render_doctor_report
+        from ..diagnostics.doctor import build_doctor_report, render_doctor_json, render_doctor_report
 
         args = str(rest or "").lower().split()
         report = build_doctor_report(
@@ -407,7 +413,7 @@ class AgentSlashCommands:
         return render_doctor_report(report)
 
     def _cmd_migrate(self, rest: str) -> str:
-        from ..state_migration import (
+        from ..state.migration import (
             apply_state_migration,
             parse_migration_request,
             plan_state_migration,
@@ -515,7 +521,7 @@ class AgentSlashCommands:
         """Show or refresh MO's local heartbeat ledger."""
         sub = (rest or "").strip().split(maxsplit=1)[0].lower() if (rest or "").strip() else "status"
         try:
-            from ..heartbeat import build_surface_continuity_context, record_heartbeat, render_heartbeat_status
+            from ..runtime.heartbeat import build_surface_continuity_context, record_heartbeat, render_heartbeat_status
             if sub in {"status", ""}:
                 return render_heartbeat_status(self, gateway=getattr(self, "gateway", None))
             if sub in {"now", "record", "ping"}:

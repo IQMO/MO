@@ -18,12 +18,12 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..atomic_write import atomic_write_json
+from ..utils.atomic_write import atomic_write_json
 
-from ..backend_monitor import get_monitor, redact_monitor_text
-from ..env_utils import int_env
-from ..path_defaults import private_state_enabled, project_cache_dir
-from ..text_utils import DEFAULT_CONTEXT_STOPWORDS
+from ..runtime.backend_monitor import get_monitor, redact_monitor_text
+from ..utils.env_utils import int_env
+from ..state.paths import private_state_enabled, project_cache_dir
+from ..utils.text_utils import DEFAULT_CONTEXT_STOPWORDS
 
 GRAPH_VERSION = "mo-code-graph-v1"
 DEFAULT_MAX_FILES = 1200

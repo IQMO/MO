@@ -10,7 +10,7 @@ from . import input as _input_module
 from .input import prompt_toolkit_input
 from core.agent.agent_utils import visible_worker_state
 from core.provider.provider import clean_provider_error
-from core.sandbox import redact_sensitive_text
+from core.tooling.sandbox import redact_sensitive_text
 
 
 def read_native_user_input(agent: Any, console: Any) -> str:

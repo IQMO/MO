@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..atomic_write import atomic_write_json
+from ..utils.atomic_write import atomic_write_json
 from .session import Session
 
 
@@ -27,7 +27,7 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
 
 def _emit_session_event(kind: str, **payload: Any) -> None:
     try:
-        from ..backend_monitor import get_monitor
+        from ..runtime.backend_monitor import get_monitor
         monitor = get_monitor()
         if monitor:
             data = {"kind": kind}

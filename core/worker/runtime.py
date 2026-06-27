@@ -9,9 +9,9 @@ import threading
 from typing import Any, Callable
 import traceback
 
-from ..gateway_helpers import select_template, words
+from ..context.gateway_helpers import select_template, words
 from ..provider.provider import clean_provider_error
-from ..work_patterns import estimate_work_complexity
+from ..context.work_patterns import estimate_work_complexity
 from ..session.session import Session
 from .registry import WorkerRecord, ensure_worker_registry, extract_worker_paths
 
@@ -179,7 +179,7 @@ class BackgroundWorkerRuntime:
                     on_finish(record, result)
                 except Exception as e:
                     try:
-                        from .backend_monitor import get_monitor
+                        from ..runtime.backend_monitor import get_monitor
                         monitor = get_monitor()
                         if monitor:
                             monitor.emit("worker_on_finish_error", {"worker_id": worker_id, "error": str(e)[:200]})

@@ -1,7 +1,7 @@
 """MO agent task-board management mixin."""
 
 from .. import local_extensions
-from ..backend_monitor import BackendMonitor
+from ..runtime.backend_monitor import BackendMonitor
 from . import task_evidence
 from .task_board import TaskBoard
 

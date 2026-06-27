@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from ..backend_monitor import BackendMonitor, get_monitor, redact_monitor_text
-from ..number_utils import as_int as _as_int
+from ..runtime.backend_monitor import BackendMonitor, get_monitor, redact_monitor_text
+from ..utils.number_utils import as_int as _as_int
 
 
 @dataclass(frozen=True)

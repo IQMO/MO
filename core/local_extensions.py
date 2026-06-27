@@ -12,7 +12,7 @@ import traceback
 from types import ModuleType
 from typing import Any
 
-from .path_defaults import local_extension_root, mo_home
+from .state.paths import local_extension_root, mo_home
 
 _HOOK_FILENAMES = ("local_extension.py",)
 _CACHE_KEY: tuple[str, str, bool] | None = None

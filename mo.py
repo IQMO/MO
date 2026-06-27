@@ -18,7 +18,7 @@ import sys
 _MO_HOME = os.environ.get("MO_HOME") or os.path.join(os.path.expanduser("~"), ".mo")
 sys.pycache_prefix = os.path.join(_MO_HOME, "pycache")
 
-from core.text_safety import configure_utf8_stdio
+from core.utils.text_safety import configure_utf8_stdio
 
 configure_utf8_stdio()
 
@@ -86,7 +86,7 @@ def _load_agent_runtime():
 def _load_initializer():
     global initialize_mo, render_init_report
     if initialize_mo is None or render_init_report is None:
-        from core.initializer import initialize_mo as loaded_initialize_mo, render_init_report as loaded_render_init_report
+        from core.state.initializer import initialize_mo as loaded_initialize_mo, render_init_report as loaded_render_init_report
         initialize_mo = loaded_initialize_mo
         render_init_report = loaded_render_init_report
     return initialize_mo, render_init_report
@@ -95,7 +95,7 @@ def _load_initializer():
 def _default_config_path(*, agent_root: str, caller_cwd: str) -> str:
     global default_config_path
     if default_config_path is None:
-        from core.path_defaults import default_config_path as loaded_default_config_path
+        from core.state.paths import default_config_path as loaded_default_config_path
         default_config_path = loaded_default_config_path
     return default_config_path(agent_root=agent_root, caller_cwd=caller_cwd)
 
@@ -116,7 +116,7 @@ def _load_provider_errors():
 def _load_state_migration():
     global apply_state_migration, parse_migration_request, plan_state_migration, render_state_migration_report
     if parse_migration_request is None:
-        from core.state_migration import (
+        from core.state.migration import (
             apply_state_migration as loaded_apply_state_migration,
             parse_migration_request as loaded_parse_migration_request,
             plan_state_migration as loaded_plan_state_migration,
@@ -132,7 +132,7 @@ def _load_state_migration():
 def _render_existing_instances_notice(config: dict) -> str:
     global render_existing_instances_notice
     if render_existing_instances_notice is None:
-        from core.instance import render_existing_instances_notice as loaded_render_existing_instances_notice
+        from core.runtime.instance import render_existing_instances_notice as loaded_render_existing_instances_notice
         render_existing_instances_notice = loaded_render_existing_instances_notice
     return render_existing_instances_notice(config)
 
@@ -202,7 +202,7 @@ def _stop_ghost_hotkey_launcher(handle) -> None:
 
 def _acquire_lock() -> bool:
     """Prevent duplicate MO Agent processes. Returns True if lock acquired."""
-    from core.runtime_lock import acquire_runtime_lock
+    from core.runtime.lock import acquire_runtime_lock
     return acquire_runtime_lock(label="MO Agent") is not None
 
 
@@ -280,7 +280,7 @@ def _print_cli_help() -> None:
     print("  mo -p \"prompt\" | --prompt \"prompt\"  # run one non-interactive turn (scriptable)")
     print("  mo [--init]")
     print("  mo [--migrate-state [dry-run|apply|move] [--confirm]]")
-    print("  mo [--help|--version]")
+    print("  mo [--help|--version|--update]")
     print()
     print("Startup:")
     print("  Run `mo` from a project folder. MO preserves that project cwd and keeps private state under ~/.mo or MO_HOME.")
@@ -289,7 +289,15 @@ def _print_cli_help() -> None:
 
 
 def _print_cli_version() -> None:
-    print("MO v1.0")
+    from core.update.version import current_version
+
+    print(current_version())
+
+
+def _run_cli_update() -> None:
+    from core.update.apply import apply_update
+
+    print(apply_update())
 
 
 def main(argv: list[str] | None = None):
@@ -299,6 +307,9 @@ def main(argv: list[str] | None = None):
         return
     if any(arg in {"--version", "version"} for arg in args):
         _print_cli_version()
+        return
+    if any(arg in {"--update", "update"} for arg in args):
+        _run_cli_update()
         return
     migration_args = _migration_args(args)
     if migration_args is not None:
@@ -355,7 +366,7 @@ def main(argv: list[str] | None = None):
     except Exception:
         telegram = None
     try:
-        from core.heartbeat import start_heartbeat_service_if_enabled
+        from core.runtime.heartbeat import start_heartbeat_service_if_enabled
         heartbeat = start_heartbeat_service_if_enabled(agent, gateway, surface="terminal")
     except Exception:
         heartbeat = None

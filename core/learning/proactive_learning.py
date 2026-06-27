@@ -14,10 +14,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..atomic_write import atomic_write_text
-from ..backend_monitor import redact_monitor_text
-from ..env_utils import int_env
-from ..jsonl_utils import read_jsonl
+from ..utils.atomic_write import atomic_write_text
+from ..runtime.backend_monitor import redact_monitor_text
+from ..utils.env_utils import int_env
+from ..utils.jsonl_utils import read_jsonl
 
 
 @dataclass(frozen=True)
@@ -76,7 +76,7 @@ def mine_learning_suggestions(
     max_items: int = 5,
 ) -> list[LearningSuggestion]:
     """Return reviewable recurring learning suggestions from episodic memory."""
-    from ..path_defaults import resolve_state_path
+    from ..state.paths import resolve_state_path
     # sqlite connect creates the file even on read — route the default to private
     # state so a default call never materializes cwd/memory/learning.sqlite.
     rows = _load_turns(resolve_state_path(memory_path or "memory/learning.sqlite"))
@@ -120,7 +120,7 @@ def write_learning_suggestions(
     path: str | Path | None = None,
 ) -> Path:
     """Append unique reviewable suggestions to JSONL and return the path."""
-    from ..path_defaults import resolve_state_path
+    from ..state.paths import resolve_state_path
     out = Path(resolve_state_path(path or "memory/learning_suggestions.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
     existing = _existing_ids(out)

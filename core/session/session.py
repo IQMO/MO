@@ -3,8 +3,8 @@
 import time
 from typing import Any
 
-from ..sandbox import redact_sensitive_text
-from ..text_safety import sanitize_jsonish, sanitize_unicode_text
+from ..tooling.sandbox import redact_sensitive_text
+from ..utils.text_safety import sanitize_jsonish, sanitize_unicode_text
 
 
 def _session_ended_clean(messages: list[dict]) -> bool:

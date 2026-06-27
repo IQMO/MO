@@ -46,7 +46,7 @@ class GhostHistoryMixin:
         self._ghost_history_index = len(self._ghost_history) - 1
         append_ghost_audit(kind, user_text=user_text, response_text=response_text, route=route)
         try:
-            from core.backend_monitor import get_monitor
+            from core.runtime.backend_monitor import get_monitor
 
             monitor = get_monitor()
             if monitor:

@@ -24,10 +24,10 @@ _SECONDARY_BUSY_MESSAGE = (
 )
 
 from . import local_extensions
-from .backend_monitor import BackendMonitor, monitor_context
-from .gateway_helpers import select_template
-from .heartbeat import normalize_surface
-from .runtime_work_signals import (
+from .runtime.backend_monitor import BackendMonitor, monitor_context
+from .context.gateway_helpers import select_template
+from .runtime.heartbeat import normalize_surface
+from .runtime.work_signals import (
     looks_like_interrupted_resume_request,
     tool_is_runtime_work_signal,
 )
@@ -40,7 +40,7 @@ from .tasking.task_board import (
     resume_last_board,
 )
 from .tasking.task_board_registry import TaskBoardRegistry
-from .work_patterns import is_research_method_question
+from .context.work_patterns import is_research_method_question
 
 if TYPE_CHECKING:
     from .agent.agent import Agent
@@ -57,7 +57,7 @@ class Gateway:
             traceback.print_exc()
         self.monitor = monitor or BackendMonitor()
         try:
-            from .backend_monitor import set_monitor
+            from .runtime.backend_monitor import set_monitor
             set_monitor(self.monitor)
         except Exception:
             traceback.print_exc()
@@ -238,7 +238,7 @@ class Gateway:
                 "messages": len(getattr(session, "messages", []) or []),
             })
             try:
-                from .heartbeat import record_heartbeat
+                from .runtime.heartbeat import record_heartbeat
                 record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_start")
             except Exception:
                 traceback.print_exc()
@@ -386,7 +386,7 @@ class Gateway:
                     "has_task_board": self.last_task_board is not None,
                 })
                 try:
-                    from .heartbeat import record_heartbeat
+                    from .runtime.heartbeat import record_heartbeat
                     record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_end", extra={"status": status, "duration_ms": elapsed_ms})
                 except Exception:
                     traceback.print_exc()
@@ -784,7 +784,7 @@ def _work_procedure_rows(user_input: str, target: str = "") -> list[dict[str, ob
     back to the single-row default and never breaks a turn.
     """
     try:
-        from .work_patterns import procedure_for
+        from .context.work_patterns import procedure_for
         from .tasking.procedure import procedure_rows
 
         procedure = procedure_for(user_input)

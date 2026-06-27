@@ -11,7 +11,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 import traceback
 
-from ..backend_monitor import get_monitor, redact_monitor_text
+from ..runtime.backend_monitor import get_monitor, redact_monitor_text
 
 TERMINAL_STATES = {"completed", "blocked", "cancelled", "paused"}
 
@@ -221,7 +221,7 @@ def ensure_worker_registry(agent) -> WorkerRegistry:
             setattr(agent, "workers", registry)
         except Exception as e:
             try:
-                from .backend_monitor import get_monitor
+                from ..runtime.backend_monitor import get_monitor
                 monitor = get_monitor()
                 if monitor:
                     monitor.emit("worker_registry_setattr_error", {"error": str(e)[:200]})

@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..jsonl_utils import read_recent_ledger_entries, resolve_ledger_path
-from ..path_defaults import ENV_TASKBOARD_LEDGER_DISABLE, ENV_TASKBOARD_LEDGER_PATH, TASKBOARD_LEDGER_PATH
+from ..utils.jsonl_utils import read_recent_ledger_entries, resolve_ledger_path
+from ..state.paths import ENV_TASKBOARD_LEDGER_DISABLE, ENV_TASKBOARD_LEDGER_PATH, TASKBOARD_LEDGER_PATH
 
 STATUSES = {"pending", "active", "completed", "blocked"}
 OPEN = {"pending", "active", "blocked"}

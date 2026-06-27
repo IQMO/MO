@@ -15,9 +15,9 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..path_defaults import resolve_state_path
+from ..state.paths import resolve_state_path
 from ..tasking import task_evidence
-from ..work_patterns import select_work_pattern
+from ..context.work_patterns import select_work_pattern
 
 FALSE_CERTAINTY_MARKERS = (
     "guaranteed", "definitely fixed", "fully fixed", "certainly fixed",

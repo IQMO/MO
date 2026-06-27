@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..backend_monitor import redact_monitor_text
+from ..runtime.backend_monitor import redact_monitor_text
 from .task_board import OPEN, TaskBoard, TaskItem, status_marker
 
 

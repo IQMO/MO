@@ -18,11 +18,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..atomic_write import atomic_write_json, atomic_write_text
-from ..jsonl_utils import read_jsonl
-from ..path_defaults import resolve_state_path
+from ..utils.atomic_write import atomic_write_json, atomic_write_text
+from ..utils.jsonl_utils import read_jsonl
+from ..state.paths import resolve_state_path
 from ..skills import skills_root
-from ..text_safety import contains_secret_value
+from ..utils.text_safety import contains_secret_value
 
 BUNDLE_VERSION = "mo-learning-bundle-v1"
 PROFILE_FILES = ("operator.md", "thinking_model.md", "behavior.md", "learning.md", "terms.md", "identity.md", "facts.md")

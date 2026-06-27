@@ -22,10 +22,10 @@ sys.path.insert(0, str(AGENT_ROOT))
 
 from core.agent.agent import create_agent
 from core.gateway import Gateway
-from core.path_defaults import default_config_path
+from core.state.paths import default_config_path
 from core.provider.provider import ConfigLoadError, ProviderError, clean_provider_error
-from core.runtime_lock import acquire_runtime_lock
-from core.text_safety import configure_utf8_stdio
+from core.runtime.lock import acquire_runtime_lock
+from core.utils.text_safety import configure_utf8_stdio
 from interface.ghost_desktop.companion import CompanionSurface, ghost_surface_config
 
 

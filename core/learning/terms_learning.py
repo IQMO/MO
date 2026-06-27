@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..atomic_write import atomic_write_text
-from ..text_safety import contains_secret_value
+from ..utils.atomic_write import atomic_write_text
+from ..utils.text_safety import contains_secret_value
 from ..gates.threat_scan import scan_text
 
 

@@ -289,7 +289,7 @@ class GoalUiMixin:
     def _goal_complexity_text(plan: Any | None) -> str:
         objective = str(getattr(plan, "objective", "") or "")
         try:
-            from core.work_patterns import estimate_work_complexity, select_work_pattern
+            from core.context.work_patterns import estimate_work_complexity, select_work_pattern
 
             estimated = estimate_work_complexity(objective)
             if estimated != "simple":

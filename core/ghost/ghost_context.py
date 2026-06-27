@@ -12,9 +12,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ..backend_monitor import redact_monitor_text, tool_call_names
+from ..runtime.backend_monitor import redact_monitor_text, tool_call_names
 from ..graph.code_graph import build_code_graph_context, should_include_code_graph_context
-from ..coordination_state import goal_summary_lines, worker_summary_lines
+from ..context.coordination_state import goal_summary_lines, worker_summary_lines
 from ..tasking.task_board import read_recent_snapshots, status_marker
 from ..tasking.task_board_context import compile_board_context, compile_board_context_from_snapshot
 

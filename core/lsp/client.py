@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..sandbox import safe_env
+from ..tooling.sandbox import safe_env
 
 # Cap a single frame so a buggy/hostile server can't OOM MO with one huge message.
 _LSP_MAX_BODY_BYTES = 16 * 1024 * 1024

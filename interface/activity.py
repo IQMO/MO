@@ -179,7 +179,7 @@ def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = N
     # Live self-update notice — cached + non-blocking, same render-safe pattern as
     # the balance above. Surfaces "N commits behind upstream" with no user action.
     try:
-        from core.update_check import update_status_text as _upd_text
+        from core.update.check import update_status_text as _upd_text
         _cfg = getattr(agent, "config", {})
         _on = (_cfg.get("update", {}) if isinstance(_cfg, dict) else {}).get("check", True)
         _upd = _upd_text(enabled=bool(_on))

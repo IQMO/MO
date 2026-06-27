@@ -32,15 +32,15 @@ from ..provider.model_slots import (
 )
 from ..provider.provider_capacity import get_capacity
 from ..session.session import Session, _session_ended_clean
-from ..system_prompt import load_system_prompt
-from ..critic import AnswerCritic
-from ..sandbox import redact_sensitive_text
-from ..path_defaults import ENV_MO_STATE_HOME, default_config_path, default_project_roots, mo_home, private_state_enabled, project_cwd, repo_root, resolve_state_path
-from ..backend_monitor import BackendMonitor, get_monitor, preview_provider_messages, preview_provider_response
-from ..instance import get_instance_id, instance_session_slot, shared_session_enabled
+from ..prompts.system_prompt import load_system_prompt
+from ..review.critic import AnswerCritic
+from ..tooling.sandbox import redact_sensitive_text
+from ..state.paths import ENV_MO_STATE_HOME, default_config_path, default_project_roots, mo_home, private_state_enabled, project_cwd, repo_root, resolve_state_path
+from ..runtime.backend_monitor import BackendMonitor, get_monitor, preview_provider_messages, preview_provider_response
+from ..runtime.instance import get_instance_id, instance_session_slot, shared_session_enabled
 from ..provider.provider_audit import append_provider_audit
-from ..work_patterns import build_ghost_work_guidance
-from ..runtime_work_signals import looks_like_interrupted_resume_request
+from ..context.work_patterns import build_ghost_work_guidance
+from ..runtime.work_signals import looks_like_interrupted_resume_request
 from ..learning.feedback_learning import extract_feedback_learning, record_feedback_learning
 from ..learning.terms_learning import record_terms_learning
 from ..learning.workflow_learning import WORKFLOW_CANDIDATE_NOTICE, promote_workflow_candidate, record_workflow_candidate_result
@@ -268,7 +268,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             traceback.print_exc()
 
         try:
-            from ..tool_registry import DeferredToolRegistry
+            from ..tooling.tool_registry import DeferredToolRegistry
             self._tool_registry = DeferredToolRegistry(self.tool_definitions)
         except Exception:
             self._tool_registry = None
@@ -1139,7 +1139,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 })
             return result
         except Exception as exc:
-            from ..critic import CritiqueResult
+            from ..review.critic import CritiqueResult
             if monitor:
                 monitor.emit("critic_review", {"ok": False, "error": type(exc).__name__, "contained": True})
             return CritiqueResult(text=str(content or ""), warnings=[f"critic failure contained: {type(exc).__name__}"])
@@ -1562,7 +1562,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         their language and tone from the profile. The TUI replaces the input row with
         the result; Esc reverts to the original.
         """
-        from ..prompt_enhancer import enhance_prompt
+        from ..context.prompt_enhancer import enhance_prompt
 
         rough = str(rough or "").strip()
         fallback = enhance_prompt(rough, getattr(self, "profile", None))

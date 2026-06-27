@@ -10,15 +10,15 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).
 - `core/agent/` — agent hub, turn loop, slash commands, PRT, utils.
 - `core/gates/behavior_gates.py` / `core/gates/final_gates.py` / `core/gates/claim_verification.py` — declarative enforcement registries the turn loop routes through: input-phase (threat scan + malicious-code refusal, before any provider call) and final-phase answer enforcement (contract, task truth, done-claim, verify-edits, and the verify-before-claiming claim gates). Private extension gates load only through `core/local_extensions.py`.
-- `core/work_patterns.py`, `core/agent/agent_dna.py` — compact internal work guidance, including the lean-build ladder that checks reuse/deletion/stdlib/native options before adding code.
+- `core/context/work_patterns.py`, `core/context/`, `core/agent/agent_dna.py` — compact internal work guidance, context builders, and workspace awareness, including the lean-build ladder that checks reuse/deletion/stdlib/native options before adding code.
 - `core/tasking/` — `core/tasking/task_board.py`, contract gate, task manager, evidence, and procedure rows seeded from work patterns.
 - `core/review/` — diff review pipeline, scorer, iteration, finding patterns; PRT can flag proven overengineering as maintainability risk.
 - `core/goal/` — goal runner and goal auditor.
 - `core/graph/` — `core/graph/structural_graph.py`, code graph, code-map HTML; `core/lsp/` — local language-server diagnostics bridge (`lsp.servers`), off by default; the `lsp_diagnostics` final-gate blocks "fixed/clean" claims on files the server still flags.
 - `core/learning/` — memory, knowledge store, workflow/feedback/trace learning.
 - `core/session/` — session, closeout, momentum; old completed tool chains can compact Python source reads to recoverable structure skeletons.
-- `core/code_skeleton.py` — Python AST skeleton compressor for session momentum only; keeps imports/signatures/docstrings, drops bodies, and returns empty on no-gain/non-Python so callers keep existing behavior.
-- `core/provider/` — providers, audit, capacity.
+- `core/tooling/code_skeleton.py`, `core/tooling/` — tool sandbox/registry/compression plus the Python AST skeleton compressor used by session momentum.
+- `core/provider/`, `core/runtime/`, `core/state/`, `core/skills/` — providers; monitor/heartbeat/locks/service; profile-home paths/init/secrets/migration; local skill packs and seeds.
 - `core/ghost/` — ghost side-check routing, context, audit.
 - `core/mcp/` — MCP client + manager (enabled by default, inert until servers are listed).
 
@@ -26,9 +26,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Live runtime state (logs, audits) lives under the profile state home (`~/.mo` / `MO_HOME` / `MO_STATE_HOME`), NOT the checkout.
 - Multiple terminal instances are allowed: stable `MO_INSTANCE_ID`, default `main-<instance>` session; `runtime.shared_session: true` is the legacy shared-main escape hatch.
 - Singleton surfaces are resource-locked: headless service, Telegram poller, scheduler, desktop Ghost tray/hotkey.
-- Logical profile-state `memory/traces/` — trace artifacts and validator input.
-- Logical profile-state `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
-- Logical profile-state `memory/structural_graph/` — graph, code map, focused map artifacts.
+- Logical profile-state `memory/traces/`, `memory/taskboards/`, `memory/structural_graph/` — trace artifacts, taskboard snapshots, graph/code-map artifacts.
 - Owner-only profile-extension records live under `~/.mo/operator` (or explicit profile env overrides), are gitignored/local only, and are never tracked or shipped.
 
 ## Verification

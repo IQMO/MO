@@ -9,7 +9,7 @@ from typing import Any
 from ..provider.provider_audit import append_provider_audit
 from ..tasking.task_board import TaskBoard, record_snapshot
 from ..session.session_momentum import maybe_compact_session
-from ..path_defaults import repo_root
+from ..state.paths import repo_root
 from .agent_utils import _emit_task_board_update
 
 

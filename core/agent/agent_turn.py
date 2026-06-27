@@ -18,17 +18,17 @@ from ..provider.provider import (
 )
 from ..provider.provider_capacity import get_capacity
 from ..provider.provider_audit import append_provider_audit
-from ..sandbox import guard_tool_call
+from ..tooling.sandbox import guard_tool_call
 from ..tasking.task_board import TaskBoard, record_snapshot
-from ..backend_monitor import (
+from ..runtime.backend_monitor import (
     BackendMonitor,
     get_monitor,
     preview_provider_messages,
     preview_provider_response,
 )
 from ..session.handoff import context_pressure
-from ..tool_compress import compress as tool_compress
-from ..context_bridge import ContextSource, build_active_context_bridge
+from ..tooling.tool_compress import compress as tool_compress
+from ..context.context_bridge import ContextSource, build_active_context_bridge
 from ..learning.feedback_learning import record_feedback_learning
 from .agent_turn_dispatch import AgentTurnDispatchMixin
 from .agent_turn_recovery import AgentTurnRecoveryMixin
@@ -42,12 +42,12 @@ from .agent_utils import (
     _usage_tokens,
 )
 from ..graph.code_graph import build_code_graph_context, should_include_code_graph_context
-from ..coordination_state import build_main_coordination_context
-from ..mo_control_context import build_mo_control_context, should_include_mo_control_context
+from ..context.coordination_state import build_main_coordination_context
+from ..context.mo_control_context import build_mo_control_context, should_include_mo_control_context
 from .. import local_extensions
-from ..project_context import build_project_context
-from ..work_patterns import build_work_pattern_context
-from ..workspace_awareness import build_workspace_awareness, should_include_workspace_awareness
+from ..context.project_context import build_project_context
+from ..context.work_patterns import build_work_pattern_context
+from ..context.workspace_awareness import build_workspace_awareness, should_include_workspace_awareness
 from ..gates.security_check import run_turn_security_check
 from interface.ghost import sanitize_proposal_for_context
 from interface.task_board_view import render_plain
@@ -855,7 +855,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         try:
             import subprocess
             from pathlib import Path
-            from ..path_defaults import repo_root
+            from ..state.paths import repo_root
             from ..graph.code_graph import affected_tests
             from ..review.diff_review import _run_affected_tests
 
@@ -961,7 +961,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 code_graph_context = build_code_graph_context(user_input)
         pending_interrupted_context = self._pending_interrupted_work_context(user_input)
         try:
-            from ..heartbeat import build_surface_continuity_context, build_surface_environment_context
+            from ..runtime.heartbeat import build_surface_continuity_context, build_surface_environment_context
             heartbeat_context = build_surface_continuity_context(self, current_surface=getattr(self, "_current_route_source", "terminal"))
             environment_context = build_surface_environment_context(self, current_surface=getattr(self, "_current_route_source", "terminal"))
         except Exception:

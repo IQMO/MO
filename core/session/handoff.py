@@ -11,15 +11,15 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..atomic_write import atomic_write_text
-from ..backend_monitor import redact_monitor_text, tool_call_names
+from ..utils.atomic_write import atomic_write_text
+from ..runtime.backend_monitor import redact_monitor_text, tool_call_names
 from ..graph.code_graph import build_code_graph_context, should_include_code_graph_context
-from ..coordination_state import goal_summary_lines, worker_summary_lines
+from ..context.coordination_state import goal_summary_lines, worker_summary_lines
 from ..provider.provider_audit import LOG_PATH as PROVIDER_AUDIT_LOG_PATH
 from ..tasking.task_board import read_recent_snapshots
 from ..tasking.task_board_context import compile_board_context, compile_board_context_from_snapshot
 from ..worker import extract_worker_paths
-from ..text_utils import cap_by_tokens, token_aware_truncation_enabled
+from ..utils.text_utils import cap_by_tokens, token_aware_truncation_enabled
 
 HANDOFF_HEADER = "MO HANDSOFF CONTEXT"
 MAX_HANDOFF_DOC_CHARS = 60_000
@@ -304,7 +304,7 @@ def build_handoff_document(agent: Any, *, focus: str = "", reason: str = "", lat
 
 def _file_operation_lines(*, limit: int = 30) -> list[str]:
     try:
-        from ..file_operations import accumulated_files
+        from ..tooling.file_operations import accumulated_files
         recent = accumulated_files(limit=limit)
     except Exception:
         return []
@@ -319,7 +319,7 @@ def _file_operation_lines(*, limit: int = 30) -> list[str]:
 
 def _file_operation_refs(*, limit: int = 20) -> tuple[list[str], list[str]]:
     try:
-        from ..file_operations import accumulated_files
+        from ..tooling.file_operations import accumulated_files
         recent = accumulated_files(limit=limit)
     except Exception:
         return [], []
@@ -331,7 +331,7 @@ def _file_operation_refs(*, limit: int = 20) -> tuple[list[str], list[str]]:
 def _compact_health_lines(agent: Any) -> list[str]:
     lines: list[str] = []
     try:
-        from ..system_health import build_health_report
+        from ..diagnostics.system_health import build_health_report
         structural = build_health_report().graph.get("structural", {})
         if isinstance(structural, dict) and structural.get("nodes"):
             lines.append(f"- Graph: {structural.get('nodes')} nodes, {structural.get('edges')} edges, {structural.get('communities')} communities")

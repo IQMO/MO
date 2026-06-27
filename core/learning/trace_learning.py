@@ -11,9 +11,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..backend_monitor import redact_monitor_text
-from ..env_utils import int_env
-from ..number_utils import as_int as _as_int
+from ..runtime.backend_monitor import redact_monitor_text
+from ..utils.env_utils import int_env
+from ..utils.number_utils import as_int as _as_int
 from .proactive_learning import LearningSuggestion, SuggestionEvidence
 
 DEFAULT_MAX_BYTES = 2_000_000

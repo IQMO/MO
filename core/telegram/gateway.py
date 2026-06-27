@@ -17,12 +17,12 @@ from typing import Any
 import traceback
 
 from core.agent.agent_utils import load_session_from_manager
-from core.auto_reply import maybe_auto_reply
-from core.backend_monitor import get_monitor, redact_monitor_text
-from core.heartbeat import record_heartbeat
-from core.path_defaults import resolve_state_path
-from core.runtime_lock import acquire_runtime_lock, release_runtime_lock
-from core.secrets import resolve_secret, secret_status
+from core.telegram.auto_reply import maybe_auto_reply
+from core.runtime.backend_monitor import get_monitor, redact_monitor_text
+from core.runtime.heartbeat import record_heartbeat
+from core.state.paths import resolve_state_path
+from core.runtime.lock import acquire_runtime_lock, release_runtime_lock
+from core.state.secrets import resolve_secret, secret_status
 from core.session.session import Session
 from core.tasking.task_board import attach_taskboard_to_text
 

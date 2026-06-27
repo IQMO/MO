@@ -18,15 +18,15 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..atomic_write import atomic_write_json
+from ..utils.atomic_write import atomic_write_json
 from ..gates.consistency_boundary import check_consistency_boundary, emit_consistency_boundary
-from ..coordination_state import active_conflicts_for_text
-from ..env_utils import int_env
+from ..context.coordination_state import active_conflicts_for_text
+from ..utils.env_utils import int_env
 from ..tasking.task_board import TaskBoard, TaskItem
 from ..tasking import task_evidence
 from .goal_auditor import GoalAuditor
-from ..path_defaults import resolve_state_path
-from ..text_utils import words as _words
+from ..state.paths import resolve_state_path
+from ..utils.text_utils import words as _words
 from ..worker import ensure_worker_registry
 
 

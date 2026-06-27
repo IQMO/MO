@@ -21,18 +21,18 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..atomic_write import atomic_write_json, atomic_write_text
-from ..backend_monitor import get_monitor, redact_monitor_text
-from ..env_utils import int_env
-from ..number_utils import as_optional_int as _as_int
-from ..path_defaults import (
+from ..utils.atomic_write import atomic_write_json, atomic_write_text
+from ..runtime.backend_monitor import get_monitor, redact_monitor_text
+from ..utils.env_utils import int_env
+from ..utils.number_utils import as_optional_int as _as_int
+from ..state.paths import (
     ENV_MO_HOME,
     ENV_MO_STATE_HOME,
     ENV_MO_STATE_LOCAL,
     private_state_enabled,
     project_cache_dir,
 )
-from ..text_utils import DEFAULT_CONTEXT_STOPWORDS
+from ..utils.text_utils import DEFAULT_CONTEXT_STOPWORDS
 
 STRUCTURAL_GRAPH_DIR = Path("memory") / "structural_graph"
 COMPAT_STRUCTURAL_GRAPH_DIR = Path("graphify-out")

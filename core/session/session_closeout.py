@@ -16,12 +16,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..atomic_write import atomic_write_text
-from ..backend_monitor import redact_monitor_text
-from ..coordination_state import goal_summary_lines, worker_summary_lines
+from ..utils.atomic_write import atomic_write_text
+from ..runtime.backend_monitor import redact_monitor_text
+from ..context.coordination_state import goal_summary_lines, worker_summary_lines
 from .handoff import context_pressure
-from ..number_utils import as_non_negative_int as _as_int
-from ..path_defaults import resolve_state_path
+from ..utils.number_utils import as_non_negative_int as _as_int
+from ..state.paths import resolve_state_path
 from ..tasking.task_board import read_recent_snapshots
 from ..tasking.task_board_context import (
     compile_board_context,
@@ -393,8 +393,8 @@ def _pressure(agent: Any) -> dict[str, Any]:
 
 def _write_file_operations(agent: Any, session: Any) -> None:
     try:
-        from ..file_operations import write_file_ops
-        from ..path_defaults import resolve_state_path
+        from ..tooling.file_operations import write_file_ops
+        from ..state.paths import resolve_state_path
 
         cfg = getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {}
         write_file_ops(
@@ -431,7 +431,7 @@ def _write_runtime_closeout_learning(agent: Any, session: Any, closeout: Session
 
 def _audit_deltas_since(since_ts: float, *, max_entries: int = 80, config: dict[str, Any] | None = None) -> dict[str, list[dict[str, Any]]]:
     try:
-        from ..path_defaults import resolve_state_path
+        from ..state.paths import resolve_state_path
         tool_path = Path(resolve_state_path("logs/tool_audit.jsonl", config or {}))
         provider_path = Path(resolve_state_path("logs/provider_audit.jsonl", config or {}))
     except Exception:

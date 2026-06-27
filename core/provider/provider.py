@@ -18,8 +18,8 @@ import yaml
 from dotenv import load_dotenv
 import traceback
 
-from ..atomic_write import atomic_write_json
-from ..path_defaults import codex_auth_path, default_config_path, mo_home
+from ..utils.atomic_write import atomic_write_json
+from ..state.paths import codex_auth_path, default_config_path, mo_home
 
 
 def _capture_response_headers(provider_name: str, response_or_stream: Any) -> None:
