@@ -18,6 +18,18 @@ import traceback
 # rejected while any turn is in flight (e.g. an active DEVMODE board), rather than
 # sharing the single agent/session/board. See run_turn().
 _SECONDARY_SURFACES = frozenset({"desktop", "ghost", "companion"})
+# Route used by the owner self-heal loop's own sweeps so the activation seam in
+# run_turn does not re-enter the loop for each sweep (it runs as one normal turn).
+_OWNER_MAINTENANCE_SWEEP = "owner_maintenance_sweep"
+
+
+def _should_owner_maintenance_loop(route_source: str, user_input: str) -> bool:
+    """The owner self-heal loop fires only on a primary-surface maintenance
+    activation that is not itself one of the loop's own sweeps. Inert for users:
+    is_owner_maintenance_activation is False without the owner pack + token."""
+    return (route_source not in _SECONDARY_SURFACES
+            and route_source != _OWNER_MAINTENANCE_SWEEP
+            and is_owner_maintenance_activation(user_input))
 _SECONDARY_BUSY_MESSAGE = (
     "MO is busy with a foreground task right now (it can only run one turn at a time "
     "yet) — try again in a moment."
@@ -123,6 +135,24 @@ class Gateway:
         conversation mid-run (e.g. during a OWNER_MAINTENANCE run). Primary turns block until the
         in-flight turn releases. The lock is always released, even on error.
         """
+        # Owner self-heal: typing the maintenance activation drives a self-healing
+        # LOOP — sweep after sweep until the codebase is provably clean — not a
+        # single turn. is_owner_maintenance_activation is False unless the owner
+        # pack + token are installed, so this branch is inert for users. The loop
+        # body lives in the operator pack; product only delegates to it. Each sweep
+        # calls back in as _OWNER_MAINTENANCE_SWEEP and runs as one normal turn, so
+        # this guard never re-enters. If the pack loop is unavailable, fall through
+        # to a single normal turn.
+        if _should_owner_maintenance_loop(route_source, user_input):
+            looped = self._run_owner_maintenance_loop(
+                on_board_update=on_board_update, on_token=on_token,
+                on_activity=on_activity, on_proposal=on_proposal,
+                cancel_event=cancel_event, on_assistant_text=on_assistant_text,
+                on_board_event=on_board_event, on_action=on_action,
+            )
+            if looped is not None:
+                return looped
+
         secondary = route_source in _SECONDARY_SURFACES
         if secondary:
             if not self._turn_lock.acquire(blocking=False):
@@ -151,6 +181,31 @@ class Gateway:
             )
         finally:
             self._turn_lock.release()
+
+    def _run_owner_maintenance_loop(self, **callbacks) -> str | None:
+        """Delegate the owner self-heal loop to its pack-resident body.
+
+        Owner-only and gated upstream (is_owner_maintenance_activation is False
+        without the pack + token). The loop drives THIS gateway's run_turn one
+        sweep at a time until the codebase is provably clean. Returns the loop's
+        summary line, or None if the pack loop is unavailable so the caller falls
+        back to a single normal turn — the owner maintenance path never breaks for
+        lack of the pack.
+        """
+        try:
+            import importlib.util
+            from .path_defaults import operator_pack_root
+            loop_path = operator_pack_root() / "devmode" / "autopilot.py"
+            if not loop_path.exists():
+                return None
+            spec = importlib.util.spec_from_file_location("_owner_maintenance_loop", loop_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            result = module.run_in_session(self, **callbacks)
+            return result if isinstance(result, str) else ""
+        except Exception:
+            traceback.print_exc()
+            return None
 
     def _run_turn_impl(
         self,
