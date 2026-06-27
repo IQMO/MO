@@ -165,8 +165,8 @@ def run_native_terminal_loop(agent: Any, gateway: Any, console: Any) -> None:
         print(f"Runtime: {runtime}")
     from .layout import STARTUP_HINT
     print(f"{STARTUP_HINT}, /exit to quit.")
-    if _input_module.HAS_PROMPT_TOOLKIT and sys.stdin.isatty():
-        print("Native terminal loop enabled. Set MO_TUI=1 for the fixed prompt-toolkit TUI.")
+    if os.environ.get("MO_NATIVE_SCROLL") == "1":
+        print("Plain native scrollback enabled by MO_NATIVE_SCROLL=1.")
     print()
 
     while True:

@@ -34,8 +34,8 @@ def should_open_backend_monitor() -> bool:
 
 
 def should_use_prompt_toolkit_tui() -> bool:
-    """True only when the fixed prompt-toolkit TUI is explicitly requested."""
-    return os.environ.get("MO_TUI") == "1"
+    """True unless the operator explicitly opts into plain native scrollback."""
+    return os.environ.get("MO_NATIVE_SCROLL") != "1"
 
 
 def startup_identity_lines(agent: Any) -> list[str]:
@@ -95,9 +95,9 @@ def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool) -> Non
     except Exception:
         pass
 
-    # Native-scroll terminal output is the default: chat is printed into normal
-    # terminal scrollback. The fixed prompt-toolkit TUI still exists, but only
-    # when explicitly requested.
+    # Prompt-toolkit TUI is the normal interface: styled logo, colors, palette,
+    # Ghost/task/status panels, and keyboard-managed transcript scrolling.
+    # Plain native scrollback is an explicit fallback via MO_NATIVE_SCROLL=1.
     if _input_module.HAS_PROMPT_TOOLKIT and sys.stdin.isatty() and should_use_prompt_toolkit_tui():
         tui = _tui_class()(agent, gateway)
         try:

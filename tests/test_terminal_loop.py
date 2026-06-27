@@ -62,7 +62,7 @@ def test_terminal_loop_import_does_not_load_main_tui():
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_run_main_loop_uses_native_scroll_by_default_even_when_prompt_toolkit_available(monkeypatch):
+def test_run_main_loop_uses_prompt_toolkit_tui_by_default_when_available(monkeypatch):
     calls = []
 
     class FakeTui:
@@ -77,40 +77,7 @@ def test_run_main_loop_uses_native_scroll_by_default_even_when_prompt_toolkit_av
 
     monkeypatch.setattr(terminal_loop._input_module, "HAS_PROMPT_TOOLKIT", True)
     monkeypatch.setattr(terminal_loop.sys.stdin, "isatty", lambda: True)
-    monkeypatch.delenv("MO_TUI", raising=False)
-    monkeypatch.delenv("MO_OPEN_BACKEND_MONITOR", raising=False)
-    monkeypatch.setattr(terminal_loop, "MoTui", FakeTui)
-    monkeypatch.setattr(terminal_loop, "record_session", lambda value: calls.append(("record", value)))
-    monkeypatch.setattr(terminal_loop, "run_native_terminal_loop", lambda *_args: calls.append(("native",)))
-    monkeypatch.setattr(terminal_loop, "set_terminal_title", lambda title: calls.append(("title", title)))
-
-    terminal_loop.run_main_loop(agent, gateway, console=None, has_rich=False)
-
-    assert ("title", "MO") in calls
-    assert ("native",) in calls
-    assert ("record", agent) in calls
-    assert not any(call[0] == "init" for call in calls)
-    assert not any(call == ("run",) for call in calls)
-    assert gateway.monitor.opened == 0
-    assert gateway.monitor.closed == 0
-
-
-def test_run_main_loop_uses_prompt_toolkit_tui_when_explicitly_enabled(monkeypatch):
-    calls = []
-
-    class FakeTui:
-        def __init__(self, agent, gateway):
-            calls.append(("init", agent, gateway))
-
-        def run(self):
-            calls.append(("run",))
-
-    agent = object()
-    gateway = SimpleNamespace(monitor=DummyMonitor())
-
-    monkeypatch.setattr(terminal_loop._input_module, "HAS_PROMPT_TOOLKIT", True)
-    monkeypatch.setattr(terminal_loop.sys.stdin, "isatty", lambda: True)
-    monkeypatch.setenv("MO_TUI", "1")
+    monkeypatch.delenv("MO_NATIVE_SCROLL", raising=False)
     monkeypatch.delenv("MO_OPEN_BACKEND_MONITOR", raising=False)
     monkeypatch.setattr(terminal_loop, "MoTui", FakeTui)
     monkeypatch.setattr(terminal_loop, "record_session", lambda value: calls.append(("record", value)))
@@ -124,6 +91,39 @@ def test_run_main_loop_uses_prompt_toolkit_tui_when_explicitly_enabled(monkeypat
     assert ("run",) in calls
     assert ("record", agent) in calls
     assert ("native",) not in calls
+    assert gateway.monitor.opened == 0
+    assert gateway.monitor.closed == 0
+
+
+def test_run_main_loop_uses_native_scroll_when_explicitly_enabled(monkeypatch):
+    calls = []
+
+    class FakeTui:
+        def __init__(self, agent, gateway):
+            calls.append(("init", agent, gateway))
+
+        def run(self):
+            calls.append(("run",))
+
+    agent = object()
+    gateway = SimpleNamespace(monitor=DummyMonitor())
+
+    monkeypatch.setattr(terminal_loop._input_module, "HAS_PROMPT_TOOLKIT", True)
+    monkeypatch.setattr(terminal_loop.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setenv("MO_NATIVE_SCROLL", "1")
+    monkeypatch.delenv("MO_OPEN_BACKEND_MONITOR", raising=False)
+    monkeypatch.setattr(terminal_loop, "MoTui", FakeTui)
+    monkeypatch.setattr(terminal_loop, "record_session", lambda value: calls.append(("record", value)))
+    monkeypatch.setattr(terminal_loop, "run_native_terminal_loop", lambda *_args: calls.append(("native",)))
+    monkeypatch.setattr(terminal_loop, "set_terminal_title", lambda title: calls.append(("title", title)))
+
+    terminal_loop.run_main_loop(agent, gateway, console=None, has_rich=False)
+
+    assert ("title", "MO") in calls
+    assert ("native",) in calls
+    assert ("record", agent) in calls
+    assert not any(call[0] == "init" for call in calls)
+    assert not any(call == ("run",) for call in calls)
     assert gateway.monitor.opened == 0
     assert gateway.monitor.closed == 0
 
