@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from pathlib import Path
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.buffer import Buffer
@@ -18,6 +19,34 @@ LOGO_LINES: tuple[str, ...] = (
     "  █ █ █  █   █",
     "  █   █   ███ ",
 )
+
+
+def _active_provider_key_missing(agent) -> str:
+    """Best-effort: name the active provider's key env var if it is required but
+    absent (so the first turn would fail on a TUI that looks ready), else "".
+
+    By the time the TUI renders, ~/.mo/.env is already loaded into the environment,
+    so os.environ reflects keys placed there. Providers that authenticate by file
+    (auth_path), inline key, or need no key (local hosts) are treated as satisfied.
+    """
+    try:
+        cfg = getattr(agent, "config", {}) or {}
+        if not isinstance(cfg, dict):
+            return ""
+        active = str(getattr(agent, "provider_name", "") or (cfg.get("model") or {}).get("default") or "")
+        for provider_cfg in cfg.get("providers") or []:
+            if not isinstance(provider_cfg, dict) or str(provider_cfg.get("name") or "") != active:
+                continue
+            env = str(provider_cfg.get("api_key_env") or "")
+            if not env or os.environ.get(env) or provider_cfg.get("api_key"):
+                return ""
+            auth = provider_cfg.get("auth_path")
+            if auth and Path(str(auth)).expanduser().is_file():
+                return ""
+            return env
+    except Exception:
+        pass
+    return ""
 
 
 def startup_header_fragment_lines(agent, gateway) -> list[list[tuple[str, str]]]:
@@ -42,6 +71,13 @@ def startup_header_fragment_lines(agent, gateway) -> list[list[tuple[str, str]]]
             style, text = info[index]
             fragments.extend([("", "  "), (style, text)])
         rows.append(fragments)
+    # First-step nudge: a new user knows commands exist (/help) but not what to ASK.
+    rows.append([("class:dim", "Try: find issues in this project  ·  explain this codebase  ·  /help")])
+    # If the active provider has no key, the first turn would fail with a provider
+    # error on a TUI that looks ready — surface it upfront and point to the fix.
+    missing_env = _active_provider_key_missing(agent)
+    if missing_env:
+        rows.append([("class:warning", f"⚠ no key for {provider} — add {missing_env} to ~/.mo/.env or run /doctor")])
     return rows
 
 
