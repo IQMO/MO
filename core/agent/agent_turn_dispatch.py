@@ -526,7 +526,19 @@ class AgentTurnDispatchMixin:
         # Owner protocols live outside the public checkout after the layout
         # migration. Add those private roots only when the owner-only activation
         # gates are already true; user clones have neither pack nor owner token.
-        write_protocol = is_owner_maintenance_activation(user_input) or is_owner_interface_audit_activation(user_input)
+        #
+        # STICKY for the session: a DEVMODE05/IFDEV05 run writes its artifacts to
+        # ~/.mo/memory/devmode and ~/.mo/operator across MANY turns, but only the FIRST
+        # turn's user_input is the "start DEVMODE05" activation — later turns are
+        # continuations or operator follow-ups ("continue", "yes", a mid-run instruction)
+        # that don't match the activation phrase. Recomputing the write-path extension
+        # per-turn from user_input therefore DROPPED it on those turns and sandbox-blocked
+        # edit_file to MO's own runtime dirs (the recurring DEVMODE05 block). Once a
+        # write-protocol turn is seen, keep the private runtime write paths for the rest of
+        # this agent session so the block can't recur mid-run.
+        if is_owner_maintenance_activation(user_input) or is_owner_interface_audit_activation(user_input):
+            self._owner_write_paths_active = True
+        write_protocol = bool(getattr(self, "_owner_write_paths_active", False))
         if write_protocol or (is_owner_comparison_activation(user_input) and read_like):
             append_root(operator_pack_root())
             append_root(mo_home() / "memory" / "devmode")
