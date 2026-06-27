@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..market_symbols import market_pair_intent_terms
 from ..utils.atomic_write import atomic_write_text
 from ..utils.jsonl_utils import read_jsonl
 from ..state.paths import mo_home, resolve_state_path
@@ -238,7 +239,7 @@ def select_skills_context(
     if not skills:
         return ""
     text = str(user_input or "")
-    text_lower = text.lower()
+    text_lower = market_pair_intent_terms(text).lower()
     scored = [(skill, _match_score(skill, text_lower)) for skill in skills]
     matched = [(skill, score) for skill, score in scored if score > 0]
     if not matched:

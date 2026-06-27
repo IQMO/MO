@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.market_symbols import market_pair_intent_terms
+
 
 TOOL_SEARCH_NAME = "tool_search"
 
@@ -212,8 +214,9 @@ class DeferredToolRegistry:
         return names
 
     def _rank(self, query: str) -> list[tuple[int, str]]:
-        query_norm = _normalise(query)
-        query_tokens = _tokens(query)
+        expanded_query = market_pair_intent_terms(query)
+        query_norm = _normalise(expanded_query)
+        query_tokens = _tokens(expanded_query)
         if not query_norm and not query_tokens:
             return []
         ranked: list[tuple[int, str]] = []
