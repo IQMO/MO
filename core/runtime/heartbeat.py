@@ -339,8 +339,8 @@ def _context_pressure(agent: Any) -> dict[str, Any]:
 def _taskboard_state(board: Any, *, session_id: str = "") -> dict[str, Any]:
     if board is None:
         try:
-            from .tasking.task_board import read_recent_snapshots
-            from .tasking.task_board_context import compile_board_context_from_snapshot, task_row_counts
+            from ..tasking.task_board import read_recent_snapshots
+            from ..tasking.task_board_context import compile_board_context_from_snapshot, task_row_counts
             recent = read_recent_snapshots(limit=1, session_id=session_id) if session_id else []
             if recent:
                 item = recent[-1]
@@ -367,7 +367,7 @@ def _taskboard_state(board: Any, *, session_id: str = "") -> dict[str, Any]:
         "open": sum(1 for task in tasks if getattr(task, "status", "") in {"pending", "active", "blocked"}),
     }
     try:
-        from .tasking.task_board_context import compile_board_context, task_row_counts
+        from ..tasking.task_board_context import compile_board_context, task_row_counts
         context = compile_board_context(board, max_tasks=3, max_evidence=1, max_chars=500)
         counts = task_row_counts(tasks)
     except Exception:

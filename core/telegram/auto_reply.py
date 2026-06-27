@@ -86,7 +86,7 @@ def _identity_text(agent: Any) -> str:
 
 def _heartbeat_status(agent: Any, gateway: Any) -> str:
     try:
-        from .runtime.heartbeat import render_heartbeat_status
+        from ..runtime.heartbeat import render_heartbeat_status
         return render_heartbeat_status(agent, gateway=gateway)
     except Exception:
         return "Heartbeat: online (status snapshot unavailable)."

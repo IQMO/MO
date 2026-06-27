@@ -16,7 +16,7 @@ from ..learning.workflow_learning import (
     promote_workflow_candidate,
     stage_workflow_source_candidate,
 )
-from ..gates.consistency_boundary import changed_proposal_paths_for_last_commit
+from ..gates.consistency_boundary import changed_markdown_paths_for_last_commit
 from ..gates.behavior_gates import run_input_gates
 from ..context.mo_control_context import resolve_mo_control_workspace
 from .. import local_extensions
@@ -778,7 +778,7 @@ class AgentTurnDispatchMixin:
         low = command.lower()
         if "git commit" not in low and "git push" not in low:
             return
-        proposal_paths = changed_proposal_paths_for_last_commit() if "git commit" in low else []
+        proposal_paths = changed_markdown_paths_for_last_commit() if "git commit" in low else []
         self._run_consistency_boundary(
             "commit_push",
             command=command,

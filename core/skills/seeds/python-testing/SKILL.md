@@ -16,8 +16,12 @@ mastery_uses: 0
 mastery_successes: 0
 mastery_corrections: 0
 ---
-Run tests with `python -m pytest -q`. With `pytest-xdist` installed in
-requirements-dev.txt, `python -m pytest -q -n auto` runs the full suite faster.
+Run focused tests with `python -m pytest <target> -q`. Before broad/full local
+sweeps, run `python -m core.diagnostics.test_preflight --collect` so boundary
+guards and collection fail fast before the expensive suite. With `pytest-xdist`
+installed in requirements-dev.txt, `python -m pytest -q -n 4 --dist loadfile`
+runs the full suite in bounded parallel mode. Do not default to `-n auto`;
+it can consume every CPU thread and slow the operator's machine.
 
 Scope first, full suite second: for a focused change, run only the affected test
 files or `-k` expression. Reserve the full suite for broad behavioral changes.

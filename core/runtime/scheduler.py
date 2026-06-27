@@ -206,7 +206,7 @@ class SchedulerService:
         objective = str(job.get("prompt") or job.get("objective") or "").strip()
         if not objective:
             raise ValueError("Scheduled goal job missing prompt/objective")
-        from .goal import GoalRunner
+        from ..goal import GoalRunner
 
         session_name = str(job.get("session") or job.get("session_name") or f"scheduler-{_job_id(job)}")
         session = _load_scheduler_session(self.agent, session_name)

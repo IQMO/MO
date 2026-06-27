@@ -72,7 +72,7 @@ class DoctorReport:
 
 def _load_config(config_path: str | Path | None) -> dict[str, Any]:
     try:
-        from .provider.provider import load_config
+        from ..provider.provider import load_config
 
         return load_config(str(config_path) if config_path else None) or {}
     except Exception:

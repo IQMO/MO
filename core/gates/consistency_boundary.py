@@ -156,8 +156,8 @@ def render_consistency_boundary(report: BoundaryReport, *, include_clean: bool =
     return "\n".join(lines)
 
 
-def changed_proposal_paths_for_last_commit(cwd: str | Path | None = None) -> list[Path]:
-    """Return docs/proposals files changed by HEAD, best-effort."""
+def changed_markdown_paths_for_last_commit(cwd: str | Path | None = None) -> list[Path]:
+    """Return tracked markdown files changed by HEAD, best-effort."""
     try:
         proc = subprocess.run(
             ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
@@ -173,7 +173,7 @@ def changed_proposal_paths_for_last_commit(cwd: str | Path | None = None) -> lis
     paths = []
     for raw in proc.stdout.splitlines():
         rel = raw.strip().replace("\\", "/")
-        if rel.startswith("docs/proposals/") and rel.endswith(".md"):
+        if rel.endswith(".md"):
             paths.append(Path(cwd or Path.cwd()) / rel)
     return paths
 

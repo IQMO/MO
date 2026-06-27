@@ -13,6 +13,7 @@ import json
 import subprocess
 import fnmatch
 import threading
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -687,6 +688,71 @@ def _looks_like_pytest_command(command: object) -> bool:
     return bool(re.search(r"\b(pytest|python\s+-m\s+pytest|py\s+-m\s+pytest)\b", text))
 
 
+def _pytest_preflight_needed(command: object) -> bool:
+    if os.environ.get("MO_TEST_RUNNER_PREFLIGHT") == "0":
+        return False
+    text = str(command or "").strip()
+    low = text.lower()
+    if not _looks_like_pytest_command(text):
+        return False
+    if "core.diagnostics.test_preflight" in low or "--collect-only" in low or " --co" in low:
+        return False
+    if re.search(r"(^|\s)-k(\s|=)", low):
+        return False
+    if "::" in low:
+        return False
+    if re.search(r"(^|\s)[^\s\"']*tests?[\\/][^\s\"']*\.py(\s|$)", low):
+        return False
+    return True
+
+
+def _shell_quote(value: object) -> str:
+    text = str(value)
+    if sys.platform == "win32":
+        return '"' + text.replace('"', '\\"') + '"'
+    return shlex.quote(text)
+
+
+def _preflight_command(timeout: int = 180) -> str:
+    return f"{_shell_quote(sys.executable)} -m core.diagnostics.test_preflight --collect --timeout {int(timeout or 180)}"
+
+
+def _pytest_worker_count() -> int:
+    raw = os.environ.get("MO_PYTEST_WORKERS", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    cpu_count = os.cpu_count() or 4
+    return max(1, min(4, max(1, cpu_count // 2)))
+
+
+def _bounded_pytest_command(command: object) -> str:
+    text = str(command or "")
+    if not _looks_like_pytest_command(text):
+        return text
+    workers = _pytest_worker_count()
+    text = re.sub(r"(?i)(^|\s)-n\s+auto(?=\s|$)", rf"\1-n {workers}", text)
+    text = re.sub(r"(?i)(^|\s)-n=auto(?=\s|$)", rf"\1-n={workers}", text)
+    text = re.sub(r"(?i)(^|\s)--numprocesses\s+auto(?=\s|$)", rf"\1--numprocesses {workers}", text)
+    text = re.sub(r"(?i)(^|\s)--numprocesses=auto(?=\s|$)", rf"\1--numprocesses={workers}", text)
+    return text
+
+
+def _output_exit_code(output: str) -> int | None:
+    match = re.search(r"\[exit code (-?\d+)\]\s*$", str(output or "").strip(), flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def _output_succeeded(output: str) -> bool:
+    code = _output_exit_code(output)
+    if code is not None:
+        return code == 0
+    lowered = str(output or "").lower()
+    return "timed out" not in lowered and "error executing command" not in lowered
+
+
 def _tool_timeout(command: object, requested: object, default: int) -> int:
     try:
         timeout = int(requested if requested is not None else default)
@@ -766,7 +832,8 @@ def execute_shell(arguments: dict[str, Any]) -> str:
                     f"Error: Command timed out after {timeout}s and was killed. Do NOT re-run the "
                     "same long command on a loop and do NOT background it and poll — that burns turns "
                     "and never finishes. Run it ONCE with a higher `timeout`, narrow the scope, or use "
-                    "a faster invocation (for the test suite: `python -m pytest -q -n auto --dist loadfile`)."
+                    "a bounded parallel invocation (for this suite: "
+                    "`python -m pytest -q -n 4 --dist loadfile`)."
                 )
                 if partial:
                     return (
@@ -888,12 +955,32 @@ def execute_git_status(arguments: dict[str, Any]) -> str:
 
 
 def execute_test_runner(arguments: dict[str, Any]) -> str:
-    command = arguments.get("command", "python -m pytest -q")
+    command = _bounded_pytest_command(arguments.get("command", "python -m pytest -q"))
+    workdir = arguments.get("workdir")
+    clean_env = arguments.get("_clean_env", True)
+    timeout = _test_runner_timeout(command, arguments.get("timeout"))
+    if _pytest_preflight_needed(command):
+        preflight_timeout = int(os.environ.get("MO_TEST_PREFLIGHT_TIMEOUT", "180") or 180)
+        preflight = execute_shell({
+            "command": _preflight_command(preflight_timeout),
+            "workdir": workdir,
+            "timeout": preflight_timeout,
+            "_clean_env": clean_env,
+        })
+        if not _output_succeeded(preflight):
+            return "[pytest preflight failed — full suite not run]\n" + preflight
+        full = execute_shell({
+            "command": command,
+            "workdir": workdir,
+            "timeout": timeout,
+            "_clean_env": clean_env,
+        })
+        return "[pytest preflight passed]\n" + preflight.rstrip() + "\n\n[pytest full suite]\n" + full
     return execute_shell({
         "command": command,
-        "workdir": arguments.get("workdir"),
-        "timeout": _test_runner_timeout(command, arguments.get("timeout")),
-        "_clean_env": arguments.get("_clean_env", True),
+        "workdir": workdir,
+        "timeout": timeout,
+        "_clean_env": clean_env,
     })
 
 

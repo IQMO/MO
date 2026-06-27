@@ -31,9 +31,10 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 
 ## Verification
 - Maintainer-local tests live in ignored `tests/`; they are used before CPD but must never be tracked or pushed.
-- The local pytest bootstrap runs the public/private guard before broad collection so privacy/term failures surface first.
+- Run `python -m core.diagnostics.test_preflight --collect` before broad/full local sweeps; `test_runner` does this automatically for broad pytest commands.
+- The local pytest bootstrap repeats the public/private guard before broad collection so privacy/term failures surface first.
 - Focused tests first when the overlay is present: `python -m pytest tests/<target>.py -q`.
-- Tiered/full sweeps remain local-only: `-m smoke`, `-m "smoke or unit"`, or `python -m pytest -q -n auto --dist loadfile`.
+- Tiered/full sweeps remain local-only: `-m smoke`, `-m "smoke or unit"`, or bounded parallel full suite such as `python -m pytest -q -n 4 --dist loadfile`; avoid `-n auto` unless the operator explicitly wants all CPU threads used.
 - Do not use Node tooling; this is a Python project.
 
 ## Working Rules

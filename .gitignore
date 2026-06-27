@@ -33,12 +33,13 @@ with open*
 personal/
 .claude/
 .agents/
-# Leak-prevention safety net ONLY — owner-only protocol/state files do NOT live
+# Leak-prevention safety net ONLY — private profile-extension/state files do NOT live
 # here. They resolve from ~/.mo/operator (or MO_OPERATOR_PACK) under the user's
 # MO profile; this checkout is the one public product repo and never a submodule
 # host. The resolver never reads a repo-local copy; local maintainer tests cover
 # that boundary from the ignored tests/ overlay. This line only guarantees a stray
 # hand-copied operator/ can never be committed.
 operator/
-# Dev/maintainer design docs, proposals, audits — internal, not shipped.
+# Ignored local docs are not product authority; track product-safe guidance or
+# keep private/local records under ~/.mo/memory.
 docs/
