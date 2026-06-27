@@ -73,6 +73,12 @@ def startup_header_fragment_lines(agent, gateway) -> list[list[tuple[str, str]]]
         rows.append(fragments)
     # First-step nudge: a new user knows commands exist (/help) but not what to ASK.
     rows.append([("class:dim", "Try: find issues in this project  ·  explain this codebase  ·  /help")])
+    # Cold-start personalization: if MO has no operator name yet, invite the user to
+    # seed the profile. Name auto-capture (terms_learning.capture_operator_name)
+    # handles "I'm <Name>"; this nudge covers everyone who doesn't say it.
+    prof = getattr(agent, "profile", None)
+    if prof is not None and not str(getattr(prof, "user_name", "") or "").strip():
+        rows.append([("class:info", "MO doesn't know you yet — tell it your name, or run /profile to personalize")])
     # If the active provider has no key, the first turn would fail with a provider
     # error on a TUI that looks ready — surface it upfront and point to the fix.
     missing_env = _active_provider_key_missing(agent)

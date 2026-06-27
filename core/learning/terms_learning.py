@@ -45,6 +45,48 @@ _TERM_STOPWORDS = {
     "it", "this", "that", "these", "those", "you", "me", "i", "we", "they", "thing", "stuff", "work",
 }
 
+# Explicit self-introduction only. The captured name must be verified capitalized
+# and non-stopword by the caller, so "I'm done" / "I am not sure" never match a name.
+_NAME_INTRO_RE = re.compile(
+    r"\b(?:my\s+name\s+is|i\s*['’]?\s*am|i\s*['’]\s*m|call\s+me|you\s+can\s+call\s+me)\s+"
+    r"([A-Za-z][A-Za-z'’-]{1,19})\b",
+    re.I,
+)
+_NAME_STOPWORDS = {
+    "not", "done", "sure", "here", "going", "trying", "just", "working", "looking", "sorry",
+    "afraid", "good", "fine", "back", "ready", "still", "now", "also", "really", "about",
+    "able", "glad", "happy", "curious", "the", "a", "an", "mo", "so", "very", "only", "the",
+}
+
+
+def capture_operator_name(profile: Any, user_text: str) -> str:
+    """Set the operator name from an EXPLICIT self-introduction, only while the
+    profile still has no name. Conservative on purpose: requires an intro phrase
+    plus a capitalized single-word name that is not a common word, so "I'm done"
+    or "I am not sure" never set a name. Fires at most once (cold start) and never
+    overrides an existing name. Returns the captured name, or "".
+    """
+    if not profile:
+        return ""
+    if str(getattr(profile, "user_name", "") or "").strip():
+        return ""  # already personalized — never override a real name
+    match = _NAME_INTRO_RE.search(str(user_text or ""))
+    if not match:
+        return ""
+    name = match.group(1).strip(" '’-")
+    if len(name) < 2 or not name[0].isalpha() or not name[0].isupper():
+        return ""
+    if name.lower() in _NAME_STOPWORDS:
+        return ""
+    try:
+        profile.user_name = name
+        if hasattr(profile, "sync_operator_profile_files"):
+            profile.sync_operator_profile_files()
+        profile.save()
+    except Exception:
+        return ""
+    return name
+
 
 def extract_term_definitions(user_text: str) -> list[TermDefinition]:
     """Extract explicit operator shorthand definitions from user text."""
@@ -73,6 +115,10 @@ def record_terms_learning(profile: Any, user_text: str) -> list[str]:
     Returns the term names added or updated. Normal conversation and unsafe
     definitions return an empty list.
     """
+    # Per-turn operator-message learning is wired through this single call site, so
+    # capture an explicit self-introduction here too (only while the profile has no
+    # name yet). Runs before the no-terms early-return so it fires on plain intros.
+    capture_operator_name(profile, user_text)
     terms = extract_term_definitions(user_text)
     if not terms or not profile:
         return []
