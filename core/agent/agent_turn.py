@@ -88,6 +88,7 @@ _CONTEXT_SOURCE_SPECS = (
     ("code_graph", "Code map", 5, "orientation only; graph hints must be verified with files/tools/tests", 1800),
     ("learning", "MO Internal Learning Context — operator-confirmed, relevance-gated", 3, "apply only when the recommendation fits this turn; current user scope, sandbox, tools, and Gateway/taskboard evidence still win", 1200),
     ("workflow_learning", "MO Internal Local Skills — approved, relevance-gated", 3, "apply only when the trigger truly fits this turn; current user scope, sandbox, tools, and Gateway/taskboard evidence still win", 1400),
+    ("last_session", "Last session closeout summary", 2, "orientation only; re-read files and re-verify before factual claims", 600),
 )
 
 
@@ -109,6 +110,7 @@ _CONTEXT_CHAR_FIELDS = {
     "environment": "environment_chars",
     "datetime": "datetime_chars",
     "reasoning": "reasoning_chars",
+    "last_session": "last_session_chars",
 }
 
 
@@ -1064,6 +1066,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 workflow_learning_context = build_workflow_learning_context(profile, user_input)
         except Exception:
             traceback.print_exc()
+        last_session_context = ""
+        try:
+            from ..session.session_closeout import read_latest_closeout_summary
+            last_session_context = read_latest_closeout_summary()
+        except Exception:
+            traceback.print_exc()
         context_parts = {
             "profile": profile_context,
             "memory": recalled_context,
@@ -1084,6 +1092,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             "reasoning": reasoning_context,
             "learning": learning_context,
             "workflow_learning": workflow_learning_context,
+            "last_session": last_session_context,
         }
         self._last_turn_context_flags = _context_flags(context_parts)
         self._pending_turn_proposal = ""

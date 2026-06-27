@@ -95,6 +95,16 @@ class EpisodicMemory:
         
         u = str(user or "").strip()
 
+        # Guard against automated-loop / repeated-input spam:
+        # if the same exact user input has appeared > 5 times in the most
+        # recent 50 entries (or whatever the DB holds), skip indexing.
+        # This stops autopilot/DEVMODE loops from flooding the memory DB
+        # and crowding out real operator turns.
+        dup_count = self._count_recent_duplicates(u, window=50, threshold=5)
+        if dup_count >= 5:
+            _emit_memory_event("memory_index_skipped_repeat", {"turn_id": turn_id, "dup_count": dup_count})
+            return
+
         # Compute the embedding OUTSIDE the DB transaction (network I/O must not hold
         # the sqlite lock). None when no embedder / on failure → keyword recall only.
         vec_json = None
@@ -129,6 +139,18 @@ class EpisodicMemory:
                 _emit_memory_event("memory_index", {"turn_id": turn_id, "chars": len(a), "cleanup_removed": removed})
         except Exception as e:
             _emit_memory_event("memory_index_error", {"turn_id": turn_id, "error": str(e)[:200]})
+
+    def _count_recent_duplicates(self, user_input: str, window: int = 50, threshold: int = 5) -> int:
+        """Count how many times the exact same user input appears in the most recent `window` entries."""
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT user FROM turns ORDER BY updated_at DESC LIMIT ?",
+                    (window,)
+                ).fetchall()
+                return sum(1 for (u,) in rows if str(u or "").strip() == user_input.strip())
+        except Exception:
+            return 0
 
     def _cleanup(self, conn: sqlite3.Connection, max_turns: int = 200) -> int:
         try:

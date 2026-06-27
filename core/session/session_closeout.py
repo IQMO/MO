@@ -596,3 +596,82 @@ def _mtime(path: Path) -> float:
 def _safe_slug(value: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(value or "")).strip("-.")[:80]
     return slug or "session"
+
+
+def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", max_age_hours: float = 72.0) -> str:
+    """Return a compact 1-3 line summary of the latest session closeout for context injection.
+
+    Reads the newest closeout Markdown that is fresh enough (< max_age_hours).
+    Returns a string with session info (reason, turns, unresolved count, +/- clean),
+    or an empty string when no closeout is fresh enough or available.
+    """
+    root_path = Path(resolve_state_path(root))
+    if not root_path.exists():
+        return ""
+    files = [path for path in root_path.glob("*.md") if path.is_file()]
+    if not files:
+        return ""
+    files.sort(key=lambda path: (_mtime(path), path.name), reverse=True)
+    latest = files[0]
+    age_hours = (time.time() - _mtime(latest)) / 3600.0
+    if age_hours > max_age_hours:
+        return ""
+
+    try:
+        text = latest.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+    # Extract lines of interest
+    reason = ""
+    clean = True
+    unresolved: list[str] = []
+    in_unresolved = False
+    turn_count = 0
+    dirty_count = 0
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Reason: "):
+            reason = stripped[8:].strip()
+        elif stripped.startswith("- Status: "):
+            clean = "clean" in stripped.lower() and "unresolved" not in stripped.lower()
+        elif stripped.startswith("- Turns/messages: "):
+            parts = stripped[17:].split("/")
+            turn_count = int(parts[0].strip()) if parts else 0
+        elif stripped.startswith("- Git dirty lines:"):
+            in_unresolved = False
+        elif stripped == "UNRESOLVED:":
+            in_unresolved = True
+            continue
+        elif stripped.startswith("## "):
+            in_unresolved = False
+            continue
+        if in_unresolved and stripped.startswith("- "):
+            unresolved.append(stripped[2:].strip())
+
+    # Count dirty files from the Git dirty lines section
+    in_dirty = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "## Workspace / workers / goals":
+            break
+        if stripped == "- Git dirty lines:":
+            in_dirty = True
+            continue
+        if in_dirty and stripped.startswith("## "):
+            break
+        if in_dirty and stripped.startswith("- `"):
+            dirty_count += 1
+
+    if not reason:
+        return ""
+
+    status = "clean" if clean else f"{len(unresolved)} unresolved"
+    summary = f"Last session: {turn_count} turns · {reason} · {status}"
+    if dirty_count:
+        summary += f" · {dirty_count} dirty file(s)"
+    if unresolved:
+        first_unresolved = unresolved[0] if unresolved else ""
+        summary += f"\nUnresolved: {first_unresolved[:120]}"
+    return summary
