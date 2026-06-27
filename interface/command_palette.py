@@ -10,7 +10,6 @@ from typing import Any
 
 from .command_registry import (
     DEFAULT_PALETTE_CATEGORY,
-    PALETTE_CATEGORIES,
     SLASH_COMMANDS,
     _command_hidden,
     build_palette_categories,

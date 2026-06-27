@@ -262,8 +262,3 @@ _POST_PROVIDER_PIPELINE = [
     ("claim_gates", "gate", _pipeline_claim_gates),
     ("local_extension_final", "gate", _pipeline_local_extension_final),
 ]
-
-
-def _no_tool_evidence_continuation(**_kwargs) -> tuple[str, str] | None:
-    """Compatibility stub; private no-tool evidence gates live in profile hooks."""
-    return None

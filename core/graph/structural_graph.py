@@ -141,19 +141,6 @@ def _load_graph_json(path: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _iter_nodes(path: Path):
-    """Yield graph nodes lazily when ijson is installed; otherwise fallback to JSON."""
-    try:
-        import ijson  # type: ignore
-        with path.open("rb") as fh:
-            yield from ijson.items(fh, "nodes.item")
-        return
-    except Exception:
-        traceback.print_exc()
-    data = _load_graph_json(path) or {}
-    for node in data.get("nodes", []) if isinstance(data, dict) else []:
-        yield node
-
 
 def _migrate_graph(data: dict[str, Any]) -> dict[str, Any] | None:
     version = str(data.get("version") or "")

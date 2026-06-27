@@ -57,9 +57,6 @@ from interface.task_board_view import render_plain
 # ---------------------------------------------------------------------------
 from ..gates.post_provider_pipeline import _CONTINUE, _GateContext, _run_post_provider_pipeline
 
-# Re-export for backward compat (tests)
-from ..gates.post_provider_pipeline import _no_tool_evidence_continuation
-
 def _emit_security_check(turn_modified_files, monitor, final_text=None):
     """Emit a turn-end security check on modified files (and optionally final_text)."""
     if not turn_modified_files:
