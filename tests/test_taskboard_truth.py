@@ -606,6 +606,54 @@ def test_reconcile_devmode_summary_marker_fires_only_on_blocked_terminal(tmp_pat
     assert "[OWNER_MAINTENANCE COMPLETE]" not in out and "[OWNER_MAINTENANCE BLOCKED]" in out
 
 
+def test_blocked_reconciliation_stamps_artifact_without_complete_marker(tmp_path):
+    """A blocked run can have HEALTHY/0-finding prose without the literal COMPLETE marker.
+    Runtime reconciliation must still stamp blocked truth so the artifact is not misleading."""
+    from core.tasking.agent_taskboard import AgentTaskBoard
+    summary = tmp_path / "summary.md"
+    summary.write_text("# Summary\nOwner-maintenance run - 0 findings. Codebase HEALTHY.\n", encoding="utf-8")
+
+    assert AgentTaskBoard._reconcile_summary_terminal_marker(summary, blocked=True) is True
+
+    out = summary.read_text(encoding="utf-8")
+    assert "Runtime Blocked Closeout" in out
+    assert "[OWNER_MAINTENANCE BLOCKED]" in out
+    assert "manifest.json" in out
+
+
+def test_owner_maintenance_terminal_truth_rejects_complete_with_open_board():
+    """Final pipeline invariant: a complete marker over an open owner-maintenance board
+    is rewritten to blocked after bounded recovery, not returned as a clean close."""
+    from core.gates.post_provider_pipeline import _GateContext, _pipeline_owner_maintenance_terminal_truth
+
+    board = TaskBoard(tasks=[
+        TaskItem("1", "Inspect", "completed", evidence=["read_file:protocol"]),
+        TaskItem("2", "Verify", "active", evidence=["shell:pytest"]),
+        TaskItem("3", "Report", "pending"),
+    ])
+    reconciled = []
+    agent = SimpleNamespace(
+        _reconcile_devmode_summary_marker=lambda text: reconciled.append(text) or True,
+        _run_consistency_boundary=lambda boundary, **kwargs: SimpleNamespace(boundary=boundary, clean=True),
+    )
+    ctx = _GateContext()
+    ctx.owner_maintenance_active = True
+    ctx.final_text = "**[OWNER_MAINTENANCE COMPLETE]**\nOwner-maintenance run - 0 findings. Codebase HEALTHY."
+    ctx.task_board = board
+    ctx.user_input = "start OWNER_MAINTENANCE"
+    ctx.notes = []
+    ctx.on_board_update = None
+    ctx.on_board_event = None
+    ctx.boundary_report = None
+
+    _pipeline_owner_maintenance_terminal_truth(agent, ctx)
+
+    assert ctx.final_text.startswith("[OWNER_MAINTENANCE BLOCKED]")
+    assert "2 open row(s)" in ctx.final_text
+    assert board.state == "blocked"
+    assert reconciled == [ctx.final_text]
+
+
 def test_blocked_terminal_reconciliation_projects_blocked_manifest(tmp_path):
     """A gateway-blocked OWNER_MAINTENANCE terminal marker must rewrite the private
     artifacts too: no summary COMPLETE, no active/complete manifest with open rows."""

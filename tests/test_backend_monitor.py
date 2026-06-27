@@ -710,6 +710,47 @@ def test_economy_writer_freezes_error_tool_names_across_closeout_edits(tmp_path,
     assert manifest["economy"]["error_tools"] == ["shell"]
 
 
+def test_blocked_devmode_reconciliation_force_refreshes_terminal_economy(tmp_path, monkeypatch):
+    """Blocked closeout is final truth repair, not a normal stable COMPLETE ledger.
+    It must refresh economy.md/manifest from live monitor data so late recovery errors
+    are not hidden behind the first closeout snapshot."""
+    import json as _json
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    monpath = mondir / "backend_monitor-1.jsonl"
+
+    def write_monitor(tools):
+        rows = [{"type": "provider_request", "payload": {"session_id": "mo-x", "route_source": "user"}}]
+        rows += [
+            {"type": "tool_result", "payload": {"session_id": "mo-x", "route_source": "user", "tool": tool, "error": True}}
+            for tool in tools
+        ]
+        monpath.write_text("\n".join(_json.dumps(r) for r in rows), encoding="utf-8")
+
+    active = tmp_path / "memory" / "devmode" / "2026-01-06T0000"
+    active.mkdir(parents=True)
+    (active / "summary.md").write_text("## Closeout\n- [OWNER_MAINTENANCE COMPLETE]\n", encoding="utf-8")
+    agent = _devmode_board_agent()
+    agent._active_devmode_session_dir = active
+    agent._devmode_run_session_ids = {"mo-x"}
+
+    write_monitor(["shell"])
+    agent._write_devmode_economy_record()
+    assert agent._devmode_closeout_frozen_economy["error_tools"] == ["shell"]
+
+    write_monitor(["shell", "edit_file"])
+    assert agent._reconcile_devmode_summary_marker("[OWNER_MAINTENANCE BLOCKED] open taskboard rows") is True
+
+    assert agent._devmode_closeout_frozen_economy["error_tools"] == ["edit_file", "shell"]
+    assert "Error tools: edit_file, shell" in (active / "economy.md").read_text(encoding="utf-8")
+    manifest = _json.loads((active / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "blocked"
+    assert manifest["economy"]["error_tools"] == ["edit_file", "shell"]
+    assert manifest["reconciliations"]["economy_snapshot"] == "live_final"
+
+
 def test_devmode_economy_isolates_one_main_run_from_another_in_same_file(tmp_path, monkeypatch):
     """Logical-run scoping must isolate one Main/user DEVMODE run from ANOTHER Main/user
     run that shares the same per-process monitor file — not just exclude Ghost/desktop.

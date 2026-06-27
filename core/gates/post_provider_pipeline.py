@@ -27,6 +27,7 @@ from ..self_maintenance.devmode_closeout import (
     owner_interface_audit_final_allows_stop,
     owner_maintenance_continuation_instruction,
     owner_maintenance_final_allows_stop,
+    _owner_maintenance_terminal_prefix_text,
 )
 from ..self_maintenance.owner_integrity_audit_ground_truth import (
     normalize_owner_integrity_audit_report_text,
@@ -349,6 +350,71 @@ def _pipeline_claim_gates(agent, ctx):
     return None
 
 
+def _owner_maintenance_open_count(task_board) -> int:
+    if not task_board:
+        return 0
+    try:
+        return int(task_board.open_count())
+    except Exception:
+        tasks = list(getattr(task_board, "tasks", []) or [])
+        return sum(1 for task in tasks if str(getattr(task, "status", "") or "") in {"pending", "active", "blocked"})
+
+
+def _mark_owner_maintenance_blocked(agent, ctx) -> None:
+    if ctx.task_board:
+        try:
+            ctx.task_board.state = "blocked"
+        except Exception:
+            pass
+        record_snapshot(ctx.task_board, "blocked", state="blocked")
+        _emit_task_board_update(
+            ctx.task_board,
+            update="blocked",
+            on_board_update=ctx.on_board_update,
+            on_board_event=ctx.on_board_event,
+        )
+    try:
+        agent._reconcile_devmode_summary_marker(ctx.final_text)
+    except Exception:
+        traceback.print_exc()
+    try:
+        ctx.boundary_report = agent._run_consistency_boundary(
+            "turn_final",
+            user_text=ctx.user_input,
+            final_text=ctx.final_text,
+            learning_notes=ctx.notes,
+            task_board=ctx.task_board,
+        )
+    except Exception:
+        traceback.print_exc()
+
+
+def _pipeline_owner_maintenance_terminal_truth(agent, ctx):
+    """Last invariant: owner-maintenance cannot leave a COMPLETE terminal over an open board."""
+    if not ctx.owner_maintenance_active:
+        return None
+    terminal = _owner_maintenance_terminal_prefix_text(ctx.final_text) or ""
+    open_count = _owner_maintenance_open_count(ctx.task_board)
+    if terminal.startswith("[OWNER_MAINTENANCE COMPLETE]") and open_count > 0:
+        ctx.final_text = (
+            "[OWNER_MAINTENANCE BLOCKED] Runtime rejected an invalid completion: "
+            f"the taskboard still has {open_count} open row(s). Continue from the active "
+            "row; this run is not complete."
+        )
+        _mark_owner_maintenance_blocked(agent, ctx)
+        return None
+    if terminal.startswith("[OWNER_MAINTENANCE BLOCKED]"):
+        _mark_owner_maintenance_blocked(agent, ctx)
+        return None
+    if ctx.final_text.lstrip().startswith(("[SELF PROTOCOL TRUTH BLOCKED]", "[TASKBOARD CONTRACT BLOCKED]")):
+        ctx.final_text = (
+            "[OWNER_MAINTENANCE BLOCKED] Runtime could not honestly close the owner-maintenance turn.\n\n"
+            + ctx.final_text
+        )
+        _mark_owner_maintenance_blocked(agent, ctx)
+    return None
+
+
 # -- The pipeline: ordered list of (name, kind, entry_fn) -----------------------
 
 _POST_PROVIDER_PIPELINE = [
@@ -369,6 +435,7 @@ _POST_PROVIDER_PIPELINE = [
     ("iam_normalize", "action", _pipeline_iam_normalize),
     ("iam_reporting", "gate", _pipeline_iam_reporting),
     ("claim_gates", "gate", _pipeline_claim_gates),
+    ("owner_maintenance_terminal_truth", "action", _pipeline_owner_maintenance_terminal_truth),
 ]
 
 

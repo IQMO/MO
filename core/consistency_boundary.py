@@ -56,6 +56,7 @@ _DONE_CLAIM_RE = re.compile(
     r"\b(done|complete|completed|finished|fixed|resolved|ready|production[- ]ready|pushed|committed)\b",
     re.I,
 )
+_OWNER_MAINTENANCE_COMPLETE_MARKER_RE = re.compile(r"\[OWNER_MAINTENANCE\s+COMPLETE\]", re.I)
 _LEARNING_PROMISE_RE = re.compile(
     r"\b(i(?:'ll| will)? remember|i learned|learned from this|updated learning|saved to memory|noted:)\b",
     re.I,
@@ -281,7 +282,9 @@ def _check_session_closeout(closeout: Any) -> list[BoundaryFinding]:
 
 def _check_taskboard(task_board: Any, *, final_text: str = "") -> list[BoundaryFinding]:
     tasks = list(getattr(task_board, "tasks", []) or [])
-    if not tasks or not _DONE_CLAIM_RE.search(str(final_text or "")):
+    text = str(final_text or "")
+    claims_done = bool(_DONE_CLAIM_RE.search(text) or _OWNER_MAINTENANCE_COMPLETE_MARKER_RE.search(text))
+    if not tasks or not claims_done:
         return []
     open_rows = [task for task in tasks if str(getattr(task, "status", "") or "") in {"pending", "active", "blocked"}]
     if not open_rows:

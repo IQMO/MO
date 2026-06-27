@@ -494,7 +494,7 @@ class AgentTaskBoard:
         if sid:
             ids.add(sid)
 
-    def _write_devmode_economy_record(self) -> None:
+    def _write_devmode_economy_record(self, *, force_live: bool = False) -> dict | None:
         """Write the authoritative economy record (provider/tool/error/compression
         counts from the live monitor) into the EXPLICIT active DEVMODE session dir
         bound from this run's own artifact writes — NEVER the newest dir by mtime.
@@ -512,7 +512,7 @@ class AgentTaskBoard:
             from ..backend_monitor import GHOST_SURFACES, active_monitor_path, economy_summary, format_economy_record
             target = getattr(self, "_active_devmode_session_dir", None)
             if target is None or not Path(target).is_dir():
-                return  # no explicit binding this run → refuse; never fall back to mtime
+                return None  # no explicit binding this run → refuse; never fall back to mtime
             # Logical-run scoping: count ONLY this run's own session segments (the
             # original id + every handoff `mo-handoff-*` id accumulated this run) and
             # exclude interleaved Ghost/desktop turns. This isolates the run both from
@@ -534,7 +534,13 @@ class AgentTaskBoard:
             # frozen economy.md. The terminal ledger is one snapshot: counts, error tools,
             # blocked tools, and provider numbers all move together.
             frozen_summary = getattr(self, "_devmode_closeout_frozen_economy", None)
-            if isinstance(frozen_summary, dict):
+            if force_live:
+                summary = dict(summary)
+                frozen = int(summary.get("tool_errors", 0) or 0)
+                summary["tool_errors"] = frozen
+                self._devmode_closeout_frozen_errors = frozen
+                self._devmode_closeout_frozen_economy = dict(summary)
+            elif isinstance(frozen_summary, dict):
                 summary = dict(frozen_summary)
             else:
                 summary = dict(summary)
@@ -558,8 +564,9 @@ class AgentTaskBoard:
             # (monitor, economy, taskboard, artifacts, status) so the model never
             # hand-tracks its own counts. Best-effort, never model-authored.
             self._write_devmode_manifest_record(status="active", economy=summary)
+            return summary
         except Exception:
-            pass
+            return None
 
     def _write_devmode_manifest_record(self, *, status: str = "active", economy: dict | None = None,
                                        warnings: list | None = None,
@@ -724,25 +731,38 @@ class AgentTaskBoard:
             pass
 
     @staticmethod
-    def _reconcile_summary_terminal_marker(summary_path, *, blocked: bool) -> bool:
-        """When the run ends BLOCKED, a summary.md that still claims [OWNER_MAINTENANCE COMPLETE]
-        is a lie (observed T0403: COMPLETE in summary while the run hit the budget and
-        emitted a continuation capsule). Deterministically rewrite the marker to
-        [OWNER_MAINTENANCE BLOCKED]. Returns True if it changed anything."""
+    def _reconcile_blocked_terminal_marker(path, *, blocked: bool) -> bool:
+        """When the run ends BLOCKED, a private DEVMODE artifact must not keep an
+        unqualified [OWNER_MAINTENANCE COMPLETE] or HEALTHY-only closeout. Stamp one
+        runtime-owned blocked section so manifest/taskboard truth is visible even when
+        the model did not include the literal marker in that artifact."""
         try:
-            if not blocked or not summary_path.exists():
+            if not blocked or not path.exists():
                 return False
-            text = summary_path.read_text(encoding="utf-8", errors="replace")
-            if "[OWNER_MAINTENANCE COMPLETE]" not in text:
-                return False
+            text = path.read_text(encoding="utf-8", errors="replace")
             new_text = text.replace(
                 "[OWNER_MAINTENANCE COMPLETE]",
                 "[OWNER_MAINTENANCE BLOCKED] (reconciled: run ended blocked, not complete)",
             )
-            atomic_write_text(summary_path, new_text, encoding="utf-8")
+            marker = "## Runtime Blocked Closeout (authoritative)"
+            if marker not in new_text:
+                new_text = (
+                    new_text.rstrip()
+                    + f"\n\n{marker}\n"
+                    + "- [OWNER_MAINTENANCE BLOCKED] Runtime ended blocked; do not treat earlier HEALTHY/COMPLETE text as terminal truth.\n"
+                    + "- manifest.json and the taskboard projection are authoritative for status, open rows, and economy counts.\n"
+                )
+            if new_text == text:
+                return False
+            atomic_write_text(path, new_text, encoding="utf-8")
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def _reconcile_summary_terminal_marker(summary_path, *, blocked: bool) -> bool:
+        """Back-compat wrapper used by tests and older callers."""
+        return AgentTaskBoard._reconcile_blocked_terminal_marker(summary_path, blocked=blocked)
 
     def _reconcile_devmode_summary_marker(self, final_text: str) -> bool:
         """If the model's terminal answer is [OWNER_MAINTENANCE BLOCKED], make summary.md agree —
@@ -759,12 +779,23 @@ class AgentTaskBoard:
             target = getattr(self, "_active_devmode_session_dir", None)
             if target is None:
                 return False
-            changed = AgentTaskBoard._reconcile_summary_terminal_marker(Path(target) / "summary.md", blocked=True)
+            target = Path(target)
+            economy = self._write_devmode_economy_record(force_live=True)
+            artifact_changes = {}
+            for name in ("summary.md", "catalog.md", "workflow.md"):
+                changed = AgentTaskBoard._reconcile_blocked_terminal_marker(target / name, blocked=True)
+                artifact_changes[name] = "changed" if changed else "ok"
             # A blocked terminal must leave the manifest status="blocked" — it can never
             # read "complete" (acceptance criterion 7).
             self._write_devmode_manifest_record(
                 status="blocked",
-                reconciliations={"summary_terminal_marker": "changed" if changed else "ok"},
+                economy=economy,
+                reconciliations={
+                    "summary_terminal_marker": artifact_changes.get("summary.md", "ok"),
+                    "catalog_terminal_marker": artifact_changes.get("catalog.md", "ok"),
+                    "workflow_terminal_marker": artifact_changes.get("workflow.md", "ok"),
+                    "economy_snapshot": "live_final" if economy is not None else "unavailable",
+                },
             )
             return True
         except Exception:
