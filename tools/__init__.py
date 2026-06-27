@@ -733,17 +733,28 @@ def execute_shell(arguments: dict[str, Any]) -> str:
                 stdout, stderr = proc.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
                 _kill_process_tree(proc.pid)
+                # Capture whatever the process printed BEFORE the kill, so a slow run
+                # still yields actionable progress instead of nothing — this is what
+                # stops the model from backgrounding+poll-looping (or blindly re-running)
+                # a long job, which leaves it parked with no real output.
+                part_out = part_err = ""
                 try:
-                    proc.communicate(timeout=2)
+                    part_out, part_err = proc.communicate(timeout=2)
                 except Exception:
                     pass
-                return (
-                    f"Error: Command timed out after {timeout}s — the process was killed "
-                    "before it finished, so no output was produced. If the command "
-                    "legitimately needs longer (full test suites often need 300s+), retry "
-                    "once with a higher `timeout` argument instead of lowering it or "
-                    "shrinking scope blindly."
+                partial = ((part_out or "") + ("\n[stderr]\n" + part_err if part_err else "")).strip()
+                guidance = (
+                    f"Error: Command timed out after {timeout}s and was killed. Do NOT re-run the "
+                    "same long command on a loop and do NOT background it and poll — that burns turns "
+                    "and never finishes. Run it ONCE with a higher `timeout`, narrow the scope, or use "
+                    "a faster invocation (for the test suite: `python -m pytest -q -n auto --dist loadfile`)."
                 )
+                if partial:
+                    return (
+                        f"[Partial output captured before the {timeout}s timeout — process killed, "
+                        f"likely incomplete]\n{partial[-6000:]}\n\n{guidance}"
+                    )
+                return guidance
         finally:
             _unregister_shell_process(proc.pid)
 

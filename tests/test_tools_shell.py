@@ -93,3 +93,15 @@ def test_execute_test_runner_applies_pytest_timeout_floor(monkeypatch):
 
     assert execute_test_runner({"command": "python -m pytest tests -q", "timeout": 120}) == "ok"
     assert captured["timeout"] == 420
+
+
+def test_shell_timeout_returns_partial_output_and_blocks_poll_loop():
+    # Root-cause guard: a slow command that prints then hangs must return the
+    # output captured BEFORE the kill (actionable progress) plus explicit
+    # anti-poll-loop guidance — so the model never backgrounds+polls or blindly
+    # re-runs a long job (which previously left it parked with no output).
+    cmd = "python -c \"import sys,time; print('PROGRESS-153-passed'); sys.stdout.flush(); time.sleep(8)\""
+    out = execute_shell({"command": cmd, "timeout": 1})
+    assert "PROGRESS-153-passed" in out      # partial output recovered, not discarded
+    assert "timed out" in out.lower()
+    assert "do not" in out.lower() and "poll" in out.lower()  # anti-loop guidance
