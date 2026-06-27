@@ -126,6 +126,7 @@ def activity_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) ->
     text = Text()
     state = "busy" if snapshot.busy else "ready"
     state_style = style(theme, "amber" if snapshot.busy else "green")
+    surface = snapshot.surface or "isolated UX"
     text.append(state.upper(), style=f"bold {state_style}")
     if snapshot.notice:
         text.append("\n")
@@ -133,12 +134,13 @@ def activity_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) ->
     text.append("\n")
     text.append("runtime truth: Gateway/taskboard", style=style(theme, "muted"))
     text.append("\n")
-    text.append("surface: isolated UX", style=style(theme, "muted"))
+    text.append(f"surface: {surface}", style=style(theme, "muted"))
     return frame_panel(text, "Activity", theme)
 
 
 def ops_rail_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) -> Panel:
     text = Text()
+    surface = snapshot.surface or "isolated UX"
     text.append("Task Board", style=f"bold {style(theme, 'blue')}")
     text.append("\n")
     if snapshot.board:
@@ -161,5 +163,5 @@ def ops_rail_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) ->
     text.append("\n")
     text.append("runtime truth: Gateway/taskboard", style=style(theme, "muted"))
     text.append("\n")
-    text.append("surface: isolated UX", style=style(theme, "muted"))
+    text.append(f"surface: {surface}", style=style(theme, "muted"))
     return frame_panel(text, "Ops Rail", theme)

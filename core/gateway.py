@@ -15,26 +15,15 @@ from typing import TYPE_CHECKING
 import traceback
 
 # Surfaces that must NEVER interleave into a Main-MO run: a Ghost/desktop turn is
-# rejected while any turn is in flight (e.g. an active DEVMODE board), rather than
+# rejected while any foreground task is in flight, rather than
 # sharing the single agent/session/board. See run_turn().
 _SECONDARY_SURFACES = frozenset({"desktop", "ghost", "companion"})
-# Route used by the owner self-heal loop's own sweeps so the activation seam in
-# run_turn does not re-enter the loop for each sweep (it runs as one normal turn).
-_OWNER_MAINTENANCE_SWEEP = "owner_maintenance_sweep"
-
-
-def _should_owner_maintenance_loop(route_source: str, user_input: str) -> bool:
-    """The owner self-heal loop fires only on a primary-surface maintenance
-    activation that is not itself one of the loop's own sweeps. Inert for users:
-    is_owner_maintenance_activation is False without the owner pack + token."""
-    return (route_source not in _SECONDARY_SURFACES
-            and route_source != _OWNER_MAINTENANCE_SWEEP
-            and is_owner_maintenance_activation(user_input))
 _SECONDARY_BUSY_MESSAGE = (
     "MO is busy with a foreground task right now (it can only run one turn at a time "
     "yet) — try again in a moment."
 )
 
+from . import local_extensions
 from .backend_monitor import BackendMonitor, monitor_context
 from .gateway_helpers import select_template
 from .heartbeat import normalize_surface
@@ -51,14 +40,6 @@ from .tasking.task_board import (
     resume_last_board,
 )
 from .tasking.task_board_registry import TaskBoardRegistry
-from .owner_protocols import (
-    is_owner_maintenance_activation,
-    is_owner_protocol_activation,
-    is_owner_comparison_activation,
-    is_owner_integrity_audit_activation,
-    is_owner_dedup_activation,
-    owner_protocol_name,
-)
 from .work_patterns import is_research_method_question
 
 if TYPE_CHECKING:
@@ -102,8 +83,9 @@ class Gateway:
         text = str(user_input or "").lower().strip()
         if text.startswith("/"):
             return False
-        if is_owner_comparison_activation(text):
-            return True
+        extension_decision = local_extensions.should_show_task_board(text)
+        if extension_decision is not None:
+            return extension_decision
         if is_research_method_question(text):
             return False
         return select_template(text) != "simple_chat"
@@ -132,26 +114,21 @@ class Gateway:
 
         A secondary surface (Ghost/desktop) turn is REJECTED outright while any turn is
         already in flight, so it can never clear the Main board or append into the Main
-        conversation mid-run (e.g. during a OWNER_MAINTENANCE run). Primary turns block until the
+        conversation mid-run. Primary turns block until the
         in-flight turn releases. The lock is always released, even on error.
         """
-        # Owner self-heal: typing the maintenance activation drives a self-healing
-        # LOOP — sweep after sweep until the codebase is provably clean — not a
-        # single turn. is_owner_maintenance_activation is False unless the owner
-        # pack + token are installed, so this branch is inert for users. The loop
-        # body lives in the operator pack; product only delegates to it. Each sweep
-        # calls back in as _OWNER_MAINTENANCE_SWEEP and runs as one normal turn, so
-        # this guard never re-enters. If the pack loop is unavailable, fall through
-        # to a single normal turn.
-        if _should_owner_maintenance_loop(route_source, user_input):
-            looped = self._run_owner_maintenance_loop(
-                on_board_update=on_board_update, on_token=on_token,
-                on_activity=on_activity, on_proposal=on_proposal,
-                cancel_event=cancel_event, on_assistant_text=on_assistant_text,
-                on_board_event=on_board_event, on_action=on_action,
-            )
-            if looped is not None:
-                return looped
+        override = local_extensions.run_turn_override(self, route_source, user_input, {
+            "on_board_update": on_board_update,
+            "on_token": on_token,
+            "on_activity": on_activity,
+            "on_proposal": on_proposal,
+            "cancel_event": cancel_event,
+            "on_assistant_text": on_assistant_text,
+            "on_board_event": on_board_event,
+            "on_action": on_action,
+        })
+        if override is not None:
+            return override
 
         secondary = route_source in _SECONDARY_SURFACES
         if secondary:
@@ -181,31 +158,6 @@ class Gateway:
             )
         finally:
             self._turn_lock.release()
-
-    def _run_owner_maintenance_loop(self, **callbacks) -> str | None:
-        """Delegate the owner self-heal loop to its pack-resident body.
-
-        Owner-only and gated upstream (is_owner_maintenance_activation is False
-        without the pack + token). The loop drives THIS gateway's run_turn one
-        sweep at a time until the codebase is provably clean. Returns the loop's
-        summary line, or None if the pack loop is unavailable so the caller falls
-        back to a single normal turn — the owner maintenance path never breaks for
-        lack of the pack.
-        """
-        try:
-            import importlib.util
-            from .path_defaults import operator_pack_root
-            loop_path = operator_pack_root() / "devmode" / "autopilot.py"
-            if not loop_path.exists():
-                return None
-            spec = importlib.util.spec_from_file_location("_owner_maintenance_loop", loop_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            result = module.run_in_session(self, **callbacks)
-            return result if isinstance(result, str) else ""
-        except Exception:
-            traceback.print_exc()
-            return None
 
     def _run_turn_impl(
         self,
@@ -243,8 +195,7 @@ class Gateway:
         # A new session must not inherit a PRIOR session's board — neither in-memory (a
         # persistent gateway carries last_task_board across sessions) nor in the persisted
         # current.json (watchers / status / resume fast-path read it). Same-session state
-        # is preserved and the ledger stays authoritative (live mo-1782304565: an OWNER_INTEGRITY_AUDIT
-        # turn showed mo-1782300201's stale OWNER_MAINTENANCE board). Primary turns only —
+        # is preserved and the ledger stays authoritative. Primary turns only —
         # secondary surfaces keep their own slot and restore Main in the finally.
         if not secondary and session_id:
             prev = self.previous_task_board
@@ -252,7 +203,7 @@ class Gateway:
                 self.previous_task_board = None
             try:
                 clear_current_board_if_foreign_session(session_id)
-                if is_owner_integrity_audit_activation(user_input):
+                if local_extensions.should_skip_task_board(user_input):
                     clear_current_board_if_empty()
             except Exception:
                 traceback.print_exc()
@@ -297,22 +248,15 @@ class Gateway:
                 # Ghost generates intent guardrails AND structured taskboard rows.
                 ghost_plan_text = ""
                 ghost_plan_rows: list[dict[str, object]] = []
-                # ALL owner protocols (OWNER_MAINTENANCE/OWNER_COMPARISON/OWNER_INTERFACE_AUDIT/OWNER_INTEGRITY_AUDIT) skip the generic
-                # ghost board-seeding. Previously only OWNER_MAINTENANCE/OWNER_COMPARISON did, so OWNER_INTEGRITY_AUDIT/OWNER_INTERFACE_AUDIT
-                # fell through and inherited a OWNER_MAINTENANCE-flavored ghost board their own
-                # closeout never advances — a stale open board tripping the generic
-                # done-claim gate (live mo-1782300201). A protocol drives its own task
-                # truth (or none); it must never get a contaminated cross-protocol board.
-                protocol_activation = is_owner_protocol_activation(user_input)
-                if protocol_activation:
+                # Local extensions may own their own task truth, so Gateway must
+                # not seed generic Ghost rows for those turns.
+                if local_extensions.should_skip_ghost_proposal(user_input):
                     try:
                         setattr(self.agent, "_pending_turn_proposal", "")
                     except Exception:
                         traceback.print_exc()
-                    self.monitor.emit("session_event", {
-                        "kind": "protocol_ghost_proposal_skipped",
-                        "protocol": owner_protocol_name(user_input),
-                    })
+                    event = local_extensions.ghost_skip_event(user_input) or {"kind": "local_extension_ghost_proposal_skipped"}
+                    self.monitor.emit("session_event", event)
                 elif self.should_show_task_board(user_input) and hasattr(self.agent, "propose_work"):
                     raw_proposal = self.agent.propose_work(user_input, monitor=self.monitor)
                     if raw_proposal:
@@ -328,7 +272,7 @@ class Gateway:
                 def _lazy_create_board(tool_name: str = "", arguments: dict | None = None):
                     if board_holder[0]:
                         return board_holder[0]
-                    if is_owner_integrity_audit_activation(user_input):
+                    if local_extensions.should_skip_task_board(user_input):
                         return None
                     if not _runtime_should_create_board(self.agent, user_input, route_source, tool_name, arguments, resume_intent=resume_intent):
                         return None
@@ -374,7 +318,7 @@ class Gateway:
                     monitor=self.monitor,
                     **kwargs,
                 )
-                result_text = _continue_owner_maintenance_after_runtime_boundary(
+                result_text = _continue_local_extension_after_runtime_boundary(
                     self.agent,
                     user_input,
                     result_text,
@@ -393,7 +337,7 @@ class Gateway:
                     on_activity=on_activity,
                     has_open_board=lambda: bool(self.last_task_board and self.last_task_board.open_count() > 0),
                 )
-                result_text = _block_open_protocol_board_at_turn_end(
+                result_text = _block_open_extension_board_at_turn_end(
                     self.agent,
                     user_input,
                     result_text,
@@ -476,12 +420,7 @@ def _continue_after_runtime_boundary(
     activity_msg: str,
     event_kind_prefix: str,
 ) -> str:
-    """Single continuation engine — resume after recoverable runtime budgets.
-
-    Parameterized for both owner-protocol (OWNER_MAINTENANCE) and ordinary-work
-    continuation loops. The two callers are thin wrappers that supply the
-    namespace-specific values.
-    """
+    """Single continuation engine — resume after recoverable runtime budgets."""
     if not _callable_bool(guard_fn):
         return result_text
 
@@ -519,7 +458,7 @@ def _continue_after_runtime_boundary(
     return current
 
 
-def _continue_owner_maintenance_after_runtime_boundary(
+def _continue_local_extension_after_runtime_boundary(
     agent: object,
     user_input: str,
     result_text: str,
@@ -529,7 +468,13 @@ def _continue_owner_maintenance_after_runtime_boundary(
     cancel_event: object = None,
     on_activity: object = None,
 ) -> str:
-    """Resume OWNER_MAINTENANCE in fresh turns after recoverable runtime budgets."""
+    """Resume profile extension work after recoverable runtime budgets."""
+    policy = local_extensions.runtime_boundary_policy(user_input)
+    if not policy:
+        return result_text
+    prompt_fn = policy.get("prompt")
+    if not callable(prompt_fn):
+        return result_text
     return _continue_after_runtime_boundary(
         agent,
         user_input,
@@ -538,13 +483,13 @@ def _continue_owner_maintenance_after_runtime_boundary(
         callbacks=callbacks,
         cancel_event=cancel_event,
         on_activity=on_activity,
-        namespace="owner_maintenance",
-        config_key="owner_maintenance_auto_continuation_max_turns",
-        default_max=20,
-        guard_fn=lambda: is_owner_maintenance_activation(user_input),
-        prompt_fn=lambda current, count: _owner_maintenance_continuation_prompt(current, count),
-        activity_msg="OWNER_MAINTENANCE: continuing after runtime boundary...",
-        event_kind_prefix="owner_maintenance",
+        namespace=str(policy.get("namespace") or "local_extension"),
+        config_key=str(policy.get("config_key") or "local_extension_auto_continuation_max_turns"),
+        default_max=_safe_positive_int(policy.get("default_max"), 3),
+        guard_fn=lambda: True,
+        prompt_fn=prompt_fn,
+        activity_msg=str(policy.get("activity_msg") or "MO: continuing local extension work after runtime boundary..."),
+        event_kind_prefix=str(policy.get("event_kind_prefix") or "local_extension"),
     )
 
 
@@ -571,15 +516,14 @@ def _continue_work_after_runtime_boundary(
         namespace="work",
         config_key="work_auto_continuation_max_turns",
         default_max=3,
-        guard_fn=lambda: not is_owner_maintenance_activation(user_input) and _callable_bool(has_open_board),
+        guard_fn=lambda: local_extensions.runtime_boundary_policy(user_input) is None and _callable_bool(has_open_board),
         prompt_fn=lambda current, count: _work_continuation_prompt(user_input, current, count),
         activity_msg="MO: continuing active work after runtime boundary...",
         event_kind_prefix="work",
     )
 
 
-# Recoverable runtime-budget boundaries that a fresh continuation turn can resume
-# (shared by the owner-maintenance and ordinary-work continuation engines).
+# Recoverable runtime-budget boundaries that a fresh continuation turn can resume.
 _RECOVERABLE_BOUNDARY_MARKERS = (
     "budget exhaustion",
     "tool budget",
@@ -599,8 +543,8 @@ _RECOVERABLE_BOUNDARY_MARKERS = (
 def _runtime_boundary_needs_continuation(result_text: str, namespace: str) -> bool:
     """True when ``result_text`` ended on a recoverable runtime budget for ``namespace``.
 
-    ``namespace`` is the marker family ("owner_maintenance" or "work"); the logic is
-    identical across both, only the marker prefixes differ.
+    ``namespace`` is the marker family; the logic is identical across callers,
+    only marker prefixes differ.
     """
     text = _terminal_marker_text(result_text)
     if not text:
@@ -623,19 +567,6 @@ def _terminal_marker_text(result_text: str) -> str:
     text = re.sub(r"^(?:#{1,6}\s*)+", "", text).lstrip()
     text = re.sub(r"^(?:[*_`~>\s]+)+", "", text).lstrip()
     return " ".join(text.lower().split())
-
-
-def _owner_maintenance_continuation_prompt(previous_boundary: str, continuation_count: int) -> str:
-    boundary = " ".join(str(previous_boundary or "").split())[:1200]
-    return (
-        f"OWNER_MAINTENANCE CONTINUATION {continuation_count}. "
-        "Continue the active OWNER_MAINTENANCE protocol from the preserved handoff/capsule and current repo evidence. "
-        "Any 'do not call tools' or 'no more tools this turn' instruction in the previous capsule applied only to the exhausted prior turn; this is the fresh continuation turn and tools are available again. "
-        "Do not ask the operator to re-explain scope, do not redo completed discovery, and do not stop at a progress report. "
-        "Resume from the exact next unresolved action. "
-        "Stop only with [OWNER_MAINTENANCE COMPLETE] when complete, or [OWNER_MAINTENANCE BLOCKED] for a real non-recoverable tool/provider/timeout/sandbox/permission/safety boundary. "
-        f"Previous runtime boundary/capsule: {boundary}"
-    )
 
 
 def _work_continuation_prompt(original_user_input: str, previous_boundary: str, continuation_count: int) -> str:
@@ -689,12 +620,11 @@ def _runtime_should_create_board(
     text = str(user_input or "")
     if is_research_method_question(text):
         return False
-    if is_owner_integrity_audit_activation(text):
+    if local_extensions.should_skip_task_board(text):
         return False
-    if is_owner_maintenance_activation(text):
-        return True
-    if is_owner_comparison_activation(text):
-        return True
+    extension_decision = local_extensions.should_show_task_board(text)
+    if extension_decision is not None:
+        return extension_decision
     if resume_intent:
         return True
     model_owned = False
@@ -764,7 +694,7 @@ def terminal_board_event(board: TaskBoard, status: str) -> tuple[str, str]:
 _terminal_board_event = terminal_board_event
 
 
-def _block_open_protocol_board_at_turn_end(
+def _block_open_extension_board_at_turn_end(
     agent: object,
     user_input: str,
     result_text: str,
@@ -772,56 +702,15 @@ def _block_open_protocol_board_at_turn_end(
     *,
     monitor: BackendMonitor,
 ) -> str:
-    """Block protocol turns that claim terminal status with open task rows."""
+    """Let a local extension reject terminal text with open task rows."""
     if not board or not board.tasks or board.open_count() <= 0:
         return result_text
-    protocol = ""
-    if is_owner_maintenance_activation(user_input):
-        protocol = "OWNER_MAINTENANCE"
-    elif is_owner_comparison_activation(user_input):
-        protocol = "OWNER_COMPARISON"
-    elif is_owner_dedup_activation(user_input):
-        protocol = "OWNER_DEDUP"
-    if not protocol:
+    blocked_text = local_extensions.open_board_block_text(agent, user_input, result_text, board)
+    if not blocked_text:
         return result_text
-    normalized = str(result_text or "").upper()
-    if f"[{protocol} COMPLETE]" not in normalized and f"[{protocol} BLOCKED]" not in normalized:
-        return result_text
-
-    task_id = board.active_task_id() or board.first_ready_pending_id()
-    if task_id:
-        board.block(task_id, "protocol terminal marker returned with open taskboard rows")
-    try:
-        agent._pending_interrupted_work = {
-            "user": user_input,
-            "reason": "open_protocol_taskboard",
-            "changed": True,
-        }
-    except Exception:
-        traceback.print_exc()
-    blocked_text = (
-        f"[{protocol} BLOCKED] Protocol returned a terminal marker while the taskboard still has "
-        f"{board.open_count()} open row(s). Resume and close the board with evidence before final closeout."
-    )
-    if protocol == "OWNER_MAINTENANCE":
-        try:
-            reconcile = getattr(agent, "_reconcile_devmode_summary_marker", None)
-            if callable(reconcile):
-                if not reconcile(blocked_text):
-                    monitor.emit("protocol_artifact_reconcile_failed", {
-                        "protocol": protocol,
-                        "error": "reconciliation returned False (session dir unset or internal failure)",
-                    })
-        except Exception as exc:
-            monitor.emit("protocol_artifact_reconcile_failed", {
-                "protocol": protocol,
-                "error": str(exc)[:300],
-            })
-    monitor.emit("protocol_open_taskboard_blocked", {
-        "protocol": protocol,
+    monitor.emit("local_extension_open_taskboard_blocked", {
         "board_id": board.board_id,
         "open_count": board.open_count(),
-        "task_id": str(task_id or ""),
     })
     return blocked_text
 
@@ -856,38 +745,28 @@ def _new_gateway_board(
     When ``model_owned`` is set, normal work turns get an EMPTY board that MO
     populates with its own plan via ``set_plan`` — Ghost and the work-procedure no
     longer seed the rows, and an unplanned board can't false-trip the
-    done-claim/contract gates. Owner protocols keep their explicit phase rows.
+    done-claim/contract gates. Local extensions may supply explicit rows.
     """
     board = TaskBoard(turn_id=turn_id, session_id=session_id, source="gateway")
     target = str(title or "").strip() or user_input[:80]
-    proto = is_owner_protocol_activation(user_input)
-    if is_owner_maintenance_activation(user_input):
-        rows = _owner_maintenance_gateway_phase_rows()
-    elif is_owner_comparison_activation(user_input):
-        rows = _owner_comparison_gateway_phase_rows()
-    elif is_owner_dedup_activation(user_input):
-        rows = _owner_dedup_gateway_phase_rows()
-    elif model_owned and not proto:
+    extension_active = local_extensions.is_active(user_input)
+    extension_rows = local_extensions.board_rows(user_input)
+    if extension_rows is not None:
+        rows = extension_rows
+    elif model_owned and not extension_active:
         # MO owns the board: start EMPTY and let MO populate it via set_plan. An
         # empty board (no rows) cannot false-trip the done-claim/contract gates if
         # MO doesn't plan; once set_plan runs, its rows go through the normal gates.
         return board
-    elif not rows and not proto:
-        # No Ghost plan and NOT an owner protocol: seed the matching build/reasoning
+    elif not rows and not extension_active:
+        # No Ghost plan and not an extension-owned turn: seed the matching build/reasoning
         # work procedure so the board carries the proven evidence-gated phases instead
-        # of one generic row. Owner protocols are EXCLUDED here — OWNER_MAINTENANCE/OWNER_COMPARISON use the
-        # explicit phase rows above, OWNER_INTERFACE_AUDIT drives its own board, and OWNER_INTEGRITY_AUDIT is boardless.
-        # None may inherit a generic work-procedure board (build_verify/project_audit/…),
-        # which has no protocol closeout and would trip the done-claim gate. Live
-        # mo-1782307665: "Run OWNER_INTEGRITY_AUDIT on …" got a build_verify board through THIS fallback
-        # even though the ghost proposal was already skipped (9555983 closed only ghost).
+        # of one generic row.
         rows = _work_procedure_rows(user_input, target)
     if rows:
         board.set_rows(f"{target}", rows, objective=user_input[:200])
-    elif not proto:
-        # Ghost unavailable and no matching procedure — single-row fallback, non-protocol
-        # turns only. An owner protocol with no explicit rows stays an EMPTY board: the
-        # protocol/model owns its task truth and an empty board can't trip done-claim.
+    elif not extension_active:
+        # Ghost unavailable and no matching procedure: single-row fallback.
         board.set_rows(
             f"{target}",
             [{"id": "1", "text": f"Work on {target}", "status": "active", "kind": "edit", "completion_gate": "tool", "depends_on": []}],
@@ -912,160 +791,6 @@ def _work_procedure_rows(user_input: str, target: str = "") -> list[dict[str, ob
         return procedure_rows(procedure, objective=target) if procedure else None
     except Exception:
         return None
-
-
-def _owner_maintenance_gateway_phase_rows() -> list[dict[str, object]]:
-    """Fallback OWNER_MAINTENANCE rows when Ghost does not provide a structured plan."""
-    return [
-        {
-            "id": "1",
-            "text": "Boot protocol and load prior session context",
-            "status": "active",
-            "kind": "inspect",
-            "completion_gate": "tool",
-            "depends_on": [],
-        },
-        {
-            "id": "2",
-            "text": "Run live-trace rewind and baseline-plus-delta capability matrix",
-            "status": "pending",
-            "kind": "verify",
-            "completion_gate": "tool",
-            "depends_on": ["1"],
-        },
-        {
-            "id": "3",
-            "text": "Catalog verified findings and choose the highest-priority lane",
-            "status": "pending",
-            "kind": "verify",
-            "completion_gate": "tool",
-            "depends_on": ["2"],
-        },
-        {
-            "id": "4",
-            "text": "Fix validated OWNER_MAINTENANCE findings without duplicating existing features",
-            "status": "pending",
-            "kind": "edit",
-            "completion_gate": "tool",
-            "depends_on": ["3"],
-        },
-        {
-            "id": "5",
-            "text": "Verify behavior, cost, handoff, compression, and task truth",
-            "status": "pending",
-            "kind": "verify",
-            "completion_gate": "tool",
-            "depends_on": ["4"],
-        },
-        {
-            "id": "6",
-            "text": "Write summary, close task truth, and produce final OWNER_MAINTENANCE report",
-            "status": "pending",
-            "kind": "report",
-            "completion_gate": "final",
-            "depends_on": ["5"],
-        },
-    ]
-
-
-def _owner_comparison_gateway_phase_rows() -> list[dict[str, object]]:
-    """Fallback OWNER_COMPARISON rows when Ghost does not provide a structured plan."""
-    return [
-        {
-            "id": "1",
-            "text": "Capture current-MO target, reference roles, scope, and read-only boundary",
-            "status": "active",
-            "kind": "inspect",
-            "completion_gate": "tool",
-            "depends_on": [],
-        },
-        {
-            "id": "2",
-            "text": "Build current-MO baseline from structured evidence before broad reads",
-            "status": "pending",
-            "kind": "inspect",
-            "completion_gate": "tool",
-            "depends_on": ["1"],
-        },
-        {
-            "id": "3",
-            "text": "Build comparison matrix against current MO with reference evidence",
-            "status": "pending",
-            "kind": "verify",
-            "completion_gate": "tool",
-            "depends_on": ["2"],
-        },
-        {
-            "id": "4",
-            "text": "Classify implement, reject, defer, by-design, and unknown items",
-            "status": "pending",
-            "kind": "verify",
-            "completion_gate": "tool",
-            "depends_on": ["3"],
-        },
-        {
-            "id": "5",
-            "text": "Write OWNER_COMPARISON artifacts and approval-ready closeout",
-            "status": "pending",
-            "kind": "report",
-            "completion_gate": "final",
-            "depends_on": ["4"],
-        },
-    ]
-
-
-def _owner_dedup_gateway_phase_rows() -> list[dict[str, object]]:
-    """Fallback OWNER_DEDUP rows when Ghost does not provide a structured plan."""
-    return [
-        {
-            "id": "1",
-            "text": "Load duplication ground truth (dedup_scan minus ledger-resolved) and scope",
-            "status": "active",
-            "kind": "inspect",
-            "completion_gate": "tool",
-            "depends_on": [],
-        },
-        {
-            "id": "2",
-            "text": "Multi-modal discovery across code, docs, refs, comments, legacy",
-            "status": "pending",
-            "kind": "inspect",
-            "completion_gate": "tool",
-            "depends_on": ["1"],
-        },
-        {
-            "id": "3",
-            "text": "Adversarially verify clusters and extend to zero-missing coverage",
-            "status": "pending",
-            "kind": "verify",
-            "completion_gate": "tool",
-            "depends_on": ["2"],
-        },
-        {
-            "id": "4",
-            "text": "Prove consolidation safety per cluster (blast radius, behavior preserved)",
-            "status": "pending",
-            "kind": "verify",
-            "completion_gate": "tool",
-            "depends_on": ["3"],
-        },
-        {
-            "id": "5",
-            "text": "Consolidate/simplify/remove per dedup.mode, then clean-verify and record the ledger",
-            "status": "pending",
-            "kind": "build",
-            "completion_gate": "tool",
-            "depends_on": ["4"],
-        },
-        {
-            "id": "6",
-            "text": "Write OWNER_DEDUP run artifacts and major-consolidation closeout",
-            "status": "pending",
-            "kind": "report",
-            "completion_gate": "final",
-            "depends_on": ["5"],
-        },
-    ]
 
 
 def _parse_ghost_proposal(raw: str) -> tuple[str, list[dict[str, object]]]:

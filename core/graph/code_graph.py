@@ -216,6 +216,11 @@ def _discover_files(root: Path) -> list[str]:
         proc = subprocess.run(["git", "ls-files"], cwd=str(root), text=True, capture_output=True, timeout=5)
         if proc.returncode == 0 and proc.stdout.strip():
             candidates = [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
+            seen = set(candidates)
+            for rel in _local_qa_overlay_files(root):
+                if rel not in seen:
+                    candidates.append(rel)
+                    seen.add(rel)
             return [p for p in candidates if _indexable_path(p) and (root / p).is_file()]
     except Exception:
         traceback.print_exc()
@@ -227,6 +232,22 @@ def _discover_files(root: Path) -> list[str]:
             rel = Path(base, name).relative_to(root).as_posix()
             if _indexable_path(rel):
                 result.append(rel)
+    return result
+
+
+def _local_qa_overlay_files(root: Path) -> list[str]:
+    """Ignored maintainer-local QA files that still support local PRT/test impact."""
+    result: list[str] = []
+    for overlay in ("tests",):
+        base = root / overlay
+        if not base.is_dir():
+            continue
+        for current, dirs, names in os.walk(base):
+            dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS and not d.startswith("."))
+            for name in sorted(names):
+                rel = Path(current, name).relative_to(root).as_posix()
+                if _indexable_path(rel):
+                    result.append(rel)
     return result
 
 

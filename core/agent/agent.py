@@ -25,7 +25,7 @@ from ..provider.provider import (
     prt_review_provider_chain,
     first_vision_provider_index,
 )
-from ..model_slots import (
+from ..provider.model_slots import (
     main_model_selectors,
     provider_matches_selector,
     resolve_model_slot,
@@ -44,9 +44,8 @@ from ..runtime_work_signals import looks_like_interrupted_resume_request
 from ..learning.feedback_learning import extract_feedback_learning, record_feedback_learning
 from ..learning.terms_learning import record_terms_learning
 from ..learning.workflow_learning import WORKFLOW_CANDIDATE_NOTICE, promote_workflow_candidate, record_workflow_candidate_result
-from ..workers import WorkerRegistry
-from ..worker_runtime import BackgroundWorkerRuntime
-from ..model_limits import resolve_context_budget_tokens, context_budget_source
+from ..worker import BackgroundWorkerRuntime, WorkerRegistry
+from ..provider.model_limits import resolve_context_budget_tokens, context_budget_source
 from ..session.handoff import build_compact_summary, build_handoff_document, context_pressure, recent_visible_report_messages, seed_session_from_handoff, should_auto_handoff, write_handoff_document
 from ..session.session_momentum import maybe_compact_session
 from ..profile import Profile
@@ -829,16 +828,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         compact_document = build_compact_summary(self, focus=focus, reason=reason, latest_user=latest_user)
         path = write_handoff_document(document)
         seed_session_from_handoff(self.session, compact_document, latest_user=latest_user, visible_messages=visible_messages, compact=True)
-        # Keep the DEVMODE logical-run economy scoping intact across this handoff: record
-        # BOTH the pre-handoff id and the new mo-handoff-* id so the run's economy still
-        # groups every segment together (a handoff mints a new session_id on the same run).
-        run_ids = getattr(self, "_devmode_run_session_ids", None)
-        if isinstance(run_ids, set):
-            if old_session_id:
-                run_ids.add(old_session_id)
-            new_sid = str(getattr(self.session, "session_id", "") or "")
-            if new_sid:
-                run_ids.add(new_sid)
         # Preserve taskboard truth across the handoff. The session id just changed to a
         # mo-handoff-* id, but the active board's snapshots are keyed under the OLD id;
         # when last_task_board is momentarily None (e.g. the next turn's start, before the
@@ -1158,7 +1147,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
     def _scan_user_input(self, user_input: str) -> dict[str, object] | None:
         """Run lightweight local input threat scan before provider dispatch."""
         try:
-            from ..threat_scan import scan_text
+            from ..gates.threat_scan import scan_text
             result = scan_text(user_input, surface="user_input")
             if not result.findings:
                 return None
@@ -1277,8 +1266,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         # A plain unanswered user message (no dangling tool calls) is only stale
         # when the operator returns with a casual greeting. During active
         # continuation, keep it so a question that failed on a provider hiccup
-        # gets answered instead of silently deleted (observed live: a OWNER_COMPARISON
-        # question vanished after a startup provider-balance error).
+        # gets answered instead of silently deleted.
         drop_unanswered = self._looks_like_return_greeting(user_input)
         try:
             meta = quarantine(drop_unanswered_user=drop_unanswered) or {"changed": False, "dropped_messages": 0}
@@ -1451,7 +1439,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         value = str(text or "").strip().lower()
         return (
             value.startswith("[provider empty]")
-            or value.startswith("[owner_maintenance blocked]")
             or value.startswith("[max provider requests]")
             or value.startswith("[max tool rounds]")
             or value.startswith("[tool arguments truncated]")

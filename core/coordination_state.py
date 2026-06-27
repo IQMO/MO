@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from .backend_monitor import redact_monitor_text
-from .workers import WorkerRecord, ensure_worker_registry, extract_worker_paths
+from .worker import WorkerRecord, ensure_worker_registry, extract_worker_paths
 
 
 BACKGROUND_CONFLICT_HEADER = "### Coordination conflict — priority 1"

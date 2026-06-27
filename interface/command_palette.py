@@ -8,9 +8,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .command_registry import DEFAULT_PALETTE_CATEGORY, PALETTE_CATEGORIES, SLASH_COMMANDS, _command_hidden
+from .command_registry import (
+    DEFAULT_PALETTE_CATEGORY,
+    PALETTE_CATEGORIES,
+    SLASH_COMMANDS,
+    _command_hidden,
+    build_palette_categories,
+    slash_command_with_desc,
+)
 
 DEFAULT_CATEGORY = DEFAULT_PALETTE_CATEGORY  # Tasks
+
+
+def _current_palette_categories() -> list[tuple[str, list[tuple[str, str]]]]:
+    """Return runtime palette categories, including admitted local extensions."""
+    return build_palette_categories()
+
+
+def _slash_descriptions() -> dict[str, str]:
+    return {command: description for command, description in slash_command_with_desc()}
 
 
 @dataclass(frozen=True)
@@ -121,7 +137,7 @@ class CommandPalette:
             if delta < 0:
                 self.back()
             return
-        total = len(PALETTE_CATEGORIES)
+        total = len(_current_palette_categories())
         if total == 0:
             return
         self.category_idx = (self.category_idx + delta) % total
@@ -166,15 +182,17 @@ class CommandPalette:
     def _current_items(self) -> list[PaletteItem]:
         if self._stack:
             return self._stack[-1][1]
-        if not PALETTE_CATEGORIES:
+        categories = _current_palette_categories()
+        if not categories:
             return []
-        idx = self.category_idx % len(PALETTE_CATEGORIES)
-        name, items = PALETTE_CATEGORIES[idx]
+        idx = self.category_idx % len(categories)
+        name, items = categories[idx]
         if name == "Recent":
+            descriptions = _slash_descriptions()
             return [
-                PaletteItem(cmd, cmd, SLASH_COMMANDS.get(cmd, ""))
+                PaletteItem(cmd, cmd, descriptions.get(cmd, SLASH_COMMANDS.get(cmd, "")))
                 for cmd in self._recent
-                if cmd in SLASH_COMMANDS and not _command_hidden(cmd)
+                if cmd in descriptions and not _command_hidden(cmd)
             ]
         return [self._coerce_item(item) for item in items]
 
@@ -195,7 +213,7 @@ class CommandPalette:
 
         # Category tabs
         if not self._stack:
-            for idx, (name, _items) in enumerate(PALETTE_CATEGORIES):
+            for idx, (name, _items) in enumerate(_current_palette_categories()):
                 if idx == self.category_idx:
                     fragments.append(("class:palette-selected", f" {name} "))
                 else:

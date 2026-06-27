@@ -224,7 +224,7 @@ def compact_completed_tool_chains(
     The return dict includes a ``truth_boundary`` key so downstream consumers
     can verify the anti-hallucination contract was satisfied.
     """
-    from ..consistency_boundary import truth_boundary as _tb
+    from ..gates.consistency_boundary import truth_boundary as _tb
 
     messages = [m for m in list(getattr(session, "messages", []) or []) if isinstance(m, dict)]
     if len(messages) <= max(2, keep_recent):

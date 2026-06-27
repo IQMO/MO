@@ -15,6 +15,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
+tests/
 logs/
 memory/
 config.yaml
@@ -35,8 +36,8 @@ personal/
 # Leak-prevention safety net ONLY — owner-only protocol/state files do NOT live
 # here. They resolve from ~/.mo/operator (or MO_OPERATOR_PACK) under the user's
 # MO profile; this checkout is the one public product repo and never a submodule
-# host. The resolver never reads a repo-local copy (core/path_defaults.py +
-# tests/test_path_defaults.py enforce this). This line only guarantees a stray
+# host. The resolver never reads a repo-local copy; local maintainer tests cover
+# that boundary from the ignored tests/ overlay. This line only guarantees a stray
 # hand-copied operator/ can never be committed.
 operator/
 # Dev/maintainer design docs, proposals, audits — internal, not shipped.

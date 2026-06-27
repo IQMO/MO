@@ -14,7 +14,8 @@ ENV_MO_HOME = "MO_HOME"
 ENV_MO_PROJECT_CWD = "MO_PROJECT_CWD"
 ENV_MO_STATE_HOME = "MO_STATE_HOME"
 ENV_MO_STATE_LOCAL = "MO_STATE_LOCAL"  # opt OUT of private-by-default → project-relative state
-ENV_MO_OPERATOR_PACK = "MO_OPERATOR_PACK"  # legacy env name for owner-only profile protocol root
+ENV_MO_LOCAL_EXTENSION_ROOT = "MO_LOCAL_EXTENSION_ROOT"
+ENV_MO_OPERATOR_PACK = "MO_OPERATOR_PACK"  # legacy env name for the profile extension root
 ENV_TASKBOARD_LEDGER_PATH = "MO_TASKBOARD_LEDGER_PATH"
 ENV_TASKBOARD_LEDGER_DISABLE = "MO_TASKBOARD_LEDGER_DISABLE"
 ENV_HEARTBEAT_LEDGER_PATH = "MO_HEARTBEAT_LEDGER_PATH"
@@ -28,7 +29,7 @@ def repo_root() -> str:
 def mo_home(config: dict[str, Any] | None = None) -> Path:
     """Return MO's private runtime home.
 
-    This is where user/operator state belongs for installed runtimes.
+    This is where user state belongs for installed runtimes.
     Relative runtime state resolves here when private state is enabled.
     """
     cfg = config or {}
@@ -41,20 +42,25 @@ def mo_home(config: dict[str, Any] | None = None) -> Path:
     return Path(raw).expanduser().resolve(strict=False)
 
 
-def operator_pack_root(config: dict[str, Any] | None = None) -> Path:
-    """Resolve the owner-only protocol/state root.
+def local_extension_root(config: dict[str, Any] | None = None) -> Path:
+    """Resolve the profile-owned local extension root.
 
-    Resolution order: ``MO_OPERATOR_PACK`` env > ``~/.mo/operator`` under the
-    user's MO profile. Owner-only protocol files never ship, so the product checkout
-    is never a valid implicit source for them. This is not a nested repo or submodule
-    inside the product checkout. Returns the home location by default even when absent
-    — a user clone has neither protocol files nor owner token, so owner mode stays off.
+    Resolution order: ``MO_LOCAL_EXTENSION_ROOT`` env > legacy
+    ``MO_OPERATOR_PACK`` env > ``~/.mo/operator`` under the user's MO profile.
+    Local extension files never ship, so the product checkout is never a valid
+    implicit source for them. Returns the home location by default even when
+    absent; an empty profile has no extension module or local token, so extension
+    behavior stays off.
     """
-    env = os.getenv(ENV_MO_OPERATOR_PACK, "").strip()
+    env = os.getenv(ENV_MO_LOCAL_EXTENSION_ROOT, "").strip() or os.getenv(ENV_MO_OPERATOR_PACK, "").strip()
     if env:
         return Path(env).expanduser().resolve(strict=False)
-    home_pack = mo_home(config) / "operator"
-    return home_pack
+    return mo_home(config) / "operator"
+
+
+def operator_pack_root(config: dict[str, Any] | None = None) -> Path:
+    """Legacy alias for the profile-owned local extension root."""
+    return local_extension_root(config)
 
 
 def private_state_enabled(config: dict[str, Any] | None = None) -> bool:

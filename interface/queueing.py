@@ -5,7 +5,7 @@ import queue
 import traceback
 from typing import Any
 
-from core.workers import ensure_worker_registry
+from core.worker import ensure_worker_registry
 
 
 class QueueingMixin:

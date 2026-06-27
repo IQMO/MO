@@ -13,9 +13,7 @@ from core.ghost.ghost_context import build_ghost_context
 from core.ghost.ghost_routing import GhostRouteSuggestion, enhance_route_objective, is_route_confirmation, is_route_rejection, recommend_ghost_route
 from core.ghost.ghost_tool_context import build_ghost_tool_context
 from core.provider.provider import clean_provider_error, fallback_reason
-from core.worker_runtime import ensure_worker_runtime
-from core.worker_scheduler import decide_worker_route
-from core.workers import ensure_worker_registry
+from core.worker import decide_worker_route, ensure_worker_registry, ensure_worker_runtime
 from core.gateway_helpers import words as _words
 
 from .ghost import ghost_safe_messages

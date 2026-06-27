@@ -12,6 +12,7 @@ import sys
 import json
 import subprocess
 import fnmatch
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -728,21 +729,39 @@ def execute_shell(arguments: dict[str, Any]) -> str:
             popen_kwargs["start_new_session"] = True
         proc = subprocess.Popen(shell_cmd, **popen_kwargs)
         _register_shell_process(proc, registered_command, cwd, timeout)
+        stdout_chunks: list[str] = []
+        stderr_chunks: list[str] = []
+
+        def _drain_pipe(stream: Any, chunks: list[str]) -> None:
+            try:
+                while True:
+                    chunk = stream.read(1)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+            except Exception:
+                pass
+
+        stdout_thread = threading.Thread(target=_drain_pipe, args=(proc.stdout, stdout_chunks), daemon=True)
+        stderr_thread = threading.Thread(target=_drain_pipe, args=(proc.stderr, stderr_chunks), daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
         try:
             try:
-                stdout, stderr = proc.communicate(timeout=timeout)
+                proc.wait(timeout=timeout)
+                stdout_thread.join(timeout=2)
+                stderr_thread.join(timeout=2)
             except subprocess.TimeoutExpired:
                 _kill_process_tree(proc.pid)
+                stdout_thread.join(timeout=0.2)
+                stderr_thread.join(timeout=0.2)
                 # Capture whatever the process printed BEFORE the kill, so a slow run
                 # still yields actionable progress instead of nothing — this is what
                 # stops the model from backgrounding+poll-looping (or blindly re-running)
                 # a long job, which leaves it parked with no real output.
-                part_out = part_err = ""
-                try:
-                    part_out, part_err = proc.communicate(timeout=2)
-                except Exception:
-                    pass
-                partial = ((part_out or "") + ("\n[stderr]\n" + part_err if part_err else "")).strip()
+                stdout_partial = "".join(stdout_chunks)
+                stderr_partial = "".join(stderr_chunks)
+                partial = (stdout_partial + ("\n[stderr]\n" + stderr_partial if stderr_partial else "")).strip()
                 guidance = (
                     f"Error: Command timed out after {timeout}s and was killed. Do NOT re-run the "
                     "same long command on a loop and do NOT background it and poll — that burns turns "
@@ -758,7 +777,8 @@ def execute_shell(arguments: dict[str, Any]) -> str:
         finally:
             _unregister_shell_process(proc.pid)
 
-        output = stdout or ""
+        output = "".join(stdout_chunks)
+        stderr = "".join(stderr_chunks)
         if stderr:
             output += "\n[stderr]\n" + stderr
         if not output.strip():
@@ -1300,7 +1320,7 @@ def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
         return "Fact NOT recorded: don't store raw IPs or SSH connection strings — record a host alias / location / status instead."
     # Fail-closed safety scan (same class workflow-learning already blocks).
     try:
-        from core.threat_scan import scan_text
+        from core.gates.threat_scan import scan_text
         scan = scan_text(f"{fact}\n{evidence}", surface="profile fact")
         if getattr(scan, "blocked", False):
             return f"Fact NOT recorded: failed the safety scan ({scan.reason()})."

@@ -20,7 +20,9 @@ select = ["F", "E9"]  # pyflakes + syntax errors
 
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"
-testpaths = ["tests"]
+# Maintainer tests live in an ignored local tests/ overlay. Do not pin testpaths
+# in the public product config; local pytest discovery still finds tests/ when
+# the overlay exists.
 norecursedirs = ["tmp", ".git", "__pycache__", ".pytest_cache", ".ruff_cache", "logs", "memory", "operator", "docs", "personal"]
 markers = [
     "smoke: fast core verification — test files under 3KB (auto-tiered by conftest)",

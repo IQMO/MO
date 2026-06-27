@@ -45,11 +45,18 @@ Forbidden directions:
 or rewrite task status. Gateway/taskboard/runtime own truth; adapters only
 convert runtime state into immutable display rows.
 
+Live UX is a real MO surface: the runtime bridge creates the normal Agent and
+Gateway in the UX process and submits turns with `route_source="ux"`. Direct
+`python -m UX` launch defaults to this live runtime path. The current
+production `interface/` package remains the default renderer for `python mo.py`
+and is not imported by UX.
+
 ## Current Build Rules
 
-- Preview mode is local-only. It can capture input and render a transcript, but
-  it must label local output as `UX`, never as `MO`.
-- Live mode sends turns only through `Gateway.run_turn` via the runtime bridge.
+- Preview mode is explicit and local-only. It can capture input and render a
+  transcript, but it must label local output as `UX`, never as `MO`.
+- Live mode sends turns only through `Gateway.run_turn(route_source="ux")` via
+  the runtime bridge.
 - Read-only mode can instantiate runtime state and render a snapshot, but sends
   no turn.
 - Idle rails stay static. Motion is allowed for the landing signal and for

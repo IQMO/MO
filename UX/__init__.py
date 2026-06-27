@@ -1,8 +1,9 @@
 """Isolated next-generation terminal UX surface for MO Agent.
 
 The package is default-off and isolated from the production ``interface/`` tree.
-Run ``python -m UX`` for preview, or ``python mo.py --ux`` for the explicit lazy
-live opt-in while default ``python mo.py`` remains on the current interface.
+Run ``python -m UX`` or ``python mo.py --ux`` for live UX runtime mode while
+default ``python mo.py`` remains on the current interface. Use
+``python -m UX --preview`` for the local-only preview backend.
 """
 from __future__ import annotations
 

@@ -386,7 +386,7 @@ def review_diff(agent: "Agent", diff_ref: str = "HEAD") -> ReviewReport:
         structural_impact["risk_score"] = risk
     
     # 2.5 Threat Scan
-    from core.threat_scan import scan_text
+    from core.gates.threat_scan import scan_text
     scan_result = scan_text(diff_text, surface="review")
     if scan_result.blocked:
         report = ReviewReport(
@@ -419,7 +419,7 @@ def review_diff(agent: "Agent", diff_ref: str = "HEAD") -> ReviewReport:
         agent.compression_total_ops += 1
         agent.compression_last_pct = compress_stats["saved_pct"]
         
-    from core.model_limits import resolve_context_budget_tokens
+    from core.provider.model_limits import resolve_context_budget_tokens
     # Budget against the provider/model that will ACTUALLY run the review (head of
     # the review chain), not a hardcoded opencode/deepseek-v4-pro. A reviewer with a
     # smaller context window would otherwise be handed an over-long diff and overflow.

@@ -20,6 +20,7 @@ class RuntimeUnavailable(RuntimeError):
 class RuntimeHandle:
     agent: Any
     gateway: Any
+    surface: str = "ux"
 
     def snapshot(self) -> SessionSnapshot:
         return snapshot_from_runtime(self.agent, self.gateway)
@@ -34,7 +35,7 @@ class RuntimeHandle:
                 on_board_event=lambda _event: callbacks.changed(),
                 on_board_update=lambda _rich: callbacks.changed(),
             )
-        return str(self.gateway.run_turn(text, **kwargs) or "")
+        return str(self.gateway.run_turn(text, route_source=self.surface, **kwargs) or "")
 
 
 def repo_root() -> Path:

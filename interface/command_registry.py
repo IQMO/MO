@@ -21,34 +21,41 @@ class SlashCommandSpec:
     help_lines: tuple[str, ...] = ()
     palette: bool = True
     legacy: bool = False
-    operator_only: bool = False
 
     @property
     def palette_desc(self) -> str:
         return self.description if self.palette_description is None else self.palette_description
 
 
-def _operator_protocols_visible() -> bool:
-    """True when the operator's private protocol pack is installed.
-
-    Operator-only commands stay fully dispatchable for everyone, but are hidden
-    from user-facing help/palette/completion on a public build (no pack), so a
-    user never sees operator-only machinery advertised. Imported lazily to avoid
-    an interface->core import cycle and to stay monkeypatchable in tests.
-    """
+def _extension_specs() -> tuple[SlashCommandSpec, ...]:
+    """Return slash commands supplied by a profile-owned local extension."""
     try:
-        from core.owner_protocols import operator_protocols_installed
-
-        return bool(operator_protocols_installed())
+        from core.local_extensions import command_specs
     except Exception:
-        return False
+        return ()
+    specs: list[SlashCommandSpec] = []
+    fields = set(SlashCommandSpec.__dataclass_fields__)
+    for item in command_specs():
+        if not isinstance(item, dict):
+            continue
+        try:
+            data = {key: value for key, value in item.items() if key in fields}
+            if "name" not in data or "description" not in data:
+                continue
+            specs.append(SlashCommandSpec(**data))
+        except Exception:
+            continue
+    return tuple(specs)
 
 
-def _command_hidden(name: str) -> bool:
-    """True when *name* (or its root command) is operator-only and not installed."""
-    root = name.split()[0] if " " in name else name
-    spec = COMMAND_BY_NAME.get(root)
-    return bool(spec and spec.operator_only and not _operator_protocols_visible())
+def _all_commands(*, include_extensions: bool = True) -> tuple[SlashCommandSpec, ...]:
+    if not include_extensions:
+        return COMMANDS
+    return COMMANDS + _extension_specs()
+
+
+def _command_by_name(*, include_extensions: bool = True) -> dict[str, SlashCommandSpec]:
+    return {spec.name: spec for spec in _all_commands(include_extensions=include_extensions)}
 
 
 COMMANDS: tuple[SlashCommandSpec, ...] = (
@@ -277,19 +284,6 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         ),
     ),
     SlashCommandSpec(
-        name="/owner_comparison",
-        description="OWNER_COMPARISON comparison/improvement mode",
-        category="Tasks",
-        palette_description="compare MO against a reference system",
-        help_lines=(
-            "/owner_comparison             OWNER_COMPARISON comparison/improvement mode",
-            "                  /owner_comparison <current-path> <reference-path>",
-        ),
-        # Operator-only protocol: dispatchable for all, but hidden from
-        # user-facing help/palette/completion unless the protocol pack is installed.
-        operator_only=True,
-    ),
-    SlashCommandSpec(
         name="/ghost",
         description="toggle Ghost side-check mode on/off or ask Ghost",
         category="Tasks",
@@ -414,7 +408,7 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
     ),
 )
 
-COMMAND_BY_NAME: dict[str, SlashCommandSpec] = {spec.name: spec for spec in COMMANDS}
+COMMAND_BY_NAME: dict[str, SlashCommandSpec] = _command_by_name(include_extensions=False)
 SLASH_COMMANDS: dict[str, str] = {spec.name: spec.description for spec in COMMANDS}
 SLASH_ALIASES: dict[str, str] = {alias: spec.name for spec in COMMANDS for alias in spec.aliases}
 SLASH_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
@@ -425,7 +419,7 @@ SLASH_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
 
 
 HELP_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Work", ("/status", "/goal", "/ghost", "/prt", "/owner_comparison", "/structural-graph", "/learning", "/usage", "/companion")),
+    ("Work", ("/status", "/goal", "/ghost", "/prt", "/structural-graph", "/learning", "/usage", "/companion")),
     ("Sessions", ("/projects", "/sessions", "/session", "/new", "/resume", "/clear", "/undo", "/retry")),
     ("Settings", ("/help", "/init", "/doctor", "/migrate", "/model", "/profile", "/moon", "/hints", "/reload", "/think", "/settings")),
     ("Remote", ("/heartbeat", "/telegram")),
@@ -435,61 +429,107 @@ HELP_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 HELP_ORDER: tuple[str, ...] = tuple(command for _section, commands in HELP_SECTIONS for command in commands)
 
 
-def build_help_text() -> str:
+def _command_hidden(command: str) -> bool:
+    """Return True for commands that should not appear in user-facing recents."""
+    root = str(command or "").strip().split()[0] if str(command or "").strip() else ""
+    spec = _command_by_name().get(root)
+    if spec is None:
+        return True
+    return bool(spec.legacy or not spec.palette)
+
+
+def build_help_text(*, include_extensions: bool = True) -> str:
     lines = ["MO Agent commands:"]
+    command_by_name = _command_by_name(include_extensions=include_extensions)
+    rendered: set[str] = set()
     for section, commands in HELP_SECTIONS:
-        visible = [name for name in commands if not _command_hidden(name)]
+        visible = [name for name in commands if name in command_by_name]
         if not visible:
             continue
         lines.append("")
         lines.append(section)
         for name in visible:
-            spec = COMMAND_BY_NAME[name]
+            spec = command_by_name[name]
+            rendered.add(spec.name)
+            for line in spec.help_lines:
+                lines.append(f"  {line}")
+    extension_by_category: dict[str, list[SlashCommandSpec]] = {}
+    if include_extensions:
+        for spec in _extension_specs():
+            if spec.name in rendered or not spec.help_lines:
+                continue
+            extension_by_category.setdefault(spec.category or "Tasks", []).append(spec)
+    for section, specs in extension_by_category.items():
+        lines.append("")
+        lines.append(section)
+        for spec in specs:
             for line in spec.help_lines:
                 lines.append(f"  {line}")
     return "\n".join(lines)
 
 
-SLASH_COMMAND_HELP = build_help_text()
+SLASH_COMMAND_HELP = build_help_text(include_extensions=False)
 
 
 PALETTE_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Recent", ()),
-    ("Tasks", ("/goal", "/ghost", "/prt", "/owner_comparison", "/structural-graph", "/status", "/usage", "/heartbeat", "/companion")),
+    ("Tasks", ("/goal", "/ghost", "/prt", "/structural-graph", "/status", "/usage", "/heartbeat", "/companion")),
     ("Sessions", ("/projects", "/session", "/session save", "/resume", "/new", "/clear", "/undo", "/retry")),
     ("Settings", ("/settings", "/init", "/migrate", "/model", "/think", "/reload", "/profile", "/telegram", "/help")),
     ("Exit", ("/exit",)),
 )
 
 
-def _palette_entry(command: str) -> tuple[str, str]:
+def _palette_entry(command: str, *, include_extensions: bool = True) -> tuple[str, str]:
+    command_by_name = _command_by_name(include_extensions=include_extensions)
     if " " in command:
         root = command.split()[0]
-        spec = COMMAND_BY_NAME[root]
+        spec = command_by_name[root]
         for entry, desc in spec.palette_entries:
             if entry == command:
                 return entry, desc
-    spec = COMMAND_BY_NAME[command]
+    spec = command_by_name[command]
     return spec.name, spec.palette_desc
 
 
-def build_palette_categories() -> list[tuple[str, list[tuple[str, str]]]]:
+def build_palette_categories(*, include_extensions: bool = True) -> list[tuple[str, list[tuple[str, str]]]]:
     categories: list[tuple[str, list[tuple[str, str]]]] = []
+    command_by_name = _command_by_name(include_extensions=include_extensions)
     for name, commands in PALETTE_ORDER:
-        entries = [_palette_entry(command) for command in commands if not _command_hidden(command)]
+        entries = [
+            _palette_entry(command, include_extensions=include_extensions)
+            for command in commands
+            if (command.split()[0] if " " in command else command) in command_by_name
+        ]
         categories.append((name, entries))
+    if include_extensions:
+        extension_entries: dict[str, list[tuple[str, str]]] = {}
+        for spec in _extension_specs():
+            if not spec.palette:
+                continue
+            entries = list(spec.palette_entries) if spec.palette_entries else [(spec.name, spec.palette_desc)]
+            extension_entries.setdefault(spec.category or "Tasks", []).extend(entries)
+        if extension_entries:
+            existing = {name: entries for name, entries in categories}
+            for name, entries in extension_entries.items():
+                if name in existing:
+                    existing[name].extend(entries)
+                else:
+                    categories.append((name, entries))
     return categories
 
 
-PALETTE_CATEGORIES = build_palette_categories()
+PALETTE_CATEGORIES = build_palette_categories(include_extensions=False)
 DEFAULT_PALETTE_CATEGORY = 1
 
 
 def slash_command_names() -> list[str]:
-    names = list(SLASH_COMMANDS.keys()) + list(SLASH_ALIASES.keys())
-    return sorted({name for name in names if not _command_hidden(name)})
+    commands = _all_commands()
+    names = [spec.name for spec in commands]
+    names.extend(alias for spec in commands for alias in spec.aliases)
+    return sorted(set(names))
 
 
 def slash_command_with_desc() -> list[tuple[str, str]]:
     """Return (command, description) pairs for suggestion display."""
-    return [(cmd, desc) for cmd, desc in SLASH_COMMANDS.items() if not _command_hidden(cmd)]
+    return [(spec.name, spec.description) for spec in _all_commands()]

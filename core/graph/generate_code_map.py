@@ -194,7 +194,7 @@ def _group_order_penalty(name: str) -> int:
     """Product code sits central; tests/docs/root are pushed to the outside."""
     if name in ("tests", "docs"):
         return 2
-    if name in ("root", "devmode"):
+    if name == "root":
         return 1
     return 0
 

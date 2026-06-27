@@ -83,7 +83,7 @@ def startup_header_fragment_lines(agent, gateway) -> list[list[tuple[str, str]]]
     # error on a TUI that looks ready — surface it upfront and point to the fix.
     missing_env = _active_provider_key_missing(agent)
     if missing_env:
-        rows.append([("class:warning", f"⚠ no key for {provider} — add {missing_env} to ~/.mo/.env or run /doctor")])
+        rows.append([("class:low-balance", f"⚠ no key for {provider} — add {missing_env} to ~/.mo/.env or run /doctor")])
     return rows
 
 

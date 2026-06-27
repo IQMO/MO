@@ -8,7 +8,7 @@ import time
 import traceback
 
 from core.provider.provider import clean_provider_error
-from core.workers import ensure_worker_registry
+from core.worker import ensure_worker_registry
 
 
 def _strip_rich_tags(text: str) -> str:
@@ -234,7 +234,7 @@ class TurnRunnerMixin:
             elif str(result or "").startswith("[ABORTED]"):
                 self._add("class:dim", "  stopped current turn")
             if main_worker_id:
-                from core.worker_runtime import summarize_worker_result
+                from core.worker import summarize_worker_result
 
                 result_text = str(result or "")
                 if result_text.startswith("[ABORTED]"):

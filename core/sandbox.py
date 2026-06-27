@@ -549,8 +549,8 @@ def shell_paths_allowed(command: str, allowed_roots: list[str] | None) -> bool:
     raw_command = _path_scan_command_text(command or "")
     # Variable expansion into a path escapes the static scope check; block it
     # when roots are restricted unless it is a current-dir variable. Tilde paths
-    # are deterministic enough to expand and scope-check, which lets owner profile
-    # protocol tools run from ~/.mo/operator without widening access.
+    # are deterministic enough to expand and scope-check, which lets profile
+    # tools run from private home paths without widening access.
     for m in _SHELL_VAR_PATH_PATTERN.finditer(raw_command):
         if m.group(0).startswith("~"):
             end = m.start()

@@ -27,8 +27,9 @@ class PreviewBackend:
             self._base,
             busy=self._busy,
             notice=self._notice,
+            surface="UX preview",
             transcript=tuple(self._transcript[-12:]),
-            composer_hint="preview local; run `python mo.py --ux` for live",
+            composer_hint="preview local; run `python -m UX` for live",
         )
 
     def submit(self, text: str, callbacks: UxCallbacks | None = None) -> str:
@@ -41,9 +42,9 @@ class PreviewBackend:
             callbacks.on_activity("previewing input")
         self._transcript.append(TranscriptItem("user", clean))
         if clean.startswith("/"):
-            reply = local_command_response(clean)
+            reply = local_command_response(clean, model_label=self._base.model_label)
         else:
-            reply = "UX preview captured locally. Start live mode with `python mo.py --ux` or `UX\\run_ux.bat`."
+            reply = "UX preview captured locally. Start live mode with `python -m UX`, `python mo.py --ux`, or `UX\\run_ux.bat`."
         self._transcript.append(TranscriptItem("ux", reply))
         self._busy = False
         self._notice = "Preview mode - local only"
@@ -71,6 +72,7 @@ class RuntimeBackend:
             base,
             busy=self._busy,
             notice=self._notice,
+            surface="UX live",
             transcript=transcript[-12:],
             composer_hint="live runtime; /exit closes UX",
         )
@@ -100,12 +102,15 @@ class RuntimeBackend:
                 callbacks.on_activity("")
 
 
-def local_command_response(text: str) -> str:
+def local_command_response(text: str, *, model_label: str = "") -> str:
     command = str(text or "").strip().lower()
     if command in {"/help", "/h"}:
-        return "UX commands: /help, /status, /exit. Runtime slash commands are available only in --live mode."
+        return "UX commands: /help, /status, /model, /exit. Runtime slash commands are available only in --live mode."
     if command == "/status":
         return "UX preview status: isolated, local-only, runtime disconnected."
+    if command == "/model":
+        label = str(model_label or "model not configured").strip()
+        return f"UX preview model: {label}. Runtime model switching is available only in --live mode."
     if command in {"/exit", "/quit", "/q"}:
         return "[EXIT]"
     return f"Unknown UX preview command: {text.split()[0]}"
@@ -117,4 +122,4 @@ def read_only_snapshot(handle: object) -> SessionSnapshot:
     snapshot = snapshot_fn()
     rows = snapshot.board or (BoardRow("readonly", "Idle - no active runtime task board", "pending", kind="read-only"),)
     lanes = snapshot.lanes or (LaneSnapshot("runtime", "ready", "MO runtime loaded", snapshot.model_label),)
-    return replace(snapshot, board=rows, lanes=lanes, composer_hint="read-only mode; no messages are sent")
+    return replace(snapshot, board=rows, lanes=lanes, surface="UX read-only", composer_hint="read-only mode; no messages are sent")

@@ -810,8 +810,7 @@ def clear_current_board_if_foreign_session(active_session_id: str, *, path: str 
     session than the active one.
 
     A new session with no board of its own must never show (to watchers, ``/status``, or
-    the resume fast-path) a stale board left by a prior session — live mo-1782304565: an
-    OWNER_INTEGRITY_AUDIT turn kept mo-1782300201's OWNER_MAINTENANCE board in current.json. Same-session state is
+    the resume fast-path) a stale board left by a prior session. Same-session state is
     preserved (the session ids match, so nothing is cleared), and the append-only ledger
     stays the authority, so a legitimate same-session resume is unaffected (it falls back
     to the ledger). Returns True if it cleared. Best-effort: never raises into the turn."""
@@ -837,8 +836,8 @@ def clear_current_board_if_foreign_session(active_session_id: str, *, path: str 
 def clear_current_board_if_empty(*, path: str | Path | None = None) -> bool:
     """Clear ``current.json`` when it only contains a boardless/empty working copy.
 
-    Boardless owner-protocol turns intentionally have no task rows. They should not
-    leave ``current.json`` looking like an active taskboard with zero rows, because
+    Boardless extension turns intentionally have no task rows. They should not leave
+    ``current.json`` looking like an active taskboard with zero rows, because
     status/watchers interpret that as live work. The append-only ledger remains the
     durable audit trail; this only removes the fast-access working copy.
     """

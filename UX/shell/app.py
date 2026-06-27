@@ -20,6 +20,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MO Agent's isolated next-generation terminal UX.")
     parser.add_argument("--width", type=int, help="render width; defaults to the terminal width")
     parser.add_argument("--once", action="store_true", help="render once and exit")
+    parser.add_argument("--preview", action="store_true", help="run the local UX preview backend instead of MO runtime")
     parser.add_argument("--read-only", action="store_true", help="load MO runtime state without sending messages")
     parser.add_argument("--live", action="store_true", help="send messages through MO Gateway.run_turn")
     parser.add_argument("--smoke", action="store_true", help="run local UX smoke checks and exit")
@@ -150,15 +151,29 @@ def main(argv: list[str] | None = None) -> None:
     if args.smoke:
         console.print(run_smoke(width=args.width), markup=False)
         return
-    if args.live and args.read_only:
-        raise SystemExit("--live and --read-only are mutually exclusive")
+    selected_modes = [name for name, enabled in (("preview", args.preview), ("live", args.live), ("read-only", args.read_only)) if enabled]
+    if len(selected_modes) > 1:
+        raise SystemExit("--preview, --live, and --read-only are mutually exclusive")
     if args.message and args.read_only:
         raise SystemExit("--message cannot be used with --read-only")
     if args.read_only:
         handle = _create_runtime_or_exit(console)
         UxPreviewApp(console).run(once=True, snapshot=read_only_snapshot(handle))
         return
-    if args.live:
+    if args.preview:
+        if args.message:
+            console.print(
+                run_single_message(UxController(PreviewBackend(preview_landing_snapshot())), args.message, width=console.width),
+                markup=False,
+            )
+            return
+        controller = UxController(PreviewBackend(preview_landing_snapshot()))
+        if args.once:
+            UxPreviewApp(console).run(once=True, controller=controller)
+        else:
+            _run_tui(controller)
+        return
+    if args.live or not selected_modes:
         handle = _create_runtime_or_exit(console)
         controller = UxController(RuntimeBackend(handle))
         if args.message:
@@ -169,17 +184,6 @@ def main(argv: list[str] | None = None) -> None:
         else:
             _run_tui(controller)
         return
-    if args.message:
-        console.print(
-            run_single_message(UxController(PreviewBackend(preview_landing_snapshot())), args.message, width=console.width),
-            markup=False,
-        )
-        return
-    controller = UxController(PreviewBackend(preview_landing_snapshot()))
-    if args.once:
-        UxPreviewApp(console).run(once=True, controller=controller)
-    else:
-        _run_tui(controller)
 
 
 if __name__ == "__main__":

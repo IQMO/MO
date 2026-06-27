@@ -13,7 +13,7 @@ from typing import Any
 
 from ..atomic_write import atomic_write_text
 from ..text_safety import contains_secret_value
-from ..threat_scan import scan_text
+from ..gates.threat_scan import scan_text
 
 
 @dataclass(frozen=True)

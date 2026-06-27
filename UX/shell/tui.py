@@ -29,7 +29,7 @@ SPINNER_FRAMES: tuple[str, ...] = ("◜", "◠", "◝", "◞", "◡", "◟")
 COMMAND_HINTS: tuple[tuple[str, str], ...] = (
     ("/help", "show available commands"),
     ("/status", "show UX/runtime status"),
-    ("/models", "model/provider controls when runtime supports them"),
+    ("/model", "show model/provider status"),
     ("/exit", "close this UX"),
     ("@path", "attach path text to the next prompt"),
 )
@@ -197,7 +197,7 @@ def _hero_fragments(controller: UxController, animation: TuiAnimation | None = N
     fragments.extend(_centered_lines(LOGO_LINES, width, "class:logo"))
     fragments.append(("", "\n"))
     title = f"MO UX  {snapshot.model_label}"
-    hints = "/help   |   /models   |   Shift+Tab plan mode   |   @file context"
+    hints = "/help   |   /model   |   Shift+Tab plan mode   |   @file context"
     box_width = min(width - 10, max(72, len(hints) + 8))
     left = " " * max(0, (width - box_width) // 2)
     fragments.extend(

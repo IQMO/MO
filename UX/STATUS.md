@@ -12,6 +12,11 @@ It supersedes chat summaries and older proposal notes for the `UX/` folder.
   `MO_NEXT_UX=1`. Default `python mo.py` behavior is unchanged.
 - Runtime truth stays outside the UX layer. Gateway, taskboard, and runtime
   adapters own truth; UX renders immutable `SessionSnapshot` values.
+- Direct UX launch defaults to live runtime mode. Local preview requires
+  `--preview` or `UX\run_preview.bat`.
+- Live UX uses real MO in its own UX process by submitting through
+  `Gateway.run_turn(route_source="ux")`; it does not import or replace the
+  current `interface/` package.
 - Preview mode is local-only. It labels local preview replies as `UX`, not `MO`,
   and tells the operator how to start live mode.
 - Idle rails are static. Spinner motion appears only while a turn is actually
@@ -24,11 +29,14 @@ It supersedes chat summaries and older proposal notes for the `UX/` folder.
 | Mode | Command | Runtime effect |
 | --- | --- | --- |
 | Interactive preview | `UX\run_preview.bat` | Local-only; no Gateway turn. |
+| Explicit preview | `python -m UX --preview` | Local-only; no Gateway turn. |
 | Static preview smoke | `python -m UX --smoke` | Local-only smoke render. |
-| Static one-screen render | `python -m UX --once` | Local-only render. |
+| Static preview render | `python -m UX --preview --once` | Local-only render. |
+| Direct live UX | `python -m UX` | Sends real turns through Gateway as route source `ux`. |
+| Static live render | `python -m UX --once` | Creates runtime snapshot; sends no turn. |
 | Read-only runtime | `python -m UX --read-only` | Creates runtime snapshot; sends no turn. |
-| Live UX launcher | `UX\run_ux.bat` | Sends real turns through Gateway. |
-| Live via MO entrypoint | `python mo.py --ux` | Lazy-loads UX and sends real turns through Gateway. |
+| Live UX launcher | `UX\run_ux.bat` | Sends real turns through Gateway as route source `ux`. |
+| Live via MO entrypoint | `python mo.py --ux` | Lazy-loads UX and sends real turns through Gateway as route source `ux`. |
 | One live message | `python mo.py --ux --message "..."` | Sends one real provider-backed turn. |
 
 ## Implemented
@@ -41,6 +49,9 @@ It supersedes chat summaries and older proposal notes for the `UX/` folder.
   lock.
 - Background submit worker so live Gateway turns do not run on the render/input
   thread.
+- Runtime-backed snapshots render their actual UX mode (`UX live`,
+  `UX read-only`, or `UX runtime bridge`) instead of looking like preview.
+- Direct UX entry defaults to live runtime; preview is explicit.
 - Conservative runtime lane adapter: reported lanes render as-is; absent lane
   truth falls back to a neutral runtime row.
 - Opt-in `mo.py` promotion hook without default replacement and without top-level
@@ -48,19 +59,29 @@ It supersedes chat summaries and older proposal notes for the `UX/` folder.
 
 ## Verification
 
-Latest verified UX code state for the current opt-in UX:
+Latest verified UX-only code state for the current opt-in UX:
 
-- `python -m pytest -q` -> `2500 passed`
-- `python -m ruff check .` -> clean
-- `python -m UX --smoke` -> passed
-- `python -m UX --read-only` -> passed
-- Push privacy guard -> clean
-
-Focused verification for the preview/spinner correction:
-
-- `python -m pytest -q tests\test_ux_tui.py tests\test_ux_controller.py tests\test_ux_app.py tests\test_ux_contract.py tests\test_ux_runtime.py` -> `46 passed`
+- `python -m pytest tests\test_ux_tui.py tests\test_ux_controller.py tests\test_ux_app.py tests\test_ux_contract.py tests\test_ux_runtime.py -q` -> `49 passed`
 - `python -m ruff check UX tests\test_ux_tui.py tests\test_ux_controller.py tests\test_ux_app.py tests\test_ux_contract.py tests\test_ux_runtime.py` -> clean
-- `python -m UX --smoke` -> preview transcript labels local output as `UX`
+- `python -m UX --smoke` -> passed
+- `python -m UX --preview --message hi --width 80` -> passed as local-only preview
+- `python -m UX --preview --once --width 80` -> passed
+- `python -m UX --once --width 80` -> passed with `surface: UX live`
+- `python -m UX --read-only --width 80` -> passed
+- `python -m UX --message hi --width 80` -> reached live runtime and rendered
+  `surface: UX live`; provider socket access was blocked by local sandbox
+  `WinError 10013`
+
+Focused verification for the preview command-truth correction:
+
+- The prompt-toolkit UX hero and command palette advertise `/model`, not the
+  nonexistent `/models`.
+- Preview `/model` returns the displayed provider/model instead of an unknown
+  command response.
+- Preview transcript still labels local output as `UX`.
+- Live runtime tests verify Gateway receives `route_source="ux"`.
+- Direct `python -m UX --message ...` tests verify message handling defaults to
+  live runtime instead of preview.
 
 ## CPD Record
 

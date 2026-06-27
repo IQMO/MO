@@ -262,7 +262,7 @@ def _next_ux_requested(args: list[str]) -> bool:
 
 def _run_next_ux(args: list[str]) -> None:
     ux_args = [arg for arg in args if arg != "--ux"]
-    explicit_mode = any(arg in {"--live", "--read-only", "--smoke", "--help", "-h"} for arg in ux_args)
+    explicit_mode = any(arg in {"--preview", "--live", "--read-only", "--smoke", "--help", "-h"} for arg in ux_args)
     if not explicit_mode:
         ux_args.insert(0, "--live")
     module = importlib.import_module("UX.shell.app")
@@ -276,7 +276,7 @@ def _print_cli_help() -> None:
     print()
     print("Usage:")
     print("  mo                                  # interactive TUI")
-    print("  mo --ux                             # interactive next UX preview, live runtime")
+    print("  mo --ux                             # interactive next UX live runtime")
     print("  mo -p \"prompt\" | --prompt \"prompt\"  # run one non-interactive turn (scriptable)")
     print("  mo [--init]")
     print("  mo [--migrate-state [dry-run|apply|move] [--confirm]]")

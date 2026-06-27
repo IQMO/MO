@@ -241,7 +241,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Memory recall | Past-turn recall ranked by relevance (FTS5 bm25). When embeddings are enabled, keyword and meaning-based recall are **fused** (reciprocal-rank fusion), so paraphrases that share meaning but not words are still found — embeddings via an OpenAI-compatible endpoint (no dependency) or a fully-offline on-device ONNX model (optional `fastembed`). Off by default; never touches the internet, only your own history. Recall quality is **measured** (`python -m core.learning.recall_benchmark`, recall@K) and guarded by a regression test |
 | `/goal` | Autonomous multi-step work with deterministic completion auditing |
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
-| PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings, including proven overengineering/duplication as maintainability risk; optional auto-regression-tests for fixed bugs (`prt.regression_tests`) |
+| PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings, including proven overengineering/duplication as maintainability risk; optional local maintainer regression tests for fixed bugs (`prt.regression_tests`) |
 | Learning loop | Recurring-pattern and workflow suggestions stay pending until you confirm; approved reusable guidance becomes local skill packs, scoped conventions can persist to matching code areas, and direct corrections/term definitions apply to your local profile |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
@@ -291,9 +291,9 @@ home, provider keys, personal profile, project/server knowledge, learned terms,
 or session memory. Those belong in each user's `~/.mo` runtime state.
 
 Ignored local docs may exist in a maintainer checkout, but they are not product
-authority and are not shipped. Owner run records, comparison artifacts, and
-self-maintenance history belong in `~/.mo/memory/...`; the public repo should
-carry only product-safe source and tracked docs.
+authority and are not shipped. Private run records, comparison artifacts, and
+maintenance history belong in `~/.mo/memory/...`; the public repo should carry
+only product-safe source and tracked docs.
 
 MO's personalization is part of the product idea, but the personal data is not
 part of the product defaults. A new user gets the same machinery empty, then MO

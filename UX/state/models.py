@@ -55,6 +55,7 @@ class SessionSnapshot:
     product: str = "MO Agent"
     project: str = ""
     runtime: str = ""
+    surface: str = "isolated UX"
     provider: str = ""
     model: str = ""
     busy: bool = False
@@ -77,6 +78,7 @@ def demo_snapshot() -> SessionSnapshot:
     return SessionSnapshot(
         project="E:\\MO-clean",
         runtime="isolated UX preview",
+        surface="UX preview",
         provider="opencode",
         model="deepseek-v4-pro",
         busy=True,
@@ -98,5 +100,5 @@ def demo_snapshot() -> SessionSnapshot:
                 "New UX is isolated: model, render, controller, adapter. Runtime truth stays outside display code.",
             ),
         ),
-        composer_hint="preview local; run `python mo.py --ux` for live",
+        composer_hint="preview local; run `python -m UX` for live",
     )

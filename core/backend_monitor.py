@@ -53,7 +53,6 @@ SAFE_EVENT_TYPES = {
     "slash_command",
     "context_handoff",
     "consistency_boundary",
-    "owner_integrity_audit_reporting_truth",
     "ghost_event",
     "board_advance",
     "prt_event",
@@ -289,9 +288,8 @@ class BackendMonitor:
         if self.process and self.process.poll() is None:
             return
         root = Path(__file__).resolve().parents[1]
-        # The monitor window is an owner-only diagnostic launcher in the operator
-        # pack, now resolved from ~/.mo/operator (or MO_OPERATOR_PACK), not the
-        # checkout. Absent on user clones, where open_window simply no-ops.
+        # Optional local diagnostic launchers resolve from the profile extension
+        # root, not the checkout. Absent on user clones, open_window no-ops.
         from .path_defaults import operator_pack_root
         monitor = operator_pack_root() / "mo_monitor.py"
         if not monitor.exists():
@@ -326,7 +324,7 @@ def latest_monitor_path() -> Path | None:
     return files[-1] if files else None
 
 
-# Surfaces whose turns are NOT part of a Main-MO logical run (DEVMODE/OWNER_COMPARISON/etc.) and
+# Surfaces whose turns are NOT part of a Main-MO logical run and
 # must be excluded from its economy record — Ghost/desktop activity shares the same
 # per-process monitor file but is a separate entity (see the multi-instance proposal).
 GHOST_SURFACES = frozenset({"desktop", "ghost", "companion"})
@@ -341,8 +339,8 @@ def economy_summary(
 ) -> dict[str, Any]:
     """Deterministic provider/tool/error/compression counts from a backend monitor.
 
-    The authoritative source of session economy — used by the OWNER_MAINTENANCE closeout
-    and the operator economy helper so the record can never be estimated or stale.
+    The authoritative source of session economy so records never need to be
+    estimated or stale.
     Tool errors are counted from ``tool_result.error``/``is_error`` and blocks from
     ``tool_result.blocked`` (NOT only the rarer ``tool_error``/``sandbox_blocked``
     event types — those miss a failed ``tool_result`` that later recovered).

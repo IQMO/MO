@@ -4,12 +4,12 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 
 ## Runtime Truth
 - `core/prompts/system.md` — MO runtime behavior prompt.
-- `core/owner_protocols.py`, `core/self_maintenance/` — owner-only activation, preflight, and stop gates; inert without the owner's profile protocol files and owner token.
+- `core/local_extensions.py` — neutral profile-extension bridge; empty profiles load no private commands, hooks, board rows, or closeout machinery.
 
 ## Core Surfaces
 - `core/gateway.py` — turn coordination and taskboard lifecycle (flat by design).
 - `core/agent/` — agent hub, turn loop, slash commands, PRT, utils.
-- `core/behavior_gates.py` / `core/final_gates.py` / `core/claim_verification.py` — declarative enforcement registries the turn loop routes through: input-phase (threat scan + malicious-code refusal, before any provider call) and final-phase answer enforcement (contract, self-protocol truth, done-claim, verify-edits, and the verify-before-claiming claim gates). Owner-protocol terminal stop gates stay a separate mechanism in the turn loop.
+- `core/gates/behavior_gates.py` / `core/gates/final_gates.py` / `core/gates/claim_verification.py` — declarative enforcement registries the turn loop routes through: input-phase (threat scan + malicious-code refusal, before any provider call) and final-phase answer enforcement (contract, task truth, done-claim, verify-edits, and the verify-before-claiming claim gates). Private extension gates load only through `core/local_extensions.py`.
 - `core/work_patterns.py`, `core/agent/agent_dna.py` — compact internal work guidance, including the lean-build ladder that checks reuse/deletion/stdlib/native options before adding code.
 - `core/tasking/` — `core/tasking/task_board.py`, contract gate, task manager, evidence, and procedure rows seeded from work patterns.
 - `core/review/` — diff review pipeline, scorer, iteration, finding patterns; PRT can flag proven overengineering as maintainability risk.
@@ -29,17 +29,18 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - Logical profile-state `memory/traces/` — trace artifacts and validator input.
 - Logical profile-state `memory/taskboards/` — append-only taskboard snapshots + `current.json`.
 - Logical profile-state `memory/structural_graph/` — graph, code map, focused map artifacts.
-- Owner-only session records are gitignored/local only; never tracked or shipped.
+- Owner-only profile-extension records live under `~/.mo/operator` (or explicit profile env overrides), are gitignored/local only, and are never tracked or shipped.
 
 ## Verification
-- Focused tests first: `python -m pytest tests/<target>.py -q`.
-- Tiered sweeps: `-m smoke` (~250 tests) or `-m "smoke or unit"` (~1,615 tests) — auto-tiered by conftest.
-- Full suite (parallel): `python -m pytest -q -n auto --dist loadfile` (~1 min). A session fixture builds the repo code graph once into a shared cache so workers load it instead of each re-parsing the tree. Serial `python -m pytest -q` works too (~2x slower).
+- Maintainer-local tests live in ignored `tests/`; they are used before CPD but must never be tracked or pushed.
+- The local pytest bootstrap runs the public/private guard before broad collection so privacy/term failures surface first.
+- Focused tests first when the overlay is present: `python -m pytest tests/<target>.py -q`.
+- Tiered/full sweeps remain local-only: `-m smoke`, `-m "smoke or unit"`, or `python -m pytest -q -n auto --dist loadfile`.
 - Do not use Node tooling; this is a Python project.
 
 ## Working Rules
 - Evidence before claims; use files, traces, tests, and runtime signals.
 - Prefer existing MO systems over new parallel mechanisms.
-- Keep protocols split into modules, not oversized root prompts.
+- Keep product guidance split into modules, not oversized root prompts.
 - Never print secrets or credential values.
-- Boundary: owner-only material lives under profile state (`~/.mo`, including `~/.mo/operator` or `MO_OPERATOR_PACK`) or ignored local-only paths and never ships; a pre-push guard blocks leaks. Operator-only commands use `operator_only=True`. See AGENTS.md "Boundary".
+- Boundary: owner-only private profile-extension material (`~/.mo/operator`) and maintainer QA live under profile state or ignored local-only paths and never ship; a pre-push guard blocks leaks and tracked `tests/`. Private commands come only from profile extensions. See AGENTS.md "Boundary".

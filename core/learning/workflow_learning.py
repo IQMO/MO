@@ -18,7 +18,7 @@ from ..atomic_write import atomic_write_text
 from ..env_utils import int_env
 from ..jsonl_utils import read_jsonl
 from ..text_safety import contains_secret_value
-from ..threat_scan import scan_text
+from ..gates.threat_scan import scan_text
 
 _SIGNAL_MARKERS = (
     "next time", "from now on", "always", "never", "when i ask", "when I ask",

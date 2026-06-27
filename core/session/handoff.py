@@ -18,7 +18,7 @@ from ..coordination_state import goal_summary_lines, worker_summary_lines
 from ..provider.provider_audit import LOG_PATH as PROVIDER_AUDIT_LOG_PATH
 from ..tasking.task_board import read_recent_snapshots
 from ..tasking.task_board_context import compile_board_context, compile_board_context_from_snapshot
-from ..workers import extract_worker_paths
+from ..worker import extract_worker_paths
 from ..text_utils import cap_by_tokens, token_aware_truncation_enabled
 
 HANDOFF_HEADER = "MO HANDSOFF CONTEXT"
@@ -850,19 +850,6 @@ def _artifact_references(
         "config.example.yaml",
     ]
     candidates.extend(name for name in static_names if Path(name).exists())
-
-    # The active DEVMODE run's runtime-owned manifest.json — one authoritative map of the
-    # run's outputs (monitor, economy, taskboard, artifacts, status). A resumed model
-    # should see this single index instead of rebuilding from scattered paths (orientation
-    # only, not proof by itself).
-    devmode_dir = getattr(agent, "_active_devmode_session_dir", None)
-    if devmode_dir is not None:
-        try:
-            manifest = Path(devmode_dir) / "manifest.json"
-            if manifest.is_file():
-                candidates.append(str(manifest))
-        except Exception:
-            pass
 
     for line in changed or []:
         if line.startswith("##"):

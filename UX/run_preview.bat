@@ -41,18 +41,18 @@ for %%A in (%*) do (
 
 if "%~1"=="" (
   if defined UX_WIDTH (
-    set "UX_ARGS=--width %UX_WIDTH%"
+    set "UX_ARGS=--preview --width %UX_WIDTH%"
   ) else (
-    set "UX_ARGS="
+    set "UX_ARGS=--preview"
   )
 ) else if "%HAS_WIDTH%"=="0" (
   if defined UX_WIDTH (
-    set "UX_ARGS=--width %UX_WIDTH% %*"
+    set "UX_ARGS=--preview --width %UX_WIDTH% %*"
   ) else (
-    set "UX_ARGS=%*"
+    set "UX_ARGS=--preview %*"
   )
 ) else (
-  set "UX_ARGS=%*"
+  set "UX_ARGS=--preview %*"
 )
 
 %PY_CMD% -m UX %UX_ARGS%

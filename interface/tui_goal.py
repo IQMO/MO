@@ -7,7 +7,7 @@ import traceback
 from typing import Any
 
 from core.provider.provider import clean_provider_error
-from core.workers import ensure_worker_registry
+from core.worker import ensure_worker_registry
 from .formatting import format_k
 
 

@@ -41,7 +41,6 @@ TUI_STYLE_DICT: dict[str, str] = {
     "ghost-route-blocked": "#cc4444 bold",
     "dim": "#666666",
     "info": "#00cccc",
-    "warning": "#ffae42 bold",
     "input-placeholder": "#555555 italic",
     "notification-idle": "#00cccc italic",
     "notification-prt": "#bb86fc bold",

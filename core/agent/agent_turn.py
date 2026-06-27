@@ -44,20 +44,11 @@ from .agent_utils import (
 from ..graph.code_graph import build_code_graph_context, should_include_code_graph_context
 from ..coordination_state import build_main_coordination_context
 from ..mo_control_context import build_mo_control_context, should_include_mo_control_context
-from ..owner_protocols import (
-    is_owner_maintenance_activation,
-    is_owner_interface_audit_activation,
-    is_owner_comparison_activation,
-    is_owner_dedup_activation,
-)
-from ..self_maintenance.preflight import (
-    build_self_capability_preflight_context,
-    should_include_self_capability_preflight,
-)
+from .. import local_extensions
 from ..project_context import build_project_context
 from ..work_patterns import build_work_pattern_context
 from ..workspace_awareness import build_workspace_awareness, should_include_workspace_awareness
-from ..security_check import run_turn_security_check
+from ..gates.security_check import run_turn_security_check
 from interface.ghost import sanitize_proposal_for_context
 from interface.task_board_view import render_plain
 
@@ -68,7 +59,6 @@ from ..gates.post_provider_pipeline import _CONTINUE, _GateContext, _run_post_pr
 
 # Re-export for backward compat (tests)
 from ..gates.post_provider_pipeline import _no_tool_evidence_continuation
-from ..self_maintenance.devmode_closeout import owner_maintenance_final_allows_stop  # test monkeypatch target
 
 def _emit_security_check(turn_modified_files, monitor, final_text=None):
     """Emit a turn-end security check on modified files (and optionally final_text)."""
@@ -94,8 +84,7 @@ _CONTEXT_SOURCE_SPECS = (
     ("workspace", "Workspace / worker awareness", 3, "coordination context only; not proof of code correctness", 1600),
     ("project_context", "Project-local instructions (current working directory)", 3, "instructions from the CURRENT cwd, which may not be the operator's named project; verify this is the right project and check current files before factual claims", 3200),
     ("mo_control", "MO control workspace authority", 3, "active policy/orientation for cross-repo/server work; live checks still win", 2600),
-    ("self_capability", "MO self-capability preflight", 1, "hard gate for MO self/OWNER_MAINTENANCE work; inventory existing capabilities before edits/builds", 7200),
-    ("devmode_output", "OWNER_MAINTENANCE runtime-owned output directory", 1, "authoritative private artifact directory for this OWNER_MAINTENANCE run; never hand-roll a memory/devmode timestamp", 1200),
+    ("local_extension", "Local extension context", 1, "profile-owned extension guidance for this turn; verify with tools before claims", 7200),
     ("pending_interrupted", "Paused interrupted work", 3, "continuity context only; do not resume unless relevant to current request", 1100),
     ("reasoning", "Runtime reasoning preference", 4, "runtime preference only; evidence and current task still win", 400),
     ("memory", "Recalled past interactions", 5, "orientation only; not tool receipts or current proof", 2400),
@@ -116,8 +105,7 @@ _CONTEXT_CHAR_FIELDS = {
     "workspace": "workspace_chars",
     "project_context": "project_context_chars",
     "mo_control": "mo_control_chars",
-    "self_capability": "self_capability_chars",
-    "devmode_output": "devmode_output_chars",
+    "local_extension": "local_extension_chars",
     "code_graph": "code_graph_chars",
     "pending_interrupted": "pending_interrupted_chars",
     "heartbeat": "heartbeat_chars",
@@ -223,14 +211,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         last_tool_batch_signature = ""
         repeated_tool_batch_count = 0
         final_gates_fired: set = set()  # once-per-turn guards for final-phase gates
-        self_protocol_truth_continuations = 0  # bound the self-protocol completion-truth gate (mirror PROTOCOL_STOP_GATE_MAX)
-        contract_gate_continuations = 0  # bound the closeout contract gate so it can never loop unbounded (mirror PROTOCOL_STOP_GATE_MAX)
-        owner_integrity_audit_reporting_truth_continuations = 0  # OWNER_INTEGRITY_AUDIT reports may need recounting after corrective artifact edits.
-        # Bound the owner-only protocol terminal-stop gates: each may re-prompt a
-        # few times to push for a clean closeout, but must not loop to
-        # max_provider_requests when a near-terminal completion keeps tripping the
-        # regex. After the cap, allow the stop with a logged disagreement note.
-        protocol_stop_gate_continuations: dict[str, int] = {}
+        task_truth_continuations = 0
+        contract_gate_continuations = 0
+        extension_gate_continuations: dict[str, int] = {}
         # Snapshot rows already completed at TURN START so the closing contract
         # gate audits every task completed during THIS turn (across all provider
         # rounds), while still excluding rows completed in prior turns. Using a
@@ -251,7 +234,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         self._turn_health_handed_off = False
         self._turn_health_tools_blocked = False
         self._turn_health_tools_blocked_count = 0
-        self._owner_maintenance_completed_board_tool_blocked_count = 0
+        self._extension_completed_board_tool_blocked_count = 0
         sanitize_meta = self.session.sanitize_for_provider(
             max_chars=None
             if getattr(self, "context_handoff_enabled", True)
@@ -461,25 +444,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # === Phase 2c: dispatch tool calls or finalize text ===
             # Check for tool calls
             if response.tool_calls:
-                # A completed OWNER_MAINTENANCE board must not reopen broad discovery, but it
-                # STILL needs its closeout tools: owning economy.md, writing the session
-                # artifacts, running the final pytest. Exempt those — blocking them
-                # deadlocked legitimate closeouts to [OWNER_MAINTENANCE BLOCKED] (mo-1782077188).
-                if (self._owner_maintenance_completed_taskboard_should_stop_tools(user_input, task_board)
-                        and not self._owner_maintenance_tool_calls_are_closeout_only(response.tool_calls)):
-                    self._owner_maintenance_completed_board_tool_blocked_count += 1
-                    if monitor:
-                        monitor.emit("turn_health", {
-                            "tool_rounds": tool_rounds,
-                            "max_tool_rounds": self.max_tool_rounds,
-                            "level": "blocked",
-                            "action": "owner_maintenance_completed_board_tool_blocked",
-                            "blocked_count": self._owner_maintenance_completed_board_tool_blocked_count,
-                        })
-                    if self._owner_maintenance_completed_board_tool_blocked_count <= 2:
-                        self.session.add_assistant(self._owner_maintenance_completed_taskboard_tool_instruction())
-                        continue
-                    return self._owner_maintenance_completed_taskboard_persistent_tool_text()
                 # Adaptive turn management: block tools after handoff budget exhausted
                 if getattr(self, '_turn_health_tools_blocked', False):
                     self._turn_health_tools_blocked_count += 1
@@ -580,12 +544,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                             "diagnostics": diag,
                         })
                     final_text = self._doom_loop_block_text(tool_calls_data, repeated_tool_batch_count)
-                    # A doom-loop force-stop returns here directly, bypassing the closeout
-                    # pipeline — so an OWNER_MAINTENANCE run could be left with a false
-                    # [OWNER_MAINTENANCE COMPLETE] summary beside open task rows (live
-                    # mo-1782487827). Convert it to a recoverable [OWNER_MAINTENANCE BLOCKED]
-                    # boundary so the existing reconciler fixes summary.md + manifest.
-                    final_text = self._owner_maintenance_doom_loop_boundary(user_input, final_text)
+                    extension_boundary = local_extensions.completion_boundary(self, user_input, final_text)
+                    if extension_boundary:
+                        final_text = extension_boundary
                     notes = self._record_turn_memory_and_learning(user_input, final_text)
                     final_text = self._append_after_turn_notes(final_text, notes)
                     self.session.add_assistant(final_text)
@@ -653,7 +614,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     # THE SINGLE GATE
                     operator_ok = self._operator_approved(user_input, name, arguments)
                     effective_roots = self._effective_allowed_roots_for_tool(user_input, name, arguments)
-                    block_reason = self._devmode_output_path_block_reason(user_input, name, arguments) or \
+                    block_reason = local_extensions.tool_block_reason(self, user_input, name, arguments) or \
                         self._self_mutation_block_reason(user_input, name, arguments) or guard_tool_call(
                         name, arguments,
                         lane=self._effective_lane(),
@@ -696,12 +657,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         if task_board and (task_board.tasks or name == "set_plan") and not self._tool_result_is_error(result):
                             before_board = _task_board_change_fingerprint(task_board)
                             advanced = self._advance_task_board_after_tool(task_board, name, arguments, monitor=monitor)
-                            # Honest result: if set_plan was refused because an owner
-                            # protocol owns the board, say so — otherwise execute_set_plan's
+                            # Honest result: if set_plan was refused because a local
+                            # extension owns the board, say so — otherwise execute_set_plan's
                             # "Plan set" confirmation misleads MO into retrying (observed
                             # live mo-1782437654: 3 wasted set_plan calls before fallback).
-                            if name == "set_plan" and not advanced and self._board_is_protocol_owned(task_board):
-                                result = ("set_plan was not applied: this taskboard is managed by an active protocol. "
+                            if name == "set_plan" and not advanced and self._board_is_extension_owned(task_board):
+                                result = ("set_plan was not applied: this taskboard is managed by a local extension. "
                                           "Advance its rows with complete_task as you finish each phase; do not call set_plan here.")
                             if advanced or _task_board_change_fingerprint(task_board) != before_board:
                                 record_snapshot(task_board, "updated")
@@ -820,26 +781,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 return final_text
 
 
-            # --- Post-provider gate pipeline ---
-            # Assemble the gate context from run_turn locals, then run the
-            # declarative pipeline (gates fire continuations; actions advance state).
-            owner_maintenance_active = is_owner_maintenance_activation(user_input)
-            owner_comparison_active = is_owner_comparison_activation(user_input)
-            owner_interface_audit_active = is_owner_interface_audit_activation(user_input)
-            owner_dedup_active = is_owner_dedup_activation(user_input)
             total_tool_calls = sum(tool_call_counts.values())
-            no_evidence = _no_tool_evidence_continuation(
-                owner_maintenance_active=owner_maintenance_active,
-                owner_comparison_active=owner_comparison_active,
-                owner_interface_audit_active=owner_interface_audit_active,
-                total_tool_calls=total_tool_calls,
-                devmode_taskboard_completed=self._owner_maintenance_taskboard_completed(task_board),
-            )
-            devmode_monitor_path = getattr(monitor, "path", None) if monitor is not None else None
-            devmode_run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
-            devmode_frozen_errs = getattr(self, "_devmode_closeout_frozen_errors", None)
-            devmode_frozen_economy = getattr(self, "_devmode_closeout_frozen_economy", None)
-            devmode_session_dir = getattr(self, "_active_devmode_session_dir", None)
 
             ctx = _GateContext()
             ctx.user_input = user_input
@@ -853,35 +795,22 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             ctx.on_board_update = on_board_update
             ctx.on_board_event = on_board_event
             ctx.final_gates_fired = final_gates_fired
-            ctx.protocol_stop_gate_continuations = protocol_stop_gate_continuations
+            ctx.extension_gate_continuations = extension_gate_continuations
             ctx.contract_gate_continuations = contract_gate_continuations
-            ctx.self_protocol_truth_continuations = self_protocol_truth_continuations
-            ctx.owner_integrity_audit_reporting_truth_continuations = owner_integrity_audit_reporting_truth_continuations
+            ctx.task_truth_continuations = task_truth_continuations
             ctx.turn_initial_completed_ids = turn_initial_completed_ids
             ctx.turn_modified_files = turn_modified_files
             ctx.tool_call_counts = tool_call_counts
             ctx.tool_error_counts = tool_error_counts
-            ctx.owner_maintenance_active = owner_maintenance_active
-            ctx.owner_comparison_active = owner_comparison_active
-            ctx.owner_interface_audit_active = owner_interface_audit_active
-            ctx.owner_dedup_active = owner_dedup_active
-            ctx.no_evidence = no_evidence
-            ctx.devmode_monitor_path = devmode_monitor_path
-            ctx.devmode_run_ids = devmode_run_ids
-            ctx.devmode_frozen_errs = devmode_frozen_errs
-            ctx.devmode_frozen_economy = devmode_frozen_economy
-            ctx.devmode_session_dir = devmode_session_dir
-            ctx.protocol_closeout_text = ""
             ctx.total_tool_calls = total_tool_calls
             ctx.response = response
 
             result = _run_post_provider_pipeline(self, ctx)
             if result is _CONTINUE:
                 # Thread mutable counters back to run_turn locals for the next iteration.
-                protocol_stop_gate_continuations = ctx.protocol_stop_gate_continuations
+                extension_gate_continuations = ctx.extension_gate_continuations
                 contract_gate_continuations = ctx.contract_gate_continuations
-                self_protocol_truth_continuations = ctx.self_protocol_truth_continuations
-                owner_integrity_audit_reporting_truth_continuations = ctx.owner_integrity_audit_reporting_truth_continuations
+                task_truth_continuations = ctx.task_truth_continuations
                 continue
 
             final_text = ctx.final_text
@@ -910,33 +839,6 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             on_board_update=on_board_update,
             on_board_event=on_board_event,
         )
-
-    def _owner_maintenance_doom_loop_boundary(self, user_input: str, final_text: str) -> str:
-        """Turn a doom-loop force-stop into a recoverable OWNER_MAINTENANCE boundary.
-
-        The doom-loop path returns directly, skipping the closeout pipeline; on an
-        OWNER_MAINTENANCE turn that left a false ``[OWNER_MAINTENANCE COMPLETE]`` summary
-        beside open task rows with a stale manifest (live mo-1782487827). Prefixing the
-        stop with ``[OWNER_MAINTENANCE BLOCKED]`` makes the existing reconciler rewrite
-        summary.md and re-project the manifest (status=blocked + live economy/board), and
-        the still-open board is snapshotted blocked. No-op off OWNER_MAINTENANCE.
-        """
-        if not is_owner_maintenance_activation(user_input):
-            return final_text
-        blocked = (
-            "[OWNER_MAINTENANCE BLOCKED] tool doom-loop: the same tool batch repeated past "
-            "the limit and the turn was force-stopped before closeout. Recoverable runtime "
-            "boundary — resume from the active task with fresh evidence; open rows remain and "
-            "the run is NOT complete.\n\n" + str(final_text or "")
-        )
-        try:
-            self._reconcile_devmode_summary_marker(blocked)
-            board = getattr(getattr(self, "gateway", None), "last_task_board", None)
-            if board is not None and board.open_count() > 0:
-                record_snapshot(board, "blocked", state="blocked")
-        except Exception:
-            traceback.print_exc()
-        return blocked
 
     def _affected_test_failure_instruction(self, turn_modified_files: list) -> str | None:
         """Run the affected tests for code files this turn changed;
@@ -1043,10 +945,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 workspace_context = build_workspace_awareness(self)
         project_context = "" if trivial_greeting else build_project_context(getattr(self, "project_cwd", os.getcwd()))
         mo_control_context = build_mo_control_context(user_input=user_input, config=getattr(self, "config", {})) if mo_control_needed else ""
-        self_capability_context = ""
-        if should_include_self_capability_preflight(user_input):
-            self_capability_context = build_self_capability_preflight_context(user_input, cwd=getattr(self, "project_cwd", None))
-        devmode_output_context = self._devmode_runtime_output_context(user_input)
+        extension_blocks = local_extensions.context_blocks(
+            self,
+            user_input,
+            cwd=str(getattr(self, "project_cwd", "") or ""),
+        )
+        local_extension_context = "\n\n".join(
+            str(value) for value in extension_blocks.values() if str(value).strip()
+        )
         code_graph_context = ""
         if should_include_code_graph_context(user_input):
             try:
@@ -1148,8 +1054,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             "workspace": workspace_context,
             "project_context": project_context,
             "mo_control": mo_control_context,
-            "self_capability": self_capability_context,
-            "devmode_output": devmode_output_context,
+            "local_extension": local_extension_context,
             "code_graph": code_graph_context,
             "pending_interrupted": pending_interrupted_context,
             "heartbeat": heartbeat_context,

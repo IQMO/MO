@@ -7,7 +7,13 @@ own task truth.
 
 Current status, verification, and CPD history live in `STATUS.md`.
 
-Run the static preview smoke render:
+Run the UX package directly in live runtime mode:
+
+```bash
+python -m UX
+```
+
+Render one live runtime screen without sending a turn:
 
 ```bash
 python -m UX --once
@@ -85,13 +91,18 @@ python -m UX --read-only
 Send real turns through the MO Gateway:
 
 ```bash
-python -m UX --live
+python -m UX
 ```
+
+Live mode is real MO: it creates the normal Agent/Gateway runtime for this UX
+process and sends turns through `Gateway.run_turn(route_source="ux")`. It does
+not import, replace, or mutate the current `interface/` package, and default
+`python mo.py` still opens the official interface.
 
 Run one deterministic live smoke message and exit:
 
 ```bash
-python -m UX --live --message "who are you?"
+python -m UX --message "who are you?"
 ```
 
 ## Phase Contract
@@ -101,6 +112,8 @@ python -m UX --live --message "who are you?"
   production entrypoint integration is the explicit lazy opt-in hook.
 - Display models are immutable snapshots.
 - Gateway/taskboard/runtime own truth; UX renders snapshots only.
+- Live UX uses real MO through Gateway with the `ux` route source; preview UX is
+  local-only and never labels local echoes as MO answers.
 - Preview mode is local-only and must not label local echoes as `MO`.
 - Idle rails stay quiet; motion is reserved for the landing signal and real
   busy/running activity.
@@ -124,17 +137,17 @@ state/CPD, and `ROADMAP.md` for the remaining promotion path.
 
 ## Mode Status
 
-- Phase 1 interactive shell: `python -m UX` opens a fullscreen prompt-toolkit
-  TUI with a focused multiline composer, command palette, transcript updates,
-  animated landing surface, quiet idle rails, and busy-only activity indicators.
+- Phase 1 interactive shell: `python -m UX --preview` opens the local-only
+  preview TUI with a focused multiline composer, command palette, transcript
+  updates, animated landing surface, quiet idle rails, and busy-only activity
+  indicators.
 - Phase 2 read-only runtime: `python -m UX --read-only` creates Agent/Gateway and
   renders a snapshot without sending messages.
-- Phase 3 controlled actions: `python -m UX --live` sends messages through
+- Phase 3 controlled actions: `python -m UX` sends messages through
   `Gateway.run_turn` from a background submit worker and renders the resulting
   snapshot. `--message` provides a non-interactive smoke path.
-- Phase 4 comparison/coverage: `tests/test_ux_contract.py` and
-  `tests/test_ux_controller.py` lock isolation, rendering, controller, and
-  adapter behavior.
+- Phase 4 comparison/coverage is locked by the ignored maintainer-local pytest
+  overlay before CPD; those tests are not public product source.
 
 ## UX Direction
 

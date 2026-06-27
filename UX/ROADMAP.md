@@ -10,6 +10,9 @@ presentation only.
 - Isolated `UX/` package with no imports from the current `interface/`.
 - Immutable display models and backend-independent controller.
 - Preview, read-only runtime, live runtime, and one-message smoke modes.
+- Live runtime submits real MO turns through Gateway with `route_source="ux"`;
+  direct `python -m UX` defaults to live runtime and preview remains explicit
+  local-only mode.
 - Windows launchers for preview and live runs.
 - Prompt-first fullscreen TUI with centered landing surface, composer, and status
   rail.

@@ -20,14 +20,14 @@ from ..session.session_closeout import (
     stage_session_closeout_feedback,
     write_session_closeout,
 )
-from ..consistency_boundary import (
+from ..gates.consistency_boundary import (
     check_consistency_boundary,
     emit_consistency_boundary,
     render_consistency_boundary,
 )
-from ..workers import ensure_worker_registry
+from ..worker import ensure_worker_registry
 from interface.ghost import GHOST_SIDECHAT_SYSTEM, ghost_safe_messages
-from interface.slash_commands import SLASH_COMMAND_HELP
+from interface.command_registry import build_help_text
 
 
 class AgentSlashCommands:
@@ -80,7 +80,6 @@ class AgentSlashCommands:
             "/structural-graph": self._cmd_structural_graph,
             "/sg": self._cmd_structural_graph,
             "/prt": self._cmd_prt,
-            "/owner_comparison": self._cmd_owner_comparison,
             "/moon": self._cmd_moon,
             "/hints": self._cmd_hints,
             "/ghost": self._cmd_ghost,
@@ -102,13 +101,21 @@ class AgentSlashCommands:
             except Exception:
                 pass
             return result
-        return None
+        try:
+            from ..local_extensions import dispatch_slash
 
-    def _cmd_owner_comparison(self, rest: str) -> str:
-        """Route OWNER_COMPARISON slash syntax into the normal provider/preflight path."""
-        clean = str(rest or "").strip()
-        self._slash_pending_input = f"start OWNER_COMPARISON {clean}".strip()
-        return "[RUN_TURN]"
+            result = dispatch_slash(self, cmd, rest)
+        except Exception:
+            result = None
+        if result is not None:
+            try:
+                monitor = get_monitor()
+                if monitor:
+                    monitor.emit("slash_command", {"command": cmd, "has_args": bool(rest.strip()), "handled": True})
+            except Exception:
+                pass
+            return result
+        return None
 
     def _cmd_moon(self, rest: str) -> str:
         """Toggle the animated moon visuals for the MO logo."""
@@ -295,7 +302,7 @@ class AgentSlashCommands:
     def _cmd_prt(self, rest: str) -> str:
         """Trigger PRT review on last commit."""
         from core.review.diff_review import review_diff
-        from core.workers import ensure_worker_registry
+        from core.worker import ensure_worker_registry
         import time
         
         parts = str(rest or "").strip().split()
@@ -357,12 +364,12 @@ class AgentSlashCommands:
                 if on_fin:
                     on_fin(registry.get(w_id), f"Error: {e}")
             finally:
-                from core.worker_runtime import ensure_worker_runtime
+                from core.worker import ensure_worker_runtime
                 rt = ensure_worker_runtime(self)
                 with rt._lock:
                     rt._threads.pop(w_id, None)
         
-        from core.worker_runtime import ensure_worker_runtime, notify_native_async
+        from core.worker import ensure_worker_runtime, notify_native_async
         runtime = ensure_worker_runtime(self)
         record = runtime.start(
             objective=f"Reviewing {diff_ref}",
@@ -376,7 +383,7 @@ class AgentSlashCommands:
         return f"[PRT STARTED] Reviewing {diff_ref} in background..."
 
     def _cmd_help(self, _rest: str) -> str:
-        return SLASH_COMMAND_HELP
+        return build_help_text()
 
     def _cmd_init(self, _rest: str) -> str:
         from ..initializer import initialize_mo, render_init_report

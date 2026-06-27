@@ -120,6 +120,7 @@ def snapshot_from_runtime(agent: Any, gateway: Any) -> SessionSnapshot:
     return SessionSnapshot(
         project=project,
         runtime=runtime,
+        surface="UX runtime bridge",
         provider=provider,
         model=model,
         busy=False,

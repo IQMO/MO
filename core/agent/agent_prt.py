@@ -117,5 +117,5 @@ class AgentPRT:
             return []
         if proc.returncode != 0:
             return []
-        from ..workers import normalize_worker_paths
+        from ..worker import normalize_worker_paths
         return normalize_worker_paths([line.strip() for line in proc.stdout.splitlines() if line.strip()])

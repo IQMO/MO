@@ -16,9 +16,10 @@ from ..learning.workflow_learning import (
     promote_workflow_candidate,
     stage_workflow_source_candidate,
 )
-from ..consistency_boundary import changed_proposal_paths_for_last_commit
-from ..behavior_gates import run_input_gates
+from ..gates.consistency_boundary import changed_proposal_paths_for_last_commit
+from ..gates.behavior_gates import run_input_gates
 from ..mo_control_context import resolve_mo_control_workspace
+from .. import local_extensions
 from .agent_utils import (
     URL_RE,
     WORKFLOW_ADOPTION_RE,
@@ -27,13 +28,7 @@ from .agent_utils import (
     WORKFLOW_SOURCE_PATH_RE,
     _prune_tool_audit_log,
 )
-from ..owner_protocols import (
-    is_owner_maintenance_activation,
-    is_owner_interface_audit_activation,
-    is_owner_comparison_activation,
-    owner_comparison_readonly_source_roots,
-)
-from ..path_defaults import mo_home, operator_pack_root, repo_root
+from ..path_defaults import repo_root
 from ..tasking.task_evidence import taskboard_tool_summary
 
 
@@ -494,8 +489,11 @@ class AgentTurnDispatchMixin:
         return args
 
     @staticmethod
-    def _owner_comparison_source_read_tool(name: str, arguments: dict | None) -> bool:
-        """Return True when a tool may inspect OWNER_COMPARISON source roots read-only."""
+    def _local_extension_read_like_tool(name: str, arguments: dict | None) -> bool:
+        """Return True when a tool is read-like for extension-supplied roots."""
+        decision = local_extensions.read_like_tool(name, arguments)
+        if decision is not None:
+            return decision
         if name in {"read_file", "find_files", "grep", "git_status", "project_bridge"}:
             return True
         if name in {"shell", "test_runner"}:
@@ -503,8 +501,7 @@ class AgentTurnDispatchMixin:
         return False
 
     def _effective_allowed_roots_for_tool(self, user_input: str, name: str, arguments: dict | None) -> list[str] | None:
-        """Extend roots for OWNER_COMPARISON source intake and the configured MO control
-        workspace without widening write scope.
+        """Extend roots for configured read policy without widening write scope.
 
         Empty/None roots mean UNRESTRICTED (access.mode full) — appending
         anything to them would invert the meaning into "only these paths",
@@ -513,7 +510,7 @@ class AgentTurnDispatchMixin:
         roots = list(getattr(self, "allowed_roots", None) or [])
         if not roots:
             return roots
-        read_like = self._owner_comparison_source_read_tool(name, arguments)
+        read_like = self._local_extension_read_like_tool(name, arguments)
         root_keys = {str(root).casefold() for root in roots}
 
         def append_root(path: Path) -> None:
@@ -523,25 +520,8 @@ class AgentTurnDispatchMixin:
                 roots.append(value)
                 root_keys.add(key)
 
-        # Owner protocols live outside the public checkout after the layout
-        # migration. Add those private roots only when the owner-only activation
-        # gates are already true; user clones have neither pack nor owner token.
-        #
-        # STICKY for the session: a DEVMODE05/IFDEV05 run writes its artifacts to
-        # ~/.mo/memory/devmode and ~/.mo/operator across MANY turns, but only the FIRST
-        # turn's user_input is the "start DEVMODE05" activation — later turns are
-        # continuations or operator follow-ups ("continue", "yes", a mid-run instruction)
-        # that don't match the activation phrase. Recomputing the write-path extension
-        # per-turn from user_input therefore DROPPED it on those turns and sandbox-blocked
-        # edit_file to MO's own runtime dirs (the recurring DEVMODE05 block). Once a
-        # write-protocol turn is seen, keep the private runtime write paths for the rest of
-        # this agent session so the block can't recur mid-run.
-        if is_owner_maintenance_activation(user_input) or is_owner_interface_audit_activation(user_input):
-            self._owner_write_paths_active = True
-        write_protocol = bool(getattr(self, "_owner_write_paths_active", False))
-        if write_protocol or (is_owner_comparison_activation(user_input) and read_like):
-            append_root(operator_pack_root())
-            append_root(mo_home() / "memory" / "devmode")
+        for path in local_extensions.extra_allowed_roots(self, user_input, name, arguments, read_like=read_like):
+            append_root(Path(path))
 
         if not read_like:
             return roots
@@ -550,10 +530,6 @@ class AgentTurnDispatchMixin:
         control_root = self._mo_control_read_root()
         if control_root:
             append_root(Path(control_root))
-        if not is_owner_comparison_activation(user_input):
-            return roots
-        for source_root in owner_comparison_readonly_source_roots(user_input):
-            append_root(Path(source_root))
         return roots
 
     def _mo_control_read_root(self) -> str:
@@ -609,7 +585,7 @@ class AgentTurnDispatchMixin:
         text = " ".join(str(user_input or "").lower().split())
         if not text:
             return False
-        if is_owner_maintenance_activation(text):
+        if local_extensions.self_change_approved(text):
             return True
         approval = bool(re.search(r"\b(approve|approved|yes|do it|go ahead|allowed|permission)\b", text))
         target = bool(re.search(r"\b(mo|mo agent|yourself|your own files|self[- ]?change|self[- ]?edit)\b", text))

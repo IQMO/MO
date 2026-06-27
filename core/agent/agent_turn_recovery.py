@@ -9,20 +9,8 @@ from typing import Any
 from ..provider.provider_audit import append_provider_audit
 from ..tasking.task_board import TaskBoard, record_snapshot
 from ..session.session_momentum import maybe_compact_session
-from ..path_defaults import operator_pack_root, repo_root
+from ..path_defaults import repo_root
 from .agent_utils import _emit_task_board_update
-from ..owner_protocols import (
-    is_owner_maintenance_activation,
-    is_owner_interface_audit_activation,
-    is_owner_comparison_activation,
-    is_owner_dedup_activation,
-)
-from ..self_maintenance.devmode_closeout import (
-    owner_maintenance_task_truth_continuation_instruction,
-    owner_interface_audit_task_truth_continuation_instruction,
-    owner_comparison_task_truth_continuation_instruction,
-    owner_dedup_task_truth_continuation_instruction,
-)
 
 
 class AgentTurnRecoveryMixin:
@@ -236,14 +224,7 @@ class AgentTurnRecoveryMixin:
         agent_cfg = cfg.get("agent", {}) if isinstance(cfg, dict) else {}
         compact_at = float(agent_cfg.get("turn_health_compact_at", 0.60) or 0.60)
         handoff_at = int(agent_cfg.get("turn_health_handoff_at", 5) or 5)
-        latest_user = ""
-        for message in reversed(list(getattr(getattr(self, "session", None), "messages", []) or [])):
-            if message.get("role") == "user":
-                latest_user = str(message.get("content") or "")
-                break
-        owner_maintenance_active = is_owner_maintenance_activation(latest_user)
-        owner_maintenance_completed = owner_maintenance_active and self._owner_maintenance_taskboard_completed()
-        work_continuation_active = (not owner_maintenance_active) and self._has_open_runtime_work()
+        work_continuation_active = self._has_open_runtime_work()
 
         # One-shot flags per turn (reset each turn via reset below)
         if not hasattr(self, "_turn_health_compacted"):
@@ -271,12 +252,7 @@ class AgentTurnRecoveryMixin:
                         f"[TURN HEALTH HANDOFF] {tool_rounds}/{max_tools} tool rounds used. "
                         "Context handed off with continuation mandate. "
                         + (
-                            "OWNER_MAINTENANCE taskboard is already complete/open=0. Produce [OWNER_MAINTENANCE COMPLETE] now — do NOT call more tools."
-                            if owner_maintenance_completed
-                            else
-                            "Return a OWNER_MAINTENANCE continuation capsule now — do NOT call more tools."
-                            if owner_maintenance_active
-                            else "Return a work continuation capsule now — do NOT call more tools."
+                            "Return a work continuation capsule now — do NOT call more tools."
                             if work_continuation_active
                             else "Produce your final answer now — do NOT call more tools."
                         )
@@ -362,12 +338,7 @@ class AgentTurnRecoveryMixin:
                 f"[TURN HEALTH CRITICAL] {tool_rounds}/{max_tools} tool rounds used — "
                 f"only {remaining} remain. "
                 + (
-                    "Produce [OWNER_MAINTENANCE COMPLETE] NOW; taskboard is already complete/open=0."
-                    if owner_maintenance_completed
-                    else
-                    "Return a OWNER_MAINTENANCE continuation capsule NOW."
-                    if owner_maintenance_active
-                    else "Return a work continuation capsule NOW."
+                    "Return a work continuation capsule NOW."
                     if work_continuation_active
                     else "Produce your final answer NOW."
                 )
@@ -443,119 +414,6 @@ class AgentTurnRecoveryMixin:
             "guess or omit): " + " | ".join(parts) + "."
         )
 
-    def _owner_maintenance_completed_taskboard_should_stop_tools(self, user_input: str, task_board: TaskBoard | None = None) -> bool:
-        """Return True when completed OWNER_MAINTENANCE task truth must close instead of probing."""
-        return is_owner_maintenance_activation(user_input) and self._owner_maintenance_taskboard_completed(task_board)
-
-    def _owner_maintenance_taskboard_completed(self, task_board: TaskBoard | None = None) -> bool:
-        """Check known live board references for completed, non-goal task truth."""
-        gateway = getattr(self, "gateway", None)
-        candidates = (
-            task_board,
-            getattr(self, "_active_task_board", None),
-            getattr(gateway, "last_task_board", None),
-        )
-        seen: set[int] = set()
-        for board in candidates:
-            if not board:
-                continue
-            identity = id(board)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            try:
-                if getattr(board, "source", "gateway") == "goal":
-                    continue
-                tasks = list(getattr(board, "tasks", []) or [])
-                if tasks and int(board.open_count() or 0) == 0:
-                    return True
-            except Exception:
-                continue
-        return False
-
-    @staticmethod
-    def _owner_maintenance_completed_taskboard_tool_instruction() -> str:
-        return (
-            "[OWNER_MAINTENANCE CLOSEOUT] The live taskboard is already complete (open=0). "
-            "Do not call more tools or reopen broad discovery inside this completed turn. "
-            "Produce the terminal [OWNER_MAINTENANCE COMPLETE] report from existing evidence now. "
-            "If a genuinely new issue exists, it must be tracked as a new finding before completion in a fresh continuation, "
-            "not by silent post-completion probing."
-        )
-
-    @staticmethod
-    def _owner_maintenance_completed_taskboard_persistent_tool_text() -> str:
-        return (
-            "[OWNER_MAINTENANCE BLOCKED]\n\n"
-            "Provider kept requesting tools after the OWNER_MAINTENANCE taskboard was complete/open=0. "
-            "This is a provider tool-use boundary after completed task truth, not unfinished OWNER_MAINTENANCE work. "
-            "Existing evidence was preserved; restart only to investigate this provider noncompliance."
-        )
-
-    @staticmethod
-    def _owner_maintenance_tool_calls_are_closeout_only(tool_calls) -> bool:
-        """True when every requested tool call is closeout work — writing/reading the
-        OWNER_MAINTENANCE session artifacts, owning the economy ledger, or running the final
-        pytest — rather than reopening broad discovery.
-
-        The completed-board tool guard must NOT block these. The error-ownership gate
-        REQUIRES reading economy.md and the terminal report REQUIRES writing the session
-        artifacts, but both happen AFTER the board reaches open=0 — so hard-blocking all
-        post-completion tools deadlocked the closeout to [OWNER_MAINTENANCE BLOCKED] even though
-        the model was doing exactly what the truth gate demanded (observed live
-        mo-1782077188: owned 5 errors, wrote artifacts, still blocked → BLOCKED). Broad
-        re-discovery (grep/find_files/code_search/source reads/arbitrary shell) is still
-        treated as probing and nudged toward closeout."""
-        import json as _json
-        if not tool_calls:
-            return False
-        artifacts = (
-            "economy.md", "summary.md", "catalog.md", "capability-matrix.md",
-            "workflow.md", "longitudinal.md", "adversarial-rotation.json",
-        )
-        for tc in tool_calls:
-            if isinstance(tc, dict):
-                fn = tc.get("function") or {}
-                name = (fn.get("name", "") if isinstance(fn, dict) else "") or ""
-                raw = fn.get("arguments", "{}") if isinstance(fn, dict) else "{}"
-            else:
-                fn = getattr(tc, "function", tc)
-                name = (getattr(fn, "name", "") if hasattr(fn, "name") else fn.get("name", "")) or ""
-                raw = getattr(fn, "arguments", "{}") if hasattr(fn, "arguments") else fn.get("arguments", "{}")
-            try:
-                args = _json.loads(raw) if isinstance(raw, str) else (raw or {})
-            except Exception:
-                args = {}
-            if not isinstance(args, dict):
-                args = {}
-            if name == "complete_task":
-                continue
-            if name in ("read_file", "write_file", "edit_file"):
-                # edit_file is a closeout write too — the model often EDITS existing
-                # artifacts (summary/longitudinal/rotation) during closeout. Omitting it
-                # let the completed-board guard block the closeout batch and end the turn
-                # before economy.md/summary/manifest were written (live mo-1782208099).
-                path = str(args.get("path") or args.get("file_path") or "").replace("\\", "/").lower()
-                raw_path = str(args.get("path") or args.get("file_path") or "")
-                is_operator_pack_path = False
-                try:
-                    candidate = Path(raw_path).expanduser().resolve(strict=False)
-                    candidate.relative_to(operator_pack_root().resolve(strict=False))
-                    is_operator_pack_path = True
-                except (OSError, ValueError):
-                    is_operator_pack_path = False
-                if ("memory/devmode" in path or is_operator_pack_path
-                        or any(path.endswith(a.lower()) for a in artifacts)):
-                    continue
-                return False
-            if name == "shell":
-                cmd = str(args.get("command") or args.get("cmd") or "").lower()
-                if "pytest" in cmd:
-                    continue
-                return False
-            return False
-        return True
-
     def _force_tool_budget_handoff(self, tool_rounds: int, max_tools: int, *, monitor: Any = None) -> None:
         """Force a context handoff with a strong conclusion mandate.
 
@@ -563,42 +421,6 @@ class AgentTurnRecoveryMixin:
         The handoff document carries an explicit [TOOL BUDGET CRITICAL] focus
         so the model wakes up in a fresh session knowing it must conclude.
         """
-        latest_user = ""
-        for message in reversed(list(getattr(getattr(self, "session", None), "messages", []) or [])):
-            if message.get("role") == "user":
-                latest_user = str(message.get("content") or "")
-                break
-        if is_owner_maintenance_activation(latest_user):
-            # Critical budget: do NOT re-seed a fresh session for a OWNER_MAINTENANCE run. A fresh
-            # context handoff makes the model re-orient ("I'll start OWNER_MAINTENANCE by first
-            # reading...") and burn the last rounds, hitting the hard stop (observed live
-            # mo-1782179985: 75/80 reseed -> restart -> BLOCKED). Force the conclusion IN
-            # PLACE in the current session — tools are already blocked by the caller, and
-            # there is no budget left to use a relieved context anyway.
-            if self._owner_maintenance_taskboard_completed():
-                self.session.add_assistant(
-                    f"[OWNER_MAINTENANCE TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
-                    "The taskboard is complete (open=0). Produce [OWNER_MAINTENANCE COMPLETE] NOW from the "
-                    "evidence already gathered. Do NOT call any tools. Do NOT re-read state. Do NOT "
-                    "restart the protocol."
-                )
-                action = "force_complete_in_place"
-            else:
-                self.session.add_assistant(
-                    f"[OWNER_MAINTENANCE TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
-                    "STOP. Emit [OWNER_MAINTENANCE BLOCKED] with a continuation capsule NOW, from the current "
-                    "context only: completed work, unresolved finding IDs, dirty files, tests run, and "
-                    "the exact next action. Do NOT call any tools. Do NOT re-read state. Do NOT restart "
-                    "OWNER_MAINTENANCE. The next fresh/resume turn continues from this capsule."
-                    + self._capsule_ground_truth()
-                )
-                action = "force_blocked_in_place"
-            if monitor:
-                monitor.emit("turn_health", {
-                    "tool_rounds": tool_rounds, "max_tool_rounds": max_tools,
-                    "action": action, "protocol": "owner_maintenance", "reseed": False,
-                })
-            return
         if self._has_open_runtime_work():
             focus = (
                 f"[TOOL BUDGET CRITICAL] {tool_rounds}/{max_tools} tool rounds used. "
@@ -637,7 +459,6 @@ class AgentTurnRecoveryMixin:
 
     def _turn_health_tool_blocked_instruction(self, user_input: str | None = None) -> str:
         active_work = False
-        owner_maintenance_completed = False
         ground_truth = ""
         if user_input is None:
             # Degenerate static-text form: called with the user text as ``self``
@@ -645,22 +466,7 @@ class AgentTurnRecoveryMixin:
             user_input = str(self or "")
         else:
             active_work = self._has_open_runtime_work()
-            owner_maintenance_completed = self._owner_maintenance_taskboard_completed()
             ground_truth = self._capsule_ground_truth()
-        if is_owner_maintenance_activation(user_input):
-            if owner_maintenance_completed:
-                return (
-                    "[TURN HEALTH] Tool calls blocked because OWNER_MAINTENANCE taskboard is already complete/open=0. "
-                    "Do not call more tools. Your next response must start exactly with `[OWNER_MAINTENANCE COMPLETE]` "
-                    "and summarize the existing evidence."
-                )
-            return (
-                "[TURN HEALTH] Tool calls blocked — turn budget exhausted. "
-                "Do not call more tools. Your next response must start exactly with "
-                "`[OWNER_MAINTENANCE BLOCKED]` and contain a continuation capsule: completed work, "
-                "unresolved finding IDs, dirty files, tests run, and the exact next action."
-                + ground_truth
-            )
         if active_work:
             return (
                 "[TURN HEALTH] Tool calls blocked — turn budget exhausted. "
@@ -677,20 +483,10 @@ class AgentTurnRecoveryMixin:
 
     def _turn_health_persistent_block_text(self, user_input: str | None = None) -> str:
         active_work = False
-        owner_maintenance_completed = False
         if user_input is None:
             user_input = str(self or "")
         else:
             active_work = self._has_open_runtime_work()
-            owner_maintenance_completed = self._owner_maintenance_taskboard_completed()
-        if is_owner_maintenance_activation(user_input):
-            if owner_maintenance_completed:
-                return self._owner_maintenance_completed_taskboard_persistent_tool_text()
-            return (
-                "[OWNER_MAINTENANCE BLOCKED]\n\n"
-                "Tool calls persistently blocked after budget exhaustion. "
-                "Continuation required in the next fresh turn from the preserved handoff capsule."
-            )
         if active_work:
             return (
                 "[WORK BLOCKED]\n\n"
@@ -717,35 +513,6 @@ class AgentTurnRecoveryMixin:
             except Exception:
                 traceback.print_exc()
         return False
-
-    @staticmethod
-    def _self_protocol_completion_boundary_requires_continuation(user_input: str, final_text: str, boundary_report: object | None) -> bool:
-        """Force self-protocol modes to continue when completion conflicts with task truth."""
-        owner_maintenance = is_owner_maintenance_activation(user_input)
-        owner_comparison = is_owner_comparison_activation(user_input)
-        owner_interface_audit = is_owner_interface_audit_activation(user_input)
-        owner_dedup = is_owner_dedup_activation(user_input)
-        if not (owner_maintenance or owner_comparison or owner_interface_audit or owner_dedup):
-            return False
-        prefix = str(final_text or "").lstrip()[:240].lower()
-        if owner_maintenance:
-            expected_marker = "[owner_maintenance complete]"
-        elif owner_comparison:
-            expected_marker = "[owner_comparison complete]"
-        elif owner_dedup:
-            expected_marker = "[owner_dedup complete]"
-        else:
-            expected_marker = "[owner_interface_audit complete]"
-        if expected_marker not in prefix:
-            return False
-        findings = list(getattr(boundary_report, "findings", ()) or ())
-        return any(
-            str(getattr(finding, "kind", "") or "") == "taskboard_done_claim_conflict"
-            for finding in findings
-        )
-
-    # Backward-compatible name used by older tests/callers.
-    _owner_maintenance_completion_boundary_requires_continuation = _self_protocol_completion_boundary_requires_continuation
 
     @staticmethod
     def _boundary_has_done_claim_conflict(boundary_report: object | None) -> bool:
@@ -807,13 +574,3 @@ class AgentTurnRecoveryMixin:
             "actually establish the claim, say so and soften it. Plain references only; no "
             "citation markup. Then give your final answer."
         )
-
-    @staticmethod
-    def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
-        if is_owner_comparison_activation(user_input):
-            return owner_comparison_task_truth_continuation_instruction()
-        if is_owner_dedup_activation(user_input):
-            return owner_dedup_task_truth_continuation_instruction()
-        if is_owner_interface_audit_activation(user_input):
-            return owner_interface_audit_task_truth_continuation_instruction()
-        return owner_maintenance_task_truth_continuation_instruction()
