@@ -60,6 +60,8 @@ def resolve_model_slot(
     pool = list(providers or [])
     active = active_provider or (pool[0] if pool else None)
     slot = _slot_for_surface(surface_name)
+    if slot == "ghost_proposal":
+        return _resolve_ghost_proposal_slot(surface_name, pool, active, config)
     if slot == "ghost":
         return _resolve_ghost_slot(surface_name, pool, active, config)
     if slot == "review":
@@ -75,6 +77,8 @@ def resolve_model_slot(
 
 def _slot_for_surface(surface: str) -> str:
     value = str(surface or "").strip().lower()
+    if value == "ghost_proposal":
+        return "ghost_proposal"
     if value.startswith("ghost"):
         return "ghost"
     if value.startswith("review"):
@@ -119,6 +123,62 @@ def _resolve_ghost_slot(
     source = "ghost_config" if want_provider or want_model else "ghost_default_chain"
     selectors = tuple(value for value in (want_provider, want_model) if value)
     return ModelSlotResolution("ghost", surface, tuple(chain), selectors=selectors, source=source)
+
+
+def _resolve_ghost_proposal_slot(
+    surface: str,
+    providers: list[Any],
+    active_provider: Any | None,
+    config: dict[str, Any] | None,
+) -> ModelSlotResolution:
+    cfg = config if isinstance(config, dict) else {}
+    agent_cfg = cfg.get("agent", {}) if isinstance(cfg.get("agent", {}), dict) else {}
+    proposal_provider = str(agent_cfg.get("ghost_proposal_provider") or "").strip().lower()
+    proposal_model = str(agent_cfg.get("ghost_proposal_model") or "").strip().lower()
+    legacy_provider = str(agent_cfg.get("ghost_provider") or "").strip().lower()
+    legacy_model = str(agent_cfg.get("ghost_model") or "").strip().lower()
+    chain: list[Any] = []
+
+    def add(provider: Any | None) -> None:
+        if provider is not None and not any(existing is provider for existing in chain):
+            chain.append(provider)
+
+    def add_configured(want_provider: str, want_model: str, *, allow_deepseek_flash: bool) -> bool:
+        if not want_provider and not want_model:
+            return False
+        for provider in providers:
+            name, model, _api_mode = provider_name_model(provider)
+            if want_provider and name != want_provider:
+                continue
+            if want_model and model != want_model:
+                continue
+            if not allow_deepseek_flash and _is_deepseek_flash_provider(provider):
+                return False
+            add(provider)
+            return True
+        return False
+
+    configured = False
+    if proposal_provider or proposal_model:
+        configured = add_configured(proposal_provider, proposal_model, allow_deepseek_flash=True)
+    elif legacy_provider or legacy_model:
+        configured = add_configured(legacy_provider, legacy_model, allow_deepseek_flash=False)
+
+    for predicate in (_is_deepseek_pro_provider, _is_codex_provider):
+        for provider in providers:
+            if predicate(provider):
+                add(provider)
+
+    if not chain and active_provider is not None and not _is_deepseek_flash_provider(active_provider):
+        add(active_provider)
+
+    source = "ghost_proposal_config" if configured else "ghost_proposal_default_chain"
+    selectors = tuple(
+        value
+        for value in (proposal_provider, proposal_model, legacy_provider, legacy_model)
+        if value
+    )
+    return ModelSlotResolution("ghost_proposal", surface, tuple(chain), selectors=selectors, source=source)
 
 
 def _resolve_review_slot(
@@ -181,6 +241,11 @@ def _review_chain(
 def _is_non_free_flash_provider(provider: Any | None) -> bool:
     name, model, _api_mode = provider_name_model(provider)
     return "flash" in model and "free" not in model and "free" not in name
+
+
+def _is_deepseek_flash_provider(provider: Any | None) -> bool:
+    _name, model, _api_mode = provider_name_model(provider)
+    return "deepseek" in model and "flash" in model
 
 
 def _is_deepseek_pro_provider(provider: Any | None) -> bool:

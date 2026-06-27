@@ -70,7 +70,10 @@ Do not guess. Do not call something dead unless imports/tests prove it.
 - The TUI must render `gateway.last_task_board` truth, not arbitrary callback markup.
 - Final answers cannot complete open tasks by prose.
 - Failed verification remains blocked.
-- Scroll/selection contract: `full_screen=False`, `mouse_support=False` — the terminal owns the mouse so native click-drag selection/copy and native wheel scrollback keep working; in-app scrolling is the keyboard bindings (Up/Down, PageUp/PageDown). (PTK `mouse_support=True` was tried and reverted: it captured the mouse and broke selection without reliable wheel scroll in this inline layout.)
+- Scroll/selection contract: native-scroll terminal output is the default so chat
+  is normal terminal scrollback. The fixed prompt-toolkit TUI is opt-in via
+  `MO_TUI=1`; when enabled it keeps `full_screen=False`, `mouse_support=False`
+  and uses keyboard transcript scrolling (Up/Down, PageUp/PageDown).
 - Transcript notices (one-time, colored, at turn end, never block): low DeepSeek balance (`< $2.00`, once per session) and provider/model fallback (only when the model actually changes mid-turn, e.g. to `big-pickle`). Reuse the `_add` transcript path + theme styles; they are informational, not gates.
 - Parked interrupted work (after a hard-stop): a short greeting/ambiguous return keeps the "resume?" hint, but a clearly-new substantive request (>= 4 words) clears the park so stale context can't pollute the new ask or auto-resume.
 - Slash commands are control actions and must not echo raw commands as chat.

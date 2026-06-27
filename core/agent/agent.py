@@ -1492,7 +1492,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 surface="ghost_proposal",
                 request="ghost-1",
                 messages=messages,
-                max_tokens=min(int(self.max_tokens or 1500), 1500),
+                max_tokens=self._ghost_proposal_max_tokens(),
                 monitor=monitor,
             )
         except Exception:
@@ -1503,6 +1503,21 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
 
         self._pending_turn_proposal = text
         return text
+
+    def _ghost_proposal_max_tokens(self) -> int:
+        """Output budget for the structured Ghost planning handoff.
+
+        The proposal prompt asks for guardrails plus parseable task JSON. DeepSeek
+        reasoning-style models can spend the old 1500-token cap before emitting
+        visible text, so keep this lane large enough to reach the answer.
+        """
+        try:
+            configured = int(self.max_tokens or 0)
+        except Exception:
+            configured = 0
+        if configured <= 0:
+            configured = 2500
+        return max(2500, min(configured, 4000))
 
     def _ghost_context_messages(self, user_input: str) -> list[dict]:
         """Return compact recent context for Ghost — just the last few exchanges."""

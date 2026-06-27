@@ -33,6 +33,11 @@ def should_open_backend_monitor() -> bool:
     return os.environ.get("MO_OPEN_BACKEND_MONITOR") == "1"
 
 
+def should_use_prompt_toolkit_tui() -> bool:
+    """True only when the fixed prompt-toolkit TUI is explicitly requested."""
+    return os.environ.get("MO_TUI") == "1"
+
+
 def startup_identity_lines(agent: Any) -> list[str]:
     """One-time startup identity banner.
 
@@ -90,9 +95,10 @@ def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool) -> Non
     except Exception:
         pass
 
-    # Prompt-toolkit TUI is the default MO design. It avoids alternate-screen
-    # fullscreen mode and owns its own transcript scrolling.
-    if _input_module.HAS_PROMPT_TOOLKIT and sys.stdin.isatty() and os.environ.get("MO_NATIVE_SCROLL") != "1":
+    # Native-scroll terminal output is the default: chat is printed into normal
+    # terminal scrollback. The fixed prompt-toolkit TUI still exists, but only
+    # when explicitly requested.
+    if _input_module.HAS_PROMPT_TOOLKIT and sys.stdin.isatty() and should_use_prompt_toolkit_tui():
         tui = _tui_class()(agent, gateway)
         try:
             tui.run()

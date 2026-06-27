@@ -43,6 +43,22 @@ def test_ghost_slot_honors_configured_provider_before_default_chain():
     assert resolution.providers[:4] == (configured, flash, main, codex)
 
 
+def test_ghost_proposal_slot_uses_pro_not_deepseek_flash_by_default():
+    main = _provider("deepseek", "deepseek-v4-pro")
+    flash = _provider("opencode-flash", "deepseek-v4-flash")
+    codex = _provider("openai-codex", "gpt-5.5", "codex_responses")
+
+    resolution = resolve_model_slot(
+        "ghost_proposal",
+        [flash, main, codex],
+        active_provider=flash,
+        config={},
+    )
+
+    assert resolution.slot == "ghost_proposal"
+    assert resolution.providers == (main, codex)
+
+
 def test_review_slot_uses_configured_review_chain_builder():
     pro = _provider("opencode-pro", "deepseek-v4-pro")
     codex = _provider("openai-codex", "gpt-5.5", "codex_responses")

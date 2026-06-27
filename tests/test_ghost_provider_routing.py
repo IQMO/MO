@@ -47,10 +47,12 @@ class FakeProvider:
         self.finish_reason = finish_reason
         self.calls = 0
         self.tools = None
+        self.max_tokens = None
 
     def complete(self, **kwargs):
         self.calls += 1
         self.tools = kwargs.get("tools")
+        self.max_tokens = kwargs.get("max_tokens")
         if self.raises:
             raise self.raises
         return SimpleNamespace(content=self.content, usage=None, finish_reason=self.finish_reason)
@@ -142,6 +144,21 @@ def test_ghost_provider_chain_is_flash_pro_codex_only():
         ("openai-codex", "gpt-5.5"),
     ]
     assert ("free-router", "deepseek-v4-flash-free") not in chain
+
+
+def test_ghost_proposal_skips_default_deepseek_flash_provider():
+    main = FakeProvider("deepseek", "deepseek-v4-pro", "proposal ok")
+    flash = FakeProvider("opencode-flash", "deepseek-v4-flash", "", finish_reason="length")
+    codex = FakeProvider("openai-codex", "gpt-5.5", "codex ok")
+    agent = make_agent([main, flash, codex])
+
+    result = agent.propose_work("fix the failing interface behavior")
+
+    assert result == "proposal ok"
+    assert flash.calls == 0
+    assert main.calls == 1
+    assert codex.calls == 0
+    assert main.max_tokens >= 2500
 
 
 def test_ghost_provider_chain_keeps_pro_before_codex_if_main_switches():
