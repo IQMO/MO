@@ -175,6 +175,83 @@ def test_main_does_not_open_runtime_monitor_without_opt_in(monkeypatch):
     assert DummyMonitor.closed is False
 
 
+def test_main_does_not_import_ghost_desktop_when_not_terminal_hosted(monkeypatch):
+    class DetachedGhostAgent(DummyAgent):
+        config = {"ghost": {"enabled": True, "run_in_terminal": False}}
+
+    real_import = builtins.__import__
+    launcher_checked = []
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "interface.ghost_desktop" or name.startswith("interface.ghost_desktop."):
+            raise AssertionError("terminal startup imported desktop Ghost")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(mo.os.path, "exists", lambda _path: True)
+    monkeypatch.setattr(mo, "create_agent", lambda _config: DetachedGhostAgent())
+    monkeypatch.setattr(mo, "Gateway", DummyGateway)
+    monkeypatch.setattr(mo, "Console", lambda: None)
+    monkeypatch.setattr(mo, "HAS_RICH", False)
+    monkeypatch.setattr(input_module, "HAS_PROMPT_TOOLKIT", False)
+    monkeypatch.setattr(mo, "_start_ghost_hotkey_launcher_if_enabled", lambda agent: launcher_checked.append(agent) or None)
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    monkeypatch.setenv("MO_SKIP_LOCK", "1")
+    monkeypatch.delenv("MO_OPEN_BACKEND_MONITOR", raising=False)
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": (_ for _ in ()).throw(EOFError()))
+
+    mo.main([])
+    assert len(launcher_checked) == 1
+
+
+def test_ghost_hotkey_launcher_spawns_detached_when_ghost_not_running(monkeypatch):
+    callbacks = {}
+    removals = []
+    launches = []
+
+    class FakeKeyboard:
+        @staticmethod
+        def add_hotkey(combo, callback):
+            callbacks[combo] = callback
+            return "ghost-hotkey"
+
+        @staticmethod
+        def remove_hotkey(handle):
+            removals.append(handle)
+
+    agent = type("Agent", (), {"config": {"ghost": {"enabled": True, "run_in_terminal": False}}})()
+    monkeypatch.setitem(sys.modules, "keyboard", FakeKeyboard)
+    monkeypatch.setattr(mo, "_ghost_desktop_running", lambda: False)
+    monkeypatch.setattr(mo, "_launch_ghost_desktop_detached", lambda: launches.append("launched"))
+
+    handle = mo._start_ghost_hotkey_launcher_if_enabled(agent)
+    callbacks["win+alt+m"]()
+    mo._stop_ghost_hotkey_launcher(handle)
+
+    assert handle == "ghost-hotkey"
+    assert launches == ["launched"]
+    assert removals == ["ghost-hotkey"]
+
+
+def test_ghost_hotkey_launcher_does_not_spawn_duplicate_desktop(monkeypatch):
+    callbacks = {}
+    launches = []
+
+    class FakeKeyboard:
+        @staticmethod
+        def add_hotkey(combo, callback):
+            callbacks[combo] = callback
+            return "ghost-hotkey"
+
+    agent = type("Agent", (), {"config": {"ghost": {"enabled": True, "run_in_terminal": False}}})()
+    monkeypatch.setitem(sys.modules, "keyboard", FakeKeyboard)
+    monkeypatch.setattr(mo, "_ghost_desktop_running", lambda: True)
+    monkeypatch.setattr(mo, "_launch_ghost_desktop_detached", lambda: launches.append("launched"))
+
+    assert mo._start_ghost_hotkey_launcher_if_enabled(agent) == "ghost-hotkey"
+    callbacks["win+alt+m"]()
+    assert launches == []
+
+
 def test_main_opens_runtime_monitor_with_bat_opt_in(monkeypatch):
     DummyMonitor.opened = False
     DummyMonitor.closed = False

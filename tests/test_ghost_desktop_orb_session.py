@@ -146,7 +146,7 @@ def test_recorder_auto_stops_after_trailing_silence():
 
 def test_launch_ghost_desktop_detached_spawns_standalone(monkeypatch):
     import subprocess
-    from interface.ghost_desktop.companion import launch_ghost_desktop_detached
+    from core.ghost.desktop_launch import launch_ghost_desktop_detached
     calls = {}
 
     class _FakePopen:
@@ -163,7 +163,7 @@ def test_launch_ghost_desktop_detached_spawns_standalone(monkeypatch):
 
 def test_launch_ghost_desktop_detached_refuses_when_disabled(monkeypatch):
     import subprocess
-    from interface.ghost_desktop.companion import launch_ghost_desktop_detached
+    from core.ghost.desktop_launch import launch_ghost_desktop_detached
 
     def _boom(*_a, **_k):
         raise AssertionError("must not spawn when Ghost Desktop is disabled")
@@ -171,6 +171,21 @@ def test_launch_ghost_desktop_detached_refuses_when_disabled(monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", _boom)
     msg = launch_ghost_desktop_detached({"desktop_companion": {"enabled": False}})
     assert "disabled" in msg.lower()
+
+
+def test_launch_ghost_desktop_detached_noarg_spawns_for_hotkey(monkeypatch):
+    """The hotkey path calls it with no config (pre-gated on enabled) and must spawn."""
+    import subprocess
+    from core.ghost.desktop_launch import launch_ghost_desktop_detached
+    spawned = {}
+
+    class _FakePopen:
+        def __init__(self, args, **kw):
+            spawned["args"] = list(args)
+
+    monkeypatch.setattr(subprocess, "Popen", _FakePopen)
+    launch_ghost_desktop_detached()
+    assert "interface.ghost_desktop" in " ".join(spawned["args"])
 
 
 def test_recorder_returns_1d_mono_waveform():

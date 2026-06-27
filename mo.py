@@ -137,6 +137,69 @@ def _render_existing_instances_notice(config: dict) -> str:
     return render_existing_instances_notice(config)
 
 
+def _terminal_should_host_ghost(agent) -> bool:
+    block = _ghost_config_block(getattr(agent, "config", None))
+    return bool(block.get("enabled", False) and block.get("run_in_terminal", False))
+
+
+def _terminal_should_register_ghost_launcher(agent) -> bool:
+    block = _ghost_config_block(getattr(agent, "config", None))
+    if not block.get("enabled", False) or block.get("run_in_terminal", False):
+        return False
+    return block.get("hotkey_launcher", True) is not False
+
+
+# Ghost-launch helpers live in core.ghost.desktop_launch (the single source, GUI-free
+# so terminal startup never imports interface.ghost_desktop). These stay as thin
+# module-level wrappers so the startup tests can monkeypatch them by name.
+def _ghost_config_block(config) -> dict:
+    from core.ghost.desktop_launch import ghost_config_block
+    return ghost_config_block(config)
+
+
+def _ghost_desktop_running() -> bool:
+    from core.ghost.desktop_launch import ghost_desktop_running
+    return ghost_desktop_running()
+
+
+def _launch_ghost_desktop_detached() -> None:
+    from core.ghost.desktop_launch import launch_ghost_desktop_detached
+    launch_ghost_desktop_detached()  # no-arg → caller (launcher) already gated on enabled
+
+
+def _start_ghost_hotkey_launcher_if_enabled(agent):
+    """Register a light Win+Alt+M launcher without importing desktop Ghost."""
+    if not _terminal_should_register_ghost_launcher(agent):
+        return None
+    try:
+        import keyboard
+    except ImportError:
+        return None
+
+    def _on_hotkey() -> None:
+        if _ghost_desktop_running():
+            return
+        try:
+            _launch_ghost_desktop_detached()
+        except Exception:
+            return
+
+    try:
+        return keyboard.add_hotkey("win+alt+m", _on_hotkey)
+    except Exception:
+        return None
+
+
+def _stop_ghost_hotkey_launcher(handle) -> None:
+    if not handle:
+        return
+    try:
+        import keyboard
+        keyboard.remove_hotkey(handle)
+    except Exception:
+        return
+
+
 def _acquire_lock() -> bool:
     """Prevent duplicate MO Agent processes. Returns True if lock acquired."""
     from core.runtime_lock import acquire_runtime_lock
@@ -284,6 +347,8 @@ def main(argv: list[str] | None = None):
     telegram = None
     heartbeat = None
     companion = None
+    ghost_hotkey = None
+    ghost_hotkey = _start_ghost_hotkey_launcher_if_enabled(agent)
     try:
         from core.telegram import start_telegram_gateway_if_enabled
         telegram = start_telegram_gateway_if_enabled(agent, gateway)
@@ -295,13 +360,14 @@ def main(argv: list[str] | None = None):
     except Exception:
         heartbeat = None
     try:
-        from interface.ghost_desktop import start_companion_if_enabled
-        companion = start_companion_if_enabled(agent, gateway)
-        if companion:
-            try:
-                setattr(agent, "_companion", companion)
-            except Exception:
-                pass
+        if _terminal_should_host_ghost(agent):
+            from interface.ghost_desktop import start_companion_if_enabled
+            companion = start_companion_if_enabled(agent, gateway)
+            if companion:
+                try:
+                    setattr(agent, "_companion", companion)
+                except Exception:
+                    pass
     except Exception:
         companion = None
     console_cls, has_rich = _load_rich_console()
@@ -313,6 +379,7 @@ def main(argv: list[str] | None = None):
     finally:
         if companion and hasattr(companion, "stop"):
             companion.stop()
+        _stop_ghost_hotkey_launcher(ghost_hotkey)
         if telegram and hasattr(telegram, "stop"):
             telegram.stop()
         if heartbeat and hasattr(heartbeat, "stop"):

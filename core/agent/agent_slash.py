@@ -823,7 +823,7 @@ class AgentSlashCommands:
         # Decoupled default: no in-thread companion → launch the separate process.
         if action == "hide":
             return "Ghost Desktop runs as its own process — hide it with Esc or from its tray icon."
-        from interface.ghost_desktop.companion import launch_ghost_desktop_detached
+        from core.ghost.desktop_launch import launch_ghost_desktop_detached
         return launch_ghost_desktop_detached(getattr(self, "config", None))
 
     def _cmd_companion(self, rest: str) -> str:

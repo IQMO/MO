@@ -59,12 +59,12 @@ def test_ghost_window_subcommand_and_companion_alias_route_to_window():
     assert calls == ["toggle", "show", "hide"]
 
 
-def test_ghost_window_when_not_started_matches_companion_alias():
+def test_ghost_window_when_disabled_matches_companion_alias():
     from core.agent.agent_slash import AgentSlashCommands
     obj = AgentSlashCommands.__new__(AgentSlashCommands)
     obj._companion = None
     msg = obj._cmd_ghost("window")
-    assert "not started" in msg.lower()
+    assert "disabled" in msg.lower()
     assert obj._cmd_companion("") == msg   # alias gives the identical message
 
 
