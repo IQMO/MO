@@ -188,6 +188,8 @@ class AgentSlashCommands:
             return render_learning_clusters(clusters, raw_count=len(active), expired_count=expired, path=suggestions_path)
         if sub in {"confirm", "dismiss"}:
             return self._cmd_learning_review(sub, arg)
+        if sub in {"inspect", "use", "promote", "candidates", "sources", "imports"}:
+            return self._cmd_learning_import(sub, arg, cfg)
         from core.learning.proactive_learning import cluster_suggestions, read_learning_suggestions
         from core.skills import default_skill_roots, load_generated_learning_skills, load_skills
         from core.diagnostics.system_health import build_health_report
@@ -221,6 +223,62 @@ class AgentSlashCommands:
             f"  graph:            {graph.get('nodes', 0)} nodes / {graph.get('edges', 0)} edges / {graph.get('communities', 0)} communities",
             "  proof:            deterministic local reads only; no provider call",
         ])
+
+    def _cmd_learning_import(self, sub: str, arg: str, cfg: dict) -> str:
+        """Skill-import subcommands: inspect/use/promote/candidates.
+
+        Network is OFF by default; enable per source via config
+        `skills.import.network_allowed`. Imported material is untrusted until
+        explicitly promoted through the existing skill writer.
+        """
+        from core.skills.importing import pipeline as _imp
+        profile = getattr(self, "profile", None)
+        net = bool(((cfg.get("skills") or {}).get("import") or {}).get("network_allowed", False))
+
+        if sub in {"candidates", "sources", "imports"}:
+            st = _imp.status(profile=profile, config=cfg)
+            cands, imps = st["candidates"], st["imported_skills"]
+            lines = ["Skill imports:", f"  candidates: {len(cands)}"]
+            for c in cands[:10]:
+                state = "approved" if c.get("approved") else "pending"
+                lines.append(f"    - {c['candidate_id']} {c.get('label', '')} ({c.get('kind', '')}) [{state}]")
+            lines.append(f"  imported skills: {len(imps)}")
+            for s in imps[:10]:
+                upd = " [update available]" if s.get("update_available") else ""
+                lines.append(f"    - {s['skill']} <- {s.get('source_url') or s.get('source_kind')}{upd}")
+            return "\n".join(lines)
+
+        if not arg:
+            return f"Usage: /learning {sub} <github-repo | docs-url | llms.txt | local-path | candidate-id>"
+
+        if sub == "inspect":
+            res = _imp.inspect(arg, profile=profile, config=cfg, network_allowed=net)
+            if not res.get("ok"):
+                warns = f" ({'; '.join(res.get('warnings', []))})" if res.get("warnings") else ""
+                return f"inspect failed: {res.get('error', '')}{warns}"
+            warn = f"\n  warnings: {'; '.join(res['warnings'])}" if res.get("warnings") else ""
+            block = " [BLOCK findings — resolve before promotion]" if res.get("has_block") else ""
+            return (
+                f"Inspected {res['name']} ({res['kind']}): candidate {res['candidate_id']}, "
+                f"{res['files']} file(s){block}.{warn}\n"
+                f"  bundle: {res['bundle_dir']}\n"
+                f"  conflicts: {len(res.get('conflicts', []))} structural\n"
+                f"  -> review, then: /learning promote {res['candidate_id']}"
+            )
+
+        if sub == "use":
+            res = _imp.use(arg, profile=profile, config=cfg, network_allowed=net)
+            if not res.get("ok"):
+                return f"use failed: {res.get('error', '')}"
+            return res["context"]
+
+        if sub == "promote":
+            res = _imp.promote(arg, profile=profile, config=cfg)
+            if not res.get("ok"):
+                return f"promote failed: {res.get('error', '')}"
+            return f"Promoted candidate {arg} -> {res['skill_path']}\n  manifest: {res['skill_manifest']}"
+
+        return f"unknown import subcommand: {sub}"
 
     def _cmd_learning_review(self, action: str, suggestion_id: str) -> str:
         """Confirm/dismiss learning suggestions — cluster-wide, not item-by-item."""
