@@ -12,7 +12,6 @@ from interface.activity import (
     status_bar_fragments,
     status_left_fragments,
     activity_fragments,
-    context_status_text,
     elapsed_seconds_text,
     goal_elapsed_text,
     goal_progress_text,
@@ -377,11 +376,3 @@ class TestElapsedHelpers:
         assert goal_progress_text(MagicMock(_goal_plan=plan)) == "75%"
 
 
-class TestContextStatusText:
-    """Tests for context_status_text()."""
-
-    def test_context_status_is_not_user_visible(self):
-        """Internal context/handoff budget metrics are not footer text."""
-        agent = MagicMock()
-        agent.context_budget_tokens = 32000
-        assert context_status_text(agent) == ""

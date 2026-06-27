@@ -17,6 +17,23 @@ STATUS_MARKERS = {
 }
 
 
+def _board_row_parts(row: BoardRow, theme: UxTheme) -> tuple[str, str, str, str]:
+    row_style = style(theme, STATUS_STYLE.get(row.status, "muted"))
+    title_style = row_style if row.status == "active" else style(theme, "text")
+    detail = row.blocker if row.status == "blocked" and row.blocker else row.kind
+    return STATUS_MARKERS.get(row.status, "[ ]"), row_style, title_style, detail
+
+
+def _append_board_row_text(text: Text, row: BoardRow, theme: UxTheme, *, detail_limit: int) -> None:
+    marker, row_style, title_style, detail = _board_row_parts(row, theme)
+    text.append(marker, style=f"bold {row_style}")
+    text.append("  ")
+    text.append(row.title, style=title_style)
+    if detail:
+        text.append("  ")
+        text.append(trim(detail, detail_limit), style=style(theme, "muted"))
+
+
 def header(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) -> Panel:
     grid = Table.grid(expand=True)
     grid.add_column(ratio=1)
@@ -65,11 +82,10 @@ def task_board_panel(rows: tuple[BoardRow, ...], theme: UxTheme = DEFAULT_THEME)
     table.add_column(ratio=3)
     table.add_column(ratio=1)
     for row in rows:
-        row_style = style(theme, STATUS_STYLE.get(row.status, "muted"))
-        detail = row.blocker if row.status == "blocked" and row.blocker else row.kind
+        marker, row_style, title_style, detail = _board_row_parts(row, theme)
         table.add_row(
-            Text(STATUS_MARKERS.get(row.status, "[ ]"), style=f"bold {row_style}"),
-            Text(trim(row.title, 92), style=row_style if row.status == "active" else style(theme, "text")),
+            Text(marker, style=f"bold {row_style}"),
+            Text(trim(row.title, 92), style=title_style),
             Text(trim(detail, 36), style=style(theme, "muted")),
         )
     if not rows:
@@ -127,14 +143,7 @@ def ops_rail_panel(snapshot: SessionSnapshot, theme: UxTheme = DEFAULT_THEME) ->
     text.append("\n")
     if snapshot.board:
         for index, row in enumerate(snapshot.board):
-            row_style = style(theme, STATUS_STYLE.get(row.status, "muted"))
-            detail = row.blocker if row.status == "blocked" and row.blocker else row.kind
-            text.append(STATUS_MARKERS.get(row.status, "[ ]"), style=f"bold {row_style}")
-            text.append("  ")
-            text.append(row.title, style=row_style if row.status == "active" else style(theme, "text"))
-            if detail:
-                text.append("  ")
-                text.append(trim(detail, 12), style=style(theme, "muted"))
+            _append_board_row_text(text, row, theme, detail_limit=12)
             if index < len(snapshot.board) - 1:
                 text.append("\n")
     else:

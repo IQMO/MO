@@ -88,11 +88,6 @@ def activity_fragments(
     return [("class:spinner", f" {frame} "), (mo_style, "MO"), ("class:activity", f" {label}{suffix}")]
 
 
-def context_status_text(_agent: Any) -> str:
-    """Footer must not expose internal context/handoff budget metrics."""
-    return ""
-
-
 def notification_items(*, ghost_unread_count: int, goal_worker_active: bool, goal_done_unread: bool, pending_count: int, prt_done_unread: bool = False, goal_progress: str = "") -> list[tuple[str, str]]:
     items: list[tuple[str, str]] = []
     if prt_done_unread:
