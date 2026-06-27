@@ -9,6 +9,7 @@ from ..owner_protocols import (
     is_owner_integrity_audit_activation,
     is_owner_interface_audit_activation,
     is_owner_comparison_activation,
+    is_owner_dedup_activation,
 )
 from ..path_defaults import mo_home, operator_pack_root
 
@@ -130,7 +131,7 @@ def should_include_self_capability_preflight(user_input: str) -> bool:
     text = " ".join(str(user_input or "").strip().lower().split())
     if not text:
         return False
-    if is_owner_maintenance_activation(text) or is_owner_comparison_activation(text) or is_owner_interface_audit_activation(text) or is_owner_integrity_audit_activation(text):
+    if is_owner_maintenance_activation(text) or is_owner_comparison_activation(text) or is_owner_interface_audit_activation(text) or is_owner_integrity_audit_activation(text) or is_owner_dedup_activation(text):
         return True
     scope_hit = any(_marker_in_text(marker, text) for marker in _SELF_SCOPE_MARKERS)
     action_hit = any(_marker_in_text(word, text) for word in _SELF_ACTION_WORDS)

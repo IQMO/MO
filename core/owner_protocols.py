@@ -16,12 +16,14 @@ OWNER_MAINTENANCE = "maintenance"
 OWNER_COMPARISON = "comparison"
 OWNER_INTERFACE_AUDIT = "interface_audit"
 OWNER_INTEGRITY_AUDIT = "integrity_audit"
+OWNER_DEDUP = "deduplication"
 
 _PROTOCOL_KEYS = (
     OWNER_MAINTENANCE,
     OWNER_COMPARISON,
     OWNER_INTERFACE_AUDIT,
     OWNER_INTEGRITY_AUDIT,
+    OWNER_DEDUP,
 )
 
 _DEFAULT_ALIASES = {
@@ -29,6 +31,7 @@ _DEFAULT_ALIASES = {
     OWNER_COMPARISON: ("owner comparison", "reference comparison", "comparison audit"),
     OWNER_INTERFACE_AUDIT: ("owner interface audit", "interface audit"),
     OWNER_INTEGRITY_AUDIT: ("owner integrity audit", "integrity audit", "expert audit"),
+    OWNER_DEDUP: ("owner deduplication", "deduplication audit", "consolidation audit"),
 }
 
 _DEFAULT_LABELS = {
@@ -36,6 +39,7 @@ _DEFAULT_LABELS = {
     OWNER_COMPARISON: "owner comparison",
     OWNER_INTERFACE_AUDIT: "owner interface audit",
     OWNER_INTEGRITY_AUDIT: "owner integrity audit",
+    OWNER_DEDUP: "owner deduplication",
 }
 
 
@@ -162,6 +166,11 @@ def is_owner_integrity_audit_activation(user_input: str) -> bool:
     return _is_protocol_activation(user_input, OWNER_INTEGRITY_AUDIT)
 
 
+def is_owner_dedup_activation(user_input: str) -> bool:
+    """Return True when the owner deduplication/consolidation protocol is active."""
+    return _is_protocol_activation(user_input, OWNER_DEDUP)
+
+
 def _is_protocol_activation(user_input: str, key: str) -> bool:
     if not operator_protocols_installed():
         return False
@@ -171,7 +180,8 @@ def _is_protocol_activation(user_input: str, key: str) -> bool:
 def is_owner_protocol_activation(user_input: str) -> bool:
     """True when any owner-only protocol is active."""
     return (is_owner_maintenance_activation(user_input) or is_owner_comparison_activation(user_input)
-            or is_owner_interface_audit_activation(user_input) or is_owner_integrity_audit_activation(user_input))
+            or is_owner_interface_audit_activation(user_input) or is_owner_integrity_audit_activation(user_input)
+            or is_owner_dedup_activation(user_input))
 
 
 def owner_protocol_name(user_input: str) -> str:

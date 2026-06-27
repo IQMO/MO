@@ -8,9 +8,11 @@ from ..owner_protocols import (
     is_owner_maintenance_activation,
     is_owner_interface_audit_activation,
     is_owner_comparison_activation,
+    is_owner_dedup_activation,
 )
 from ..protocol_kernel import (
     OWNER_COMPARISON_PROTOCOL,
+    OWNER_DEDUP_PROTOCOL,
     OWNER_MAINTENANCE_PROTOCOL,
     required_artifacts,
     required_closeout_terms,
@@ -109,24 +111,29 @@ def _owner_maintenance_closeout_evidence_violation(
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
     frozen_error_count: int | None = None,
+    frozen_economy: dict | None = None,
     session_dir: "str | Path | None" = None,
 ) -> str | None:
     """Deterministic contradiction between a clean OWNER_MAINTENANCE closeout and runtime
     truth — the internalized watcher. Returns a one-line block reason, or None.
     Fail-open: any error returns None so it can never wedge a legitimate closeout.
 
-    ``frozen_error_count`` (when provided) is the count frozen at the FIRST closeout write;
-    the gate owns THAT number instead of re-reading the live monitor, so post-freeze
-    closeout-edit errors cannot move the target and loop the gate forever."""
+    ``frozen_economy`` (when provided) is the full economy snapshot frozen at the FIRST
+    closeout write; the gate owns THAT ledger instead of re-reading the live monitor,
+    so post-freeze closeout-edit errors cannot move the count or tool-name target and
+    loop the gate forever. ``frozen_error_count`` remains accepted for older callers."""
     try:
         text = _owner_maintenance_terminal_marker_text(final_text) or ""
         if not text.startswith("[OWNER_MAINTENANCE COMPLETE]"):
             return None
+        frozen_eco = dict(frozen_economy) if isinstance(frozen_economy, dict) else None
         # 1. real tool errors must be explicitly owned — not denied, not merely
         #    adjacent to a stray "economy.md" mention or a loose digit. Use the FROZEN
         #    terminal count if one was captured at closeout; else scope to the Main-MO run
         #    (exclude Ghost/desktop turns that share the monitor file) live.
-        if frozen_error_count is not None:
+        if frozen_eco is not None and "tool_errors" in frozen_eco:
+            errs = int(frozen_eco.get("tool_errors", 0) or 0)
+        elif frozen_error_count is not None:
             errs = int(frozen_error_count)
         else:
             from ..backend_monitor import GHOST_SURFACES, active_monitor_path, economy_summary
@@ -151,12 +158,18 @@ def _owner_maintenance_closeout_evidence_violation(
                     "explicitly and classify each (recovered/benign/unresolved); a clean "
                     "closeout that omits or denies them is blocked."
                 )
-        # 1b. the error ledger must own the ACTUAL erroring tools (monitor truth), not a
-        #     mis-attributed/confabulated tool. The monitor names which tools raised
-        #     error=True; a clean closeout that names none of them is a false ledger.
-        #     Only when the monitor is explicitly scoped (real run threads session_ids /
-        #     monitor_path) — never read an ambient/unscoped monitor that could false-block.
-        if monitor_path is not None or session_ids is not None:
+        # 1b. the error ledger must own the ACTUAL erroring tools from the same terminal
+        #     economy snapshot. Fall back to scoped monitor truth only when no frozen
+        #     snapshot exists. Never read an ambient/unscoped monitor that could
+        #     false-block an unrelated run.
+        _error_tools: list[str] | None = None
+        if frozen_eco is not None and "error_tools" in frozen_eco:
+            _error_tools = [
+                str(t).strip()
+                for t in (frozen_eco.get("error_tools") or [])
+                if str(t).strip()
+            ]
+        elif monitor_path is not None or session_ids is not None:
             try:
                 from ..backend_monitor import (
                     GHOST_SURFACES as _GS,
@@ -168,20 +181,21 @@ def _owner_maintenance_closeout_evidence_violation(
                     t for t in (_es(_mp, session_ids=session_ids, exclude_surfaces=_GS).get("error_tools") or [])
                     if t
                 ]
-                ownership_text = _owner_maintenance_tool_error_ownership_text(final_text)
-                missing_tools = [
-                    tool for tool in _error_tools
-                    if tool.lower() not in ownership_text.lower()
-                ]
-                if missing_tools:
-                    return (
-                        "the error ledger is not monitor-truthful: the monitor records tool error(s) "
-                        f"on {', '.join(_error_tools)}, but the closeout does not name "
-                        f"{', '.join(missing_tools)}. Report each "
-                        "erroring tool by its real name from economy/monitor evidence."
-                    )
             except Exception:
                 pass
+        if _error_tools:
+            ownership_text = _owner_maintenance_tool_error_ownership_text(final_text)
+            missing_tools = [
+                tool for tool in _error_tools
+                if tool.lower() not in ownership_text.lower()
+            ]
+            if missing_tools:
+                return (
+                    "the error ledger is not runtime-truthful: the terminal economy records tool "
+                    f"error(s) on {', '.join(_error_tools)}, but the closeout does not name "
+                    f"{', '.join(missing_tools)}. Report each erroring tool by its real name "
+                    "from economy/monitor evidence."
+                )
         # 2. the closeout artifacts must actually EXIST in the bound session dir. The
         #    manifest defines the session-local artifact contract; if the stop gate only
         #    checks a subset, a run can close with an explicitly missing expected file
@@ -224,6 +238,7 @@ def owner_maintenance_final_allows_stop(
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
     frozen_error_count: int | None = None,
+    frozen_economy: dict | None = None,
     session_dir: "str | Path | None" = None,
 ) -> bool:
     """Return True only when a OWNER_MAINTENANCE final answer is a real stop boundary."""
@@ -242,7 +257,8 @@ def owner_maintenance_final_allows_stop(
             return False
         if _owner_maintenance_closeout_evidence_violation(
             final_text, monitor_path=monitor_path, session_ids=session_ids,
-            frozen_error_count=frozen_error_count, session_dir=session_dir,
+            frozen_error_count=frozen_error_count, frozen_economy=frozen_economy,
+            session_dir=session_dir,
         ):
             return False
         return True
@@ -295,6 +311,7 @@ def owner_maintenance_continuation_instruction(
     monitor_path: str | Path | None = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
     frozen_error_count: int | None = None,
+    frozen_economy: dict | None = None,
     session_dir: "str | Path | None" = None,
 ) -> str:
     """Explain why a OWNER_MAINTENANCE stop claim was rejected and what must happen next."""
@@ -321,7 +338,8 @@ def owner_maintenance_continuation_instruction(
         )
     _violation = _owner_maintenance_closeout_evidence_violation(
         final_text, monitor_path=monitor_path, session_ids=session_ids,
-        frozen_error_count=frozen_error_count, session_dir=session_dir,
+        frozen_error_count=frozen_error_count, frozen_economy=frozen_economy,
+        session_dir=session_dir,
     )
     if text.startswith("[OWNER_MAINTENANCE COMPLETE]") and _violation:
         return (
@@ -409,6 +427,111 @@ def owner_comparison_task_truth_continuation_instruction() -> str:
         "implementation only if `complete_task` is unavailable or fails. Use [OWNER_COMPARISON BLOCKED] "
         "only for a real hard runtime/tool/provider/safety boundary."
     )
+
+
+def owner_dedup_final_allows_stop(user_input: str, final_text: str) -> bool:
+    """Return True only when a OWNER_DEDUP answer is a terminal deduplication boundary."""
+    if not is_owner_dedup_activation(user_input):
+        return True
+    text = _owner_maintenance_terminal_prefix_text(final_text)
+    if not text:
+        return False
+    # Defer the other protocols' completions to their own gates.
+    if text.startswith(("[OWNER_MAINTENANCE COMPLETE]", "[OWNER_MAINTENANCE BLOCKED]",
+                        "[OWNER_COMPARISON COMPLETE]", "[OWNER_COMPARISON BLOCKED]")):
+        return True
+    if text.startswith("[OWNER_DEDUP BLOCKED]"):
+        return _owner_maintenance_blocked_has_hard_boundary(text)
+    if text.startswith("[OWNER_DEDUP COMPLETE]"):
+        if _owner_maintenance_completion_reports_open_work(text):
+            return False
+        if _owner_dedup_missing_closeout_terms(text):
+            return False
+        return True
+    allowed_prefixes = (
+        "[MAX PROVIDER REQUESTS]",
+        "[MAX TOOL ROUNDS]",
+        "MO provider error:",
+        "MO interface error:",
+        "Provider returned no visible answer",
+        "Provider repeatedly produced malformed",
+    )
+    return text.startswith(allowed_prefixes)
+
+
+def owner_dedup_continuation_instruction(user_input: str, final_text: str) -> str:
+    """Explain why a OWNER_DEDUP stop claim was rejected and what must happen next."""
+    base = (
+        "[OWNER_DEDUP CONTINUATION] Do not stop at discovery or a partial consolidation. Continue the "
+        "deduplication protocol until the duplication picture is provably zero-missing, each verified "
+        "cluster is safely consolidated/deleted or explicitly deferred, every resolved cluster is "
+        "appended to ~/.mo/memory/dedup/ledger.jsonl after clean-verification, and the report carries "
+        "Scope, Coverage, Consolidated, Major, Deferred, Clean, Ledger. Finalize only with "
+        "[OWNER_DEDUP COMPLETE] or [OWNER_DEDUP BLOCKED] for a real tool/provider/timeout/sandbox/"
+        "permission/safety boundary."
+    )
+    if not is_owner_dedup_activation(user_input):
+        return base
+    text = _owner_maintenance_terminal_prefix_text(final_text)
+    if text.startswith("[OWNER_DEDUP COMPLETE]") and _owner_maintenance_completion_reports_open_work(text):
+        return (
+            "[OWNER_DEDUP CONTINUATION] Your last answer claimed [OWNER_DEDUP COMPLETE] while still "
+            "reporting remaining, deferred, open, failed, or carried-forward work. Continue from those "
+            "named clusters now, or close them as consolidated/deleted/deferred with clean-verification "
+            "evidence before completing."
+        )
+    if text.startswith("[OWNER_DEDUP COMPLETE]"):
+        missing = _owner_dedup_missing_closeout_terms(text)
+        if missing:
+            return (
+                "[OWNER_DEDUP CONTINUATION] Your [OWNER_DEDUP COMPLETE] report is missing required "
+                f"closeout terms: {', '.join(missing)}. Continue and produce the final report with these "
+                "literal labels before closeout: Scope, Coverage, Consolidated, Major, Deferred, Clean, "
+                "Ledger. Coverage must show real detector counts / the zero-missing proof; Clean must "
+                "cite the tests run and the detector re-run; Ledger must name the recorded cluster ids."
+            )
+    if text.startswith("[OWNER_DEDUP BLOCKED]") and not _owner_maintenance_blocked_has_hard_boundary(text):
+        return (
+            "[OWNER_DEDUP CONTINUATION] Your last answer used [OWNER_DEDUP BLOCKED] without a current hard "
+            "tool/provider/timeout/sandbox/permission/safety boundary. Work remaining is not a blocker. "
+            "Continue the deduplication from the next evidence-backed cluster."
+        )
+    return base
+
+
+def owner_dedup_task_truth_continuation_instruction() -> str:
+    """Tell OWNER_DEDUP how to recover from a terminal claim with open task truth."""
+    return (
+        "[OWNER_DEDUP CONTINUATION] Completion is not allowed while MO's task/protocol truth still has "
+        "open work. Do not repeat the same completion report. Continue from the active OWNER_DEDUP "
+        "taskboard row: run the next evidence-backed action, or if the active row is genuinely done, call "
+        "`complete_task` and verify open task count is zero before the final [OWNER_DEDUP COMPLETE]. If "
+        "the only rejection was `taskboard_done_claim_conflict`, do not inspect taskboard source, storage, "
+        "or trace paths before that `complete_task` call. Use [OWNER_DEDUP BLOCKED] only for a real hard "
+        "runtime/tool/provider/safety boundary."
+    )
+
+
+def _owner_dedup_missing_closeout_terms(text: str) -> list[str]:
+    """Return missing OWNER_DEDUP terminal closeout concepts.
+
+    Enforces the deduplication closeout shape: the run must state its scope, a real
+    coverage/zero-missing proof, what it consolidated, and the ledger record. `Coverage`
+    is accepted via the literal label or explicit detector-count evidence.
+    """
+    lowered = str(text or "").lower()
+    has_coverage = "coverage" in lowered or (
+        ("cluster" in lowered or "dedup_scan" in lowered or "detector" in lowered)
+        and any(marker in lowered for marker in ("zero-missing", "zero missing", "verified", "instances"))
+    )
+    checks_by_term = {
+        "scope": "scope" in lowered or "current mo" in lowered,
+        "coverage": has_coverage,
+        "consolidated": "consolidated" in lowered or "consolidate" in lowered or "deleted" in lowered,
+        "ledger": "ledger" in lowered,
+    }
+    checks = tuple((term, bool(checks_by_term.get(term))) for term in required_closeout_terms(OWNER_DEDUP_PROTOCOL))
+    return [name for name, present in checks if not present]
 
 
 def owner_interface_audit_final_allows_stop(user_input: str, final_text: str) -> bool:
@@ -643,7 +766,7 @@ def _owner_maintenance_terminal_prefix_text(final_text: str) -> str:
         text = _strip_leading_markdown_prefix(text[status.end():])
     heading = re.search(
         r"(?im)^\s*(?:[-*_]{3,}\s*)?(?:#{1,6}\s*)?(?:[*_`]+\s*)?"
-        r"(\[(?:OWNER_MAINTENANCE|OWNER_COMPARISON)\s+(?:COMPLETE|BLOCKED)\])",
+        r"(\[(?:OWNER_MAINTENANCE|OWNER_COMPARISON|OWNER_DEDUP)\s+(?:COMPLETE|BLOCKED)\])",
         text[:480],
     )
     if heading:
@@ -659,10 +782,10 @@ def _owner_maintenance_terminal_marker_text(final_text: str) -> str:
     normalization would skip the closeout evidence checks when validating artifacts.
     """
     text = _owner_maintenance_terminal_prefix_text(final_text)
-    if text.startswith(("[OWNER_MAINTENANCE COMPLETE]", "[OWNER_MAINTENANCE BLOCKED]", "[OWNER_COMPARISON COMPLETE]", "[OWNER_COMPARISON BLOCKED]")):
+    if text.startswith(("[OWNER_MAINTENANCE COMPLETE]", "[OWNER_MAINTENANCE BLOCKED]", "[OWNER_COMPARISON COMPLETE]", "[OWNER_COMPARISON BLOCKED]", "[OWNER_DEDUP COMPLETE]", "[OWNER_DEDUP BLOCKED]")):
         return text
     raw = str(final_text or "")
-    marker = re.search(r"(?is)\[(?:OWNER_MAINTENANCE|OWNER_COMPARISON)\s+(?:COMPLETE|BLOCKED)\]", raw)
+    marker = re.search(r"(?is)\[(?:OWNER_MAINTENANCE|OWNER_COMPARISON|OWNER_DEDUP)\s+(?:COMPLETE|BLOCKED)\]", raw)
     if not marker:
         return text
     return raw[marker.start():]

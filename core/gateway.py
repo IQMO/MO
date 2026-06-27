@@ -44,6 +44,7 @@ from .owner_protocols import (
     is_owner_protocol_activation,
     is_owner_comparison_activation,
     is_owner_integrity_audit_activation,
+    is_owner_dedup_activation,
     owner_protocol_name,
 )
 from .work_patterns import is_research_method_question
@@ -712,6 +713,8 @@ def _block_open_protocol_board_at_turn_end(
         protocol = "OWNER_MAINTENANCE"
     elif is_owner_comparison_activation(user_input):
         protocol = "OWNER_COMPARISON"
+    elif is_owner_dedup_activation(user_input):
+        protocol = "OWNER_DEDUP"
     if not protocol:
         return result_text
     normalized = str(result_text or "").upper()
@@ -795,6 +798,8 @@ def _new_gateway_board(
         rows = _owner_maintenance_gateway_phase_rows()
     elif is_owner_comparison_activation(user_input):
         rows = _owner_comparison_gateway_phase_rows()
+    elif is_owner_dedup_activation(user_input):
+        rows = _owner_dedup_gateway_phase_rows()
     elif model_owned and not proto:
         # MO owns the board: start EMPTY and let MO populate it via set_plan. An
         # empty board (no rows) cannot false-trip the done-claim/contract gates if
@@ -938,6 +943,60 @@ def _owner_comparison_gateway_phase_rows() -> list[dict[str, object]]:
             "kind": "report",
             "completion_gate": "final",
             "depends_on": ["4"],
+        },
+    ]
+
+
+def _owner_dedup_gateway_phase_rows() -> list[dict[str, object]]:
+    """Fallback OWNER_DEDUP rows when Ghost does not provide a structured plan."""
+    return [
+        {
+            "id": "1",
+            "text": "Load duplication ground truth (dedup_scan minus ledger-resolved) and scope",
+            "status": "active",
+            "kind": "inspect",
+            "completion_gate": "tool",
+            "depends_on": [],
+        },
+        {
+            "id": "2",
+            "text": "Multi-modal discovery across code, docs, refs, comments, legacy",
+            "status": "pending",
+            "kind": "inspect",
+            "completion_gate": "tool",
+            "depends_on": ["1"],
+        },
+        {
+            "id": "3",
+            "text": "Adversarially verify clusters and extend to zero-missing coverage",
+            "status": "pending",
+            "kind": "verify",
+            "completion_gate": "tool",
+            "depends_on": ["2"],
+        },
+        {
+            "id": "4",
+            "text": "Prove consolidation safety per cluster (blast radius, behavior preserved)",
+            "status": "pending",
+            "kind": "verify",
+            "completion_gate": "tool",
+            "depends_on": ["3"],
+        },
+        {
+            "id": "5",
+            "text": "Consolidate/simplify/remove per dedup.mode, then clean-verify and record the ledger",
+            "status": "pending",
+            "kind": "build",
+            "completion_gate": "tool",
+            "depends_on": ["4"],
+        },
+        {
+            "id": "6",
+            "text": "Write OWNER_DEDUP run artifacts and major-consolidation closeout",
+            "status": "pending",
+            "kind": "report",
+            "completion_gate": "final",
+            "depends_on": ["5"],
         },
     ]
 

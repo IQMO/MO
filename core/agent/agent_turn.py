@@ -48,6 +48,7 @@ from ..owner_protocols import (
     is_owner_maintenance_activation,
     is_owner_interface_audit_activation,
     is_owner_comparison_activation,
+    is_owner_dedup_activation,
 )
 from ..self_maintenance.preflight import (
     build_self_capability_preflight_context,
@@ -801,6 +802,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             owner_maintenance_active = is_owner_maintenance_activation(user_input)
             owner_comparison_active = is_owner_comparison_activation(user_input)
             owner_interface_audit_active = is_owner_interface_audit_activation(user_input)
+            owner_dedup_active = is_owner_dedup_activation(user_input)
             total_tool_calls = sum(tool_call_counts.values())
             no_evidence = _no_tool_evidence_continuation(
                 owner_maintenance_active=owner_maintenance_active,
@@ -812,6 +814,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             devmode_monitor_path = getattr(monitor, "path", None) if monitor is not None else None
             devmode_run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
             devmode_frozen_errs = getattr(self, "_devmode_closeout_frozen_errors", None)
+            devmode_frozen_economy = getattr(self, "_devmode_closeout_frozen_economy", None)
             devmode_session_dir = getattr(self, "_active_devmode_session_dir", None)
 
             ctx = _GateContext()
@@ -837,10 +840,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             ctx.owner_maintenance_active = owner_maintenance_active
             ctx.owner_comparison_active = owner_comparison_active
             ctx.owner_interface_audit_active = owner_interface_audit_active
+            ctx.owner_dedup_active = owner_dedup_active
             ctx.no_evidence = no_evidence
             ctx.devmode_monitor_path = devmode_monitor_path
             ctx.devmode_run_ids = devmode_run_ids
             ctx.devmode_frozen_errs = devmode_frozen_errs
+            ctx.devmode_frozen_economy = devmode_frozen_economy
             ctx.devmode_session_dir = devmode_session_dir
             ctx.protocol_closeout_text = ""
             ctx.total_tool_calls = total_tool_calls

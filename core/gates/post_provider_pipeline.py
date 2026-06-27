@@ -21,6 +21,8 @@ from ..owner_protocols import is_owner_integrity_audit_activation
 from ..self_maintenance.devmode_closeout import (
     owner_comparison_continuation_instruction,
     owner_comparison_final_allows_stop,
+    owner_dedup_continuation_instruction,
+    owner_dedup_final_allows_stop,
     owner_interface_audit_continuation_instruction,
     owner_interface_audit_final_allows_stop,
     owner_maintenance_continuation_instruction,
@@ -64,9 +66,9 @@ class _GateContext:
         "turn_initial_completed_ids", "turn_modified_files",
         "tool_call_counts", "tool_error_counts",
         "owner_maintenance_active", "owner_comparison_active",
-        "owner_interface_audit_active", "no_evidence",
+        "owner_interface_audit_active", "owner_dedup_active", "no_evidence",
         "devmode_monitor_path", "devmode_run_ids",
-        "devmode_frozen_errs", "devmode_session_dir",
+        "devmode_frozen_errs", "devmode_frozen_economy", "devmode_session_dir",
         "protocol_closeout_text",
         "total_tool_calls", "boundary_report", "response",
     )
@@ -135,6 +137,22 @@ def _pipeline_owner_comparison_stop(agent, ctx):
     return None
 
 
+def _pipeline_owner_dedup_stop(agent, ctx):
+    if not owner_dedup_final_allows_stop(ctx.user_input, ctx.content):
+        if ctx.protocol_stop_gate_continuations.get("owner_dedup", 0) < PROTOCOL_STOP_GATE_MAX:
+            ctx.protocol_stop_gate_continuations["owner_dedup"] = ctx.protocol_stop_gate_continuations.get("owner_dedup", 0) + 1
+            if ctx.on_activity:
+                ctx.on_activity("continuing OWNER_DEDUP...")
+            agent.session.add_assistant(owner_dedup_continuation_instruction(ctx.user_input, ctx.content))
+            return _CONTINUE
+        if ctx.on_activity:
+            ctx.on_activity("OWNER_DEDUP stop-gate blocked after cap")
+        _protocol_stop_blocked("OWNER_DEDUP", ctx)
+    elif ctx.owner_dedup_active:
+        ctx.protocol_closeout_text = ctx.content
+    return None
+
+
 def _pipeline_devmode_economy(agent, ctx):
     """Write the economy ledger BEFORE the OWNER_MAINTENANCE closeout gate evaluates."""
     if ctx.owner_maintenance_active:
@@ -142,6 +160,7 @@ def _pipeline_devmode_economy(agent, ctx):
         agent._reconcile_devmode_summary_marker(ctx.content)
         ctx.devmode_run_ids = set(getattr(agent, "_devmode_run_session_ids", None) or set())
         ctx.devmode_frozen_errs = getattr(agent, "_devmode_closeout_frozen_errors", ctx.devmode_frozen_errs)
+        ctx.devmode_frozen_economy = getattr(agent, "_devmode_closeout_frozen_economy", ctx.devmode_frozen_economy)
         ctx.devmode_session_dir = getattr(agent, "_active_devmode_session_dir", ctx.devmode_session_dir)
     return None
 
@@ -152,6 +171,7 @@ def _pipeline_owner_maintenance_stop(agent, ctx):
         monitor_path=ctx.devmode_monitor_path,
         session_ids=ctx.devmode_run_ids or None,
         frozen_error_count=ctx.devmode_frozen_errs,
+        frozen_economy=ctx.devmode_frozen_economy,
         session_dir=ctx.devmode_session_dir,
     ):
         if ctx.protocol_stop_gate_continuations.get("owner_maintenance", 0) < PROTOCOL_STOP_GATE_MAX:
@@ -163,6 +183,7 @@ def _pipeline_owner_maintenance_stop(agent, ctx):
                 monitor_path=ctx.devmode_monitor_path,
                 session_ids=ctx.devmode_run_ids or None,
                 frozen_error_count=ctx.devmode_frozen_errs,
+                frozen_economy=ctx.devmode_frozen_economy,
                 session_dir=ctx.devmode_session_dir,
             ))
             return _CONTINUE
@@ -198,6 +219,7 @@ def _pipeline_board_finalization(agent, ctx):
             monitor_path=ctx.devmode_monitor_path,
             session_ids=ctx.devmode_run_ids or None,
             frozen_error_count=ctx.devmode_frozen_errs,
+            frozen_economy=ctx.devmode_frozen_economy,
             session_dir=ctx.devmode_session_dir,
         )
         if protocol_closed or (not protocol_closed and agent._finalize_task_board_for_answer(ctx.task_board)):
@@ -333,6 +355,7 @@ _POST_PROVIDER_PIPELINE = [
     ("no_tool_evidence", "gate", _pipeline_no_tool_evidence),
     ("owner_interface_audit_stop", "gate", _pipeline_owner_interface_audit_stop),
     ("owner_comparison_stop", "gate", _pipeline_owner_comparison_stop),
+    ("owner_dedup_stop", "gate", _pipeline_owner_dedup_stop),
     ("devmode_economy", "action", _pipeline_devmode_economy),
     ("owner_maintenance_stop", "gate", _pipeline_owner_maintenance_stop),
     ("critique", "action", _pipeline_critique),

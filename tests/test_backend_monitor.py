@@ -670,6 +670,46 @@ def test_economy_writer_freezes_error_count_across_closeout_edits(tmp_path, monk
     assert "errors: 8" in eco and "errors: 10" not in eco  # still the FROZEN 8
 
 
+def test_economy_writer_freezes_error_tool_names_across_closeout_edits(tmp_path, monkeypatch):
+    """The frozen terminal economy includes error_tools, not only tool_errors.
+
+    Otherwise economy.md can say the frozen count while the closeout gate reads a later
+    live error tool from the monitor, forcing the summary to own an error that was not in
+    the frozen terminal ledger.
+    """
+    import json as _json
+    monkeypatch.setenv("MO_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("MO_BACKEND_MONITOR_DIR", str(tmp_path / "logs" / "monitor"))
+    mondir = tmp_path / "logs" / "monitor"
+    mondir.mkdir(parents=True)
+    monpath = mondir / "backend_monitor-1.jsonl"
+
+    def write_monitor(tools):
+        rows = [{"type": "provider_request", "payload": {"session_id": "mo-x", "route_source": "user"}}]
+        rows += [
+            {"type": "tool_result", "payload": {"session_id": "mo-x", "route_source": "user", "tool": tool, "error": True}}
+            for tool in tools
+        ]
+        monpath.write_text("\n".join(_json.dumps(r) for r in rows), encoding="utf-8")
+
+    active = tmp_path / "memory" / "devmode" / "2026-01-05T0000"
+    active.mkdir(parents=True)
+    agent = _devmode_board_agent()
+    agent._active_devmode_session_dir = active
+    agent._devmode_run_session_ids = {"mo-x"}
+
+    write_monitor(["shell"])
+    agent._write_devmode_economy_record()
+    assert agent._devmode_closeout_frozen_economy["error_tools"] == ["shell"]
+
+    write_monitor(["shell", "edit_file"])
+    agent._write_devmode_economy_record()
+    assert agent._devmode_closeout_frozen_economy["error_tools"] == ["shell"]
+    assert "Error tools: shell" in (active / "economy.md").read_text(encoding="utf-8")
+    manifest = _json.loads((active / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["economy"]["error_tools"] == ["shell"]
+
+
 def test_devmode_economy_isolates_one_main_run_from_another_in_same_file(tmp_path, monkeypatch):
     """Logical-run scoping must isolate one Main/user DEVMODE run from ANOTHER Main/user
     run that shares the same per-process monitor file — not just exclude Ghost/desktop.

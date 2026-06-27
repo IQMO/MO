@@ -773,7 +773,8 @@ class AgentSlashCommands:
                 "  /ghost launch   start Ghost Desktop as its own process (Win+Alt+M to summon).\n"
                 "  /ghost window   show/hide it, or launch it if not running (same as /companion).\n"
                 "  Ghost Desktop runs separately and survives this terminal closing.\n"
-                "  Ghost is side-check/planning only; send real work to MO when ready.\n"
+                "  Ghost is side-check/planning only; it does not create task progress.\n"
+                "  Send real work to MO when ready.\n"
             )
         # Quick slash Ghost side-question: provider-side tools stay disabled.
         live_context = build_ghost_context(self, getattr(self, "gateway", None), question=rest)

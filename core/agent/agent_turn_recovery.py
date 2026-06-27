@@ -15,11 +15,13 @@ from ..owner_protocols import (
     is_owner_maintenance_activation,
     is_owner_interface_audit_activation,
     is_owner_comparison_activation,
+    is_owner_dedup_activation,
 )
 from ..self_maintenance.devmode_closeout import (
     owner_maintenance_task_truth_continuation_instruction,
     owner_interface_audit_task_truth_continuation_instruction,
     owner_comparison_task_truth_continuation_instruction,
+    owner_dedup_task_truth_continuation_instruction,
 )
 
 
@@ -722,13 +724,16 @@ class AgentTurnRecoveryMixin:
         owner_maintenance = is_owner_maintenance_activation(user_input)
         owner_comparison = is_owner_comparison_activation(user_input)
         owner_interface_audit = is_owner_interface_audit_activation(user_input)
-        if not (owner_maintenance or owner_comparison or owner_interface_audit):
+        owner_dedup = is_owner_dedup_activation(user_input)
+        if not (owner_maintenance or owner_comparison or owner_interface_audit or owner_dedup):
             return False
         prefix = str(final_text or "").lstrip()[:240].lower()
         if owner_maintenance:
             expected_marker = "[owner_maintenance complete]"
         elif owner_comparison:
             expected_marker = "[owner_comparison complete]"
+        elif owner_dedup:
+            expected_marker = "[owner_dedup complete]"
         else:
             expected_marker = "[owner_interface_audit complete]"
         if expected_marker not in prefix:
@@ -807,6 +812,8 @@ class AgentTurnRecoveryMixin:
     def _self_protocol_task_truth_continuation_instruction(user_input: str) -> str:
         if is_owner_comparison_activation(user_input):
             return owner_comparison_task_truth_continuation_instruction()
+        if is_owner_dedup_activation(user_input):
+            return owner_dedup_task_truth_continuation_instruction()
         if is_owner_interface_audit_activation(user_input):
             return owner_interface_audit_task_truth_continuation_instruction()
         return owner_maintenance_task_truth_continuation_instruction()

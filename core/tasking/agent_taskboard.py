@@ -203,6 +203,7 @@ class AgentTaskBoard:
             if prev is None or Path(prev) != target:
                 self._devmode_run_session_ids = set()
                 self._devmode_closeout_frozen_errors = None
+                self._devmode_closeout_frozen_economy = None
             self._active_devmode_session_dir = target
             self._active_devmode_session_dir_runtime_owned = True
             self._track_devmode_run_session_id()
@@ -329,6 +330,7 @@ class AgentTaskBoard:
         monitor_path=None,
         session_ids=None,
         frozen_error_count=None,
+        frozen_economy=None,
         session_dir=None,
     ) -> bool:
         """Close self-protocol phase rows only after their terminal report gate passes.
@@ -342,17 +344,23 @@ class AgentTaskBoard:
             is_owner_maintenance_activation,
             is_owner_interface_audit_activation,
             is_owner_comparison_activation,
+            is_owner_dedup_activation,
         )
         from ..self_maintenance.devmode_closeout import (
             owner_maintenance_final_allows_stop,
             owner_interface_audit_final_allows_stop,
             owner_comparison_final_allows_stop,
+            owner_dedup_final_allows_stop,
         )
 
         if is_owner_comparison_activation(user_input):
             if not owner_comparison_final_allows_stop(user_input, final_text):
                 return False
             evidence = "final:owner_comparison_protocol_closeout"
+        elif is_owner_dedup_activation(user_input):
+            if not owner_dedup_final_allows_stop(user_input, final_text):
+                return False
+            evidence = "final:owner_dedup_protocol_closeout"
         elif is_owner_maintenance_activation(user_input):
             from ..backend_monitor import active_monitor_path
             self._track_devmode_run_session_id()
@@ -364,6 +372,8 @@ class AgentTaskBoard:
                 run_ids = set(session_ids or set())
             if frozen_error_count is None:
                 frozen_error_count = getattr(self, "_devmode_closeout_frozen_errors", None)
+            if frozen_economy is None:
+                frozen_economy = getattr(self, "_devmode_closeout_frozen_economy", None)
             if session_dir is None:
                 session_dir = getattr(self, "_active_devmode_session_dir", None)
             if not owner_maintenance_final_allows_stop(
@@ -372,6 +382,7 @@ class AgentTaskBoard:
                 monitor_path=monitor_path,
                 session_ids=run_ids or None,
                 frozen_error_count=frozen_error_count,
+                frozen_economy=frozen_economy,
                 session_dir=session_dir,
             ):
                 return False
@@ -463,6 +474,7 @@ class AgentTaskBoard:
                 # count so a new run freezes its own terminal count.
                 self._devmode_run_session_ids = set()
                 self._devmode_closeout_frozen_errors = None
+                self._devmode_closeout_frozen_economy = None
             self._active_devmode_session_dir = candidate
             self._track_devmode_run_session_id()
         except Exception:
@@ -515,17 +527,23 @@ class AgentTaskBoard:
                 session_ids=run_ids or None,
                 exclude_surfaces=GHOST_SURFACES,
             )
-            # Freeze the tool-error count at the FIRST closeout write. Post-freeze artifact
-            # edits (e.g. an edit_file old-text-not-found while writing the summary) would
-            # otherwise bump the live count N -> N+1, invalidating the just-written ledger
-            # and making the closeout gate reject every attempt — an unbounded N->N+1 loop
-            # that exhausted the turn budget (observed live mo-1782179985). The frozen value
-            # IS the authoritative terminal count; the gate and the artifacts all use it.
-            frozen = getattr(self, "_devmode_closeout_frozen_errors", None)
-            if frozen is None:
-                frozen = int(summary.get("tool_errors", 0) or 0)
-                self._devmode_closeout_frozen_errors = frozen
-            summary["tool_errors"] = frozen
+            # Freeze the FULL terminal economy snapshot at the FIRST closeout write.
+            # Freezing only the numeric error count left a split-brain ledger: later
+            # closeout-recovery errors could add a new live error tool while the count
+            # stayed frozen, making the stop gate demand a tool name not present in the
+            # frozen economy.md. The terminal ledger is one snapshot: counts, error tools,
+            # blocked tools, and provider numbers all move together.
+            frozen_summary = getattr(self, "_devmode_closeout_frozen_economy", None)
+            if isinstance(frozen_summary, dict):
+                summary = dict(frozen_summary)
+            else:
+                summary = dict(summary)
+                frozen = getattr(self, "_devmode_closeout_frozen_errors", None)
+                if frozen is None:
+                    frozen = int(summary.get("tool_errors", 0) or 0)
+                summary["tool_errors"] = int(frozen)
+                self._devmode_closeout_frozen_errors = int(frozen)
+                self._devmode_closeout_frozen_economy = dict(summary)
             atomic_write_text(Path(target) / "economy.md", format_economy_record(summary), encoding="utf-8")
             # Reconcile the model-authored economy line in summary.md. The model
             # writes summary.md BEFORE the closeout completes, so its hand-counted
@@ -556,16 +574,24 @@ class AgentTaskBoard:
                 return
             run_ids = set(getattr(self, "_devmode_run_session_ids", None) or set())
             monitor_path = active_monitor_path()
-            eco = dict(economy) if economy is not None else economy_summary(
-                monitor_path, session_ids=run_ids or None, exclude_surfaces=GHOST_SURFACES)
+            frozen_summary = getattr(self, "_devmode_closeout_frozen_economy", None)
+            if economy is not None:
+                eco = dict(economy)
+            elif isinstance(frozen_summary, dict):
+                eco = dict(frozen_summary)
+            else:
+                eco = economy_summary(
+                    monitor_path, session_ids=run_ids or None, exclude_surfaces=GHOST_SURFACES)
             frozen = getattr(self, "_devmode_closeout_frozen_errors", None)
-            # The manifest's tool_errors MUST equal economy.md (which uses the frozen
-            # count). Otherwise a manifest written at the complete/blocked hook (which
-            # recomputes the LIVE count) would disagree with economy.md — exactly the
-            # cross-artifact drift the manifest exists to prevent (observed T1047: manifest
-            # said 5 live while economy.md said the frozen 4).
+            if frozen is None and isinstance(frozen_summary, dict):
+                frozen = int(frozen_summary.get("tool_errors", 0) or 0)
+                self._devmode_closeout_frozen_errors = frozen
+            # The manifest's terminal economy MUST equal economy.md (which uses the frozen
+            # snapshot). Otherwise a manifest written at the complete/blocked hook (which
+            # recomputes the LIVE monitor) can disagree with economy.md — exactly the
+            # cross-artifact drift the manifest exists to prevent.
             if frozen is not None:
-                eco["tool_errors"] = frozen
+                eco["tool_errors"] = int(frozen)
             board = getattr(getattr(self, "gateway", None), "last_task_board", None)
             surface = str(getattr(self, "_current_route_source", "") or "") or None
             instance_id = getattr(self, "instance_id", None)

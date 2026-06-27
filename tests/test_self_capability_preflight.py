@@ -374,6 +374,50 @@ def test_closeout_gate_uses_frozen_error_count_not_moving_live():
     assert scp.owner_maintenance_final_allows_stop(ui, text, frozen_error_count=10) is False
 
 
+def test_closeout_gate_uses_frozen_error_tools_not_late_live_monitor(tmp_path):
+    """Freeze the whole terminal ledger, not only the count.
+
+    A late closeout-recovery failure can add a new live error tool after economy.md was
+    frozen. The stop gate must validate against the frozen economy snapshot, otherwise a
+    valid ledger starts chasing post-freeze tools and eventually blocks the run.
+    """
+    import json
+    import core.self_maintenance.devmode_closeout as scp
+
+    mon = tmp_path / "backend_monitor-20260627-000000-test.jsonl"
+    mon.write_text(
+        "\n".join([
+            json.dumps({"type": "tool_result", "payload": {"tool": "shell", "error": True, "route_source": "user", "session_id": "s1"}}),
+            json.dumps({"type": "tool_result", "payload": {"tool": "edit_file", "error": True, "route_source": "user", "session_id": "s1"}}),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    frozen = {"tool_errors": 1, "error_tools": ["shell"]}
+    text = "[OWNER_MAINTENANCE COMPLETE] HEALTHY. 1 tool error: shell recovered; see economy.md."
+
+    assert scp._owner_maintenance_closeout_evidence_violation(
+        text,
+        monitor_path=str(mon),
+        session_ids={"s1"},
+        frozen_economy=frozen,
+    ) is None
+    assert scp.owner_maintenance_final_allows_stop(
+        "start OWNER_MAINTENANCE",
+        text,
+        monitor_path=str(mon),
+        session_ids={"s1"},
+        frozen_economy=frozen,
+    ) is True
+
+    live_violation = scp._owner_maintenance_closeout_evidence_violation(
+        text,
+        monitor_path=str(mon),
+        session_ids={"s1"},
+        frozen_error_count=1,
+    )
+    assert live_violation is not None and "edit_file" in live_violation
+
+
 def test_capability_matrix_missing_paths_helper():
     """Only EXISTING/ACTIVE rows are checked; a real path passes, a missing one is flagged."""
     import core.self_maintenance.devmode_closeout as scp

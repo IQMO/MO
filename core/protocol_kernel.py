@@ -13,6 +13,7 @@ from dataclasses import dataclass
 OWNER_MAINTENANCE_PROTOCOL = "owner_maintenance"
 OWNER_COMPARISON_PROTOCOL = "owner_comparison"
 OWNER_INTERFACE_AUDIT_PROTOCOL = "owner_interface_audit"
+OWNER_DEDUP_PROTOCOL = "owner_dedup"
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,13 @@ def protocol_contract(key: str) -> ProtocolContract:
             key=OWNER_INTERFACE_AUDIT_PROTOCOL,
             complete_marker="[OWNER_INTERFACE_AUDIT COMPLETE]",
             blocked_marker="[OWNER_INTERFACE_AUDIT BLOCKED]",
+        )
+    if normalized == OWNER_DEDUP_PROTOCOL:
+        return ProtocolContract(
+            key=OWNER_DEDUP_PROTOCOL,
+            complete_marker="[OWNER_DEDUP COMPLETE]",
+            blocked_marker="[OWNER_DEDUP BLOCKED]",
+            required_closeout_terms=("scope", "coverage", "consolidated", "ledger"),
         )
     raise KeyError(f"unknown protocol contract: {key}")
 
