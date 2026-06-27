@@ -91,7 +91,8 @@ def _pipeline_critique(agent, ctx):
     ctx.final_text = critique_result.text
     ctx.reasoning = getattr(ctx.response, "reasoning_content", None) or getattr(ctx.response, "reasoning", None)
     ctx.notes = agent._record_turn_memory_and_learning(ctx.user_input, ctx.final_text)
-    ctx.final_text = agent._append_after_turn_notes(ctx.final_text, ctx.notes)
+    append_notes = getattr(agent, "_maybe_append_after_turn_notes", agent._append_after_turn_notes)
+    ctx.final_text = append_notes(ctx.final_text, ctx.notes)
     return None
 
 
