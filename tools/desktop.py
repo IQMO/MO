@@ -16,11 +16,10 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import time
 from typing import Any
 
-from core.runtime.subprocess_flags import apply_windows_hidden_process_flags
+from core.runtime.subprocess_flags import apply_windows_hidden_process_flags, gui_python_executable
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -67,7 +66,7 @@ def execute_point_on_screen(arguments: dict[str, Any]) -> str:
         }
         apply_windows_hidden_process_flags(popen_kwargs)
         subprocess.Popen(
-            [sys.executable, "-m", "interface.screen_overlay", str(x), str(y), label, str(seconds)],
+            [gui_python_executable(), "-m", "interface.screen_overlay", str(x), str(y), label, str(seconds)],
             **popen_kwargs,
         )
     except Exception as exc:  # noqa: BLE001

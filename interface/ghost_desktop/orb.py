@@ -27,8 +27,10 @@ _MOON_DARK = "#04141a"   # the shadowed limb of the crescent
 _GLOW = "#3fe0e0"
 _LISTEN = "#bb86fc"      # purple pulse while hearing voice
 
-_SIZE = 72               # window + canvas edge (px)
+_SIZE = 80               # window + canvas edge (px)
 _GLIDE_SECONDS = 0.45    # travel time to a new point
+_ACTIVE_REDRAW_SECONDS = 0.05
+_IDLE_REDRAW_SECONDS = 0.16
 
 
 _MOON_RGB = (0, 204, 204)
@@ -92,6 +94,8 @@ class GhostOrb:
         self._level = 0.0            # live mic level (0..~0.3) → audio-reactive rings
         self._photo: Any = None      # current ImageTk frame (kept to avoid GC)
         self._pil_ok = True          # falls back to canvas ovals if PIL is unusable
+        self._last_draw_at = 0.0
+        self._last_draw_key: tuple[Any, ...] | None = None
 
     # ------------------------------------------------------------------
     # Public control (GUI-thread only)
@@ -162,7 +166,8 @@ class GhostOrb:
             self._hide()
             return
         self._reposition()
-        self._draw(current)
+        if self._should_redraw(current):
+            self._draw(current)
 
     # ------------------------------------------------------------------
     # Internals
@@ -194,12 +199,24 @@ class GhostOrb:
             pass
 
     def _draw(self, now: float) -> None:
+        self._last_draw_at = now
+        self._last_draw_key = self._draw_key(now)
         if self._pil_ok and self._render_pil(now):
             return
         self._draw_canvas(now)
 
+    def _draw_key(self, now: float) -> tuple[Any, ...]:
+        level_bucket = int(max(0.0, min(1.0, self._level * 9.0)) * 12)
+        phase_bucket = int(now * (18 if self._listening else 6))
+        return (self._listening, level_bucket, phase_bucket)
+
+    def _should_redraw(self, now: float) -> bool:
+        key = self._draw_key(now)
+        interval = _ACTIVE_REDRAW_SECONDS if self._listening else _IDLE_REDRAW_SECONDS
+        return self._last_draw_key != key and (now - self._last_draw_at) >= interval
+
     def _render_pil(self, now: float) -> bool:
-        """Anti-aliased moon via PIL: draw at 2x and downscale so edges are smooth,
+        """Anti-aliased moon via PIL: draw at 4x and downscale so edges are smooth,
         then flatten onto the near-black key (feather → soft halo). Returns False to
         fall back to the canvas ovals if PIL isn't usable."""
         try:
@@ -208,7 +225,7 @@ class GhostOrb:
             self._pil_ok = False
             return False
         try:
-            ss = 2
+            ss = 4
             s = self._size
             big = s * ss
             cx = cy = big / 2.0

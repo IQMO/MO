@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 
@@ -59,3 +60,11 @@ def apply_windows_hidden_process_flags(
     if startupinfo is not None:
         kwargs.setdefault("startupinfo", startupinfo)
     return kwargs
+
+
+def gui_python_executable() -> str:
+    """Return pythonw.exe for GUI helpers on Windows when it is available."""
+    if sys.platform != "win32":
+        return sys.executable
+    candidate = Path(sys.executable).with_name("pythonw.exe")
+    return str(candidate) if candidate.exists() else sys.executable

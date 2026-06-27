@@ -40,9 +40,7 @@ _ENTRY_BG = "#10242b"
 _MUTED = "#5a8899"
 _BORDER = "#123038"
 _LISTEN = "#bb86fc"  # voice-listening accent (matches the orb)
-_WINDOW_CHROMA = "#010101"
 _WINDOW_RADIUS = 18
-_WINDOW_PAD = 3
 _GUI_ACTIVE_FRAME_MS = 16
 _GUI_IDLE_FRAME_MS = 50
 WINDOW_WIDTH = 400
@@ -77,27 +75,6 @@ def companion_geometry_near_pointer(
     return f"{width}x{height}+{x}+{y}"
 
 
-def _draw_rounded_rect(
-    canvas: Any,
-    x1: int,
-    y1: int,
-    x2: int,
-    y2: int,
-    radius: int,
-    *,
-    fill: str,
-    tags: str,
-) -> None:
-    """Draw a filled rounded rectangle on a Tk Canvas."""
-    r = max(1, min(int(radius), max(1, (x2 - x1) // 2), max(1, (y2 - y1) // 2)))
-    canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=fill, outline="", tags=tags)
-    canvas.create_rectangle(x1, y1 + r, x2, y2 - r, fill=fill, outline="", tags=tags)
-    canvas.create_oval(x1, y1, x1 + 2 * r, y1 + 2 * r, fill=fill, outline="", tags=tags)
-    canvas.create_oval(x2 - 2 * r, y1, x2, y1 + 2 * r, fill=fill, outline="", tags=tags)
-    canvas.create_oval(x1, y2 - 2 * r, x1 + 2 * r, y2, fill=fill, outline="", tags=tags)
-    canvas.create_oval(x2 - 2 * r, y2 - 2 * r, x2, y2, fill=fill, outline="", tags=tags)
-
-
 def _apply_windows_rounded_corners(win: Any) -> None:
     """Best-effort Win11 DWM rounding for borderless Tk windows."""
     if sys.platform != "win32":
@@ -117,6 +94,30 @@ def _apply_windows_rounded_corners(win: Any) -> None:
         )
     except Exception:
         pass
+
+
+def _apply_windows_rounded_region(win: Any, radius: int = _WINDOW_RADIUS) -> None:
+    """Best-effort rounded clipping without Tk color-key transparency."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        width = max(1, int(win.winfo_width() or WINDOW_WIDTH))
+        height = max(1, int(win.winfo_height() or WINDOW_HEIGHT))
+        diameter = max(1, int(radius) * 2)
+        hwnd = int(win.winfo_id())
+        hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, diameter, diameter)
+        if hrgn:
+            ctypes.windll.user32.SetWindowRgn(hwnd, hrgn, True)
+    except Exception:
+        pass
+
+
+def _apply_windows_window_shape(win: Any) -> None:
+    """Apply native Windows rounding hints to a borderless Tk surface."""
+    _apply_windows_rounded_corners(win)
+    _apply_windows_rounded_region(win)
 
 
 class CompanionSurface:
@@ -273,7 +274,7 @@ class CompanionSurface:
             popup.attributes("-alpha", 0.95)
         except Exception:
             pass
-        _apply_windows_rounded_corners(popup)
+        _apply_windows_window_shape(popup)
 
         border = tk.Frame(popup, bg=CYAN)
         border.pack(fill="both", expand=True)
@@ -486,60 +487,16 @@ class CompanionSurface:
             win.attributes("-alpha", 0.95)
         except Exception:
             pass
-        transparent_shell = True
-        try:
-            win.configure(bg=_WINDOW_CHROMA)
-            win.attributes("-transparentcolor", _WINDOW_CHROMA)
-        except Exception:
-            transparent_shell = False
-            win.configure(bg=_BORDER)
-        _apply_windows_rounded_corners(win)
+        win.configure(bg=_BORDER)
+        _apply_windows_window_shape(win)
 
         # Modern, voice-first one-sided surface: a hairline accent border, a dark
         # card, Ghost's reply as the primary area, and a slim manual input bar.
-        shell_bg = _WINDOW_CHROMA if transparent_shell else _BORDER
-        shell = tk.Canvas(win, bg=shell_bg, highlightthickness=0, bd=0)
-        shell.pack(fill="both", expand=True)
-        card = tk.Frame(shell, bg=CARD)
-        card_id = shell.create_window(
-            _WINDOW_PAD,
-            _WINDOW_PAD,
-            anchor="nw",
-            window=card,
-        )
-
-        def _draw_shell(event: Any | None = None) -> None:
-            width = int(getattr(event, "width", 0) or shell.winfo_width() or WINDOW_WIDTH)
-            height = int(getattr(event, "height", 0) or shell.winfo_height() or WINDOW_HEIGHT)
-            shell.delete("chrome")
-            _draw_rounded_rect(
-                shell,
-                0,
-                0,
-                max(1, width - 1),
-                max(1, height - 1),
-                _WINDOW_RADIUS,
-                fill=_BORDER,
-                tags="chrome",
-            )
-            _draw_rounded_rect(
-                shell,
-                _WINDOW_PAD,
-                _WINDOW_PAD,
-                max(_WINDOW_PAD + 1, width - _WINDOW_PAD - 1),
-                max(_WINDOW_PAD + 1, height - _WINDOW_PAD - 1),
-                max(1, _WINDOW_RADIUS - _WINDOW_PAD),
-                fill=CARD,
-                tags="chrome",
-            )
-            shell.tag_lower("chrome")
-            shell.itemconfigure(
-                card_id,
-                width=max(1, width - (_WINDOW_PAD * 2)),
-                height=max(1, height - (_WINDOW_PAD * 2)),
-            )
-
-        shell.bind("<Configure>", _draw_shell)
+        border = tk.Frame(win, bg=_BORDER)
+        border.pack(fill="both", expand=True)
+        card = tk.Frame(border, bg=CARD)
+        card.pack(fill="both", expand=True, padx=1, pady=1)
+        win.bind("<Configure>", lambda _event: _apply_windows_window_shape(win))
 
         # header (drag handle): glyph + title on the left; listening dot + mode badge
         header = tk.Frame(card, bg=CARD)
@@ -655,7 +612,7 @@ class CompanionSurface:
                 win.winfo_screenwidth(),
                 win.winfo_screenheight(),
             ))
-            _draw_shell()
+            _apply_windows_window_shape(win)
             self._apply_mode_indicator()
             win.deiconify()
             win.lift()
@@ -720,7 +677,7 @@ class CompanionSurface:
         root.bind("<<CompanionHide>>", _do_hide)
         root.bind("<<CompanionStop>>", _do_stop)
         root.bind("<<CompanionShowLog>>", _do_show_log)
-        for _esc_widget in (root, win, shell, card, header, self._entry, self._response):
+        for _esc_widget in (root, win, border, card, header, self._entry, self._response):
             try:
                 _esc_widget.bind("<Escape>", _hide_and_break)
             except Exception:

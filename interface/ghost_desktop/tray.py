@@ -7,11 +7,12 @@ and panic-stop. Uses pystray (optional dep, degrades gracefully).
 from __future__ import annotations
 
 import os
-import sys
 import threading
 import traceback
 from pathlib import Path
 from typing import Any
+
+from core.runtime.subprocess_flags import gui_python_executable
 
 TRAY_TOOLTIP = "MO Ghost"
 
@@ -214,11 +215,12 @@ class CompanionTray:
                 try:
                     shell = Dispatch("WScript.Shell")
                     shortcut = shell.CreateShortcut(str(shortcut_path))
-                    shortcut.TargetPath = sys.executable
+                    python_gui = gui_python_executable()
+                    shortcut.TargetPath = python_gui
                     shortcut.Arguments = "-m interface.ghost_desktop"
                     shortcut.WorkingDirectory = str(Path(__file__).resolve().parent.parent.parent)
                     shortcut.Description = "MO Ghost — on-screen AI assistant"
-                    shortcut.IconLocation = sys.executable
+                    shortcut.IconLocation = python_gui
                     shortcut.Save()
                 finally:
                     pythoncom.CoUninitialize()

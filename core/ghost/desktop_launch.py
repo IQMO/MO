@@ -11,13 +11,12 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import Any
 
-from core.runtime.subprocess_flags import apply_windows_hidden_process_flags
+from core.runtime.subprocess_flags import apply_windows_hidden_process_flags, gui_python_executable
 
 _UNSET = object()
 _LAUNCH_MARKER_NAME = "ghost-launching.lock"
@@ -103,13 +102,6 @@ def _clear_launch_marker(path: Path | None = None) -> None:
         pass
 
 
-def _ghost_python_executable() -> str:
-    if os.name != "nt":
-        return sys.executable
-    candidate = Path(sys.executable).with_name("pythonw.exe")
-    return str(candidate) if candidate.exists() else sys.executable
-
-
 def launch_ghost_desktop_detached(config: Any = _UNSET) -> str:
     """Spawn Ghost Desktop as its OWN detached process that outlives the caller.
 
@@ -134,7 +126,7 @@ def launch_ghost_desktop_detached(config: Any = _UNSET) -> str:
     )
     apply_windows_hidden_process_flags(popen_kw, detached=True)
     try:
-        subprocess.Popen([_ghost_python_executable(), "-m", "interface.ghost_desktop", "--show"], **popen_kw)
+        subprocess.Popen([gui_python_executable(), "-m", "interface.ghost_desktop", "--show"], **popen_kw)
     except Exception as exc:
         _clear_launch_marker()
         return f"Could not launch Ghost Desktop: {type(exc).__name__}: {exc}"
