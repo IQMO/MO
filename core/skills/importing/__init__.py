@@ -6,9 +6,9 @@ network or execution happens at import time, and imported material is treated as
 untrusted data until an operator explicitly promotes it through the existing
 ``core.skills.write_skill_pack_from_candidate`` path.
 
-See ~/.mo/memory/proposals/VS05-skill-learning-system.md for the design and the
-binding integration constraints (one lifecycle, safety-primitive reuse, capped
-context budget, structural-only conflict detection, no learned-state fork).
+Design notes belong in profile memory; product code keeps only neutral import
+lifecycle constraints (one lifecycle, safety-primitive reuse, capped context
+budget, structural-only conflict detection, no learned-state fork).
 """
 from __future__ import annotations
 
