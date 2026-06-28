@@ -563,7 +563,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                     return final_text
 
                 batch_signature = self._tool_call_batch_signature(tool_calls_data)
-                if batch_signature and batch_signature == last_tool_batch_signature:
+                batch_is_task_progress = self._tool_batch_is_task_completion_progress(tool_calls_data, task_board)
+                if batch_is_task_progress:
+                    last_tool_batch_signature = ""
+                    repeated_tool_batch_count = 0
+                elif batch_signature and batch_signature == last_tool_batch_signature:
                     repeated_tool_batch_count += 1
                 else:
                     last_tool_batch_signature = batch_signature

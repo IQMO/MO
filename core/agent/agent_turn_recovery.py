@@ -136,6 +136,22 @@ class AgentTurnRecoveryMixin:
         )
 
     @staticmethod
+    def _tool_batch_is_task_completion_progress(tool_calls_data: list[dict], task_board: object | None) -> bool:
+        """True for repeated complete_task calls that are still advancing open rows."""
+        if not tool_calls_data or task_board is None:
+            return False
+        try:
+            if int(task_board.open_count()) <= 0:
+                return False
+        except Exception:
+            return False
+        for tc_data in tool_calls_data:
+            fn = tc_data.get("function") if isinstance(tc_data, dict) else {}
+            if not isinstance(fn, dict) or str(fn.get("name") or "") != "complete_task":
+                return False
+        return True
+
+    @staticmethod
     def _build_turn_limit_diagnostics(
         tool_rounds: int,
         provider_requests: int,
