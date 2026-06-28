@@ -738,9 +738,11 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
     unresolved: list[str] = []
     in_unresolved = False
     turn_count = 0
+    message_count = 0
     dirty_count = 0
     spine: list[str] = []
     in_spine = False
+    terminal_marker = ""
 
     for line in text.splitlines():
         stripped = line.strip()
@@ -749,8 +751,15 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
         elif stripped.startswith("- Status: "):
             clean = "clean" in stripped.lower() and "unresolved" not in stripped.lower()
         elif stripped.startswith("- Turns/messages: "):
-            parts = stripped[17:].split("/")
-            turn_count = int(parts[0].strip()) if parts else 0
+            parts = stripped[17:].split("/", 1)
+            try:
+                turn_count = int(parts[0].strip()) if parts else 0
+            except (TypeError, ValueError):
+                turn_count = 0
+            try:
+                message_count = int(parts[1].strip()) if len(parts) > 1 else 0
+            except (TypeError, ValueError):
+                message_count = 0
         elif stripped.startswith("- Git dirty lines:"):
             in_unresolved = False
         elif stripped == "UNRESOLVED:":
@@ -766,8 +775,10 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
             continue
         if in_unresolved and stripped.startswith("- "):
             unresolved.append(stripped[2:].strip())
-        if in_spine and stripped.startswith("  - "):
-            spine.append(stripped[4:].strip())
+        if in_spine and stripped.startswith("- "):
+            entry = stripped[2:].strip()
+            if entry and not entry.lower().startswith("spine "):
+                spine.append(entry)
 
     in_dirty = False
     for line in text.splitlines():
@@ -786,7 +797,8 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
         return ""
 
     status = "clean" if clean else f"{len(unresolved)} unresolved"
-    summary = f"Last session: {turn_count} turns · {reason} · {status}"
+    turns_label = f"{turn_count} turns/{message_count} messages" if message_count else f"{turn_count} turns"
+    summary = f"Last session: {turns_label} · {reason} · {status}"
     if dirty_count:
         summary += f" · {dirty_count} dirty file(s)"
     if spine:
@@ -796,11 +808,19 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
                 topic = entry[5:].strip()
                 summary += f"\nTopic: {topic[:200]}"
                 break
+        for entry in spine:
+            marker_match = re.search(r"\[([A-Z_]+ (?:COMPLETE|BLOCKED))\]", entry)
+            if marker_match:
+                terminal_marker = marker_match.group(1)
+                summary += f"\nMarker: {terminal_marker}"
+                break
         # First line of dialogue gives continuity
         if len(spine) > 1:
             next_line = spine[1] if not spine[0].lower().startswith("user:") or spine[1].lower().startswith("assistant:") else spine[2] if len(spine) > 2 else ""
             next_line = next_line or spine[1]
             summary += f"\nNext: {next_line[:200]}"
+    if turn_count == 0 and message_count > 0:
+        summary += "\nNote: 0-turn handoff/provider-continuation closeouts can still contain recent work messages."
     if unresolved:
         first_unresolved = unresolved[0] if unresolved else ""
         summary += f"\nUnresolved: {first_unresolved[:120]}"

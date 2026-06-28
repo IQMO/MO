@@ -74,6 +74,7 @@ _CONTEXT_SOURCE_SPECS = (
     ("datetime", "Current date", 1, "today's actual date; use it for recency/version reasoning, not a training cutoff", 80),
     ("environment", "Active surface environment", 1, "current surface, OS, CWD, and shell; always verify live state", 300),
     ("heartbeat", "Surface heartbeat continuity", 1, "surface continuity; re-check live state before claims", 900),
+    ("continuity", "Current work snapshot", 1, "runtime truth for continuity/current-work questions; use before recalled memory", 2200),
     ("profile", "Current operator profile", 2, "profile guidance; current user request, system contract, and evidence requirements win", 3000),
     ("ghost_proposal", "Ghost intent guardrails for this turn", 3, "scope guardrail only; not proof of completion", 1400),
     ("work_pattern", "Active work pattern", 3, "process guidance for this turn; verify before claims", 1800),
@@ -108,6 +109,7 @@ _CONTEXT_CHAR_FIELDS = {
     "code_graph": "code_graph_chars",
     "pending_interrupted": "pending_interrupted_chars",
     "heartbeat": "heartbeat_chars",
+    "continuity": "continuity_chars",
     "environment": "environment_chars",
     "datetime": "datetime_chars",
     "reasoning": "reasoning_chars",
@@ -1013,6 +1015,18 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         except Exception:
             heartbeat_context = ""
             environment_context = ""
+        continuity_context = ""
+        try:
+            from ..runtime.continuity import build_current_work_snapshot, looks_like_continuity_question, render_current_work_snapshot
+            if looks_like_continuity_question(user_input):
+                continuity_snapshot = build_current_work_snapshot(self)
+                setattr(self, "_last_continuity_snapshot", continuity_snapshot)
+                continuity_context = render_current_work_snapshot(continuity_snapshot)
+            else:
+                setattr(self, "_last_continuity_snapshot", None)
+        except Exception:
+            setattr(self, "_last_continuity_snapshot", None)
+            traceback.print_exc()
         # Mark graph as orientation-only if it predates current session
         if code_graph_context and hasattr(self, 'session'):
             session_age = getattr(self.session, 'created_at', 0) or 0
@@ -1110,6 +1124,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             "code_graph": code_graph_context,
             "pending_interrupted": pending_interrupted_context,
             "heartbeat": heartbeat_context,
+            "continuity": continuity_context,
             "environment": environment_context,
             "datetime": datetime_context,
             "reasoning": reasoning_context,

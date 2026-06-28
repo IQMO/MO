@@ -52,6 +52,7 @@ SAFE_EVENT_TYPES = {
     "session_compact",
     "slash_command",
     "context_handoff",
+    "continuity_gate",
     "consistency_boundary",
     "ghost_event",
     "board_advance",

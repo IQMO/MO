@@ -56,6 +56,8 @@ class AgentSlashCommands:
             "/clear": self._cmd_clear,
             "/c": self._cmd_clear,
             "/status": self._cmd_status,
+            "/now": self._cmd_now,
+            "/continuity": self._cmd_now,
             "/usage": self._cmd_usage,
             "/heartbeat": self._cmd_heartbeat,
             "/telegram": self._cmd_telegram,
@@ -621,6 +623,21 @@ class AgentSlashCommands:
                 f"  detail: {detail}",
             ])
         return "Use: /heartbeat [status|now|context]"
+
+    def _cmd_now(self, _rest: str) -> str:
+        """Show MO's deterministic current-work continuity snapshot."""
+        try:
+            from ..runtime.continuity import render_current_work_status
+
+            return render_current_work_status(self)
+        except Exception as exc:
+            detail = clean_provider_error(str(exc))
+            return "\n".join([
+                "MO continuity snapshot error: unavailable",
+                "  where: /now command",
+                "Fix: try /heartbeat status and /status if this repeats.",
+                f"  detail: {detail}",
+            ])
 
     def _cmd_telegram(self, rest: str) -> str:
         """Local Telegram gateway control. Never prints or stores token values."""

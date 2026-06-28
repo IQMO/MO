@@ -9,6 +9,7 @@ from __future__ import annotations
 from .. import local_extensions
 from .final_gates import (
     run_claim_gates,
+    run_continuity_gate,
     run_contract_gate,
     run_done_claim_gate,
     run_lsp_diagnostics_gate,
@@ -242,6 +243,21 @@ def _pipeline_lsp_diagnostics(agent, ctx):
     return None
 
 
+def _pipeline_continuity_gate(agent, ctx):
+    instruction = run_continuity_gate(
+        agent,
+        ctx.user_input,
+        ctx.final_text,
+        fired=ctx.final_gates_fired,
+        monitor=ctx.monitor,
+        on_activity=ctx.on_activity,
+    )
+    if instruction:
+        agent.session.add_assistant(instruction)
+        return _CONTINUE
+    return None
+
+
 def _pipeline_claim_gates(agent, ctx):
     instruction = run_claim_gates(
         agent,
@@ -265,6 +281,7 @@ def _pipeline_local_extension_final(agent, ctx):
 _POST_PROVIDER_PIPELINE = [
     ("local_extension_raw_stop", "gate", _pipeline_local_extension_raw_stop),
     ("critique", "action", _pipeline_critique),
+    ("continuity_gate", "gate", _pipeline_continuity_gate),
     ("memory_index", "action", _pipeline_memory_index),
     ("board_finalization", "action", _pipeline_board_finalization),
     ("contract_gate", "gate", _pipeline_contract_gate),

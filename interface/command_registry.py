@@ -129,6 +129,13 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         help_lines=("/status           show MO/session status",),
     ),
     SlashCommandSpec(
+        name="/now",
+        description="current work snapshot",
+        category="Tasks",
+        aliases=("/continuity",),
+        help_lines=("/now              show current work continuity snapshot",),
+    ),
+    SlashCommandSpec(
         name="/usage",
         description="token usage + compression savings",
         category="Tasks",
@@ -433,7 +440,7 @@ SLASH_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
 
 
 HELP_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Work", ("/status", "/goal", "/ghost", "/prt", "/structural-graph", "/learning", "/usage", "/companion")),
+    ("Work", ("/status", "/now", "/goal", "/ghost", "/prt", "/structural-graph", "/learning", "/usage", "/companion")),
     ("Sessions", ("/projects", "/sessions", "/session", "/new", "/resume", "/clear", "/undo", "/retry")),
     ("Settings", ("/help", "/init", "/doctor", "/update", "/migrate", "/model", "/profile", "/skin", "/moon", "/hints", "/reload", "/think", "/settings")),
     ("Remote", ("/heartbeat", "/telegram")),
@@ -487,7 +494,7 @@ SLASH_COMMAND_HELP = build_help_text(include_extensions=False)
 
 PALETTE_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Recent", ()),
-    ("Tasks", ("/goal", "/ghost", "/prt", "/structural-graph", "/status", "/usage", "/heartbeat", "/companion")),
+    ("Tasks", ("/goal", "/ghost", "/prt", "/structural-graph", "/status", "/now", "/usage", "/heartbeat", "/companion")),
     ("Sessions", ("/projects", "/session", "/session save", "/resume", "/new", "/clear", "/undo", "/retry")),
     ("Settings", ("/settings", "/init", "/doctor", "/update", "/migrate", "/model", "/think", "/reload", "/profile", "/telegram", "/help")),
     ("Exit", ("/exit",)),

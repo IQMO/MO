@@ -163,6 +163,38 @@ def run_done_claim_gate(
     return agent._done_claim_task_truth_instruction()
 
 
+def run_continuity_gate(
+    agent: Any,
+    user_input: str,
+    final_text: str,
+    *,
+    fired: set,
+    monitor: Any = None,
+    on_activity: Callable[[str], None] | None = None,
+) -> str | None:
+    """Re-prompt stale continuity answers that skipped runtime work state."""
+    if "continuity_claim" in fired:
+        return None
+    try:
+        from ..runtime.continuity import continuity_gate_instruction
+
+        instruction = continuity_gate_instruction(
+            user_input,
+            final_text,
+            getattr(agent, "_last_continuity_snapshot", None),
+        )
+    except Exception:
+        return None
+    if not instruction:
+        return None
+    fired.add("continuity_claim")
+    if monitor:
+        monitor.emit("continuity_gate", {"reason": "runtime_snapshot_required"})
+    if on_activity:
+        on_activity("continuity answer skipped runtime state - correcting...")
+    return instruction
+
+
 def run_verify_edits_gate(
     agent: Any,
     turn_modified_files: Any,
