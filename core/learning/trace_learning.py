@@ -18,6 +18,7 @@ from .proactive_learning import LearningSuggestion, SuggestionEvidence
 
 DEFAULT_MAX_BYTES = 2_000_000
 DEFAULT_MAX_EVENTS = 1_000
+FOREGROUND_MEMORY_SURFACES = {"main", "terminal", "user", "pc"}
 
 
 def analyze_trace_file(
@@ -93,9 +94,9 @@ def analyze_trace_file(
             salt=str(len(turn_limits)),
         ))
 
-    has_provider_activity = any(str(event.get("type") or "").startswith("provider_") for event in events)
+    has_provider_activity = any(_is_provider_activity_event(event) for event in events)
     has_meaningful_output = len(str(trace.get("stdout") or "")) >= 10
-    if (mode == "run" or has_provider_activity or has_meaningful_output) and not any(event.get("type") == "memory_index" for event in events):
+    if _memory_index_expected(mode, events, has_provider_activity, has_meaningful_output) and not any(event.get("type") == "memory_index" for event in events):
         suggestions.append(_suggestion(
             session_id=session_id,
             kind="trace:no_memory_index",
@@ -271,6 +272,48 @@ def _bounded_events(raw: Any, *, max_events: int | None = None) -> list[dict[str
 def _payload_flag(event: dict[str, Any], *keys: str) -> bool:
     payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
     return any(bool(payload.get(key)) for key in keys)
+
+
+def _memory_index_expected(
+    mode: str,
+    events: list[dict[str, Any]],
+    has_provider_activity: bool,
+    has_meaningful_output: bool,
+) -> bool:
+    """Memory indexing is a foreground-main contract, not a background sweep contract."""
+    if not (mode == "run" or has_provider_activity or has_meaningful_output):
+        return False
+    surfaces = _provider_activity_surfaces(events)
+    if surfaces and not surfaces.intersection(FOREGROUND_MEMORY_SURFACES):
+        return False
+    return True
+
+
+def _is_provider_activity_event(event: dict[str, Any]) -> bool:
+    payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+    return (
+        str(event.get("type") or "").startswith("provider_")
+        or str(payload.get("event") or "").startswith("provider_")
+    )
+
+
+def _provider_activity_surfaces(events: list[dict[str, Any]]) -> set[str]:
+    surfaces: set[str] = set()
+    for event in events:
+        if not _is_provider_activity_event(event):
+            continue
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        for key in ("surface", "route_source"):
+            value = _surface_key(payload.get(key) or event.get(key))
+            if value:
+                surfaces.add(value)
+    return surfaces
+
+
+def _surface_key(value: Any) -> str:
+    raw = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {"": "", "user": "terminal", "pc": "terminal"}
+    return aliases.get(raw, raw)
 
 
 def _event_evidence(events: list[dict[str, Any]], label: str) -> tuple[SuggestionEvidence, ...]:

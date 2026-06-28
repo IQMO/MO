@@ -150,7 +150,7 @@ def build_heartbeat_snapshot(
 ) -> dict[str, Any]:
     session = getattr(agent, "session", None)
     session_id = str(getattr(session, "session_id", "") or "")
-    board = getattr(gateway, "last_task_board", None) if gateway is not None else None
+    board = _live_taskboard(agent, gateway=gateway, session_id=session_id)
     snapshot = {
         "created_at": time.time(),
         "event": str(event or "heartbeat")[:80],
@@ -173,6 +173,22 @@ def build_heartbeat_snapshot(
         "extra": _safe_extra(extra),
     }
     return snapshot
+
+
+def _live_taskboard(agent: Any, *, gateway: Any = None, session_id: str = "") -> Any | None:
+    """Return a live taskboard for heartbeat without reviving stale sessions."""
+    candidates = []
+    if gateway is not None:
+        candidates.append(getattr(gateway, "last_task_board", None))
+    candidates.append(getattr(agent, "_active_task_board", None))
+    for board in candidates:
+        if board is None:
+            continue
+        board_session = str(getattr(board, "session_id", "") or "")
+        if session_id and board_session and board_session != session_id:
+            continue
+        return board
+    return None
 
 
 def read_recent_heartbeats(

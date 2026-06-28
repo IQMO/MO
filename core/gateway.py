@@ -189,8 +189,14 @@ class Gateway:
         board_slot = surface if secondary else "main"
         saved_main_board = self.last_task_board
         saved_previous_board = getattr(self, "previous_task_board", None)
+        saved_active_board = getattr(self.agent, "_active_task_board", None)
         self.previous_task_board = self.last_task_board
         self.last_task_board = None
+        if not secondary:
+            try:
+                setattr(self.agent, "_active_task_board", None)
+            except Exception:
+                traceback.print_exc()
         self.task_board_registry.clear_board(board_slot)
         # A new session must not inherit a PRIOR session's board — neither in-memory (a
         # persistent gateway carries last_task_board across sessions) nor in the persisted
@@ -399,6 +405,10 @@ class Gateway:
                 if secondary:
                     self.last_task_board = saved_main_board
                     self.previous_task_board = saved_previous_board
+                    try:
+                        setattr(self.agent, "_active_task_board", saved_active_board)
+                    except Exception:
+                        traceback.print_exc()
 
             return result_text
 

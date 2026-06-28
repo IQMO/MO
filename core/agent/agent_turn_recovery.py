@@ -69,8 +69,22 @@ class AgentTurnRecoveryMixin:
             "read_file(",
             "test_runner(",
             "project_bridge(",
+            "<tool_call",
+            "</tool_call",
+            "<tool_use",
+            "</tool_use",
         )
         if any(marker in lowered for marker in tool_markers):
+            return True
+        if re.search(
+            r"<\s*(?:tool_call|tool_use|read_file|write_file|edit_file|shell|test_runner|find_files|git_status|tool_search)\b",
+            text,
+            re.IGNORECASE,
+        ):
+            return True
+        if re.search(r"<\s*tool(?:_call|_use)?\s+[^>]*\bname\s*=", text, re.IGNORECASE):
+            return True
+        if re.search(r'^\s*(?:\{|\[).*"tool_calls"\s*:', text, re.DOTALL):
             return True
         if re.search(r'^\s*\{\s*"(?:path|command|root|old_text|new_text)"\s*:', text, re.DOTALL):
             return True
@@ -257,32 +271,34 @@ class AgentTurnRecoveryMixin:
         context_pressure_critical_threshold = float(
             agent_cfg.get("turn_health_context_pressure_critical_at", 0.95) or 0.95
         )
-        if not self._turn_health_handed_off and getattr(self, "context_handoff_enabled", True):
+        tool_budget_critical = remaining <= handoff_at and tool_rounds > 0
+        if (
+            not tool_budget_critical
+            and not self._turn_health_handed_off
+            and getattr(self, "context_handoff_enabled", True)
+        ):
             try:
                 from ..session.handoff import context_pressure as _cp
                 pressure_metrics = _cp(self)
                 cp = float(pressure_metrics.get("pressure") or 0.0)
             except Exception:
+                pressure_metrics = {}
                 cp = 0.0
             if cp >= context_pressure_critical_threshold:
-                # Critical: context window nearly full — handoff and block tools
+                # Critical context pressure is not tool-budget exhaustion. Start a
+                # clean context, but leave the fresh continuation free to use tools.
                 self._turn_health_handed_off = True
                 self._turn_health_compacted = True
-                self._turn_health_tools_blocked = True
                 try:
-                    self._force_tool_budget_handoff(tool_rounds, max_tools, monitor=monitor)
+                    self._force_context_pressure_handoff(pressure_metrics, critical=True, monitor=monitor)
                 except Exception:
                     pass
                 level = "critical"
                 warning = (
                     f"[TURN HEALTH CRITICAL] Context pressure {cp:.0%} — "
                     f"chars {pressure_metrics.get('chars')}/{pressure_metrics.get('budget_chars')}. "
-                    "Context handed off with continuation mandate. "
-                    + (
-                        "Return a work continuation capsule now — do NOT call more tools."
-                        if work_continuation_active
-                        else "Produce your final answer now — do NOT call more tools."
-                    )
+                    "Context handed off into a clean session. Continue the current request from "
+                    "the handoff and use tools normally when verification or action is needed."
                 )
                 if monitor:
                     monitor.emit("turn_health", {
@@ -293,27 +309,25 @@ class AgentTurnRecoveryMixin:
                         "threshold": context_pressure_critical_threshold,
                         "chars": pressure_metrics.get("chars"),
                         "budget_chars": pressure_metrics.get("budget_chars"),
+                        "tool_budget_exhausted": False,
                         "label": "orientation only, not proof",
                     })
                     emitted_turn_health = True
             elif cp >= context_pressure_handoff_threshold:
-                # High pressure: handoff, but allow one more tool round
+                # High pressure: handoff, without poisoning the fresh turn with a
+                # stale "no tools" instruction.
                 self._turn_health_handed_off = True
                 self._turn_health_compacted = True
                 try:
-                    self._force_tool_budget_handoff(tool_rounds, max_tools, monitor=monitor)
+                    self._force_context_pressure_handoff(pressure_metrics, critical=False, monitor=monitor)
                 except Exception:
                     pass
                 level = "handoff"
                 warning = (
                     f"[TURN HEALTH HANDOFF] Context pressure {cp:.0%} — "
                     f"chars {pressure_metrics.get('chars')}/{pressure_metrics.get('budget_chars')}. "
-                    "Context handed off with continuation mandate. "
-                    + (
-                        "Return a work continuation capsule now — do NOT call more tools."
-                        if work_continuation_active
-                        else "Produce your final answer now — do NOT call more tools."
-                    )
+                    "Context handed off into a clean session. Continue the current request from "
+                    "the handoff and use tools normally when verification or action is needed."
                 )
                 if monitor:
                     monitor.emit("turn_health", {
@@ -324,6 +338,7 @@ class AgentTurnRecoveryMixin:
                         "threshold": context_pressure_handoff_threshold,
                         "chars": pressure_metrics.get("chars"),
                         "budget_chars": pressure_metrics.get("budget_chars"),
+                        "tool_budget_exhausted": False,
                         "label": "orientation only, not proof",
                     })
                     emitted_turn_health = True
@@ -503,6 +518,29 @@ class AgentTurnRecoveryMixin:
         return (
             " RUNTIME GROUND TRUTH (computed now — copy verbatim into the capsule, do not "
             "guess or omit): " + " | ".join(parts) + "."
+        )
+
+    def _force_context_pressure_handoff(self, pressure_metrics: dict[str, Any], *, critical: bool, monitor: Any = None) -> None:
+        """Force a context-pressure handoff without marking tools exhausted."""
+        pressure = float((pressure_metrics or {}).get("pressure") or 0.0)
+        chars = int((pressure_metrics or {}).get("chars") or 0)
+        budget = int((pressure_metrics or {}).get("budget_chars") or 0)
+        label = "critical" if critical else "high"
+        focus = (
+            f"[CONTEXT PRESSURE {label.upper()}] Context pressure {pressure:.0%} "
+            f"(chars {chars}/{budget}). Continue the current request from this clean "
+            "handoff. The prior context was compressed/oriented only; verify live files, "
+            "logs, taskboard, and tests before factual claims. Tool budget was not exhausted."
+        )
+        reason = (
+            f"context-pressure-{label} (pressure={pressure:.0%}; chars={chars}/{budget}; "
+            "tool budget not exhausted)"
+        )
+        self._perform_context_handoff(
+            focus=focus,
+            reason=reason,
+            latest_user="",
+            expose_notice=False,
         )
 
     def _force_tool_budget_handoff(self, tool_rounds: int, max_tools: int, *, monitor: Any = None) -> None:

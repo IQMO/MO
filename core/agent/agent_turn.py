@@ -216,8 +216,13 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             delattr(self, "_prt_last_report")
 
         extra_context = self._build_extra_context(user_input)
-        if not pre_handoff and self._maybe_context_handoff(user_input, extra_context=extra_context) and on_activity:
-            on_activity("preparing...")
+        if not pre_handoff and self._maybe_context_handoff(user_input, extra_context=extra_context):
+            if on_activity:
+                on_activity("preparing...")
+            # The handoff replaced the provider-visible session. Rebuild dynamic
+            # context so the next provider request is measured against the fresh
+            # session instead of stale pre-handoff messages/tool output.
+            extra_context = self._build_extra_context(user_input)
 
         # 2. Provider loop — model may call tools, we dispatch, repeat
         provider_requests = 0
