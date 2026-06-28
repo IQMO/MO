@@ -105,7 +105,7 @@ def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
         "### Current Work Snapshot - runtime truth for continuity questions",
         "Use this before episodic memory. Memory recall is older orientation, not current work truth.",
         "Do not answer 'nothing active' unless the live taskboard, latest closeout, heartbeat, and git lines below support it.",
-        f"- Current session: slot {session.get('slot') or '?'}; session {session.get('session_id') or '?'}; turns {session.get('turn_count', 0)}; messages {session.get('message_count', 0)}.",
+        f"- Current session: slot {session.get('slot') or '?'}; turns {session.get('turn_count', 0)}; messages {session.get('message_count', 0)}.",
     ]
     if session.get("latest_user"):
         lines.append(f"- Latest user in this session: {_clip(session.get('latest_user'), 180)}")
@@ -121,7 +121,7 @@ def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
     if latest_board:
         lines.append(
             f"- Latest taskboard ledger: {latest_board.get('state') or latest_board.get('event') or '?'}; "
-            f"session {latest_board.get('session_id') or '?'}; open {latest_board.get('open', 0)}; "
+            f"open {latest_board.get('open', 0)}; "
             f"title {_clip(latest_board.get('title') or latest_board.get('objective') or '', 140)}."
         )
     if closeout:
@@ -136,7 +136,7 @@ def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
             closeout_line += f"; marker {closeout.get('terminal_marker')}"
         lines.append(closeout_line + ".")
         if int(closeout.get("turn_count") or 0) == 0 and int(closeout.get("message_count") or 0) > 0:
-            lines.append("- Note: a 0-turn handoff closeout with messages is not an empty/no-work session.")
+            lines.append("- Note: a 0-turn runtime closeout with messages is not an empty/no-work session.")
     if trace:
         validation = trace.get("validation") or ""
         suffix = f"; validation {validation}" if validation else ""
@@ -150,7 +150,62 @@ def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
 
 def render_current_work_status(agent: Any = None) -> str:
     """Human-facing /now output."""
-    return render_current_work_snapshot(build_current_work_snapshot(agent))
+    snap = build_current_work_snapshot(agent)
+    session = snap.get("current_session") or {}
+    heartbeat = snap.get("heartbeat") or {}
+    live_board = snap.get("live_taskboard") or {}
+    latest_board = snap.get("latest_taskboard") or {}
+    closeout = snap.get("latest_closeout") or {}
+    trace = snap.get("latest_trace") or {}
+    git = snap.get("git") or {}
+    lines = [
+        "Current work snapshot:",
+        f"  session: slot {session.get('slot') or '?'}; turns {session.get('turn_count', 0)}; messages {session.get('message_count', 0)}",
+    ]
+    if session.get("latest_user"):
+        lines.append(f"  latest user: {_clip(session.get('latest_user'), 160)}")
+    if heartbeat:
+        lines.append(
+            f"  heartbeat: {heartbeat.get('event') or '?'}; slot {heartbeat.get('slot') or '?'}; "
+            f"taskboard open {heartbeat.get('taskboard_open', 0)}"
+        )
+    lines.append(
+        f"  live board: {live_board.get('state', 'none')}; open {live_board.get('open', 0)}/{live_board.get('total', 0)}"
+    )
+    if latest_board:
+        lines.append(
+            f"  latest board ledger: open {latest_board.get('open', 0)}/{latest_board.get('total', 0)}; "
+            f"{_clip(latest_board.get('title') or latest_board.get('objective') or '', 120)}"
+        )
+    if closeout:
+        status = str(closeout.get("status") or "?")
+        if status.lower() == "clean":
+            status = "no unresolved markers"
+        closeout_line = (
+            f"  latest closeout: {closeout.get('reason') or '?'}; {status}; "
+            f"turns/messages {closeout.get('turn_count', 0)}/{closeout.get('message_count', 0)}"
+        )
+        if closeout.get("topic"):
+            closeout_line += f"; topic {_clip(closeout.get('topic'), 140)}"
+        if closeout.get("terminal_marker"):
+            closeout_line += f"; marker {closeout.get('terminal_marker')}"
+        lines.append(closeout_line)
+        if int(closeout.get("turn_count") or 0) == 0 and int(closeout.get("message_count") or 0) > 0:
+            lines.append("  note: 0-turn closeouts with messages are recent activity, not empty history")
+    if trace:
+        validation = trace.get("validation") or ""
+        suffix = f"; validation {validation}" if validation else ""
+        lines.append(f"  latest trace: {trace.get('name')}{suffix}")
+    if git:
+        lines.append(f"  git: branch {git.get('branch') or '?'}; dirty lines {int(git.get('dirty_count') or 0)}")
+    open_count = int(live_board.get("open") or 0) + int(latest_board.get("open") or 0)
+    if open_count:
+        lines.append(f"  verdict: {open_count} open runtime task row(s) visible")
+    elif closeout or heartbeat or trace:
+        lines.append("  verdict: no open taskboard row visible; recent runtime activity exists")
+    else:
+        lines.append("  verdict: no recent runtime activity found")
+    return "\n".join(lines)
 
 
 def continuity_gate_instruction(user_input: str, final_text: str, snapshot: dict[str, Any] | None) -> str | None:
@@ -181,7 +236,7 @@ def continuity_gate_instruction(user_input: str, final_text: str, snapshot: dict
         if marker and marker.lower() not in text.lower():
             return _continuity_retry_text("You made a no-active-work claim without naming the latest terminal closeout marker.", snapshot)
         if turn_count == 0 and message_count > 0 and re.search(r"(?i)\b0\s+turns\b", text):
-            return _continuity_retry_text("You treated a 0-turn handoff closeout with messages as empty work.", snapshot)
+            return _continuity_retry_text("You treated a 0-turn runtime closeout with messages as empty work.", snapshot)
     if topic and "recalled" in text.lower() and not _topic_words_present(text, topic):
         return _continuity_retry_text("You cited recalled older interactions but skipped the latest runtime closeout topic.", snapshot)
     return None
@@ -367,7 +422,7 @@ def _latest_trace_summary() -> dict[str, Any]:
             data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             report = data.get("validation") if isinstance(data, dict) else None
             if isinstance(report, list):
-                failed = [str(row.get("name") or "") for row in report if isinstance(row, dict) and not row.get("passed")]
+                failed = [_public_trace_label(str(row.get("name") or "")) for row in report if isinstance(row, dict) and not row.get("passed")]
                 out["validation"] = "clean" if not failed else "failed: " + ", ".join(failed[:4])
     except Exception:
         pass
@@ -400,6 +455,10 @@ def _latest_role(messages: list[dict[str, Any]], role: str) -> str:
         if item.get("role") == role:
             return _clip(str(item.get("content") or ""), 300)
     return ""
+
+
+def _public_trace_label(value: str) -> str:
+    return re.sub(r"(?i)\bsession\s+clean\b", "Session state", str(value or "")).strip()
 
 
 def _clip(value: Any, limit: int) -> str:

@@ -796,7 +796,7 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
     if not reason:
         return ""
 
-    status = "clean" if clean else f"{len(unresolved)} unresolved"
+    status = "no unresolved markers" if clean else f"{len(unresolved)} unresolved"
     turns_label = f"{turn_count} turns/{message_count} messages" if message_count else f"{turn_count} turns"
     summary = f"Last session: {turns_label} · {reason} · {status}"
     if dirty_count:
@@ -820,7 +820,7 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
             next_line = next_line or spine[1]
             summary += f"\nNext: {next_line[:200]}"
     if turn_count == 0 and message_count > 0:
-        summary += "\nNote: 0-turn handoff/provider-continuation closeouts can still contain recent work messages."
+        summary += "\nNote: 0-turn session closeouts with messages can still contain recent work."
     if unresolved:
         first_unresolved = unresolved[0] if unresolved else ""
         summary += f"\nUnresolved: {first_unresolved[:120]}"
