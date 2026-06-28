@@ -1109,6 +1109,61 @@ def _guard_write_secret(name: str, arguments: dict[str, Any], cfg: dict[str, Any
     return None
 
 
+# Files that enforce MO's own safety and truth invariants. An autonomous run
+# (self-maintenance, or any agent pointed at MO's own checkout) must not silently
+# rewrite these: a cheap model editing the sandbox, secret redaction, or the
+# final-answer / contract / claim gates could neuter MO's guarantees with no human
+# in the loop. This is the deterministic backstop for the model-facing "hard
+# boundaries" guidance — the operator can still edit them with explicit approval
+# (operator_override) or by setting sandbox.protect_safety_files=false.
+_PROTECTED_SAFETY_FILES: tuple[tuple[str, ...], ...] = (
+    ("core", "tooling", "sandbox.py"),       # path/secret/lane enforcement itself
+    ("core", "review", "critic.py"),         # secrets redaction
+    ("core", "gates", "final_gates.py"),     # final-answer enforcement registry
+    ("core", "gates", "behavior_gates.py"),  # threat / content scan
+    ("core", "gates", "claim_verification.py"),  # verify-before-claiming
+    ("core", "tasking", "contract.py"),      # taskboard contract gate
+)
+
+
+def _path_matches_protected(path: str) -> bool:
+    """True if `path` ends with one of the protected safety-file segments.
+
+    Matches on whole path segments (not substrings) and is case-insensitive, so it
+    catches the file in the live checkout, a worktree, or a clone regardless of the
+    absolute root, while staying anchored to MO's specific layout."""
+    parts = [p for p in re.split(r"[\\/]+", str(path or "")) if p and p != "."]
+    if not parts:
+        return False
+    lowered = [p.lower() for p in parts]
+    for suffix in _PROTECTED_SAFETY_FILES:
+        n = len(suffix)
+        if len(lowered) >= n and lowered[-n:] == [s.lower() for s in suffix]:
+            return True
+    return False
+
+
+def _guard_protected_path(name: str, arguments: dict[str, Any], cfg: dict[str, Any]) -> str | None:
+    """Block write_file/edit_file targeting a MO safety-critical file.
+
+    operator_override is handled by the caller (explicit approval bypasses). Set
+    sandbox.protect_safety_files=false to disable the guard globally."""
+    if not cfg.get("protect_safety_files", True):
+        return None
+    if name not in {"write_file", "edit_file"}:
+        return None
+    path = (arguments or {}).get("path")
+    if not path or not _path_matches_protected(str(path)):
+        return None
+    return (
+        f"[TOOL BLOCKED] {name} targets a MO safety-critical file ({path}). These "
+        "files (sandbox, secret redaction, final-answer / contract / claim gates) "
+        "enforce MO's own safety and truth guarantees and are not auto-editable. If "
+        "this change is genuinely intended, the operator must approve it explicitly "
+        "(operator override) or set sandbox.protect_safety_files=false."
+    )
+
+
 def guard_tool_call(
     name: str,
     arguments: dict[str, Any],
@@ -1185,6 +1240,12 @@ def guard_tool_call(
     # operator_override (explicit in-turn approval) bypasses, mirroring shell guards.
     if name in {"write_file", "edit_file"} and not operator_override:
         if reason := _guard_write_secret(name, arguments, cfg):
+            return block(reason)
+
+    # Protected-file guard: MO's own safety/truth-enforcing files are not
+    # auto-editable. operator_override (explicit approval) bypasses.
+    if name in {"write_file", "edit_file"} and not operator_override:
+        if reason := _guard_protected_path(name, arguments, cfg):
             return block(reason)
 
     # Test runner safety
