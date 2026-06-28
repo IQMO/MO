@@ -46,6 +46,8 @@ def context_pressure(agent: Any, *, extra_context: str = "") -> dict[str, Any]:
     max_history = int(getattr(session, "max_history", 50) or 50)
     char_ratio = (chars / budget_chars) if budget_chars else 0.0
     message_ratio = (message_count / max_history) if max_history else 0.0
+    raw_pressure = max(char_ratio, message_ratio)
+    pressure_source = "messages" if message_ratio >= char_ratio else "chars"
     created_at = float(getattr(session, "created_at", 0.0) or 0.0)
     age_seconds = max(0, int(time.time() - created_at)) if created_at else 0
     return {
@@ -55,7 +57,10 @@ def context_pressure(agent: Any, *, extra_context: str = "") -> dict[str, Any]:
         "message_count": message_count,
         "max_history": max_history,
         "message_ratio": message_ratio,
-        "pressure": max(char_ratio, message_ratio),
+        "raw_pressure": raw_pressure,
+        "pressure": min(1.0, raw_pressure),
+        "pressure_source": pressure_source,
+        "over_limit": raw_pressure > 1.0,
         "turn_count": int(getattr(session, "turn_count", 0) or 0),
         "session_age_seconds": age_seconds,
         "trimmed_messages_count": int(getattr(session, "trimmed_messages_count", 0) or 0),

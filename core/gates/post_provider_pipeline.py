@@ -33,6 +33,7 @@ class _GateContext:
         "turn_initial_completed_ids", "turn_modified_files",
         "tool_call_counts", "tool_error_counts", "total_tool_calls",
         "boundary_report", "response",
+        "turn_id", "session_id", "instance_id", "route_source", "surface",
     )
 
 

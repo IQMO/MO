@@ -86,6 +86,8 @@ class Gateway:
         extension_decision = local_extensions.should_show_task_board(text)
         if extension_decision is not None:
             return extension_decision
+        if local_extensions.board_rows(text) is not None:
+            return True
         if is_research_method_question(text):
             return False
         return select_template(text) != "simple_chat"
@@ -635,6 +637,8 @@ def _runtime_should_create_board(
     extension_decision = local_extensions.should_show_task_board(text)
     if extension_decision is not None:
         return extension_decision
+    if local_extensions.board_rows(text) is not None:
+        return True
     if resume_intent:
         return True
     model_owned = False

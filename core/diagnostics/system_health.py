@@ -9,8 +9,9 @@ import json
 import os
 import re
 import sqlite3
+import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,18 @@ class SystemHealth:
     graph: dict[str, Any] = field(default_factory=dict)
     learning: dict[str, Any] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def items(self):
+        return self.as_dict().items()
+
+    def keys(self):
+        return self.as_dict().keys()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.as_dict().get(key, default)
 
 
 _FILE_TARGETS: dict[str, dict[str, int]] = {
@@ -104,6 +117,34 @@ def check_config_coverage() -> dict[str, Any]:
 def build_health_report(root: str = ".") -> SystemHealth:
     """Assemble a full backend health report."""
     return SystemHealth(files=check_file_health(root), graph=check_graph_health(root), learning=check_learning_health(root), config=check_config_coverage())
+
+
+def render_health_report(report: SystemHealth) -> str:
+    """Render a safe CLI summary without printing raw environment values."""
+    data = report.as_dict()
+    safe_config = {
+        key: {
+            "set": bool(value.get("set")),
+            "matches_default": bool(value.get("matches_default")),
+        }
+        for key, value in data.get("config", {}).items()
+        if isinstance(value, dict)
+    }
+    safe = {
+        "files": data.get("files", {}),
+        "graph": data.get("graph", {}),
+        "learning": data.get("learning", {}),
+        "config": safe_config,
+    }
+    return json.dumps(safe, indent=2, sort_keys=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI-compatible entry point for health probes."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    root = args[0] if args else "."
+    print(render_health_report(build_health_report(root)))
+    return 0
 
 
 def _graph_summary(path: Path) -> dict[str, Any]:
@@ -227,3 +268,7 @@ def _stat(path: Path) -> dict[str, Any]:
         return {"bytes": stat.st_size, "modified": stat.st_mtime}
     except OSError:
         return {"bytes": 0, "modified": 0}
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

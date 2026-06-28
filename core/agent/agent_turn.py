@@ -22,6 +22,7 @@ from ..tooling.sandbox import guard_tool_call
 from ..tasking.task_board import TaskBoard, record_snapshot
 from ..runtime.backend_monitor import (
     BackendMonitor,
+    current_monitor_context,
     get_monitor,
     preview_provider_messages,
     preview_provider_response,
@@ -840,6 +841,12 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             ctx.tool_error_counts = tool_error_counts
             ctx.total_tool_calls = total_tool_calls
             ctx.response = response
+            monitor_context_values = current_monitor_context()
+            ctx.turn_id = str(monitor_context_values.get("turn_id") or "")
+            ctx.session_id = str(monitor_context_values.get("session_id") or "")
+            ctx.instance_id = str(monitor_context_values.get("instance_id") or "")
+            ctx.route_source = str(monitor_context_values.get("route_source") or "")
+            ctx.surface = str(monitor_context_values.get("surface") or "")
 
             result = _run_post_provider_pipeline(self, ctx)
             if result is _CONTINUE:

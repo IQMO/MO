@@ -123,6 +123,15 @@ def monitor_context(**values: Any):
             traceback.print_exc()
 
 
+def current_monitor_context() -> dict[str, Any]:
+    """Return the active monitor correlation context for gate/runtime hooks."""
+    try:
+        return dict(_MONITOR_CONTEXT.get({}) or {})
+    except Exception:
+        traceback.print_exc()
+        return {}
+
+
 def _safe_monitor_value(value: Any, *, limit: int = 6000) -> Any:
     if isinstance(value, dict):
         return {redact_monitor_text(k, 120): _safe_monitor_value(v, limit=limit) for k, v in value.items()}
@@ -333,6 +342,7 @@ GHOST_SURFACES = frozenset({"desktop", "ghost", "companion"})
 def economy_summary(
     monitor_path: str | Path | None = None,
     *,
+    turn_ids: "set[str] | frozenset[str] | None" = None,
     session_ids: "set[str] | frozenset[str] | None" = None,
     exclude_surfaces: "set[str] | frozenset[str] | None" = None,
     instance_ids: "set[str] | frozenset[str] | None" = None,
@@ -347,9 +357,10 @@ def economy_summary(
 
     Logical-run scoping (multi-instance proposal, amendment #5): one process monitor can
     hold a Main-MO run PLUS handoff segments PLUS interleaved Ghost/desktop turns.
-    ``session_ids`` restricts counting to a run's segment ids. ``instance_ids`` can
-    further restrict to specific process instances. ``exclude_surfaces`` drops events
-    tagged by either route_source or normalized surface (e.g. ``GHOST_SURFACES``).
+    ``turn_ids`` restricts counting to exact turn correlation ids. ``session_ids``
+    restricts counting to a run's segment ids. ``instance_ids`` can further restrict
+    to specific process instances. ``exclude_surfaces`` drops events tagged by either
+    route_source or normalized surface (e.g. ``GHOST_SURFACES``).
     Defaults preserve whole-file behavior for existing callers.
     """
     path = Path(monitor_path) if monitor_path else latest_monitor_path()
@@ -374,6 +385,10 @@ def economy_summary(
             continue
         t = d.get("type")
         p = d.get("payload", {}) or {}
+        if turn_ids is not None:
+            tid = p.get("turn_id") or d.get("turn_id")
+            if tid not in turn_ids:
+                continue
         if session_ids is not None:
             sid = p.get("session_id") or d.get("session_id")
             if sid not in session_ids:

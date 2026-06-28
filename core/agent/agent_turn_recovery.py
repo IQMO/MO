@@ -284,6 +284,22 @@ class AgentTurnRecoveryMixin:
             except Exception:
                 pressure_metrics = {}
                 cp = 0.0
+            pressure_source = str(pressure_metrics.get("pressure_source") or "unknown")
+            pressure_payload = {
+                "pressure_source": pressure_source,
+                "raw_pressure": float(pressure_metrics.get("raw_pressure") or cp or 0.0),
+                "char_ratio": float(pressure_metrics.get("char_ratio") or 0.0),
+                "message_ratio": float(pressure_metrics.get("message_ratio") or 0.0),
+                "message_count": pressure_metrics.get("message_count"),
+                "max_history": pressure_metrics.get("max_history"),
+            }
+            pressure_detail = (
+                f"source {pressure_source}; "
+                f"chars {pressure_metrics.get('chars')}/{pressure_metrics.get('budget_chars')} "
+                f"({pressure_payload['char_ratio']:.0%}); "
+                f"messages {pressure_metrics.get('message_count')}/{pressure_metrics.get('max_history')} "
+                f"({pressure_payload['message_ratio']:.0%})"
+            )
             if cp >= context_pressure_critical_threshold:
                 # Critical context pressure is not tool-budget exhaustion. Start a
                 # clean context, but leave the fresh continuation free to use tools.
@@ -296,7 +312,7 @@ class AgentTurnRecoveryMixin:
                 level = "critical"
                 warning = (
                     f"[TURN HEALTH CRITICAL] Context pressure {cp:.0%} — "
-                    f"chars {pressure_metrics.get('chars')}/{pressure_metrics.get('budget_chars')}. "
+                    f"{pressure_detail}. "
                     "Context handed off into a clean session. Continue the current request from "
                     "the handoff and use tools normally when verification or action is needed."
                 )
@@ -309,6 +325,7 @@ class AgentTurnRecoveryMixin:
                         "threshold": context_pressure_critical_threshold,
                         "chars": pressure_metrics.get("chars"),
                         "budget_chars": pressure_metrics.get("budget_chars"),
+                        **pressure_payload,
                         "tool_budget_exhausted": False,
                         "label": "orientation only, not proof",
                     })
@@ -325,7 +342,7 @@ class AgentTurnRecoveryMixin:
                 level = "handoff"
                 warning = (
                     f"[TURN HEALTH HANDOFF] Context pressure {cp:.0%} — "
-                    f"chars {pressure_metrics.get('chars')}/{pressure_metrics.get('budget_chars')}. "
+                    f"{pressure_detail}. "
                     "Context handed off into a clean session. Continue the current request from "
                     "the handoff and use tools normally when verification or action is needed."
                 )
@@ -338,6 +355,7 @@ class AgentTurnRecoveryMixin:
                         "threshold": context_pressure_handoff_threshold,
                         "chars": pressure_metrics.get("chars"),
                         "budget_chars": pressure_metrics.get("budget_chars"),
+                        **pressure_payload,
                         "tool_budget_exhausted": False,
                         "label": "orientation only, not proof",
                     })
@@ -525,15 +543,24 @@ class AgentTurnRecoveryMixin:
         pressure = float((pressure_metrics or {}).get("pressure") or 0.0)
         chars = int((pressure_metrics or {}).get("chars") or 0)
         budget = int((pressure_metrics or {}).get("budget_chars") or 0)
+        char_ratio = float((pressure_metrics or {}).get("char_ratio") or 0.0)
+        message_count = int((pressure_metrics or {}).get("message_count") or 0)
+        max_history = int((pressure_metrics or {}).get("max_history") or 0)
+        message_ratio = float((pressure_metrics or {}).get("message_ratio") or 0.0)
+        source = str((pressure_metrics or {}).get("pressure_source") or "unknown")
         label = "critical" if critical else "high"
+        detail = (
+            f"source={source}; chars={chars}/{budget} ({char_ratio:.0%}); "
+            f"messages={message_count}/{max_history} ({message_ratio:.0%})"
+        )
         focus = (
             f"[CONTEXT PRESSURE {label.upper()}] Context pressure {pressure:.0%} "
-            f"(chars {chars}/{budget}). Continue the current request from this clean "
+            f"({detail}). Continue the current request from this clean "
             "handoff. The prior context was compressed/oriented only; verify live files, "
             "logs, taskboard, and tests before factual claims. Tool budget was not exhausted."
         )
         reason = (
-            f"context-pressure-{label} (pressure={pressure:.0%}; chars={chars}/{budget}; "
+            f"context-pressure-{label} (pressure={pressure:.0%}; {detail}; "
             "tool budget not exhausted)"
         )
         self._perform_context_handoff(

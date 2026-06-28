@@ -342,10 +342,15 @@ def _context_pressure(agent: Any) -> dict[str, Any]:
         pressure = context_pressure(agent)
         return {
             "pressure": round(float(pressure.get("pressure") or 0.0), 4),
+            "raw_pressure": round(float(pressure.get("raw_pressure") or pressure.get("pressure") or 0.0), 4),
+            "pressure_source": str(pressure.get("pressure_source") or ""),
             "chars": _as_int(pressure.get("chars", 0)),
             "budget_chars": _as_int(pressure.get("budget_chars", 0)),
+            "char_ratio": round(float(pressure.get("char_ratio") or 0.0), 4),
             "messages": _as_int(pressure.get("message_count", 0)),
             "max_history": _as_int(pressure.get("max_history", 0)),
+            "message_ratio": round(float(pressure.get("message_ratio") or 0.0), 4),
+            "over_limit": bool(pressure.get("over_limit")),
             "trimmed": _as_int(pressure.get("trimmed_messages_count", 0)),
         }
     except Exception:
