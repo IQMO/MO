@@ -862,7 +862,7 @@ class AgentTurnDispatchMixin:
         if "git push" in cmd or re.search(r"\bpush\s+(?:to\s+)?(?:origin|github|remote|main|prod|production)\b", cmd):
             return bool(re.search(r"\b(push|publish|release)\b", text) or re.search(r"\b(approve|approved|go ahead|proceed|do it)\b", text))
         if re.search(r"\b(deploy(?:ment)?|release|production|prod|go live|vps|remote)\b", cmd):
-            return bool(re.search(r"\b(deploy(?:ment)?|release|production|prod|go live|vps|remote)\b", text) and not re.search(r"\b(do not|don't|dont|no)\b", text))
+            return bool(re.search(r"\b(deploy(?:ment)?|release|production|prod|go live|vps|remote|CPD|push)\b", text) and not re.search(r"\b(do not|don't|dont|no)\b", text))
         if re.search(r"\b(secret|credential|private key|token|bearer|wallet|billing|payment)\b", cmd):
             return bool(re.search(r"\b(approve|approved|go ahead|proceed|do it)\b", text) and re.search(r"\b(secret|credential|key|token|wallet|billing|payment)\b", text))
         if re.search(r"\b(reset --hard|git clean|force[- ]?push|delete repo|drop table|truncate)\b", cmd):
