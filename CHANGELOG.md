@@ -6,6 +6,14 @@ and the TUI footer shows when new updates are available.
 
 ## Unreleased
 
+- **Post-turn commit reminder:** after a turn that leaves uncommitted changes,
+  MO reminds the operator to commit and push. Runs via the post-provider pipeline
+  using a direct `git status --porcelain` check.
+- **Error recovery message:** more reassuring "no worries" tone that explicitly
+  says it's fine to ignore the error report prompt.
+- **Windows subprocess encoding:** all `subprocess.run(..., text=True)` calls
+  now explicitly use `encoding="utf-8", errors="replace"` — prevents
+  `UnicodeDecodeError` on Windows when git output contains non-ANSI characters.
 - **Self-update:** live "N updates behind" notice in the TUI footer — automatic,
   cached, non-blocking, no user action. The apply path (`/update`, `mo --update`,
   and `mo --version` reporting the running git commit) is landing incrementally;

@@ -16,7 +16,8 @@ try:
     from prompt_toolkit.completion import Completer, Completion, PathCompleter
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.input import create_input
-    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+    from prompt_toolkit.key_binding.defaults import load_key_bindings
     from prompt_toolkit.layout.containers import HSplit, Window, FloatContainer, Float
     from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
     from prompt_toolkit.layout.layout import Layout
@@ -93,10 +94,10 @@ def prompt_toolkit_input(agent: Any) -> str:
         raise RuntimeError("prompt_toolkit is not available")
     cols = terminal_columns()
 
-    kb = KeyBindings()
+    custom_kb = KeyBindings()
     buf = Buffer(completer=SlashAndPathCompleter(), complete_while_typing=False)
 
-    @kb.add("enter")
+    @custom_kb.add("enter")
     def _(event):
         b = event.app.current_buffer
         if b.complete_state:
@@ -106,21 +107,21 @@ def prompt_toolkit_input(agent: Any) -> str:
         else:
             event.app.exit(result=buf.text)
 
-    @kb.add("c-c")
+    @custom_kb.add("c-c")
     def _(event):
         event.app.exit(result=_STOP_INPUT)
 
-    @kb.add("c-d")
+    @custom_kb.add("c-d")
     def _(event):
         event.app.exit(result=_STOP_INPUT)
 
-    @kb.add("c-l")
+    @custom_kb.add("c-l")
     def _(event):
         """Ctrl+L: redraw the terminal screen (convention from readline/shell)."""
         event.app.renderer.clear()
         event.app.invalidate()
 
-    @kb.add("tab")
+    @custom_kb.add("tab")
     def _(event):
         b = event.app.current_buffer
         if b.complete_state:
@@ -128,11 +129,13 @@ def prompt_toolkit_input(agent: Any) -> str:
         else:
             b.start_completion()
 
-    @kb.add("s-tab")
+    @custom_kb.add("s-tab")
     def _(event):
         b = event.app.current_buffer
         if b.complete_state:
             b.complete_previous()
+
+    kb = merge_key_bindings([load_key_bindings(), custom_kb])
 
     def get_footer_html():
         status = format_agent_status(agent)

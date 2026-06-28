@@ -1375,7 +1375,7 @@ def _clean(value: Any, limit: int = 120) -> str:
 
 def _git_head(root: Path) -> str:
     try:
-        proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(root), text=True, capture_output=True, timeout=3)
+        proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(root), text=True, capture_output=True, encoding="utf-8", errors="replace", timeout=3)
         if proc.returncode == 0:
             return proc.stdout.strip()
     except Exception:

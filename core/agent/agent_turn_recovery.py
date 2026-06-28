@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 import traceback
 from pathlib import Path
 from typing import Any
@@ -182,6 +183,14 @@ class AgentTurnRecoveryMixin:
             f"{provider_requests} provider request(s) of {limit} allowed{files_note}"
             f"{top_tool_str}{error_note}{fallback_note}. {advice}"
         )
+        message = self._maybe_append_error_report_prompt(message, {
+            "kind": kind,
+            "limit": limit,
+            "tool_rounds": tool_rounds,
+            "provider_requests": provider_requests,
+            "provider_errors": turn_provider_errors,
+            "provider_fallbacks": turn_provider_fallbacks,
+        })
         # Record in session
         self.session.add_assistant(message)
         # Finalize taskboard if present
@@ -488,15 +497,36 @@ class AgentTurnRecoveryMixin:
         else:
             active_work = self._has_open_runtime_work()
         if active_work:
-            return (
+            message = (
                 "[WORK BLOCKED]\n\n"
                 "Tool calls persistently blocked after budget exhaustion. "
                 "Continuation required in the next fresh turn from the preserved handoff capsule."
             )
-        return (
-            "[TURN HEALTH] Tool calls persistently blocked after budget exhaustion. "
-            "The work continues in the next turn. Use /goal for larger tasks."
+        else:
+            message = (
+                "[TURN HEALTH] Tool calls persistently blocked after budget exhaustion. "
+                "The work continues in the next turn. Use /goal for larger tasks."
+            )
+        return self._maybe_append_error_report_prompt(
+            message, {"kind": "persistent_tool_block", "active_work": active_work},
         )
+
+    # ── Error-reporting prompt ──────────────────────────────────────────────
+
+    _ERROR_REPORT_PROMPT = (
+        "\n\n⚠️  I encountered a serious error. No worries — this is normal and expected sometimes. "
+        "It's perfectly fine to ignore this. "
+        'If you\'d like me to report it to IQMO anyway, just reply "yes" or "report".'
+    )
+
+    def _maybe_append_error_report_prompt(self, message: str, context: dict | None = None) -> str:
+        """Append the error-report prompt and store pending state for the next turn."""
+        session = getattr(self, "session", None)
+        if session is not None:
+            session._pending_error_report = dict(context or {})
+            session._pending_error_report.setdefault("session_id", getattr(session, "session_id", ""))
+            session._pending_error_report.setdefault("timestamp", time.time())
+        return message + self._ERROR_REPORT_PROMPT
 
     def _has_open_runtime_work(self) -> bool:
         gateway = getattr(self, "gateway", None)

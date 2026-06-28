@@ -417,7 +417,18 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         monitor.emit("provider_fallback", {"request": provider_requests, "provider": self.provider_name, "model": self.model, "reason": reason})
                     turn_provider_fallbacks += 1
                     continue
-                return f"MO provider error: {err_msg}"
+                return self._maybe_append_error_report_prompt(
+                    f"MO provider error: {err_msg}",
+                    {
+                        "kind": "provider_error",
+                        "provider": self.provider_name,
+                        "model": self.model,
+                        "reason": reason or "error",
+                        "is_context_overflow": is_context_overflow,
+                        "turn_provider_errors": turn_provider_errors,
+                        "turn_provider_fallbacks": turn_provider_fallbacks,
+                    },
+                )
 
             cancelled_after_response = bool(getattr(cancel_event, "is_set", lambda: False)())
 
@@ -1119,11 +1130,17 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         )
         handoff_seed = str(getattr(self.session, "_handoff_context", "") or "")
         p = self.active_provider
-        provider_tools = (
-            self._provider_tool_definitions()
-            if hasattr(self, "_provider_tool_definitions")
-            else list(getattr(self, "tool_definitions", []) or [])
-        )
+        # Budget guard: when tools are blocked (handoff or grace round),
+        # send an empty tool list so the model must produce a text answer
+        # rather than burning budget on blocked tool calls.
+        if getattr(self, "_turn_health_tools_blocked", False):
+            provider_tools = []
+        else:
+            provider_tools = (
+                self._provider_tool_definitions()
+                if hasattr(self, "_provider_tool_definitions")
+                else list(getattr(self, "tool_definitions", []) or [])
+            )
 
         response = p.complete(
             messages=messages,
@@ -1244,6 +1261,10 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 "[MAX TOOL ROUNDS] Reached tool round limit. "
                 "Provide your final answer based on evidence gathered so far."
             )
+            # Strip tool definitions on the grace round so the model
+            # must produce a text answer instead of burning budget on
+            # blocked tool calls.
+            self._turn_health_tools_blocked = True
             return "grace", tool_limit_grace_used
         # Grace consumed — model still tried tool calls; hard stop
         if monitor:

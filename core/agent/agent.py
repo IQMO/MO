@@ -12,6 +12,7 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
+import subprocess
 import traceback
 
 from ..provider.provider import (
@@ -1220,6 +1221,16 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                     notes.append(notice)
         except Exception:
             traceback.print_exc()
+        try:
+            result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=repo_root(), capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                notes.append("💡 Remember to commit and push your verified changes.")
+        except Exception:
+            pass
         for _note in notes:
             self.push_status_note(_note)
         return notes

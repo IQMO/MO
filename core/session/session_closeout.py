@@ -552,7 +552,7 @@ def _goal_state(agent: Any) -> list[str]:
 def _git_dirty_lines(cwd: str | Path | None = None, *, include_untracked: bool = False) -> list[str]:
     try:
         workdir = Path(cwd).expanduser().resolve(strict=False) if cwd else Path(os.getcwd()).resolve(strict=False)
-        proc = subprocess.run(["git", "status", "--short", "--branch"], cwd=str(workdir), capture_output=True, text=True, timeout=1.5)
+        proc = subprocess.run(["git", "status", "--short", "--branch"], cwd=str(workdir), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1.5)
     except Exception:
         return []
     if proc.returncode != 0:

@@ -196,7 +196,7 @@ def _emit_graph_event(
 def _project_root(cwd: str) -> Path:
     path = Path(cwd).resolve()
     try:
-        proc = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=str(path), text=True, capture_output=True, timeout=3)
+        proc = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=str(path), text=True, capture_output=True, encoding="utf-8", errors="replace", timeout=3)
         if proc.returncode == 0 and proc.stdout.strip():
             return Path(proc.stdout.strip()).resolve()
     except Exception:
@@ -213,7 +213,7 @@ def _graph_path(root: Path, config: dict[str, Any] | None = None) -> Path:
 
 def _discover_files(root: Path) -> list[str]:
     try:
-        proc = subprocess.run(["git", "ls-files"], cwd=str(root), text=True, capture_output=True, timeout=5)
+        proc = subprocess.run(["git", "ls-files"], cwd=str(root), text=True, capture_output=True, encoding="utf-8", errors="replace", timeout=5)
         if proc.returncode == 0 and proc.stdout.strip():
             candidates = [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
             seen = set(candidates)

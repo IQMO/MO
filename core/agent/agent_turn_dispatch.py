@@ -101,6 +101,12 @@ class AgentTurnDispatchMixin:
             self.session.add_user(text)
             self.session.turn_count += 1
 
+        # Error-report confirmation check — must run before other intercepts
+        report_response = self._maybe_handle_error_report_confirmation(text)
+        if report_response is not None:
+            self.session.add_assistant(report_response)
+            return {"final_text": report_response, "kind": "error_report", "user_input": text, "pre_handoff": pre_handoff}
+
         intercepts = (
             ("init", self._maybe_handle_init_turn, False),
             ("workflow_control", self._maybe_handle_workflow_control_turn, True),
@@ -145,6 +151,57 @@ class AgentTurnDispatchMixin:
             f"I'm MO — a local-first coding agent by IQMO. I'm flying around `{provider}/{model}` right now; "
             "that model is my runtime engine, not my identity. I use tools through MO's sandbox and land edits only with evidence."
         )
+
+    def _maybe_handle_error_report_confirmation(self, user_input: str) -> str | None:
+        """If the user confirms an error report, open the GitHub issues page and return a confirmation."""
+        session = getattr(self, "session", None)
+        if session is None:
+            return None
+        pending = getattr(session, "_pending_error_report", None)
+        if not pending:
+            return None
+        text = str(user_input or "").strip().lower()
+        confirm_words = {"yes", "y", "report", "confirm", "go ahead", "please", "ok", "yeah", "yep", "sure"}
+        is_confirm = text in confirm_words or text.startswith("yes") or text.startswith("report")
+        if not is_confirm:
+            # User didn't confirm — clear the pending report silently
+            del session._pending_error_report
+            return None
+        # Build the GitHub issue URL with pre-filled template
+        import urllib.parse
+        kind = pending.get("kind", "unknown")
+        title = f"[Auto-reported] MO {kind.replace('_', ' ').title()}"
+        body_lines = [
+            "## MO Error Report",
+            "",
+            f"**Error type:** {kind}",
+        ]
+        for key, val in sorted(pending.items()):
+            if key in ("kind", "session_id", "timestamp"):
+                continue
+            body_lines.append(f"- **{key}:** {val}")
+        body_lines += [
+            "",
+            "---",
+            "_Reported automatically by MO. Please add any additional context below._",
+        ]
+        body = "\n".join(body_lines)
+        params = urllib.parse.urlencode({"title": title, "body": body})
+        url = f"https://github.com/IQMO/MO/issues/new?{params}"
+        try:
+            import webbrowser
+            webbrowser.open(url)
+            del session._pending_error_report
+            return (
+                "✅ Opened the GitHub issue page in your browser.\n\n"
+                "The title and description are pre-filled — just review and submit."
+            )
+        except Exception:
+            del session._pending_error_report
+            return (
+                "⚠️  Couldn't open the browser automatically.\n\n"
+                f"Please open this link manually to report the issue:\n{url}"
+            )
 
     def _maybe_handle_workflow_control_turn(self, user_input: str) -> str | None:
         """Handle local skill adoption/promotion without a provider call.
