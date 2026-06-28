@@ -24,6 +24,7 @@ class WorkerRecord:
     route: str
     objective: str
     state: str = "offered"
+    role: str = ""
     note: str = ""
     claimed_paths: list[str] = field(default_factory=list)
     result_summary: str = ""
@@ -59,6 +60,7 @@ class WorkerRegistry:
         note: str = "",
         worker_id: str | None = None,
         claimed_paths: list[str] | None = None,
+        role: str = "",
     ) -> WorkerRecord:
         now = time.time()
         record = WorkerRecord(
@@ -68,6 +70,7 @@ class WorkerRegistry:
             route=str(route or kind or "main"),
             objective=str(objective or "").strip(),
             state=str(state or "offered"),
+            role=str(role or ""),
             note=str(note or ""),
             claimed_paths=normalize_worker_paths(claimed_paths if claimed_paths is not None else extract_worker_paths(objective)),
             created_at=now,
@@ -154,6 +157,7 @@ class WorkerRegistry:
             "source": record.source,
             "route": record.route,
             "state": record.state,
+            "role": record.role,
             "objective": redact_monitor_text(record.objective, 240),
             "note": redact_monitor_text(record.note, 240),
             "claimed_paths": [redact_monitor_text(path, 160) for path in record.claimed_paths[:10]],

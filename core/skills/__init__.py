@@ -46,6 +46,13 @@ class Skill:
     approval: str = ""
     mastery: dict[str, Any] = field(default_factory=dict)
     generated: bool = False
+    # Role binding (optional): a skill that declares ``role`` can govern a
+    # background worker as a named role — its body becomes the worker's operating
+    # contract, ``role_tools`` hard-scopes which MCP tools the worker may use.
+    role: str = ""
+    role_tools: tuple[str, ...] = ()
+    role_lane: str = ""
+    role_verify: str = ""
 
 
 def skills_root(
@@ -360,6 +367,86 @@ def select_conventions_context(
     return select_skills_by_location(skills, file_paths, max_skills=max_skills, max_chars=max_chars)
 
 
+# --- roles: a skill that declares `role:` can govern a background worker --------
+
+def list_roles(
+    roots: list[str | os.PathLike],
+    *,
+    profile: Any | None = None,
+) -> list[Skill]:
+    """Return all skills that declare a role binding."""
+    skills = _dedupe_skills([*load_skills(roots), *load_generated_learning_skills(profile)])
+    return [skill for skill in skills if skill.role]
+
+
+def resolve_role(
+    role_name: str,
+    roots: list[str | os.PathLike],
+    *,
+    profile: Any | None = None,
+) -> Skill | None:
+    """Find the role-declaring skill matching ``role_name`` (by role name, then slug).
+
+    Returns None when no skill declares that role — callers should fail loud rather
+    than silently run an ungoverned worker."""
+    target = _normalize_trigger(role_name)
+    if not target:
+        return None
+    roles = list_roles(roots, profile=profile)
+    for skill in roles:
+        if _normalize_trigger(skill.role) == target:
+            return skill
+    target_slug = _slug(role_name)
+    for skill in roles:
+        if _slug(skill.name) == target_slug or _normalize_trigger(skill.name) == target:
+            return skill
+    return None
+
+
+def role_overlay_text(skill: Skill) -> str:
+    """Build the worker system overlay that pins a role's skill as the operating
+    contract (used in place of the generic background-worker prompt)."""
+    label = skill.role or skill.name
+    lines = [
+        "",
+        f"## Active Role: {label}",
+        f"You are running as the '{label}' role. This contract GOVERNS this run and "
+        "overrides generic behavior. Obey it exactly; do not drift to generic advice.",
+    ]
+    if skill.role_tools:
+        lines.append(
+            "Tools this run: " + ", ".join(skill.role_tools)
+            + " (plus core read/search/verify tools). Other MCP tools are unavailable — do not attempt them."
+        )
+    if skill.role_lane:
+        lines.append(f"Lane: {skill.role_lane} — respect it.")
+    if skill.role_verify:
+        lines.append(
+            f"Before claiming any result, satisfy the '{skill.role_verify}' evidence gate "
+            "(use tools for proof, never assert without it)."
+        )
+    lines.extend(["", "### Role skill — follow exactly", skill.body.strip()])
+    return "\n".join(lines)
+
+
+def _tool_name_matches_any(name: str, globs: tuple[str, ...]) -> bool:
+    low = str(name or "").lower()
+    return any(fnmatch.fnmatch(low, str(glob).lower()) for glob in globs)
+
+
+def scope_definitions_for_role(definitions: list[dict], skill: Skill) -> list[dict]:
+    """Hard-scope MCP tools for a role: keep every non-MCP (core) tool, plus the
+    MCP tools matching the role's ``role_tools`` globs; drop all other MCP tools so
+    the model cannot even see them. Non-role / no-tool skills are unchanged-safe."""
+    globs = tuple(skill.role_tools or ())
+    out: list[dict] = []
+    for definition in definitions:
+        name = str((definition.get("function") or {}).get("name") or "")
+        if not name.startswith("mcp__") or _tool_name_matches_any(name, globs):
+            out.append(definition)
+    return out
+
+
 def write_skill_pack(
     *,
     root: str | Path,
@@ -642,6 +729,10 @@ def _parse_skill(path: Path) -> Skill | None:
             approval=str(meta.get("approval") or ""),
             mastery=mastery,
             generated=bool(meta.get("candidate_id")),
+            role=str(meta.get("role") or "").strip(),
+            role_tools=_coerce_triggers(meta.get("role_tools")),
+            role_lane=str(meta.get("role_lane") or "").strip(),
+            role_verify=str(meta.get("role_verify") or "").strip(),
         )
     return _parse_legacy_markdown_skill(path, raw)
 

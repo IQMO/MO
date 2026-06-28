@@ -83,6 +83,7 @@ class AgentSlashCommands:
             "/structural-graph": self._cmd_structural_graph,
             "/sg": self._cmd_structural_graph,
             "/prt": self._cmd_prt,
+            "/role": self._cmd_role,
             "/skin": self._cmd_skin,
             "/moon": self._cmd_moon,
             "/hints": self._cmd_hints,
@@ -120,6 +121,32 @@ class AgentSlashCommands:
                 pass
             return result
         return None
+
+    def _cmd_role(self, rest: str) -> str:
+        """Dispatch a background worker governed by a named role (a skill that
+        declares `role:`). Usage: /role <role-name> <objective>."""
+        parts = rest.split(maxsplit=1)
+        if len(parts) < 2 or not parts[1].strip():
+            try:
+                from core.skills import default_skill_roots, list_roles
+                roots = default_skill_roots(
+                    getattr(self, "project_cwd", None),
+                    getattr(self, "runtime_home", None),
+                    profile=getattr(self, "profile", None),
+                    config=getattr(self, "config", None),
+                )
+                names = sorted({skill.role for skill in list_roles(roots, profile=getattr(self, "profile", None))})
+            except Exception:
+                names = []
+            available = (" Available roles: " + ", ".join(names)) if names else " No roles defined yet."
+            return "[ROLE] usage: /role <role-name> <objective>." + available
+        role_name, objective = parts[0].strip(), parts[1].strip()
+        from core.worker import ensure_worker_runtime
+        runtime = ensure_worker_runtime(self)
+        record = runtime.start(objective=objective, source="user", role=role_name)
+        if getattr(record, "state", "") == "blocked":
+            return f"[ROLE BLOCKED] {getattr(record, 'note', '') or 'could not start role worker'}"
+        return f"[ROLE STARTED] '{role_name}' worker (id {getattr(record, 'id', '?')}) on: {objective[:120]} · /status to follow"
 
     def _cmd_moon(self, rest: str) -> str:
         """Toggle the animated moon visuals for the MO logo."""

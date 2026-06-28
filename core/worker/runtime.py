@@ -71,6 +71,25 @@ class BackgroundWorkerRuntime:
         self._lock = threading.RLock()
         self._threads: dict[str, threading.Thread] = {}
 
+    def _resolve_role_skill(self, role: str):
+        """Resolve a role name to its governing skill via the agent's skill roots.
+        Returns None when the role is unknown (caller fails loud)."""
+        if not role:
+            return None
+        try:
+            from ..skills import default_skill_roots, resolve_role
+            agent = self.agent
+            roots = default_skill_roots(
+                getattr(agent, "project_cwd", None),
+                getattr(agent, "runtime_home", None),
+                profile=getattr(agent, "profile", None),
+                config=getattr(agent, "config", None),
+            )
+            return resolve_role(role, roots, profile=getattr(agent, "profile", None))
+        except Exception:
+            traceback.print_exc()
+            return None
+
     def active_count(self, *, exclude: str = "") -> int:
         registry = ensure_worker_registry(self.agent)
         return sum(1 for record in registry.active() if record.kind in {"worker", "prt"} and record.id != exclude)
@@ -101,15 +120,25 @@ class BackgroundWorkerRuntime:
         worker_id: str | None = None,
         on_finish: WorkerFinishCallback | None = None,
         custom_target: Callable[[str, str, WorkerFinishCallback | None], None] | None = None,
+        role: str = "",
     ) -> WorkerRecord:
         objective = str(objective or "").strip()
         registry = ensure_worker_registry(self.agent)
+        role = str(role or "").strip()
+        role_skill = self._resolve_role_skill(role) if role else None
+        if role and role_skill is None:
+            # Fail loud: a requested role that does not resolve must not silently
+            # run as a generic, ungoverned worker.
+            return registry.create(
+                kind="worker", source=source, route="background", objective=objective,
+                state="blocked", role=role, note=f"role '{role}' not found", worker_id=worker_id,
+            )
         claimed_paths = extract_worker_paths(objective)
         record = registry.get(worker_id)
         if record and not claimed_paths:
             claimed_paths = list(getattr(record, "claimed_paths", []) or [])
         if not record:
-            record = registry.create(kind="worker", source=source, route="background", objective=objective, state="offered", note="background worker offered", worker_id=worker_id, claimed_paths=claimed_paths)
+            record = registry.create(kind="worker", source=source, route="background", objective=objective, state="offered", note="background worker offered", worker_id=worker_id, claimed_paths=claimed_paths, role=role)
 
         with self._lock:
             conflicts = registry.conflicts(claimed_paths, exclude=record.id)
@@ -123,9 +152,12 @@ class BackgroundWorkerRuntime:
             registry.update(record.id, "accepted", "background worker accepted")
             registry.update(record.id, "running", "background worker running")
             target_func = custom_target if custom_target else self._run
+            args = (record.id, objective, on_finish)
+            if not custom_target:
+                args = (record.id, objective, on_finish, role_skill)
             thread = threading.Thread(
                 target=target_func,
-                args=(record.id, objective, on_finish),
+                args=args,
                 daemon=True,
                 name=f"mo-worker-{record.id}",
             )
@@ -133,25 +165,27 @@ class BackgroundWorkerRuntime:
             thread.start()
             return registry.get(record.id) or record
 
-    def _run(self, worker_id: str, objective: str, on_finish: WorkerFinishCallback | None) -> None:
+    def _run(self, worker_id: str, objective: str, on_finish: WorkerFinishCallback | None, role_skill=None) -> None:
         registry = ensure_worker_registry(self.agent)
         result = ""
         state = "completed"
         note = "background worker finished"
         try:
             registry.update(worker_id, "running", "background worker turn started")
-            prompt = build_background_worker_prompt(objective)
-            worker_session = Session(str(getattr(self.agent, "system_message", "You are MO.") or "You are MO.") + BACKGROUND_WORKER_SYSTEM)
+            prompt = build_background_worker_prompt(objective, role_skill=role_skill)
+            base_system = str(getattr(self.agent, "system_message", "You are MO.") or "You are MO.")
+            overlay = _role_overlay(role_skill) if role_skill else BACKGROUND_WORKER_SYSTEM
+            worker_session = Session(base_system + overlay)
             monitor = getattr(getattr(self.agent, "gateway", None), "monitor", None)
             if hasattr(self.agent, "isolated_session"):
                 with self.agent.isolated_session(worker_session):
                     if hasattr(self.agent, "provider_scope"):
-                        with self.agent.provider_scope("worker", worker_id=worker_id):
+                        with self.agent.provider_scope("worker", worker_id=worker_id, role=role_skill):
                             result = self.agent.run_turn(prompt, monitor=monitor)
                     else:
                         result = self.agent.run_turn(prompt, monitor=monitor)
             elif hasattr(self.agent, "provider_scope"):
-                with self.agent.provider_scope("worker", worker_id=worker_id):
+                with self.agent.provider_scope("worker", worker_id=worker_id, role=role_skill):
                     result = self.agent.run_turn(prompt)
             else:
                 result = self.agent.run_turn(prompt)
@@ -174,6 +208,7 @@ class BackgroundWorkerRuntime:
         finally:
             result_summary, evidence = summarize_worker_result(result)
             record = registry.update(worker_id, state, note, result_summary=result_summary, evidence=evidence)
+            _record_role_outcome(role_skill, state)
             if record and on_finish:
                 try:
                     on_finish(record, result)
@@ -247,7 +282,7 @@ _CHANGE_INTENT_WORDS = frozenset({
 })
 
 
-def build_background_worker_prompt(objective: str) -> str:
+def build_background_worker_prompt(objective: str, role_skill=None) -> str:
     objective_text = str(objective or "").strip()
     # Only a PURE review forbids edits. "audit X and harden it" / "investigate the
     # crash and patch it" carry change intent, so the worker keeps edit capability;
@@ -258,8 +293,13 @@ def build_background_worker_prompt(objective: str) -> str:
     )
     review_guard = "Review only: report findings, no edits. " if review_only else ""
     complexity = estimate_work_complexity(objective_text)
+    role_banner = ""
+    if role_skill is not None:
+        label = getattr(role_skill, "role", "") or getattr(role_skill, "name", "") or "role"
+        role_banner = f"Role: {label} — obey the active role contract in your instructions.\n"
     return (
         "[BACKGROUND WORKER]\n"
+        f"{role_banner}"
         f"Objective: {objective_text}\n"
         f"Complexity: {complexity}\n\n"
         f"{review_guard}"
@@ -267,6 +307,30 @@ def build_background_worker_prompt(objective: str) -> str:
         "Use tools for evidence. Stop after this objective is completed or clearly blocked. "
         "Do not ask the operator unless blocked by missing approval or unsafe action."
     )
+
+
+def _role_overlay(role_skill) -> str:
+    """System overlay that pins a role skill as the worker's operating contract."""
+    try:
+        from ..skills import role_overlay_text
+        return role_overlay_text(role_skill)
+    except Exception:
+        return BACKGROUND_WORKER_SYSTEM
+
+
+def _record_role_outcome(role_skill, state: str) -> None:
+    """Feed the role worker's outcome back to its skill mastery, so 'sticking'
+    becomes measurable (success on completion, correction on block/error)."""
+    if role_skill is None:
+        return
+    source = str(getattr(role_skill, "source", "") or "")
+    if not source:
+        return
+    try:
+        from ..skills import record_skill_outcome
+        record_skill_outcome(source, "success" if state == "completed" else "correction")
+    except Exception:
+        pass
 
 
 def ensure_worker_runtime(agent: Any) -> BackgroundWorkerRuntime:

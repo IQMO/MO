@@ -298,6 +298,15 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         ),
     ),
     SlashCommandSpec(
+        name="/role",
+        description="run a background worker governed by a named role",
+        category="Tasks",
+        help_lines=(
+            "/role <name> <objective>   run a role-governed background worker",
+            "                  /role             list available roles",
+        ),
+    ),
+    SlashCommandSpec(
         name="/ghost",
         description="toggle Ghost side-check mode on/off or ask Ghost",
         category="Tasks",

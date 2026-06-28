@@ -375,17 +375,27 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
     def _provider_tool_definitions(self) -> list[dict]:
         self._ensure_mcp_manager()
         definitions = list(getattr(self, "tool_definitions", []) or [])
-        if not getattr(self, "deferred_tool_registry_enabled", False):
-            return definitions
         registry = getattr(self, "_tool_registry", None)
-        if registry is None:
-            return definitions
+        if not getattr(self, "deferred_tool_registry_enabled", False) or registry is None:
+            return self._scope_tools_for_active_role(definitions)
         # Compatibility: tests/review loops may temporarily replace
         # ``agent.tool_definitions`` with an explicit restricted set.  Treat that
         # override as authoritative instead of hiding non-core allowed tools.
         if not registry.matches_catalog(definitions):
+            return self._scope_tools_for_active_role(definitions)
+        return self._scope_tools_for_active_role(registry.active_definitions())
+
+    def _scope_tools_for_active_role(self, definitions: list[dict]) -> list[dict]:
+        """Hard-scope MCP tools when a role governs this turn: a role worker sees
+        only its declared MCP tools (plus all core tools). No active role => no-op."""
+        role = self._active_role()
+        if not role or not getattr(role, "role", ""):
             return definitions
-        return registry.active_definitions()
+        try:
+            from ..skills import scope_definitions_for_role
+            return scope_definitions_for_role(definitions, role)
+        except Exception:
+            return definitions
 
     def _deferred_tool_registry_snapshot(self) -> dict:
         registry = getattr(self, "_tool_registry", None)
@@ -667,14 +677,21 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         state = getattr(self, "_thread_state", None)
         return str(getattr(state, "provider_worker_id", "") or "")
 
+    def _active_role(self):
+        """The role skill governing the current thread's turn, or None."""
+        state = getattr(self, "_thread_state", None)
+        return getattr(state, "active_role", None) if state is not None else None
+
     @contextmanager
-    def provider_scope(self, surface: str, worker_id: str = ""):
+    def provider_scope(self, surface: str, worker_id: str = "", role=None):
         state = getattr(self, "_thread_state", None)
         if state is None:
             self._thread_state = threading.local()
             state = self._thread_state
         previous_surface = getattr(state, "provider_surface", None)
         previous_worker_id = getattr(state, "provider_worker_id", None)
+        previous_role = getattr(state, "active_role", None)
+        state.active_role = role
         previous_provider_index = getattr(self, "provider_index", 0)
         previous_provider_name = getattr(self, "provider_name", "")
         previous_model = getattr(self, "model", "")
@@ -706,6 +723,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                     pass
             else:
                 state.provider_worker_id = previous_worker_id
+            state.active_role = previous_role
 
     def _is_foreground_session(self) -> bool:
         return getattr(self, "session", None) is getattr(self, "_session", None) and self._provider_surface() == "main"
