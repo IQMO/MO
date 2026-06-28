@@ -270,7 +270,7 @@ def _run_next_ux(args: list[str]) -> None:
 
 
 def _print_cli_help() -> None:
-    from interface.command_registry import SLASH_COMMAND_HELP
+    from interface.command_registry import build_help_text
 
     print("MO — local provider-first coding agent")
     print()
@@ -285,7 +285,7 @@ def _print_cli_help() -> None:
     print("Startup:")
     print("  Run `mo` from a project folder. MO preserves that project cwd and keeps private state under ~/.mo or MO_HOME.")
     print()
-    print(SLASH_COMMAND_HELP)
+    print(build_help_text())
 
 
 def _print_cli_version() -> None:
