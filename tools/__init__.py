@@ -723,6 +723,108 @@ def _pytest_preflight_needed(command: object) -> bool:
     return True
 
 
+def _command_tokens(command: object) -> list[str]:
+    text = str(command or "").strip()
+    if not text:
+        return []
+    try:
+        tokens = shlex.split(text, posix=sys.platform != "win32")
+    except ValueError:
+        tokens = text.split()
+    return [part.strip("\"'") for part in tokens if str(part or "").strip("\"'")]
+
+
+def _pytest_argument_tokens(command: object) -> list[str]:
+    tokens = _command_tokens(command)
+    lowered = [Path(token).name.lower() for token in tokens]
+    for idx, token in enumerate(lowered):
+        if token in {"pytest", "pytest.exe"}:
+            return tokens[idx + 1:]
+        if token in {"python", "python.exe", "py", "py.exe"} and idx + 2 < len(tokens):
+            if tokens[idx + 1] == "-m" and tokens[idx + 2].lower() == "pytest":
+                return tokens[idx + 3:]
+    return []
+
+
+def _pytest_positional_targets(command: object) -> list[str]:
+    args = _pytest_argument_tokens(command)
+    if "--pyargs" in args:
+        return []
+    option_values = {
+        "-k", "-m", "-n", "-p", "-c", "-o",
+        "--numprocesses", "--dist", "--tb", "--rootdir", "--confcutdir",
+        "--basetemp", "--junitxml", "--cov", "--cov-report", "--maxfail",
+        "--timeout", "--durations", "--log-cli-level", "--log-level",
+    }
+    targets: list[str] = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--":
+            continue
+        if arg.startswith("-"):
+            if arg in option_values:
+                skip_next = True
+            continue
+        targets.append(arg)
+    return targets
+
+
+def _pytest_missing_targets(command: object, workdir: object = None) -> list[str]:
+    if not _looks_like_pytest_command(command):
+        return []
+    base = Path(str(workdir or os.getcwd())).expanduser()
+    missing: list[str] = []
+    for raw in _pytest_positional_targets(command):
+        target = str(raw or "").strip().strip("\"'")
+        if not target or target.startswith("@"):
+            continue
+        path_text = target.split("::", 1)[0]
+        if not path_text:
+            continue
+        looks_like_path = (
+            "/" in path_text
+            or "\\" in path_text
+            or path_text.endswith(".py")
+            or path_text in {".", "tests", "test"}
+            or Path(path_text).is_absolute()
+        )
+        if not looks_like_path:
+            continue
+        if any(ch in path_text for ch in "*?[]"):
+            raw_path = Path(path_text)
+            if raw_path.is_absolute():
+                glob_base = Path(raw_path.anchor)
+                glob_pattern = str(raw_path.relative_to(raw_path.anchor))
+            else:
+                glob_base = base
+                glob_pattern = path_text
+            matches = list(glob_base.glob(glob_pattern))
+            if not matches:
+                missing.append(path_text)
+            continue
+        path = Path(path_text).expanduser()
+        if not path.is_absolute():
+            path = base / path
+        if not path.exists():
+            missing.append(path_text)
+    return missing
+
+
+def _pytest_missing_targets_message(command: object, workdir: object = None) -> str | None:
+    missing = _pytest_missing_targets(command, workdir)
+    if not missing:
+        return None
+    lines = ["[pytest not run — missing explicit target path(s)]"]
+    lines.extend(f"- {path}" for path in missing[:20])
+    if len(missing) > 20:
+        lines.append(f"- ... and {len(missing) - 20} more")
+    lines.append("Locate the real test file or directory with find_files/grep, then call test_runner again.")
+    return "\n".join(lines)
+
+
 def _shell_quote(value: object) -> str:
     text = str(value)
     if sys.platform == "win32":
@@ -975,6 +1077,9 @@ def execute_test_runner(arguments: dict[str, Any]) -> str:
     workdir = arguments.get("workdir")
     clean_env = arguments.get("_clean_env", True)
     timeout = _test_runner_timeout(command, arguments.get("timeout"))
+    missing_targets = _pytest_missing_targets_message(command, workdir)
+    if missing_targets:
+        return missing_targets
     if _pytest_preflight_needed(command):
         preflight_timeout = int(os.environ.get("MO_TEST_PREFLIGHT_TIMEOUT", "180") or 180)
         preflight = execute_shell({
