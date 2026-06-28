@@ -585,6 +585,22 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "visualize",
+            "description": "Render structured content as a diagram — a Mermaid flowchart or an ASCII tree. Use it to show the user the shape of JSON/YAML/TOML data (a config, an API/tool response) or a Markdown document's outline. Pass the content as a string. For source code use the code map; for a directory tree use the /visualize command.",
+            "parameters": {
+                "type": "object",
+                "required": ["content"],
+                "properties": {
+                    "content": {"type": "string", "description": "Text to visualize: JSON/YAML/TOML, or Markdown."},
+                    "kind": {"type": "string", "description": "auto (default), json, yaml, toml, data, or markdown"},
+                    "format": {"type": "string", "description": "mermaid (default) or ascii"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -1447,7 +1463,26 @@ def execute_set_plan(arguments: dict[str, Any]) -> str:
     return f"Plan set with {n} step(s); the taskboard now tracks your plan. Advance each row with complete_task as you finish it."
 
 
+def execute_visualize(arguments: dict[str, Any]) -> str:
+    """Render structured content (JSON/YAML/TOML/Markdown) as a Mermaid or ASCII
+    diagram. Pure: string in, diagram string out — never touches the filesystem
+    (allow_fs=False), so it needs no path/sandbox surface. Directory trees are the
+    operator-only /visualize command."""
+    from core.visualize import visualize
+    content = arguments.get("content")
+    if not content:
+        return "visualize error: missing 'content'"
+    return visualize(
+        str(content),
+        kind=str(arguments.get("kind") or "auto"),
+        format=str(arguments.get("format") or "mermaid"),
+        title=str(arguments.get("title") or ""),
+        allow_fs=False,
+    )
+
+
 TOOL_EXECUTORS = {
+    "visualize": execute_visualize,
     "tool_search": execute_tool_search,
     "record_profile_fact": execute_record_profile_fact,
     "set_plan": execute_set_plan,

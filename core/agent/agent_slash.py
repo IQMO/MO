@@ -84,6 +84,7 @@ class AgentSlashCommands:
             "/sg": self._cmd_structural_graph,
             "/prt": self._cmd_prt,
             "/role": self._cmd_role,
+            "/visualize": self._cmd_visualize,
             "/skin": self._cmd_skin,
             "/moon": self._cmd_moon,
             "/hints": self._cmd_hints,
@@ -121,6 +122,34 @@ class AgentSlashCommands:
                 pass
             return result
         return None
+
+    def _cmd_visualize(self, rest: str) -> str:
+        """Render a file or directory as a diagram. Usage: /visualize <file-or-dir> [mermaid|ascii]."""
+        parts = rest.split()
+        if not parts:
+            return "[VISUALIZE] usage: /visualize <file-or-dir> [mermaid|ascii]"
+        fmt = "mermaid"
+        if len(parts) > 1 and parts[-1].lower() in ("mermaid", "ascii"):
+            fmt = parts[-1].lower()
+            target = " ".join(parts[:-1])
+        else:
+            target = rest.strip()
+        from pathlib import Path
+        from core.visualize import visualize
+        path = Path(target).expanduser()
+        if path.is_dir():
+            return visualize(str(path), kind="tree", format=fmt, allow_fs=True)
+        if path.is_file():
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                return f"[VISUALIZE] cannot read {target}: {exc}"
+            kind = {
+                "json": "json", "yaml": "yaml", "yml": "yaml", "toml": "toml",
+                "md": "markdown", "markdown": "markdown",
+            }.get(path.suffix.lower().lstrip("."), "auto")
+            return visualize(text, kind=kind, format=fmt, allow_fs=True)
+        return f"[VISUALIZE] not found: {target}"
 
     def _cmd_role(self, rest: str) -> str:
         """Dispatch a background worker governed by a named role (a skill that

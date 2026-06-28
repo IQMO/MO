@@ -307,6 +307,14 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         ),
     ),
     SlashCommandSpec(
+        name="/visualize",
+        description="render a file or directory as a Mermaid/ASCII diagram",
+        category="Tasks",
+        help_lines=(
+            "/visualize <file-or-dir> [mermaid|ascii]   diagram JSON/YAML/TOML/Markdown or a tree",
+        ),
+    ),
+    SlashCommandSpec(
         name="/ghost",
         description="toggle Ghost side-check mode on/off or ask Ghost",
         category="Tasks",
