@@ -623,6 +623,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 reasoning = getattr(response, "reasoning_content", None) or getattr(response, "reasoning", None)
                 if reasoning:
                     msg["reasoning_content"] = reasoning
+                    # Surface provider reasoning metadata into the transcript.
+                    # Keep the prefix ASCII-safe because some owner/CLI surfaces
+                    # still run through legacy Windows console encodings.
+                    if on_assistant_text:
+                        try:
+                            on_assistant_text("[reasoning] " + str(reasoning).strip())
+                        except Exception:
+                            traceback.print_exc()
                 self.session.add_message(msg)
 
                 # Pre-execute independent read-only inspection calls concurrently.
