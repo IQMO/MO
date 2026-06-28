@@ -81,6 +81,7 @@ class AgentSlashCommands:
             "/structural-graph": self._cmd_structural_graph,
             "/sg": self._cmd_structural_graph,
             "/prt": self._cmd_prt,
+            "/skin": self._cmd_skin,
             "/moon": self._cmd_moon,
             "/hints": self._cmd_hints,
             "/ghost": self._cmd_ghost,
@@ -160,6 +161,18 @@ class AgentSlashCommands:
         self._hints_enabled = target
         status = "ON" if target else "OFF"
         return f"[HINTS {status}] Idle line will {('show rotating hints' if target else 'show normal idle')}."
+
+    def _cmd_skin(self, rest: str) -> str:
+        """Switch UI theme. /skin dracula | /skin default."""
+        from interface.theming import available_skins, get_skin_name, set_skin
+        name = (rest or "").strip().lower()
+        available = available_skins()
+        if not name:
+            return f"Skin: {get_skin_name()} (available: {', '.join(available)})"
+        if name not in available:
+            return f"Unknown skin: {name!r}. Available: {', '.join(available)}"
+        set_skin(name)
+        return f"[SKIN] Switched to {name}."
 
     def _cmd_learning(self, rest: str) -> str:
         """Show deterministic learning/system health status."""
