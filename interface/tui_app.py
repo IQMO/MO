@@ -9,6 +9,7 @@ from pathlib import Path
 from prompt_toolkit.application import Application
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.patch_stdout import patch_stdout
 
 from .input import SlashAndPathCompleter
 from .theme import build_tui_style
@@ -143,7 +144,8 @@ class TuiAppMixin:
 
         threading.Thread(target=_refresh_loop, daemon=True).start()
         try:
-            self._app.run()
+            with patch_stdout():
+                self._app.run()
         except KeyboardInterrupt:
             pass
         finally:

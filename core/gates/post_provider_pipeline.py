@@ -90,8 +90,6 @@ def _pipeline_critique(agent, ctx):
     critique_result = agent._review_final_answer(ctx.content, monitor=ctx.monitor)
     ctx.final_text = critique_result.text
     ctx.reasoning = getattr(ctx.response, "reasoning_content", None) or getattr(ctx.response, "reasoning", None)
-    append_notes = getattr(agent, "_maybe_append_after_turn_notes", agent._append_after_turn_notes)
-    ctx.final_text = append_notes(ctx.final_text, ctx.notes)
     return None
 
 
@@ -100,9 +98,12 @@ def _pipeline_memory_index(agent, ctx):
 
     Previously this was inside _pipeline_critique, which is skipped when
     ctx.final_text is already set (e.g. by a local extension). Moving it
-    to its own pipeline step ensures foreground turns are always indexed.
+    to its own post-critique pipeline step ensures foreground turns are
+    indexed after final text exists.
     """
     ctx.notes = agent._record_turn_memory_and_learning(ctx.user_input, ctx.final_text)
+    append_notes = getattr(agent, "_maybe_append_after_turn_notes", agent._append_after_turn_notes)
+    ctx.final_text = append_notes(ctx.final_text, ctx.notes)
     return None
 
 
@@ -262,8 +263,8 @@ def _pipeline_local_extension_final(agent, ctx):
 
 _POST_PROVIDER_PIPELINE = [
     ("local_extension_raw_stop", "gate", _pipeline_local_extension_raw_stop),
-    ("memory_index", "action", _pipeline_memory_index),
     ("critique", "action", _pipeline_critique),
+    ("memory_index", "action", _pipeline_memory_index),
     ("board_finalization", "action", _pipeline_board_finalization),
     ("contract_gate", "gate", _pipeline_contract_gate),
     ("consistency_boundary", "action", _pipeline_consistency_boundary),
