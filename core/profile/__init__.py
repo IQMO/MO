@@ -497,11 +497,12 @@ class Profile:
 
 
 def _profile_index_line(path: Path) -> str:
-    """Build one compact index line from a profile file's ## headers and bold terms.
+    """Build one compact index line from a profile file's ## headers, bold terms,
+    and fact-like [category] entries.
 
-    Returns a short comma-joined string of section names (or defined terms when
-    the file has no ## headers).  This gives MO a MAP of what lives where so it
-    can decide to read_file the full file on demand.
+    Always extracts **bold** defined terms so critical operator vocabulary (e.g.
+    CPD, edge) survives context-bridge truncation.  The index tells MO the MAP so
+    it can decide to read_file the full file on demand.
     """
     if not path.exists():
         return ""
@@ -510,15 +511,28 @@ def _profile_index_line(path: Path) -> str:
     except Exception:
         return ""
     headers = re.findall(r"^## (.+)$", text, re.MULTILINE)
-    if headers:
-        return ", ".join(headers)
-    # Flat file without sections — list the bold terms (e.g. terms.md)
-    terms = []
+    # Extract bold defined terms from ALL files, not just headerless ones.
+    terms: list[str] = []
     for m in re.finditer(r"^\s*-\s*\*\*(.+?)\*\*", text, re.MULTILINE):
         term = m.group(1).strip()
         if term and term not in terms:
             terms.append(term)
-    return ", ".join(terms[:10]) if terms else ""
+    # facts.md uses - [category] not **bold** — extract those too.
+    fact_categories: list[str] = []
+    for m in re.finditer(r"^\s*-\s*\[(.+?)\]", text, re.MULTILINE):
+        cat = m.group(1).strip().rstrip(":")
+        if cat and cat not in fact_categories:
+            fact_categories.append(cat)
+    parts: list[str] = []
+    if headers:
+        parts.extend(headers)
+    if terms:
+        parts.append("terms: " + ", ".join(terms))
+    if fact_categories:
+        parts.append("facts: " + ", ".join(fact_categories))
+    if parts:
+        return " — ".join(parts)
+    return ""
 
 
 def _read_operator_profile_name(path: Path) -> str:
