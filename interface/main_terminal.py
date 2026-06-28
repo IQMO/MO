@@ -92,7 +92,8 @@ class MoTui(
         self._goal_started_at = 0.0
         self._goal_stage = ""
         self._ghost_enabled = False
-        self._show_tool_activity = True   # max-visibility (tuning): surface tool calls in the transcript
+        self._show_tool_activity = True   # surface tool calls in the transcript (toggle: /show tools)
+        self._show_reasoning = True        # surface model reasoning 💭 in the transcript (toggle: /show reasoning)
         self._palette = CommandPalette()
         self._ghost_panel_lines: list[tuple[str, str]] = []
         self._ghost_pending_route: GhostRouteSuggestion | None = None

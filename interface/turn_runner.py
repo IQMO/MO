@@ -181,9 +181,15 @@ class TurnRunnerMixin:
             def on_assistant_text(text: str):
                 # Interim prose that came alongside a tool call. This is a direct
                 # answer to the user that would otherwise reach only the livelog.
-                # Render it into the main transcript immediately.
+                # Render it into the main transcript immediately. This is also the
+                # funnel the autopilot worktree-child streams through, so the /show
+                # toggles gate both live turns and the forwarded sweep uniformly.
                 clean = str(text or "").strip()
                 if not clean:
+                    return
+                if clean.startswith("💭") and not getattr(self, "_show_reasoning", True):
+                    return
+                if (clean.startswith("▸") or "tooling (" in clean) and not getattr(self, "_show_tool_activity", True):
                     return
                 interim_seen.append(clean)
                 self._add_response_block(clean)

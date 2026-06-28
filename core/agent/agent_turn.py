@@ -652,7 +652,14 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                             mcp_parts = name.split("__", 2)
                             if len(mcp_parts) == 3:
                                 label = f"mcp:{mcp_parts[1]} · {mcp_parts[2]}"
-                        on_activity(f"tooling ({label})...")
+                        # Show WHAT the tool acts on (path/pattern), so a read-heavy
+                        # phase reads as real progress, not a blank stream. Kept inside
+                        # the parens so the existing "(name)..." parsers still work.
+                        target = str(self._safe_tool_summary(name, arguments) or "").strip()
+                        if len(target) > 60:
+                            target = target[:57].rstrip() + "…"
+                        suffix = f" {target}" if target else ""
+                        on_activity(f"tooling ({label}{suffix})...")
 
                     if monitor:
                         monitor.emit("tool_call", {"request": provider_requests, "surface": self._provider_surface(), "worker_id": self._provider_worker_id(), "tool": name, "summary": self._safe_tool_summary(name, arguments)})

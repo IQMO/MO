@@ -85,6 +85,7 @@ class AgentSlashCommands:
             "/prt": self._cmd_prt,
             "/role": self._cmd_role,
             "/visualize": self._cmd_visualize,
+            "/show": self._cmd_show,
             "/skin": self._cmd_skin,
             "/moon": self._cmd_moon,
             "/hints": self._cmd_hints,
@@ -122,6 +123,29 @@ class AgentSlashCommands:
                 pass
             return result
         return None
+
+    def _cmd_show(self, rest: str) -> str:
+        """Toggle what streams into the transcript. /show [reasoning|tools|all] [on|off]."""
+        flags = {"reasoning": "_show_reasoning", "tools": "_show_tool_activity"}
+        parts = rest.lower().split()
+        if not parts:
+            state = ", ".join(f"{k}={'on' if getattr(self, attr, True) else 'off'}" for k, attr in flags.items())
+            return f"[SHOW] {state}. Usage: /show <reasoning|tools|all> [on|off]"
+        target = parts[0]
+        arg = parts[1] if len(parts) > 1 else ""
+        keys = list(flags) if target == "all" else ([target] if target in flags else [])
+        if not keys:
+            return f"[SHOW] unknown: {target!r}. Use reasoning, tools, or all."
+        results = []
+        for key in keys:
+            attr = flags[key]
+            current = getattr(self, attr, True)
+            value = True if arg == "on" else False if arg == "off" else not current
+            setattr(self, attr, value)
+            results.append(f"{key} {'ON' if value else 'OFF'}")
+        if getattr(self, "_app", None):
+            self._app.invalidate()
+        return "[SHOW] " + ", ".join(results)
 
     def _cmd_visualize(self, rest: str) -> str:
         """Render a file or directory as a diagram. Usage: /visualize <file-or-dir> [mermaid|ascii]."""

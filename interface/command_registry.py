@@ -315,6 +315,15 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         ),
     ),
     SlashCommandSpec(
+        name="/show",
+        description="toggle what streams into the transcript (reasoning / tool calls)",
+        category="Settings",
+        help_lines=(
+            "/show                      show current visibility state",
+            "                  /show <reasoning|tools|all> [on|off]   toggle visibility",
+        ),
+    ),
+    SlashCommandSpec(
         name="/ghost",
         description="toggle Ghost side-check mode on/off or ask Ghost",
         category="Tasks",
