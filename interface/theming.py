@@ -157,11 +157,11 @@ MO_DEFAULT = Skin(
 )
 
 MO_DRACULA = Skin(
-    # Backgrounds — dark purple-grey
-    bg_deepest="#191a21",
-    bg_dark="#282a36",
-    bg_surface="#343746",
-    bg_input="#343746",
+    # Backgrounds — dark purple-grey (lifted from near-black to readable grey)
+    bg_deepest="#22232b",
+    bg_dark="#3b3d4b",
+    bg_surface="#4a4c5a",
+    bg_input="#4a4c5a",
     # Text
     text_primary="#f8f8f2",
     text_secondary="#d6d6d0",

@@ -121,15 +121,20 @@ class CompanionTray:
     @staticmethod
     def _make_icon() -> Any:
         from PIL import Image, ImageDraw
+        from interface.theming import skin_to_ghost_vars, get_skin
+        s = get_skin()
+        gv = skin_to_ghost_vars(s)
+        dark_a = (*gv["_DARK_RGB"], 255)
+        moon_a = (*gv["_MOON_RGB"], 255)
         img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         # Dark circle background
-        draw.ellipse([2, 2, 30, 30], fill=(4, 20, 26, 255))  # #04141a
-        # Cyan border
-        draw.ellipse([2, 2, 30, 30], outline=(0, 204, 204, 255))  # #00cccc
+        draw.ellipse([2, 2, 30, 30], fill=dark_a)
+        # Brand border
+        draw.ellipse([2, 2, 30, 30], outline=moon_a)
         # Half-moon glyph (approximate with arc)
-        draw.pieslice([6, 6, 26, 26], start=90, end=270, fill=(0, 204, 204, 255))
-        draw.pieslice([8, 8, 24, 24], start=90, end=270, fill=(4, 20, 26, 255))
+        draw.pieslice([6, 6, 26, 26], start=90, end=270, fill=moon_a)
+        draw.pieslice([8, 8, 24, 24], start=90, end=270, fill=dark_a)
         return img
 
     # ------------------------------------------------------------------

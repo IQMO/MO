@@ -1,4 +1,9 @@
-"""Theme tokens for the isolated UX surface."""
+"""Theme tokens for the isolated UX surface.
+
+Colour values are kept in-sync with ``interface.theming`` (single source of
+truth) by the adapter layer (``UX/runtime/adapters``), but the render layer
+must not import from outside UX — these defaults mirror MO_DEFAULT.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,20 +11,32 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class UxTheme:
-    background: str = "#090b10"
-    surface: str = "#111722"
-    border: str = "#314253"
-    text: str = "#d7dee8"
-    muted: str = "#7d8996"
-    brand: str = "#39d0c8"
-    blue: str = "#7aa2ff"
-    green: str = "#68d391"
-    amber: str = "#f6ad55"
-    red: str = "#fc8181"
-    violet: str = "#b794f4"
+    background: str
+    surface: str
+    border: str
+    text: str
+    muted: str
+    brand: str
+    blue: str
+    green: str
+    amber: str
+    red: str
+    violet: str
 
 
-DEFAULT_THEME = UxTheme()
+DEFAULT_THEME: UxTheme = UxTheme(
+    background="#090b10",
+    surface="#111722",
+    border="#314253",
+    text="#d7dee8",
+    muted="#7d8996",
+    brand="#00cccc",
+    blue="#7aa2ff",
+    green="#68d391",
+    amber="#f6ad55",
+    red="#fc8181",
+    violet="#bb86fc",
+)
 
 
 STATUS_STYLE = {

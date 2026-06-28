@@ -1,4 +1,18 @@
-"""Prompt-toolkit keybinding construction for MO TUI."""
+"""MO Keybindings — single source of truth for all keyboard shortcuts.
+
+Surfaces
+    * Main TUI       — ``build_tui_key_bindings(tui)``
+    * UX Shell TUI   — ``build_ux_shell_key_bindings(ui_state)``
+    * Plain input    — inline in ``interface/input.py`` (Enter, Ctrl+C, Ctrl+D,
+                       Ctrl+L, Tab, Shift+Tab)
+    * Desktop Ghost  — ``interface/ghost_desktop/companion.py`` (Escape, Return,
+                       Button-1, B1-Motion, DND Drop) — tkinter, not prompt_toolkit
+    * Global hotkey  — ``mo.py`` → Win+Alt+M summons desktop Ghost
+    * Sandbox guard  — ``core/tooling/sandbox.py`` blocks Win+R / Win+X in actuation
+
+DO NOT add inline ``KeyBindings()`` definitions in other files — all
+prompt_toolkit keybindings must be built through this module's factories.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -373,5 +387,47 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
         """Ctrl+L: redraw the terminal screen (convention from readline/shell)."""
         event.app.renderer.clear()
         event.app.invalidate()
+
+    return kb
+
+
+def build_ux_shell_key_bindings(ui_state: Any) -> KeyBindings:
+    """Build keybindings for the isolated UX Shell TUI.
+
+    *ui_state* must be a duck-typed object with at least:
+        - ``palette_open: bool``
+        - ``plan_lens: bool``
+        - ``turn_running: bool``
+    """
+    kb = KeyBindings()
+
+    @kb.add("c-q")
+    @kb.add("c-c")
+    def _exit(event) -> None:
+        event.app.exit()
+
+    @kb.add("c-p")
+    def _toggle_palette(event) -> None:
+        ui_state.palette_open = not ui_state.palette_open
+        event.app.invalidate()
+
+    @kb.add("s-tab")
+    def _toggle_plan_lens(event) -> None:
+        ui_state.plan_lens = not ui_state.plan_lens
+        event.app.invalidate()
+
+    @kb.add("escape")
+    def _escape(event) -> None:
+        if ui_state.palette_open:
+            ui_state.palette_open = False
+            event.app.invalidate()
+
+    @kb.add("enter")
+    def _submit(event) -> None:
+        event.current_buffer.validate_and_handle()
+
+    @kb.add("c-j")
+    def _newline(event) -> None:
+        event.current_buffer.insert_text("\n")
 
     return kb

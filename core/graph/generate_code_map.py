@@ -427,29 +427,22 @@ def _file_ops_payload() -> dict[str, dict[str, Any]]:
 
 
 def _render_html(payload: dict[str, Any]) -> str:
+    from interface.theming import skin_to_code_map_css
     graph_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    return _HTML_TEMPLATE.replace("__GRAPH_JSON__", graph_json)
+    css = skin_to_code_map_css()
+    return _HTML_TEMPLATE.replace("__GRAPH_JSON__", graph_json).replace("__CSS__", css)
 
 
 _HTML_TEMPLATE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MO Agent — Unified Map</title>
-<style>
-:root{--bg:#050711;--panel:rgba(7,10,24,.86);--line:#26365f;--text:#dce7ff;--muted:#91a4cf;--cyan:#7df9ff;--gold:#ffcc33;--pink:#ff5bea;--green:#7bd88f}
+<style>__CSS__
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px ui-sans-serif,system-ui,"Segoe UI",sans-serif;overflow:hidden}
-#canvas{display:block;width:100vw;height:100vh;background:radial-gradient(circle at center,#101936 0,#050711 62%,#02030a 100%)}
-.panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 0 30px rgba(63,120,255,.14);backdrop-filter:blur(8px)}
 #side{left:16px;top:16px;bottom:16px;width:300px;padding:14px;display:flex;flex-direction:column;gap:10px;overflow:hidden;z-index:2}
 #side h1{font-size:16px;margin:0;color:#fff}
 #side .sub{color:var(--muted);font-size:11px}
 #stats{display:flex;flex-wrap:wrap;gap:4px}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#15224a;color:#bad0ff;font-size:11px}
-.badge.gold{background:#3a2a08;color:var(--gold)}.badge.pink{background:#2a1030;color:var(--pink)}.badge.green{background:#0a2a10;color:var(--green)}.badge.dim{opacity:.55}
-#search{width:100%;box-sizing:border-box;background:#0b1228;border:1px solid var(--line);border-radius:8px;color:#fff;padding:7px 10px;font-size:12px;outline:none}
-#search:focus{border-color:#3f6dd9}
 .filters{display:flex;gap:6px;flex-wrap:wrap}
-.chip{cursor:pointer;user-select:none;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:#0b1228;color:var(--muted);font-size:11px}
-.chip.on{background:#15224a;color:#dff1ff;border-color:#3f6dd9}
 .section-title{font-size:10px;color:var(--cyan);text-transform:uppercase;letter-spacing:.8px;margin:4px 0 2px}
 #groups,#work{overflow-y:auto;min-height:0}
 #groups{flex:1.1}#work{flex:1}

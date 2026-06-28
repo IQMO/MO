@@ -129,3 +129,38 @@ def snapshot_from_runtime(agent: Any, gateway: Any) -> SessionSnapshot:
         transcript=tuple(transcript),
         composer_hint="runtime adapter preview; not promoted",
     )
+
+
+# ---------------------------------------------------------------------------
+# Theme adapters — lazy bridge to interface.theming (UX layer must not import
+# interface directly; all cross-layer access flows through this module).
+# ---------------------------------------------------------------------------
+
+def get_ux_theme():
+    """Return a UxTheme for the currently active skin."""
+    from interface.theming import skin_to_ux_theme
+    return skin_to_ux_theme()
+
+
+def get_shell_style():
+    """Return a shell style dict for the currently active skin."""
+    from interface.theming import skin_to_shell_style_dict, get_skin
+    return skin_to_shell_style_dict(get_skin())
+
+
+def get_skin():
+    """Return the current skin object."""
+    from interface.theming import get_skin
+    return get_skin()
+
+
+def get_skin_name():
+    """Return the current skin name."""
+    from interface.theming import get_skin_name
+    return get_skin_name()
+
+
+def build_key_bindings(ui_state):
+    """Build prompt_toolkit keybindings for the UX Shell TUI."""
+    from interface.keybindings import build_ux_shell_key_bindings
+    return build_ux_shell_key_bindings(ui_state)

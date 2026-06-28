@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import sys
 
-CYAN = "#00cccc"
-CARD = "#04141a"
-TEXT = "#dff6f6"
+from interface.theming import skin_overlay_vars as _resolve_overlay_colors
+_oc = _resolve_overlay_colors()
+CYAN: str = _oc["CYAN"]
+CARD: str = _oc["CARD"]
+TEXT: str = _oc["TEXT"]
 GLYPH = "◐"  # ◐ half-moon = MO mark
 
 

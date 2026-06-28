@@ -62,6 +62,7 @@ class SessionCloseout:
     goal_state: tuple[str, ...] = ()
     prt_summary: tuple[str, ...] = ()
     learning_delta: tuple[str, ...] = ()
+    session_spine: tuple[str, ...] = ()
     clean: bool = True
     created_at: float = field(default_factory=time.time)
 
@@ -103,6 +104,12 @@ def build_session_closeout(agent: Any, *, reason: str = "session boundary") -> S
             if w.kind == "prt" and w.state == "completed":
                 prt_info.append(f"PRT {w.id}: {w.result_summary}")
 
+    # Session spine: conversation content for "where were we?" continuity.
+    # Prefer the handoff document (if one was generated) — it already has
+    # a cleanly formatted recent-dialogue section. Fall back to the last
+    # few user/assistant messages from the live session.
+    session_spine = _extract_session_spine(agent, session, messages)
+
     if callable(getattr(agent, "_tool_context_saved_chars", None)):
         saved_chars = _as_int(agent._tool_context_saved_chars())
     else:
@@ -133,6 +140,7 @@ def build_session_closeout(agent: Any, *, reason: str = "session boundary") -> S
         goal_state=tuple(redact_monitor_text(item, 240) for item in goal[:6]),
         prt_summary=tuple(redact_monitor_text(item, 240) for item in prt_info[:5]),
         learning_delta=tuple(redact_monitor_text(item, 240) for item in learning_delta[:8]),
+        session_spine=tuple(redact_monitor_text(item, 320) for item in session_spine[:12]),
         clean=not unresolved,
     )
     _write_file_operations(agent, session)
@@ -191,6 +199,10 @@ def render_session_closeout_markdown(closeout: SessionCloseout) -> str:
         lines.extend(f"- {item}" for item in closeout.unresolved)
     else:
         lines.extend(["CLEAN:", "- No open taskboard items, active workers/goals, dirty workspace lines, or trim-loss warnings detected."])
+    if closeout.session_spine:
+        lines.extend(["", "## Conversation topic / recent spine"])
+        lines.append("- Spine (for session continuity):")
+        lines.extend(f"  - {item}" for item in closeout.session_spine)
     lines.extend(["", "## Workspace / workers / goals"])
     if closeout.dirty_files:
         lines.append("- Git dirty lines:")
@@ -231,6 +243,7 @@ def write_session_closeout(
     path = _unique_closeout_path(out_dir, stamp, _safe_slug(closeout.session_id or 'session'))
     atomic_write_text(path, render_session_closeout_markdown(closeout), encoding="utf-8")
     prune_session_closeouts(out_dir, keep=keep)
+    _append_session_index(closeout, path, out_dir)
     return path
 
 
@@ -355,6 +368,47 @@ def _closeout_candidate_source(pattern: str, closeout: SessionCloseout) -> str:
         f"Do: {behavior}\n"
         "Avoid: do not treat closeout notes as proof and do not auto-promote this workflow without explicit operator approval."
     )
+
+
+def _append_session_index(closeout: SessionCloseout, closeout_path: Path, out_dir: Path) -> None:
+    """Append a compact entry to the session index for navigation/history."""
+    try:
+        index_path = Path(out_dir).parent / "session_index.jsonl"
+
+        # Determine session number by counting existing entries
+        session_number = 1
+        if index_path.exists():
+            try:
+                lines = [l for l in index_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+                session_number = len(lines) + 1
+            except Exception:
+                pass
+
+        # Extract topic from spine (first user line)
+        topic = ""
+        for entry in closeout.session_spine:
+            if entry.lower().startswith("user:"):
+                topic = entry[5:].strip()[:160]
+                break
+
+        entry = {
+            "session": session_number,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(closeout.created_at)),
+            "reason": closeout.reason[:100],
+            "slot": closeout.slot[:40],
+            "topic": topic,
+            "clean": closeout.clean,
+            "unresolved_count": len(closeout.unresolved),
+            "dirty_count": len(closeout.dirty_files),
+            "turn_count": closeout.turn_count,
+            "closeout": str(closeout_path),
+        }
+        line = json.dumps(entry, ensure_ascii=False, default=str)
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(index_path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except Exception:
+        traceback.print_exc()
 
 
 def _memory_root(profile: Any) -> Path:
@@ -496,6 +550,62 @@ def _learning_delta(agent: Any) -> list[str]:
     return rows
 
 
+def _extract_session_spine(agent: Any, session: Any, messages: list[dict]) -> list[str]:
+    """Extract the last ~12 user/assistant messages as a session spine.
+
+    Prefers the handoff document's "Recent session spine" section when a
+    handoff was generated during this session — it already has cleanly
+    redacted and formatted dialogue lines.  Falls back to extracting from
+    the live session messages.
+    """
+    handoff_path = getattr(agent, "last_handoff_path", "")
+    if handoff_path:
+        try:
+            handoff_text = Path(handoff_path).read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            handoff_text = ""
+        if handoff_text:
+            rows = _spine_from_handoff_document(handoff_text)
+            if rows:
+                return rows
+    return _spine_from_session_messages(messages)
+
+
+def _spine_from_handoff_document(handoff_text: str) -> list[str]:
+    """Parse the "## Recent session spine" section from a handoff document."""
+    in_spine = False
+    rows: list[str] = []
+    for line in handoff_text.splitlines():
+        stripped = line.strip()
+        if stripped == "## Recent session spine":
+            in_spine = True
+            continue
+        if in_spine:
+            if stripped.startswith("## ") or stripped.startswith("# "):
+                break
+            if stripped.startswith("- "):
+                rows.append(stripped[2:].strip())
+    return rows[:12]
+
+
+def _spine_from_session_messages(messages: list[dict], *, limit: int = 12) -> list[str]:
+    """Extract the last N user/assistant messages, skipping tool calls/results."""
+    rows: list[str] = []
+    for msg in reversed(messages or []):
+        if len(rows) >= limit:
+            break
+        role = str(msg.get("role") or "").strip()
+        if role == "tool" or msg.get("tool_calls"):
+            continue
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        preview = content.replace("\n", " ")[:200]
+        rows.append(f"{role}: {preview}")
+    rows.reverse()
+    return rows
+
+
 def _session_taskboard_state(agent: Any) -> dict[str, Any]:
     gateway = getattr(agent, "gateway", None)
     board = getattr(gateway, "last_task_board", None) or getattr(agent, "_active_task_board", None)
@@ -598,12 +708,13 @@ def _safe_slug(value: str) -> str:
     return slug or "session"
 
 
-def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", max_age_hours: float = 72.0) -> str:
-    """Return a compact 1-3 line summary of the latest session closeout for context injection.
+def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", max_age_hours: float = 720.0) -> str:
+    """Return a compact 2-4 line summary of the latest session closeout for context injection.
 
-    Reads the newest closeout Markdown that is fresh enough (< max_age_hours).
-    Returns a string with session info (reason, turns, unresolved count, +/- clean),
-    or an empty string when no closeout is fresh enough or available.
+    Reads the newest closeout Markdown that is fresh enough (< max_age_hours, default 30 days).
+    Returns a string with session info (turns, reason, unresolved count) plus the
+    conversation topic extracted from the session spine, or an empty string when no
+    closeout is fresh enough or available.
     """
     root_path = Path(resolve_state_path(root))
     if not root_path.exists():
@@ -622,13 +733,14 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
     except Exception:
         return ""
 
-    # Extract lines of interest
     reason = ""
     clean = True
     unresolved: list[str] = []
     in_unresolved = False
     turn_count = 0
     dirty_count = 0
+    spine: list[str] = []
+    in_spine = False
 
     for line in text.splitlines():
         stripped = line.strip()
@@ -644,13 +756,19 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
         elif stripped == "UNRESOLVED:":
             in_unresolved = True
             continue
+        elif stripped == "## Conversation topic / recent spine":
+            in_spine = True
+            continue
         elif stripped.startswith("## "):
+            if in_spine:
+                in_spine = False
             in_unresolved = False
             continue
         if in_unresolved and stripped.startswith("- "):
             unresolved.append(stripped[2:].strip())
+        if in_spine and stripped.startswith("  - "):
+            spine.append(stripped[4:].strip())
 
-    # Count dirty files from the Git dirty lines section
     in_dirty = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -671,6 +789,18 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
     summary = f"Last session: {turn_count} turns · {reason} · {status}"
     if dirty_count:
         summary += f" · {dirty_count} dirty file(s)"
+    if spine:
+        # First user line carries the topic
+        for entry in spine:
+            if entry.lower().startswith("user:"):
+                topic = entry[5:].strip()
+                summary += f"\nTopic: {topic[:200]}"
+                break
+        # First line of dialogue gives continuity
+        if len(spine) > 1:
+            next_line = spine[1] if not spine[0].lower().startswith("user:") or spine[1].lower().startswith("assistant:") else spine[2] if len(spine) > 2 else ""
+            next_line = next_line or spine[1]
+            summary += f"\nNext: {next_line[:200]}"
     if unresolved:
         first_unresolved = unresolved[0] if unresolved else ""
         summary += f"\nUnresolved: {first_unresolved[:120]}"

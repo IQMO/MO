@@ -32,14 +32,17 @@ from interface.ghost_desktop.orb import GhostOrb
 from interface.ghost_desktop.voice import CompanionVoice, VoiceRecognizer, VoiceSpeaker
 from interface.ghost_desktop.tray import CompanionTray, start_tray_if_enabled
 
-CYAN = "#00cccc"
-CARD = "#0b1418"
-TEXT = "#dff6f6"
+# Resolved from the active skin at import time (single source of truth).
+from interface.theming import skin_to_ghost_vars as _resolve_ghost_colors
+_gc = _resolve_ghost_colors()
+CYAN: str = _gc["CYAN"]
+CARD: str = _gc["CARD"]
+TEXT: str = _gc["TEXT"]
+_ENTRY_BG: str = _gc["_ENTRY_BG"]
+_MUTED: str = _gc["_MUTED"]
+_BORDER: str = _gc["_BORDER"]
+_LISTEN: str = _gc["_LISTEN"]
 GLYPH = "◐"  # ◐ half-moon = MO mark
-_ENTRY_BG = "#10242b"
-_MUTED = "#5a8899"
-_BORDER = "#123038"
-_LISTEN = "#bb86fc"  # voice-listening accent (matches the orb)
 _WINDOW_RADIUS = 18
 _GUI_ACTIVE_FRAME_MS = 16
 _GUI_IDLE_FRAME_MS = 50

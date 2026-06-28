@@ -160,7 +160,12 @@ def compact_path_for_footer(path: str, *, max_chars: int = 28) -> str:
 
 def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = None) -> list[tuple[str, str]]:
     status = token_status_from_agent(agent)
-    model_label = f"{status.provider_name} / {status.model}".strip(" /")
+    model_short = str(status.model or "")
+    if model_short and status.provider_name:
+        prefix = str(status.provider_name).lower()
+        if model_short.lower().startswith(prefix + "-"):
+            model_short = model_short[len(prefix) + 1:]
+    model_label = f"{status.provider_name} / {model_short}".strip(" /")
     reasoning = str(status.reasoning or "").strip()
     reasoning_text = f" · {reasoning}" if reasoning else ""
     project = compact_path_for_footer(str(getattr(agent, "project_cwd", "") or os.environ.get("MO_PROJECT_CWD", "") or ""))
@@ -171,7 +176,8 @@ def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = N
     if status.saved_tokens_est > 0:
         total_est = status.input_tokens + status.saved_tokens_est
         pct = round(status.saved_tokens_est / max(1, total_est) * 100, 1)
-        saved_part = f" ◎~{format_k(status.saved_tokens_est)} ({pct}%)"
+        pct_str = f"{pct}%" if pct >= 0.1 else "<0.1%"
+        saved_part = f" ◎~{format_k(status.saved_tokens_est)} ({pct_str})"
     base = f"{prefix}{token_part}{saved_part} · {model_label}{reasoning_text}"
     # Official DeepSeek API only: show live account balance (cached, non-blocking).
     try:

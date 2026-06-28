@@ -363,12 +363,14 @@ def main(argv: list[str] | None = None):
     try:
         from core.telegram import start_telegram_gateway_if_enabled
         telegram = start_telegram_gateway_if_enabled(agent, gateway)
-    except Exception:
+    except Exception as exc:
+        print(f"MO: Telegram gateway failed to start: {exc}", file=sys.stderr)
         telegram = None
     try:
         from core.runtime.heartbeat import start_heartbeat_service_if_enabled
         heartbeat = start_heartbeat_service_if_enabled(agent, gateway, surface="terminal")
-    except Exception:
+    except Exception as exc:
+        print(f"MO: Heartbeat service failed to start: {exc}", file=sys.stderr)
         heartbeat = None
     try:
         if _terminal_should_host_ghost(agent):
@@ -379,7 +381,8 @@ def main(argv: list[str] | None = None):
                     setattr(agent, "_companion", companion)
                 except Exception:
                     pass
-    except Exception:
+    except Exception as exc:
+        print(f"MO: Ghost companion failed to start: {exc}", file=sys.stderr)
         companion = None
     console_cls, has_rich = _load_rich_console()
     console = console_cls() if has_rich and console_cls is not None else None

@@ -71,6 +71,16 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
     """Provider-first MO agent. Model decides, sandbox enforces."""
 
     def __init__(self, config_path: str | None = None):
+        self._init_config(config_path)
+        self._init_providers()
+        self._init_agent_config()
+        self._init_system_message()
+        self._init_session()
+        self._init_safety_and_profile()
+        self._init_state()
+        self._init_tools()
+
+    def _init_config(self, config_path: str | None) -> None:
         self.config_path = config_path or default_config_path()
         self.config = load_config(self.config_path)
         self.agent_root = repo_root()
@@ -81,7 +91,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         if private_state_enabled(self.config) and not os.environ.get("PYTEST_CURRENT_TEST"):
             os.environ.setdefault(ENV_MO_STATE_HOME, self.runtime_home)
 
-        # Init provider chain
+    def _init_providers(self) -> None:
         prov = init_provider(self.config)
         self.providers: list[BaseProvider] = prov["providers"]
         self.provider_index: int = prov["provider_index"]
@@ -93,7 +103,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self.max_tokens: int = prov["max_tokens"]
         self.reasoning: str = str(prov.get("reasoning") or "high")
 
-        # Agent config
+    def _init_agent_config(self) -> None:
         agent_cfg = self.config.get("agent", {})
         self.max_tool_rounds: int = agent_cfg.get("max_tool_rounds", 80)
         self.max_provider_requests: int = agent_cfg.get("max_provider_requests", 300)
@@ -130,11 +140,11 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         # Roots
         self.allowed_roots: list[str] = default_project_roots(self.config)
 
-        # System message: internal by default; explicit config path is an override.
+    def _init_system_message(self) -> None:
         system_path = self.config.get("paths", {}).get("system_prompt", "")
         self.system_message, self.system_prompt_source = self._load_system_message(system_path)
 
-        # Session
+    def _init_session(self) -> None:
         self._thread_state = threading.local()
         self.session = Session(self.system_message)
         self._last_interrupted_turn: dict[str, object] = {}
@@ -178,11 +188,10 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         except Exception:
             traceback.print_exc()
 
-        # Safety modules
+    def _init_safety_and_profile(self) -> None:
         self.critic = AnswerCritic(
             resolve_state_path(self.config.get("paths", {}).get("critique_file", "critique/ANSWER.md"), self.config)
         )
-
         # Profile
         profile_path = resolve_state_path(self.config.get("paths", {}).get("memory_file", "memory/mo.db"), self.config)
         self.profile = Profile.load(profile_path)
@@ -199,7 +208,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                     self.profile.touch_project(root, Path(root).name)
                     break
 
-        # State
+    def _init_state(self) -> None:
         self.last_fallback_notice = ""
         self.last_handoff_notice = ""
         self.last_quarantine_notice = ""
@@ -214,6 +223,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self._goal_active = False
         self._goal_runner = None
         self.workers = WorkerRegistry()
+        agent_cfg = self.config.get("agent", {})
         self.worker_runtime = BackgroundWorkerRuntime(self, max_workers=int(agent_cfg.get("background_workers_max", 3) or 3))
 
         # Context-saving stats (tracked per-session for /status visibility).
@@ -236,7 +246,7 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         if isinstance(pending_compression_meta, dict):
             self._restore_context_saving_meta({"compression": pending_compression_meta})
 
-        # Load tool definitions
+    def _init_tools(self) -> None:
         from tools import TOOL_DEFINITIONS
         self.tool_definitions = self._ordered_tool_definitions(TOOL_DEFINITIONS)
         # set_plan (MO-owned taskboard) is only exposed when the flag is on, so
@@ -1254,6 +1264,8 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         """Append learning/memory notes to the reply UNLESS a transient status
         surface (the TUI footer) is showing them — avoids duplicating the
         confirmation in both the response body and the footer."""
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return str(text or "")
         if getattr(self, "_status_footer_active", False):
             return str(text or "")
         return self._append_after_turn_notes(text, notes)

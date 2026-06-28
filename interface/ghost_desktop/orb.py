@@ -21,11 +21,13 @@ from typing import Any
 # Near-black transparency key: the moon is rendered anti-aliased (PIL) and flattened
 # onto this colour, so the feathered rim fades to a soft dark halo and only the exact
 # key pixels are keyed out (transparent + click-through). No art pixel equals it.
-_CHROMA = "#010101"
-_MOON = "#00cccc"        # cyan half-moon = MO mark
-_MOON_DARK = "#04141a"   # the shadowed limb of the crescent
-_GLOW = "#3fe0e0"
-_LISTEN = "#bb86fc"      # purple pulse while hearing voice
+from interface.theming import skin_to_ghost_vars as _resolve_ghost_colors
+_gc = _resolve_ghost_colors()
+_CHROMA: str = _gc["_CHROMA"]
+_MOON: str = _gc["_MOON"]           # brand moon = MO mark
+_MOON_DARK: str = _gc["_MOON_DARK"] # the shadowed limb of the crescent
+_GLOW: str = _gc["_GLOW"]
+_LISTEN: str = _gc["_LISTEN"]       # purple pulse while hearing voice
 
 _SIZE = 80               # window + canvas edge (px)
 _GLIDE_SECONDS = 0.45    # travel time to a new point
@@ -33,9 +35,10 @@ _ACTIVE_REDRAW_SECONDS = 0.05
 _IDLE_REDRAW_SECONDS = 0.16
 
 
-_MOON_RGB = (0, 204, 204)
-_LISTEN_RGB = (187, 134, 252)
-_DARK_RGB = (11, 20, 24)
+_MOON_RGB: tuple[int, int, int] = _gc["_MOON_RGB"]
+_LISTEN_RGB: tuple[int, int, int] = _gc["_LISTEN_RGB"]
+_DARK_RGB: tuple[int, int, int] = _gc["_DARK_RGB"]
+_CHROMA_RGB: tuple[int, int, int] = _gc["_CHROMA_RGB"]
 
 
 def _ease_out_cubic(t: float) -> float:
@@ -260,7 +263,7 @@ class GhostOrb:
             disc(body_r, cx + body_r * 0.55, (4, 20, 26, 255))
 
             img = img.resize((s, s), Image.LANCZOS)
-            flat = Image.new("RGB", (s, s), (1, 1, 1))  # == _CHROMA #010101
+            flat = Image.new("RGB", (s, s), _CHROMA_RGB)
             flat.paste(img, (0, 0), img)
             self._photo = ImageTk.PhotoImage(flat)
             self._canvas.delete("all")

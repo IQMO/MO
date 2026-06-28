@@ -6,23 +6,20 @@ import time
 import threading
 from typing import Any
 
-# Gold glow base colors
-R_BASE = 255
-G_BASE = 180  # 180 to 220
-B_BASE = 0
-
 def calculate_moon_glow(timestamp: float) -> str:
     """
     Generate an animated foreground color style for the MO logo.
-    Cycles between a deep gold and a bright yellow-gold.
+    Cycles between the skin's base glow and a brighter pulse.
     """
+    from interface.theming import get_moon_glow_base
+    r_base, g_base, b_base = get_moon_glow_base()
     speed = 2.0
-    
-    # Pulse the green channel to go between deep gold and bright yellow
-    g_val = G_BASE + 40 * math.sin(timestamp * speed)
+
+    # Pulse the green channel to go between base and brighter
+    g_val = g_base + 40 * math.sin(timestamp * speed)
     g = max(0, min(255, int(g_val)))
-    
-    hex_color = f"#{R_BASE:02x}{g:02x}{B_BASE:02x}"
+
+    hex_color = f"#{r_base:02x}{g:02x}{b_base:02x}"
     # Return as foreground color and bold
     return f"fg:{hex_color} bold"
 

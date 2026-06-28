@@ -172,7 +172,19 @@ class AgentSlashCommands:
         if name not in available:
             return f"Unknown skin: {name!r}. Available: {', '.join(available)}"
         set_skin(name)
-        return f"[SKIN] Switched to {name}."
+        # Apply to the live TUI surface immediately.
+        if hasattr(self, "tui") and self.tui is not None:
+            app = getattr(self.tui, "_app", None)
+            if app is not None:
+                from interface.theme import build_tui_style
+                app.style = build_tui_style()
+                app.invalidate()
+        # Ghost desktop is a separate process — it reads ~/.mo/skin at startup.
+        from core.ghost.desktop_launch import ghost_desktop_running
+        restart_note = ""
+        if ghost_desktop_running():
+            restart_note = " (restart Ghost Desktop to see it there — next launch reads the new skin)"
+        return f"[SKIN] Switched to {name}.{restart_note}"
 
     def _cmd_learning(self, rest: str) -> str:
         """Show deterministic learning/system health status."""

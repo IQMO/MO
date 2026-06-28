@@ -407,6 +407,13 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         help_lines=("/settings         show current settings",),
     ),
     SlashCommandSpec(
+        name="/skin",
+        description="Switch UI theme",
+        category="Settings",
+        palette_description="Switch UI theme (e.g. default, dracula)",
+        help_lines=("/skin             Switch UI theme. /skin dracula | /skin default",),
+    ),
+    SlashCommandSpec(
         name="/companion",
         description="alias of /ghost window — toggle the desktop Ghost window",
         category="Work",
@@ -428,7 +435,7 @@ SLASH_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
 HELP_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Work", ("/status", "/goal", "/ghost", "/prt", "/structural-graph", "/learning", "/usage", "/companion")),
     ("Sessions", ("/projects", "/sessions", "/session", "/new", "/resume", "/clear", "/undo", "/retry")),
-    ("Settings", ("/help", "/init", "/doctor", "/update", "/migrate", "/model", "/profile", "/moon", "/hints", "/reload", "/think", "/settings")),
+    ("Settings", ("/help", "/init", "/doctor", "/update", "/migrate", "/model", "/profile", "/skin", "/moon", "/hints", "/reload", "/think", "/settings")),
     ("Remote", ("/heartbeat", "/telegram")),
     ("Exit", ("/exit",)),
 )

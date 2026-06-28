@@ -60,7 +60,8 @@ def format_token_status(status: TokenStatus) -> str:
     if status.saved_tokens_est > 0:
         total_est = status.input_tokens + status.saved_tokens_est
         pct = round(status.saved_tokens_est / max(1, total_est) * 100, 1)
-        base += f" \u25ce~{format_k(status.saved_tokens_est)} ({pct}%)"
+        pct_str = f"{pct}%" if pct >= 0.1 else "<0.1%"
+        base += f" \u25ce~{format_k(status.saved_tokens_est)} ({pct_str})"
     return f"{base} \u00b7 ({status.provider_name}) {status.model} \u2022 {status.reasoning}"
 
 

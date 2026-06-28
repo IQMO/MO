@@ -246,6 +246,88 @@ class AgentTurnRecoveryMixin:
         level = "note"
         emitted_turn_health = False
 
+        # ── Context-pressure gate (chars/tokens, not tool rounds) ──
+        # Tool-round checks miss the case where each round returns huge
+        # results — pressure can hit 98% in just 4 turns (observed live:
+        # mo-1782608335, mo-1782608780).  Check pressure once here and
+        # force a handoff before the provider loop chokes.
+        context_pressure_handoff_threshold = float(
+            agent_cfg.get("turn_health_context_pressure_handoff_at", 0.90) or 0.90
+        )
+        context_pressure_critical_threshold = float(
+            agent_cfg.get("turn_health_context_pressure_critical_at", 0.95) or 0.95
+        )
+        if not self._turn_health_handed_off and getattr(self, "context_handoff_enabled", True):
+            try:
+                from ..session.handoff import context_pressure as _cp
+                pressure_metrics = _cp(self)
+                cp = float(pressure_metrics.get("pressure") or 0.0)
+            except Exception:
+                cp = 0.0
+            if cp >= context_pressure_critical_threshold:
+                # Critical: context window nearly full — handoff and block tools
+                self._turn_health_handed_off = True
+                self._turn_health_compacted = True
+                self._turn_health_tools_blocked = True
+                try:
+                    self._force_tool_budget_handoff(tool_rounds, max_tools, monitor=monitor)
+                except Exception:
+                    pass
+                level = "critical"
+                warning = (
+                    f"[TURN HEALTH CRITICAL] Context pressure {cp:.0%} — "
+                    f"chars {pressure_metrics.get('chars')}/{pressure_metrics.get('budget_chars')}. "
+                    "Context handed off with continuation mandate. "
+                    + (
+                        "Return a work continuation capsule now — do NOT call more tools."
+                        if work_continuation_active
+                        else "Produce your final answer now — do NOT call more tools."
+                    )
+                )
+                if monitor:
+                    monitor.emit("turn_health", {
+                        "tool_rounds": tool_rounds, "max_tool_rounds": max_tools,
+                        "remaining": remaining, "level": level,
+                        "action": "context_pressure_handoff",
+                        "pressure": cp,
+                        "threshold": context_pressure_critical_threshold,
+                        "chars": pressure_metrics.get("chars"),
+                        "budget_chars": pressure_metrics.get("budget_chars"),
+                        "label": "orientation only, not proof",
+                    })
+                    emitted_turn_health = True
+            elif cp >= context_pressure_handoff_threshold:
+                # High pressure: handoff, but allow one more tool round
+                self._turn_health_handed_off = True
+                self._turn_health_compacted = True
+                try:
+                    self._force_tool_budget_handoff(tool_rounds, max_tools, monitor=monitor)
+                except Exception:
+                    pass
+                level = "handoff"
+                warning = (
+                    f"[TURN HEALTH HANDOFF] Context pressure {cp:.0%} — "
+                    f"chars {pressure_metrics.get('chars')}/{pressure_metrics.get('budget_chars')}. "
+                    "Context handed off with continuation mandate. "
+                    + (
+                        "Return a work continuation capsule now — do NOT call more tools."
+                        if work_continuation_active
+                        else "Produce your final answer now — do NOT call more tools."
+                    )
+                )
+                if monitor:
+                    monitor.emit("turn_health", {
+                        "tool_rounds": tool_rounds, "max_tool_rounds": max_tools,
+                        "remaining": remaining, "level": level,
+                        "action": "context_pressure_handoff",
+                        "pressure": cp,
+                        "threshold": context_pressure_handoff_threshold,
+                        "chars": pressure_metrics.get("chars"),
+                        "budget_chars": pressure_metrics.get("budget_chars"),
+                        "label": "orientation only, not proof",
+                    })
+                    emitted_turn_health = True
+
         # Handoff: force a fresh context with a conclusion mandate
         # Guard: only handoff if the model has actually used some budget
         # (prevents instant handoff when max_tool_rounds is very small).

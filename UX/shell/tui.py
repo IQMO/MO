@@ -10,7 +10,7 @@ from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import InMemoryHistory
-from prompt_toolkit.key_binding import KeyBindings
+from UX.runtime.adapters import build_key_bindings
 from prompt_toolkit.layout.containers import ConditionalContainer, HSplit, Window
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
@@ -514,35 +514,18 @@ def _build_root(controller: UxController, input_buffer: Buffer, animation: TuiAn
 
 
 def _style() -> Style:
-    return Style.from_dict(
-        {
-            "logo": "#8ccfff bold",
-            "signal-faint": "#06151d",
-            "signal-dim": "#0a5d74",
-            "signal-mid": "#1b8aa6",
-            "signal-hot": "#8ccfff bold",
-            "signal-core": "#f6ad55 bold",
-            "border": "#255f9f",
-            "title": "#42a5ff bold",
-            "hint": "#2f8cff bold",
-            "rule": "#7aa2ff",
-            "prompt": "#39d0c8 bold",
-            "placeholder": "#7d8996",
-            "section": "#7aa2ff bold",
-            "chip": "bg:#16384a #8ccfff bold",
-            "brand": "#26c6ff bold",
-            "blue": "#7aa2ff bold",
-            "green": "#8ee88e bold",
-            "amber": "#f6ad55 bold",
-            "yellow": "#ffe45c bold",
-            "red": "#fc8181 bold",
-            "mo": "#39d0c8 bold",
-            "ux": "#f6ad55 bold",
-            "user": "#7aa2ff bold",
-            "text": "#d7dee8",
-            "muted": "#7d8996",
-        }
-    )
+    from UX.runtime.adapters import get_shell_style, get_skin
+
+    s = get_skin()
+    base = get_shell_style()
+    # Extra entries not covered by the generic bridge
+    base.update({
+        "ux": f"{s.accent_amber} bold",
+        "user": f"{s.accent_blue} bold",
+        "text": s.text_primary,
+        "muted": s.text_muted,
+    })
+    return Style.from_dict(base)
 
 
 def _create_input_buffer(accept_handler, ui_state: TuiSessionState) -> Buffer:
@@ -595,37 +578,8 @@ def _submit_in_background(
 
 
 def run_tui(controller: UxController) -> None:
-    kb = KeyBindings()
     ui_state = TuiSessionState()
-
-    @kb.add("c-q")
-    @kb.add("c-c")
-    def _exit(event) -> None:
-        event.app.exit()
-
-    @kb.add("c-p")
-    def _toggle_palette(event) -> None:
-        ui_state.palette_open = not ui_state.palette_open
-        event.app.invalidate()
-
-    @kb.add("s-tab")
-    def _toggle_plan_lens(event) -> None:
-        ui_state.plan_lens = not ui_state.plan_lens
-        event.app.invalidate()
-
-    @kb.add("escape")
-    def _escape(event) -> None:
-        if ui_state.palette_open:
-            ui_state.palette_open = False
-            event.app.invalidate()
-
-    @kb.add("enter")
-    def _submit(event) -> None:
-        event.current_buffer.validate_and_handle()
-
-    @kb.add("c-j")
-    def _newline(event) -> None:
-        event.current_buffer.insert_text("\n")
+    kb = build_key_bindings(ui_state)
 
     animation = TuiAnimation()
     app_ref: dict[str, Application] = {}
