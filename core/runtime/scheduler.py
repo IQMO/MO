@@ -175,6 +175,8 @@ class SchedulerService:
                     output = self._run_turn_job(job)
                 elif kind == "goal":
                     output = self._run_goal_job(job)
+                elif kind == "role":
+                    output = self._run_role_job(job)
                 else:
                     raise ValueError(f"Unsupported scheduler job kind: {kind}")
             delivered = _deliver_if_configured(self.agent, job, output)
@@ -231,6 +233,59 @@ class SchedulerService:
             result = _run()
         _save_scheduler_session(self.agent, session_name, session)
         return result
+
+    def _run_role_job(self, job: dict[str, Any]) -> str:
+        """Run a scheduled turn governed by a named role (a skill with `role:`),
+        reusing the same overlay + tool-scope + mastery wiring as a /role worker —
+        synchronously, so the output still flows through delivery."""
+        objective = str(job.get("prompt") or job.get("objective") or "").strip()
+        role = str(job.get("role") or "").strip()
+        if not objective:
+            raise ValueError("Scheduled role job missing prompt/objective")
+        if not role:
+            raise ValueError("Scheduled role job missing role")
+        from ..skills import (
+            default_skill_roots,
+            resolve_role,
+            role_overlay_text,
+            record_skill_outcome,
+        )
+
+        agent = self.agent
+        roots = default_skill_roots(
+            getattr(agent, "project_cwd", None),
+            getattr(agent, "runtime_home", None),
+            profile=getattr(agent, "profile", None),
+            config=getattr(agent, "config", None),
+        )
+        role_skill = resolve_role(role, roots, profile=getattr(agent, "profile", None))
+        if role_skill is None:
+            raise ValueError(f"Scheduled role job references unknown role: {role}")
+
+        base = str(getattr(agent, "system_message", "You are MO.") or "You are MO.")
+        session = Session(base + role_overlay_text(role_skill))
+        state = "completed"
+        result = ""
+        try:
+            isolated = getattr(agent, "isolated_session", None)
+            scope = getattr(agent, "provider_scope", None)
+            if callable(isolated) and callable(scope):
+                with isolated(session), scope("scheduler", role=role_skill):
+                    result = self.gateway.run_turn(objective, route_source="scheduler")
+            elif callable(isolated):
+                with isolated(session):
+                    result = self.gateway.run_turn(objective, route_source="scheduler")
+            else:
+                result = self.gateway.run_turn(objective, route_source="scheduler")
+        except Exception:
+            state = "blocked"
+            raise
+        finally:
+            try:
+                record_skill_outcome(getattr(role_skill, "source", ""), "success" if state == "completed" else "correction")
+            except Exception:
+                pass
+        return str(result or "")
 
     def _record_run_and_update_job(self, claimed_job: dict[str, Any], run: SchedulerRun) -> None:
         current = run.finished_at
