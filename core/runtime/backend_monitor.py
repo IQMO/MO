@@ -355,9 +355,9 @@ def economy_summary(
     estimated or stale.
     Tool errors are counted from ``tool_result.error``/``is_error`` and blocks from
     ``tool_result.blocked``. Lower-level ``tool_error``/``sandbox_blocked`` telemetry
-    is not counted separately because dispatch records the same action outcome as a
-    ``tool_result``; counting both turns one failed/blocked call into two economy
-    failures.
+    is counted only when no nearby matching ``tool_result`` exists; dispatch often
+    records both for one failed/blocked call, while a few internal guards can emit
+    standalone lower-level telemetry.
 
     Logical-run scoping (multi-instance proposal, amendment #5): one process monitor can
     hold a Main-MO run PLUS handoff segments PLUS interleaved Ghost/desktop turns.
@@ -379,6 +379,7 @@ def economy_summary(
         return out
     _err_tools: "set[str]" = set()
     _blk_tools: "set[str]" = set()
+    events: list[tuple[str, dict[str, Any]]] = []
     for line in Path(path).open(encoding="utf-8", errors="replace"):
         line = line.strip()
         if not line:
@@ -406,6 +407,24 @@ def economy_summary(
             surfaces = _monitor_surface_keys(p, d)
             if exclude.intersection(surfaces):
                 continue  # Ghost/desktop turn — not part of the Main-MO run
+        events.append((str(t or ""), p if isinstance(p, dict) else {}))
+
+    def has_nearby_tool_result(index: int, tool: str, field: str) -> bool:
+        # Sandbox guard telemetry is emitted immediately before the canonical
+        # dispatch result. A small lookahead de-duplicates the paired events while
+        # still preserving truly standalone guard failures.
+        for next_t, next_p in events[index + 1:index + 21]:
+            if next_t != "tool_result":
+                continue
+            if str(next_p.get("tool") or "") != tool:
+                continue
+            if field == "blocked" and next_p.get("blocked"):
+                return True
+            if field == "error" and (next_p.get("error") or next_p.get("is_error")):
+                return True
+        return False
+
+    for index, (t, p) in enumerate(events):
         if t == "provider_request":
             out["provider_requests"] += 1
         elif t == "provider_response":
@@ -421,6 +440,16 @@ def economy_summary(
             if p.get("blocked"):
                 out["sandbox_blocked"] += 1
                 _blk_tools.add(str(p.get("tool") or ""))
+        elif t == "tool_error":
+            tool = str(p.get("tool") or "")
+            if not has_nearby_tool_result(index, tool, "error"):
+                out["tool_errors"] += 1
+                _err_tools.add(tool)
+        elif t == "sandbox_blocked":
+            tool = str(p.get("tool") or "")
+            if not has_nearby_tool_result(index, tool, "blocked"):
+                out["sandbox_blocked"] += 1
+                _blk_tools.add(tool)
         elif t == "tool_compress":
             out["compression_events"] += 1
     out["error_tools"] = sorted(t for t in _err_tools if t)
