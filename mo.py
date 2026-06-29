@@ -352,8 +352,8 @@ def main(argv: list[str] | None = None):
         print("Fix provider credentials or run `mo --init` to regenerate a private config.", file=sys.stderr)
         sys.exit(2)
     notice = _render_existing_instances_notice(getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {})
-    if notice:
-        print(notice)
+    # Notice is rendered into the TUI transcript by run_main_loop (so it scrolls and
+    # clears with the session), not printed to native scrollback above the TUI.
     gateway = gateway_cls(agent)
     telegram = None
     heartbeat = None
@@ -389,7 +389,7 @@ def main(argv: list[str] | None = None):
     try:
         from interface.terminal_loop import run_main_loop
 
-        run_main_loop(agent, gateway, console, has_rich)
+        run_main_loop(agent, gateway, console, has_rich, startup_notice=notice)
     finally:
         if companion and hasattr(companion, "stop"):
             companion.stop()

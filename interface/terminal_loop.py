@@ -78,7 +78,7 @@ def startup_identity_lines(agent: Any) -> list[str]:
     return lines
 
 
-def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool) -> None:
+def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool, startup_notice: str = "") -> None:
     monitor_opened = should_open_backend_monitor()
     if monitor_opened:
         gateway.monitor.open_window()
@@ -89,17 +89,26 @@ def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool) -> Non
     # bookkeeping (closeout + profile session stats) that the finally would do.
     # record_session is idempotent, so the normal path + atexit don't double-run.
     atexit.register(record_session, agent)
+    # Startup banner = the instance notice + the MO Agent identity lines.
     try:
-        for line in startup_identity_lines(agent):
-            print(line)
+        banner = [ln for ln in str(startup_notice or "").splitlines() if ln.strip()]
+        banner += list(startup_identity_lines(agent))
     except Exception:
-        pass
+        banner = []
 
     # Prompt-toolkit TUI is the normal interface: styled logo, colors, palette,
     # Ghost/task/status panels, and keyboard-managed transcript scrolling.
     # Plain native scrollback is an explicit fallback via MO_NATIVE_SCROLL=1.
     if _input_module.HAS_PROMPT_TOOLKIT and sys.stdin.isatty() and should_use_prompt_toolkit_tui():
         tui = _tui_class()(agent, gateway)
+        # Seed the banner INTO the TUI transcript so it scrolls and /clears with
+        # everything else, instead of sitting in native scrollback pinned above the TUI.
+        try:
+            for line in banner:
+                tui._add("class:dim", line)
+        except Exception:
+            for line in banner:
+                print(line)
         try:
             tui.run()
         finally:
@@ -109,6 +118,9 @@ def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool) -> Non
             print("MO Agent session ended.")
         return
 
+    # Native fallback has no managed transcript — print the banner to scrollback.
+    for line in banner:
+        print(line)
     try:
         run_native_terminal_loop(agent, gateway, console)
     finally:
