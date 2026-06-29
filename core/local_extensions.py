@@ -198,6 +198,10 @@ def self_change_approved(user_input: str) -> bool:
     return bool(_call("self_change_approved", user_input, default=False))
 
 
+def operator_override_approved(agent: object, user_input: str, tool_name: str, arguments: dict[str, Any] | None) -> bool:
+    return bool(_call("operator_override_approved", agent, user_input, tool_name, arguments or {}, default=False))
+
+
 def tool_block_reason(agent: object, user_input: str, tool_name: str, arguments: dict[str, Any] | None) -> str | None:
     result = _call("tool_block_reason", agent, user_input, tool_name, arguments or {}, default=None)
     return result if isinstance(result, str) and result.strip() else None

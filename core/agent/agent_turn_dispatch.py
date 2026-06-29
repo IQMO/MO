@@ -721,7 +721,7 @@ class AgentTurnDispatchMixin:
             name = tc["function"]["name"]
             args = self._project_scoped_tool_arguments(name, self._parsed_tool_arguments(tc))
             args = local_extensions.normalize_tool_arguments(self, user_input, name, args)
-            operator_ok = self._operator_approved(user_input, name, args)
+            operator_ok = self._operator_approved(user_input, name, args) or local_extensions.operator_override_approved(self, user_input, name, args)
             roots = self._effective_allowed_roots_for_tool(user_input, name, args)
             blocked = local_extensions.tool_block_reason(self, user_input, name, args) or self._self_mutation_block_reason(user_input, name, args) or guard_tool_call(
                 name, args,

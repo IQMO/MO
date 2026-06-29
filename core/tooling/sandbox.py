@@ -69,6 +69,7 @@ _UNIX_ROOT_PATH_NAMES = {
     "bin", "boot", "dev", "etc", "home", "lib", "lib64", "media", "mnt",
     "opt", "proc", "root", "run", "sbin", "srv", "sys", "tmp", "usr", "var",
 }
+_PYTHON_INLINE_SLASH_LITERAL_RE = re.compile(r"/([A-Za-z][A-Za-z0-9_-]*)(?:[=:{\[][^\s\"'`;|&<>/]*)?")
 
 
 def _touches_hard_boundary(text: str) -> bool:
@@ -384,18 +385,88 @@ def _is_python_inline_command(command: str) -> bool:
     return executable in {"python", "python3", "py"} and "-c" in parts
 
 
+def _python_inline_code_raw_span(command: str) -> tuple[int, int] | None:
+    text = str(command or "")
+    match = re.search(r"(?<!\S)-c(?:\s+)", text)
+    if not match:
+        return None
+    idx = match.end()
+    while idx < len(text) and text[idx].isspace():
+        idx += 1
+    if idx >= len(text):
+        return None
+    quote = text[idx]
+    if quote in {"'", '"'}:
+        start = idx + 1
+        idx = start
+        while idx < len(text):
+            if quote == '"' and text[idx] == "\\":
+                idx += 2
+                continue
+            if text[idx] == quote:
+                return (start, idx)
+            idx += 1
+        return (start, len(text))
+    start = idx
+    while idx < len(text) and not text[idx].isspace() and text[idx] not in "`;|&<>":
+        idx += 1
+    return (start, idx)
+
+
+def _python_code_has_open_string_at(code: str, pos: int) -> bool:
+    in_quote: str | None = None
+    triple = False
+    idx = 0
+    while idx < min(pos, len(code)):
+        ch = code[idx]
+        if in_quote:
+            if ch == "\\":
+                idx += 2
+                continue
+            if triple and code.startswith(in_quote * 3, idx):
+                in_quote = None
+                triple = False
+                idx += 3
+                continue
+            if not triple and ch == in_quote:
+                in_quote = None
+                idx += 1
+                continue
+            idx += 1
+            continue
+        if ch in {"'", '"'}:
+            in_quote = ch
+            triple = code.startswith(ch * 3, idx)
+            idx += 3 if triple else 1
+            continue
+        idx += 1
+    return in_quote is not None
+
+
+def _is_inside_python_inline_string(command: str, start: int, end: int) -> bool:
+    span = _python_inline_code_raw_span(command)
+    if not span:
+        return False
+    code_start, code_end = span
+    if start < code_start or end > code_end:
+        return False
+    return _python_code_has_open_string_at(str(command or "")[code_start:code_end], start - code_start)
+
+
 def _is_quoted_python_slash_literal(command: str, start: int, end: int, candidate: str) -> bool:
     """Return True for inline Python slash-command literals, not paths."""
     if not _is_python_inline_command(command):
         return False
-    if not re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]*", candidate or ""):
+    if not _is_inside_python_inline_string(command, start, end):
         return False
-    name = candidate[1:].lower()
-    if name in _UNIX_ROOT_PATH_NAMES:
+    name_match = re.match(r"/([A-Za-z][A-Za-z0-9_-]*)", candidate or "")
+    if name_match and name_match.group(1).lower() in _UNIX_ROOT_PATH_NAMES:
         return False
-    if start <= 0 or end >= len(command):
+    if "/" in str(candidate or "")[1:]:
         return False
-    return command[start - 1] in {"'", '"'} and command[end] == command[start - 1]
+    if _PYTHON_INLINE_SLASH_LITERAL_RE.fullmatch(candidate or ""):
+        return True
+    return re.match(r"/[\{\[]", candidate or "") is not None
 
 
 def _escape_scan_command_text(command: str) -> str:

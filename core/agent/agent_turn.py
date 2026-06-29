@@ -671,7 +671,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
 
                     # === Phase 2d: dispatch each tool call through the gate ===
                     # THE SINGLE GATE
-                    operator_ok = self._operator_approved(user_input, name, arguments)
+                    operator_ok = self._operator_approved(user_input, name, arguments) or local_extensions.operator_override_approved(self, user_input, name, arguments)
                     effective_roots = self._effective_allowed_roots_for_tool(user_input, name, arguments)
                     block_reason = local_extensions.tool_block_reason(self, user_input, name, arguments) or \
                         self._self_mutation_block_reason(user_input, name, arguments) or guard_tool_call(
