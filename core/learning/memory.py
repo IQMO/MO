@@ -141,6 +141,44 @@ class EpisodicMemory:
         except Exception as e:
             _emit_memory_event("memory_index_error", {"turn_id": turn_id, "error": str(e)[:200]})
 
+    def backfill_embeddings(self) -> dict:
+        """Embed stored turns that have no vector yet (one-time, after enabling embeddings).
+
+        Turns indexed before embeddings were enabled have no vector, so semantic/RRF
+        recall is blind to them until backfilled. Embeddings are computed OUTSIDE the
+        sqlite transaction (network/CPU must not hold the lock). No-op without an
+        embedder. Returns {embedded, failed, total}.
+        """
+        if self.embedder is None:
+            return {"embedded": 0, "failed": 0, "total": 0, "reason": "no embedder configured"}
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT t.turn_id, t.user, t.assistant FROM turns t "
+                    "LEFT JOIN turn_vectors v ON t.turn_id = v.turn_id WHERE v.turn_id IS NULL"
+                ).fetchall()
+        except Exception as e:
+            _emit_memory_event("memory_backfill_error", {"error": str(e)[:200]})
+            return {"embedded": 0, "failed": 0, "total": 0, "reason": str(e)[:120]}
+        embedded = 0
+        failed = 0
+        for r in rows:
+            vec = self._embed_safe(f"{r['user']}\n{r['assistant']}")
+            if not vec:
+                failed += 1
+                continue
+            try:
+                with self._connect() as conn:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO turn_vectors (turn_id, vector) VALUES (?, ?)",
+                        (r["turn_id"], json.dumps(vec)),
+                    )
+                embedded += 1
+            except Exception:
+                failed += 1
+        _emit_memory_event("memory_backfill", {"embedded": embedded, "failed": failed, "total": len(rows)})
+        return {"embedded": embedded, "failed": failed, "total": len(rows)}
+
     def _count_recent_duplicates(self, user_input: str, window: int = 50, threshold: int = 5) -> int:
         """Count how many times the exact same user input appears in the most recent `window` entries."""
         try:
