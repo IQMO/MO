@@ -354,8 +354,10 @@ def economy_summary(
     The authoritative source of session economy so records never need to be
     estimated or stale.
     Tool errors are counted from ``tool_result.error``/``is_error`` and blocks from
-    ``tool_result.blocked`` (NOT only the rarer ``tool_error``/``sandbox_blocked``
-    event types — those miss a failed ``tool_result`` that later recovered).
+    ``tool_result.blocked``. Lower-level ``tool_error``/``sandbox_blocked`` telemetry
+    is not counted separately because dispatch records the same action outcome as a
+    ``tool_result``; counting both turns one failed/blocked call into two economy
+    failures.
 
     Logical-run scoping (multi-instance proposal, amendment #5): one process monitor can
     hold a Main-MO run PLUS handoff segments PLUS interleaved Ghost/desktop turns.
@@ -419,12 +421,6 @@ def economy_summary(
             if p.get("blocked"):
                 out["sandbox_blocked"] += 1
                 _blk_tools.add(str(p.get("tool") or ""))
-        elif t == "tool_error":
-            out["tool_errors"] += 1
-            _err_tools.add(str(p.get("tool") or ""))
-        elif t == "sandbox_blocked":
-            out["sandbox_blocked"] += 1
-            _blk_tools.add(str(p.get("tool") or ""))
         elif t == "tool_compress":
             out["compression_events"] += 1
     out["error_tools"] = sorted(t for t in _err_tools if t)
