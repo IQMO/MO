@@ -296,12 +296,15 @@ class AgentSlashCommands:
         if sub in {"confirm", "dismiss"}:
             return self._cmd_learning_review(sub, arg)
         if sub in {"reconcile", "consolidate"}:
+            if arg.strip().lower() in {"deep", "dialectic", "model"}:
+                return self._cmd_learning_reconcile_deep(cfg, suggestions_path)
             from core.learning.proactive_learning import reconcile_confirmed_learnings
             res = reconcile_confirmed_learnings(path=suggestions_path)
             return (
                 f"Reconciled confirmed learnings: {res['confirmed_before']} confirmed -> "
                 f"{res['clusters']} distinct cluster(s); {res['superseded']} near-duplicate(s) superseded.\n"
-                "  (deterministic local consolidation; no provider call)"
+                "  (deterministic local consolidation; no provider call)\n"
+                "  /learning reconcile deep — run the dialectic operator-model pass (one cheap call)"
             )
         if sub in {"inspect", "use", "promote", "candidates", "sources", "imports"}:
             return self._cmd_learning_import(sub, arg, cfg)
@@ -438,6 +441,47 @@ class AgentSlashCommands:
                 traceback.print_exc()
         skill_line = f"\nSkill pack: {skill_path}" if skill_path else ""
         return f"Confirmed cluster: {updated} suggestion(s) - now part of MO's skills ({clean_id}){skill_line}\n{result}".rstrip()
+
+    def _cmd_learning_reconcile_deep(self, cfg: dict, suggestions_path) -> str:
+        """Dialectic operator-model reconciliation - ONE cheap ghost call, propose-only.
+
+        Gathers confirmed learnings + profile prose and asks the cheap ghost model to
+        assess -> self-audit -> reconcile into a single clean operator model. The
+        result is written as a REVIEW PROPOSAL under profile state; MO never edits
+        learning.md/behavior.md itself."""
+        from core.learning.profile_reconcile import (
+            build_dialectic_prompt,
+            gather_reconcile_inputs,
+            has_reconcile_inputs,
+            write_reconcile_proposal,
+        )
+        inputs = gather_reconcile_inputs(getattr(self, "profile", None), suggestions_path=suggestions_path, config=cfg)
+        if not has_reconcile_inputs(inputs):
+            return "Nothing to reconcile yet: no confirmed learnings or profile prose."
+        system, user = build_dialectic_prompt(inputs)
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        try:
+            with self.provider_scope("ghost_slash"):
+                response, _provider = self.complete_ghost_no_tools(
+                    surface="ghost_slash",
+                    request="learning-reconcile",
+                    messages=messages,
+                    max_tokens=min(int(self.max_tokens or 1400), 1400),
+                )
+            text = str(getattr(response, "content", "") or "").strip()
+        except Exception as exc:
+            return f"Dialectic reconcile failed: {clean_provider_error(str(exc))}"
+        if not text:
+            return "Dialectic reconcile produced no output."
+        path = write_reconcile_proposal(text, config=cfg)
+        if not path:
+            return "Reconcile output tripped the secret detector; nothing written."
+        preview = "\n".join(text.splitlines()[:12])
+        return (
+            "Dialectic operator-model reconciliation (PROPOSAL - review, then apply by hand; "
+            "MO did not edit your profile):\n"
+            f"  {path}\n\n{preview}\n  ...(full proposal at the path above)"
+        )
 
     def _cmd_structural_graph(self, rest: str) -> str:
         """Show or build MO's optional structural code graph."""
