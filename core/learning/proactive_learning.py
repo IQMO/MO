@@ -116,19 +116,37 @@ def mine_learning_suggestions(
     return suggestions[:max_items]
 
 
+# Transient session-health diagnostics, NOT durable learnings: these describe THIS
+# session's provider/context/indexing state, carry no cross-session behavioral
+# lesson, and at volume (e.g. context_pressure fires every pressured session) they
+# flood the capped store and crowd out genuine operator-feedback before it can
+# accumulate. They belong in session telemetry/monitor, not the durable learning
+# store, so they are dropped at the write boundary (the single sink for all sources).
+TRANSIENT_DIAGNOSTIC_KINDS = frozenset({
+    "closeout:context_pressure",
+    "closeout:provider_errors",
+    "trace:provider_errors",
+    "trace:no_memory_index",
+})
+
+
 def write_learning_suggestions(
     suggestions: list[LearningSuggestion],
     *,
     path: str | Path | None = None,
 ) -> Path:
-    """Append unique reviewable suggestions to JSONL and return the path."""
+    """Append unique reviewable suggestions to JSONL and return the path.
+
+    Transient diagnostic canaries (``TRANSIENT_DIAGNOSTIC_KINDS``) are not persisted:
+    they are session telemetry, not durable learnings, and would crowd the store.
+    """
     from ..state.paths import resolve_state_path
     out = Path(resolve_state_path(path or "memory/learning_suggestions.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
     existing = _existing_ids(out)
     with out.open("a", encoding="utf-8") as fh:
         for suggestion in suggestions:
-            if suggestion.id in existing:
+            if suggestion.id in existing or suggestion.kind in TRANSIENT_DIAGNOSTIC_KINDS:
                 continue
             fh.write(json.dumps(suggestion.as_dict(), ensure_ascii=False, sort_keys=True) + "\n")
             existing.add(suggestion.id)
