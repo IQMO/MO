@@ -62,18 +62,15 @@ class AgentTurnRecoveryMixin:
         if not text:
             return False
         lowered = text.lower()
-        tool_markers = (
-            "[tool calls requested]",
-            "edit_file(",
-            "write_file(",
-            "read_file(",
-            "test_runner(",
-            "project_bridge(",
-            "<tool_call",
-            "</tool_call",
-            "<tool_use",
-            "</tool_use",
-        )
+        if "[tool calls requested]" in lowered:
+            return True
+        if re.search(
+            r"(?im)^\s*(?:i\s+will\s+|let\s+me\s+|now\s+)?"
+            r"(?:edit_file|write_file|read_file|test_runner|project_bridge)\s*\(",
+            text,
+        ):
+            return True
+        tool_markers = ("<tool_call", "</tool_call", "<tool_use", "</tool_use")
         if any(marker in lowered for marker in tool_markers):
             return True
         if re.search(
