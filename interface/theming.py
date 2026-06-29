@@ -324,6 +324,7 @@ def skin_to_tui_style_dict(skin: Skin | None = None) -> dict[str, str]:
         "ghost-route": f"{s.accent_purple} bold",
         "ghost-route-blocked": f"{s.accent_red_soft} bold",
         "dim": s.text_dim,
+        "reasoning": f"{s.text_dim} italic",
         "info": b,
         "input-placeholder": f"{s.text_placeholder} italic",
         "notification-idle": f"{b} italic",

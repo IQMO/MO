@@ -192,7 +192,15 @@ class TurnRunnerMixin:
                 if (clean.startswith("▸") or "tooling (" in clean) and not getattr(self, "_show_tool_activity", True):
                     return
                 interim_seen.append(clean)
-                self._add_response_block(clean)
+                # Colour by content type so secondary chrome doesn't wear the answer
+                # colour: reasoning -> dim italic, tool activity -> dim (same as the
+                # live activity line), real prose -> the answer response block.
+                if clean.startswith("💭"):
+                    self._add("class:reasoning", clean)
+                elif clean.startswith("▸") or "tooling (" in clean:
+                    self._add("class:dim", clean)
+                else:
+                    self._add_response_block(clean)
                 if self._app:
                     self._app.invalidate()
 
