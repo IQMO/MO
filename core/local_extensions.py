@@ -188,6 +188,12 @@ def read_like_tool(tool_name: str, arguments: dict[str, Any] | None) -> bool | N
     return result if isinstance(result, bool) else None
 
 
+def normalize_tool_arguments(agent: object, user_input: str, tool_name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
+    args = dict(arguments or {})
+    result = _call("normalize_tool_arguments", agent, user_input, tool_name, args, default=None)
+    return dict(result) if isinstance(result, dict) else args
+
+
 def self_change_approved(user_input: str) -> bool:
     return bool(_call("self_change_approved", user_input, default=False))
 

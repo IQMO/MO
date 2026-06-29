@@ -24,6 +24,7 @@ SAFE_EVENT_TYPES = {
     "provider_response",
     "assistant_text",
     "provider_error",
+    "provider_retry",
     "provider_fallback",
     "tool_call",
     "tool_result",

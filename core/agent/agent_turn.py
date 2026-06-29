@@ -644,6 +644,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         return "[ABORTED] Current turn stopped."
                     name = tc_data["function"]["name"]
                     arguments = self._project_scoped_tool_arguments(name, self._parsed_tool_arguments(tc_data))
+                    arguments = local_extensions.normalize_tool_arguments(self, user_input, name, arguments)
                     if on_activity:
                         # Prettify MCP tool names (mcp__server__tool -> "server · tool")
                         # so the activity line clearly shows an MCP tool is running.
@@ -1223,9 +1224,9 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
         reason = "empty_length" if finish_reason == "length" else "empty_response"
         if on_activity:
             on_activity(f"empty response (retry {empty_response_prompts}/2)")
-        if monitor:
-            monitor.emit("provider_error", {"request": provider_requests, "provider": self.provider_name, "reason": reason, "error": "Provider returned no visible content. Retrying."})
         if empty_response_prompts <= 2:
+            if monitor:
+                monitor.emit("provider_retry", {"request": provider_requests, "provider": self.provider_name, "reason": reason, "action": "same_provider_retry"})
             self.session.add_assistant(
                 "[PROVIDER EMPTY] Response had no visible text and no tool calls. "
                 "Answer the user directly and concisely."
@@ -1239,12 +1240,15 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             if self._next_provider("empty_response"):
                 empty_response_prompts = 0
                 if monitor:
+                    monitor.emit("provider_retry", {"request": provider_requests, "provider": self.provider_name, "reason": reason, "action": "provider_fallback"})
                     monitor.emit("provider_fallback", {"request": provider_requests, "provider": self.provider_name, "model": self.model, "reason": "empty_response"})
                 self.session.add_assistant(
                     "[PROVIDER EMPTY] Previous provider returned no visible text. "
                     "Answer the user directly and concisely."
                 )
                 return "retry", empty_response_prompts, empty_response_fallback_attempted
+        if monitor:
+            monitor.emit("provider_error", {"request": provider_requests, "provider": self.provider_name, "reason": reason, "error": "Provider returned no visible content after retries."})
         return "give_up", empty_response_prompts, empty_response_fallback_attempted
 
     def _malformed_tool_action(self, *, argument_block: str, malformed_tool_prompts: int,
