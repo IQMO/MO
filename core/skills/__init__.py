@@ -694,6 +694,72 @@ def retire_stale_generated_skills(
     return retired
 
 
+def record_recent_skill_corrections(
+    profile: Any | None,
+    *,
+    config: dict[str, Any] | None = None,
+    window_seconds: int = 900,
+    correction_text: str = "",
+    now: float | None = None,
+) -> list[str]:
+    """Wire the previously-dead ``correction`` outcome.
+
+    When the operator corrects MO, record a ``correction`` on the profile-owned
+    generated skills that were just used (selected within ``window_seconds``, by
+    their frontmatter ``last_used_at``) and append the correction to each skill's
+    inert ``skill_evolution.json`` fixes log. This un-blinds retirement
+    (``mastery_corrections`` becomes real) and makes the evolution sidecar live,
+    WITHOUT auto-rewriting any SKILL.md — body changes remain an explicit
+    promotion. Returns the skill source paths a correction was recorded against.
+    """
+    root = skills_root(profile, config=config)
+    if not root or not Path(root).exists():
+        return []
+    base = Path(root)
+    current = float(now if now is not None else time.time())
+    cutoff = current - max(1, int(window_seconds or 900))
+    fix_note = " ".join(str(correction_text or "").split())[:200]
+    try:
+        from ..utils.text_safety import contains_secret_value
+        if fix_note and contains_secret_value(fix_note):
+            fix_note = ""
+    except Exception:
+        fix_note = ""
+    touched: list[str] = []
+    for path in base.glob("*/SKILL.md"):
+        skill = _parse_skill(path)
+        if not skill or not skill.generated:
+            continue
+        last_used = _as_int(skill.mastery.get("last_used_at") or skill.mastery.get("created_at"))
+        if not last_used or last_used < cutoff:
+            continue
+        if record_skill_outcome(path, "correction", now=current):
+            touched.append(str(path))
+            _append_skill_evolution_fix(path.parent, skill.name, fix_note, when=current)
+    return touched
+
+
+def _append_skill_evolution_fix(skill_dir: Path, skill_name: str, fix_note: str, *, when: float) -> None:
+    """Append a correction to the skill's inert evolution sidecar (creating it on
+    first use). Records WHAT was corrected for later manual promotion; it never
+    rewrites SKILL.md and never duplicates the profile-learning store."""
+    try:
+        from .importing.manifest import new_skill_evolution, read_manifest, write_manifest
+        evo_path = Path(skill_dir) / "skill_evolution.json"
+        data = read_manifest(evo_path) or new_skill_evolution(skill_name=skill_name)
+        fixes = data.get("fixes")
+        if not isinstance(fixes, list):
+            fixes = []
+        fixes.append({"at": when, "correction": fix_note} if fix_note else {"at": when})
+        data["fixes"] = fixes[-50:]
+        data["last_updated_at"] = when
+        if not data.get("skill_name"):
+            data["skill_name"] = skill_name
+        write_manifest(evo_path, data)
+    except Exception:
+        return
+
+
 def _parse_skill(path: Path) -> Skill | None:
     try:
         raw = path.read_text(encoding="utf-8")

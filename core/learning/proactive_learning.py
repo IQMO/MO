@@ -18,6 +18,8 @@ from ..utils.atomic_write import atomic_write_text
 from ..runtime.backend_monitor import redact_monitor_text
 from ..utils.env_utils import int_env
 from ..utils.jsonl_utils import read_jsonl
+from ..utils.text_safety import contains_secret_value
+from ..gates.threat_scan import scan_text
 
 
 @dataclass(frozen=True)
@@ -426,6 +428,121 @@ def next_learning_suggestion_notice(
             f"say confirm learning suggestion {cluster.representative.id} or dismiss learning suggestion {cluster.representative.id}"
         )
     return ""
+
+
+# Auto-promotion of a NARROW safe class. MO captures + clusters learning every
+# turn, but nothing crossed the manual /learning confirm gate (observed live:
+# 100 suggested / 0 confirmed), so build_learning_context injected nothing — the
+# learning pipe was fully wired but the valve was welded shut. This opens the
+# valve for the provably-safe, universal, high-confidence clusters ONLY;
+# everything risky still needs explicit /learning confirm. Fully reversible:
+# /learning dismiss reverts an auto-confirmed cluster.
+AUTO_PROMOTE_SAFE_KINDS = frozenset({"evidence_first", "clean_finish", "communication_concise"})
+
+
+def auto_promote_safe_clusters(
+    *,
+    path: str | Path = "memory/learning_suggestions.jsonl",
+    min_confidence: float = 0.8,
+    min_count: int = 3,
+    now: float | None = None,
+) -> list[dict[str, Any]]:
+    """Auto-confirm only high-confidence, universal, low-risk suggestion clusters.
+
+    Effective bar: a universal-safe kind, seen >= ``min_count`` times, with cluster
+    confidence >= ``min_confidence`` (recurrence + recency). Returns a summary of
+    what was promoted for audit/notice. Confirms nothing when the store is empty,
+    the bar is not met, or the text trips the secret/threat gate. The ``confirmed``
+    status is exactly what ``build_learning_context`` consumes, so a promoted
+    cluster injects on the next matching turn.
+    """
+    current = float(now if now is not None else time.time())
+    src = Path(path)
+    suggestions = read_learning_suggestions(path=str(src))
+    if not suggestions:
+        return []
+    promoted: list[dict[str, Any]] = []
+    promote_ids: set[str] = set()
+    for cluster in cluster_suggestions(suggestions, now=current):
+        if cluster.kind not in AUTO_PROMOTE_SAFE_KINDS:
+            continue
+        if cluster.confidence < min_confidence or cluster.count < min_count:
+            continue
+        text = str(cluster.recommendation or "")
+        # Safety re-gate at the promotion boundary: never auto-confirm text that
+        # trips the secret detector or the input threat scan.
+        if contains_secret_value(text) or scan_text(text, surface="learning auto-promote").blocked:
+            continue
+        promote_ids.update(cluster.ids)
+        promoted.append({
+            "id": cluster.representative.id,
+            "kind": cluster.kind,
+            "confidence": cluster.confidence,
+            "count": cluster.count,
+            "recommendation": _one_line_recommendation(text, 200),
+        })
+    if promote_ids:
+        _confirm_ids_auto(src, promote_ids, current)
+    return promoted
+
+
+def _confirm_ids_auto(path: Path, ids: set[str], when: float) -> None:
+    """Flip the given suggested/pending ids to confirmed in one rewrite, tagging
+    them ``auto_promoted`` for audit. Only touches still-unreviewed rows so it
+    never overrides an explicit operator dismiss/confirm."""
+    if not ids or not path.exists():
+        return
+    rows = read_jsonl(path)
+    changed = False
+    for row in rows:
+        if str(row.get("id") or "") in ids and str(row.get("status") or "suggested").lower() in {"suggested", "pending"}:
+            row["status"] = "confirmed"
+            row["updated_at"] = when
+            row["auto_promoted"] = True
+            row["auto_promoted_at"] = when
+            changed = True
+    if changed:
+        atomic_write_text(path, "\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
+
+
+def reconcile_confirmed_learnings(
+    *,
+    path: str | Path = "memory/learning_suggestions.jsonl",
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Deterministic, no-provider consolidation of CONFIRMED learnings.
+
+    As auto-promotion (and manual confirm) accumulate learnings, near-duplicates of
+    the same insight pile up. This collapses confirmed rows that fall in one
+    ``(kind, normalized-recommendation)`` cluster down to a single active
+    representative — the rest are marked ``superseded`` so the injected learning
+    set stays lean and contradiction-free. Returns
+    ``{confirmed_before, clusters, superseded}``. (The optional LLM "dialectic"
+    depth — assess/self-audit/reconcile over profile prose — layers on top of this
+    foundation and is gated separately; this pass is local and cost-free.)
+    """
+    current = float(now if now is not None else time.time())
+    src = Path(path)
+    if not src.exists():
+        return {"confirmed_before": 0, "clusters": 0, "superseded": 0}
+    confirmed = [s for s in read_learning_suggestions(path=str(src), include_inactive=True)
+                 if str(s.status).lower() == "confirmed"]
+    if not confirmed:
+        return {"confirmed_before": 0, "clusters": 0, "superseded": 0}
+    clusters = cluster_suggestions(confirmed, now=current)
+    keep_ids = {cluster.representative.id for cluster in clusters}
+    superseded_ids: set[str] = set()
+    for cluster in clusters:
+        if cluster.count > 1:
+            superseded_ids.update(sid for sid in cluster.ids if sid not in keep_ids)
+    if superseded_ids:
+        rows = read_jsonl(src)
+        for row in rows:
+            if str(row.get("id") or "") in superseded_ids and str(row.get("status") or "").lower() == "confirmed":
+                row["status"] = "superseded"
+                row["updated_at"] = current
+        atomic_write_text(src, "\n".join(json.dumps(r, ensure_ascii=False, sort_keys=True) for r in rows) + "\n", encoding="utf-8")
+    return {"confirmed_before": len(confirmed), "clusters": len(clusters), "superseded": len(superseded_ids)}
 
 
 def build_learning_context(

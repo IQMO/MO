@@ -295,6 +295,14 @@ class AgentSlashCommands:
             return render_learning_clusters(clusters, raw_count=len(active), expired_count=expired, path=suggestions_path)
         if sub in {"confirm", "dismiss"}:
             return self._cmd_learning_review(sub, arg)
+        if sub in {"reconcile", "consolidate"}:
+            from core.learning.proactive_learning import reconcile_confirmed_learnings
+            res = reconcile_confirmed_learnings(path=suggestions_path)
+            return (
+                f"Reconciled confirmed learnings: {res['confirmed_before']} confirmed -> "
+                f"{res['clusters']} distinct cluster(s); {res['superseded']} near-duplicate(s) superseded.\n"
+                "  (deterministic local consolidation; no provider call)"
+            )
         if sub in {"inspect", "use", "promote", "candidates", "sources", "imports"}:
             return self._cmd_learning_import(sub, arg, cfg)
         from core.learning.proactive_learning import cluster_suggestions, read_learning_suggestions
@@ -325,6 +333,7 @@ class AgentSlashCommands:
             f"  behavior rules:   {behavior.get('count', 0)}",
             f"  candidates:       {workflow.get('candidates', 0)} staged / {workflow.get('promoted', 0)} promoted",
             f"  skills:           {skill_count} local/generated pack(s); {len(confirmed_clusters)} confirmed cluster(s)",
+            f"  auto-learn:       {'on' if (cfg.get('learning') or {}).get('auto_promote', True) else 'off'} (safe class) · /learning reconcile to consolidate",
             f"  suggestions:      {len(pending_clusters)} cluster(s) pending review ({len(active)} raw)",
             f"  memory:           {memory.get('turns', 0)} turns · FTS5 {'yes' if memory.get('fts5') else 'no'} · misses {memory.get('miss_terms', 0)}",
             f"  graph:            {graph.get('nodes', 0)} nodes / {graph.get('edges', 0)} edges / {graph.get('communities', 0)} communities",

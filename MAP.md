@@ -15,7 +15,7 @@ Compact orientation for providers. `AGENTS.md` is authoritative for rules.
 - `core/review/` — diff review pipeline, scorer, iteration, finding patterns; PRT can flag proven overengineering as maintainability risk.
 - `core/goal/` — goal runner and goal auditor.
 - `core/graph/` — `core/graph/structural_graph.py`, code graph, code-map HTML; `core/lsp/` — local language-server diagnostics bridge (`lsp.servers`), off by default; the `lsp_diagnostics` final-gate blocks "fixed/clean" claims on files the server still flags.
-- `core/learning/` — memory, knowledge store, workflow/feedback/trace learning.
+- `core/learning/` — episodic memory (FTS5 + optional local-embedding RRF recall, env-tunable horizon `MO_MEMORY_MAX_TURNS`), workflow/feedback/trace learning. Per-turn mining stays inert, but the narrow universal safe class auto-promotes (`learning.auto_promote`, default on) so confirmed learnings actually inject; everything else needs `/learning confirm`. `/learning reconcile` consolidates confirmed near-duplicates; operator corrections record the skill `correction` outcome (un-blinding retirement) and log to the inert `skill_evolution.json`.
 - `core/session/` — session, closeout, momentum; old completed tool chains can compact Python source reads to recoverable structure skeletons.
 - `core/tooling/code_skeleton.py`, `core/tooling/` — tool sandbox/registry/compression plus the Python AST skeleton compressor used by session momentum.
 - `core/provider/`, `core/runtime/`, `core/state/`, `core/skills/` — providers; monitor/heartbeat/locks/service; profile-home paths/init/secrets/migration; local skill packs and seeds.

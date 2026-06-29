@@ -218,6 +218,19 @@ taskboard:
   # Ghost/procedure-seeded behavior unchanged.
   model_owned: false
 
+learning:
+  # MO mines inert learning suggestions from your turns and only injects them once
+  # confirmed. Historically nothing crossed the manual confirm gate, so the loop
+  # never fed back. auto_promote opens the gate for ONLY the narrow, universal,
+  # high-confidence safe class (evidence-first / clean-finish / concise) seen 3+
+  # times recently; everything else still needs an explicit `/learning confirm`.
+  # `/learning dismiss <id>` reverts an auto-confirmed item; `/learning reconcile`
+  # consolidates near-duplicate confirmed learnings (deterministic, no provider call).
+  auto_promote: true
+  # Episodic recall horizon (verbatim turn store). Env-tunable, not a config key:
+  # set MO_MEMORY_MAX_TURNS to change it (default 1000). bm25 is indexed and semantic
+  # cosine over this many small vectors is cheap, so a larger store costs almost nothing.
+
 skills:
   # Local best-practice packs MO reads before acting on a matching task.
   # Profile packs live under ~/.mo/skills; shipped seed packs are copied there

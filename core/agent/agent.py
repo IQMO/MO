@@ -1210,6 +1210,18 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             insights = extract_feedback_learning(user_input, final_text)
             if insights and record_feedback_learning(getattr(self, "profile", None), user_input, final_text):
                 notes.append("Noted: " + self._compact_learning_note(insights))
+            if insights:
+                # Wire the correction signal into skill outcomes: a correction this
+                # turn marks the just-used generated skills, un-blinding retirement
+                # and logging the fix to each skill's inert evolution sidecar.
+                from ..skills import record_recent_skill_corrections
+                corrected = record_recent_skill_corrections(
+                    getattr(self, "profile", None),
+                    config=getattr(self, "config", {}) or {},
+                    correction_text=user_input,
+                )
+                if corrected:
+                    notes.append(f"Skill correction recorded on {len(corrected)} generated pack(s)")
         except Exception:
             traceback.print_exc()
         try:
@@ -1244,6 +1256,30 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
                 suggestions = mine_learning_suggestions(getattr(memory, "path", None))
                 if suggestions:
                     write_learning_suggestions(suggestions, path=suggestions_path)
+                # Keystone: auto-confirm only the narrow safe class so the wired
+                # injection path (build_learning_context) actually has confirmed
+                # learnings to inject each turn. Everything risky still needs an
+                # explicit /learning confirm; /learning dismiss reverts an auto one.
+                cfg = getattr(self, "config", {}) if isinstance(getattr(self, "config", {}), dict) else {}
+                learn_cfg = cfg.get("learning") or {}
+                if isinstance(learn_cfg, dict) and learn_cfg.get("auto_promote", True):
+                    from ..learning.proactive_learning import auto_promote_safe_clusters
+                    auto_promoted = auto_promote_safe_clusters(path=suggestions_path)
+                    if auto_promoted:
+                        notes.append(
+                            f"Learned (auto): {len(auto_promoted)} safe pattern(s) now active — "
+                            "/learning pending to review, /learning dismiss <id> to revert"
+                        )
+                        try:
+                            from ..runtime.backend_monitor import get_monitor as _get_monitor
+                            _mon = _get_monitor()
+                            if _mon:
+                                _mon.emit("learning_auto_promote", {
+                                    "count": len(auto_promoted),
+                                    "kinds": sorted({str(item.get("kind") or "") for item in auto_promoted}),
+                                })
+                        except Exception:
+                            pass
                 notice = next_learning_suggestion_notice(path=suggestions_path)
                 if notice:
                     notes.append(notice)
