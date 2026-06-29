@@ -516,6 +516,51 @@ class AgentTurnDispatchMixin:
             })
         return capped
 
+    @staticmethod
+    def _tool_root_remap_pair() -> tuple[Path, Path] | None:
+        source = os.environ.get("MO_TOOL_ROOT_REMAP_FROM", "").strip()
+        target = os.environ.get("MO_TOOL_ROOT_REMAP_TO", "").strip()
+        if not source or not target:
+            return None
+        try:
+            return (
+                Path(source).expanduser().resolve(strict=False),
+                Path(target).expanduser().resolve(strict=False),
+            )
+        except Exception:
+            return None
+
+    @classmethod
+    def _remap_tool_root_path(cls, value: str) -> str:
+        pair = cls._tool_root_remap_pair()
+        if not pair:
+            return value
+        source, target = pair
+        try:
+            path = Path(str(value or "")).expanduser().resolve(strict=False)
+            rel = path.relative_to(source)
+        except Exception:
+            return value
+        return str((target / rel).resolve(strict=False))
+
+    @classmethod
+    def _remap_tool_root_text(cls, value: str) -> str:
+        pair = cls._tool_root_remap_pair()
+        if not pair:
+            return value
+        source, target = pair
+        source_native = str(source)
+        target_native = str(target)
+        variants = (
+            (source_native.replace("/", "\\"), target_native.replace("/", "\\")),
+            (source_native.replace("\\", "/"), target_native.replace("\\", "/")),
+        )
+        text = str(value or "")
+        for src, dst in variants:
+            if src:
+                text = re.sub(re.escape(src) + r"(?=$|[\\/]|[^A-Za-z0-9_.-])", lambda _m, repl=dst: repl, text, flags=re.I)
+        return text
+
     def _project_scoped_tool_arguments(self, name: str, arguments: dict | None) -> dict:
         """Apply the active project cwd to relative/default tool paths.
 
@@ -536,13 +581,15 @@ class AgentTurnDispatchMixin:
             return str((project_root / p).resolve(strict=False))
 
         if name in {"read_file", "write_file", "edit_file"} and args.get("path"):
-            args["path"] = resolve_value(args.get("path"))
+            args["path"] = self._remap_tool_root_path(resolve_value(args.get("path")))
         elif name in {"find_files", "grep"}:
-            args["root"] = resolve_value(args.get("root") or str(project_root))
+            args["root"] = self._remap_tool_root_path(resolve_value(args.get("root") or str(project_root)))
         elif name in {"shell", "test_runner", "git_status"}:
-            args["workdir"] = resolve_value(args.get("workdir") or str(project_root))
+            args["workdir"] = self._remap_tool_root_path(resolve_value(args.get("workdir") or str(project_root)))
+            if args.get("command"):
+                args["command"] = self._remap_tool_root_text(str(args.get("command") or ""))
         elif name == "project_bridge":
-            args["path"] = resolve_value(args.get("path") or str(project_root))
+            args["path"] = self._remap_tool_root_path(resolve_value(args.get("path") or str(project_root)))
         return args
 
     @staticmethod
