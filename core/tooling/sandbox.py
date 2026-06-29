@@ -669,6 +669,13 @@ SAFE_ENV_ALLOWLIST = {
     "SYSTEMDRIVE", "PROGRAMDATA", "PUBLIC", "ALLUSERSPROFILE",
     "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
     "LANG", "LC_ALL", "PYTHONIOENCODING", "PYTHONUTF8",
+    # Non-secret MO routing context. Shell/test subprocesses need these to
+    # preserve isolated worktree roots and private-state location while still
+    # excluding provider keys, tokens, and credentials.
+    "MO_PRODUCT_ROOT", "MO_PROJECT_CWD", "MO_DEFAULT_ROOTS",
+    "MO_TOOL_ROOT_REMAP_FROM", "MO_TOOL_ROOT_REMAP_TO",
+    "MO_DEVMODE_AUTOPILOT_ISOLATED", "MO_OPERATOR_PACK",
+    "MO_LOCAL_EXTENSION_ROOT", "MO_STATE_HOME", "MO_INSTANCE_ID",
 }
 
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASS", "AUTH", "COOKIE", "CREDENTIAL")
