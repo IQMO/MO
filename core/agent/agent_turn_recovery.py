@@ -301,10 +301,12 @@ class AgentTurnRecoveryMixin:
                 pressure_metrics = {}
                 cp = 0.0
             pressure_source = str(pressure_metrics.get("pressure_source") or "unknown")
+            char_ratio = float(pressure_metrics.get("char_ratio") or 0.0)
+            pressure_for_handoff = cp if pressure_source != "messages" else char_ratio
             pressure_payload = {
                 "pressure_source": pressure_source,
                 "raw_pressure": float(pressure_metrics.get("raw_pressure") or cp or 0.0),
-                "char_ratio": float(pressure_metrics.get("char_ratio") or 0.0),
+                "char_ratio": char_ratio,
                 "message_ratio": float(pressure_metrics.get("message_ratio") or 0.0),
                 "message_count": pressure_metrics.get("message_count"),
                 "max_history": pressure_metrics.get("max_history"),
@@ -316,7 +318,7 @@ class AgentTurnRecoveryMixin:
                 f"messages {pressure_metrics.get('message_count')}/{pressure_metrics.get('max_history')} "
                 f"({pressure_payload['message_ratio']:.0%})"
             )
-            if cp >= context_pressure_critical_threshold:
+            if pressure_for_handoff >= context_pressure_critical_threshold:
                 # Critical context pressure is not tool-budget exhaustion. Start a
                 # clean context, but leave the fresh continuation free to use tools.
                 self._turn_health_handed_off = True
@@ -346,7 +348,7 @@ class AgentTurnRecoveryMixin:
                         "label": "orientation only, not proof",
                     })
                     emitted_turn_health = True
-            elif cp >= context_pressure_handoff_threshold:
+            elif pressure_for_handoff >= context_pressure_handoff_threshold:
                 # High pressure: handoff, without poisoning the fresh turn with a
                 # stale "no tools" instruction.
                 self._turn_health_handed_off = True

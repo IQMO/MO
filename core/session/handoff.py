@@ -367,6 +367,18 @@ def build_compact_summary(agent: Any, *, focus: str = "", reason: str = "", late
     task_board = _active_task_board(agent)
     decisions = _decision_rows(messages, task_board, goal)
     metrics = context_pressure(agent) if session else {}
+    tool_entries = _recent_tool_audit(agent)
+    artifacts = _artifact_references(
+        agent,
+        changed=changed,
+        workers=workers,
+        goal=goal,
+        task_board=task_board,
+        tool_entries=tool_entries,
+        graph_context="",
+    )
+    attempts = _attempt_ledger(task_board, tool_entries, messages, metrics)
+    recent = _recent_dialogue(messages, limit=10, exclude_latest_user=latest_user_text)
     lines = [
         f"# {HANDOFF_HEADER} (compact)",
         f"Created: {time.strftime('%Y-%m-%d %H:%M:%S')} | Reason: {redact_monitor_text(reason or 'context handoff', 120)}",
@@ -377,6 +389,12 @@ def build_compact_summary(agent: Any, *, focus: str = "", reason: str = "", late
         "## Progress",
     ]
     lines.extend(f"- {item}" for item in (goal[:6] or ["No active goal captured."]))
+    lines.extend([
+        "",
+        "## Continuation Contract",
+        "- Continue the active work from this capsule; do not restart the original request or redo completed discovery.",
+        "- Use this capsule to choose the next action, then verify live files, logs, tests, and taskboard state before claims.",
+    ])
     if changed:
         lines.extend(["", "## Workspace", *[f"- `{redact_monitor_text(item, 220)}`" for item in changed[:10]]])
     if workers:
@@ -395,7 +413,17 @@ def build_compact_summary(agent: Any, *, focus: str = "", reason: str = "", late
     file_ops = _file_operation_lines(limit=20)
     if file_ops:
         lines.extend(["", "## Recent File Operations", *file_ops[:12]])
-    lines.extend(["", "## Next Steps", f"- Continue: {redact_monitor_text(objective, 400)}", "- Re-read files and re-run verification before factual claims."])
+    if attempts:
+        lines.extend(["", "## Already Tried / Avoid Repeating", *attempts[:6]])
+    if recent:
+        lines.extend(["", "## Recent Session Spine", *recent[:10]])
+    lines.extend([
+        "",
+        "## Next Steps",
+        f"- {_next_exact_step(latest_user_text, artifacts, task_board)}",
+        f"- Continue: {redact_monitor_text(objective, 400)}",
+        "- Re-read files and re-run verification before factual claims.",
+    ])
     read_files, modified_files = _file_operation_refs(limit=20)
     if read_files:
         lines.extend(["", "<read-files>", *read_files[:12], "</read-files>"])
