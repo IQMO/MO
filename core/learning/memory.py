@@ -11,6 +11,7 @@ import traceback
 from typing import Callable
 
 from .embeddings import cosine
+from ..utils.env_utils import int_env
 
 
 def _emit_memory_event(event_type: str, payload: dict) -> None:
@@ -152,11 +153,17 @@ class EpisodicMemory:
         except Exception:
             return 0
 
-    def _cleanup(self, conn: sqlite3.Connection, max_turns: int = 200) -> int:
+    def _cleanup(self, conn: sqlite3.Connection, max_turns: int | None = None) -> int:
+        # Long-horizon recall: the cap was a flat 200, which evicted older
+        # operator facts a personalization-first agent should still recall.
+        # Default raised to 1000 and made env-tunable; bm25 is FTS5-indexed and
+        # semantic cosine over ~1000 small vectors is trivial, so the larger
+        # store costs almost nothing.
+        limit = max_turns if max_turns is not None else max(50, int_env("MO_MEMORY_MAX_TURNS", 1000))
         try:
             count = conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0]
-            if count > max_turns:
-                excess = count - max_turns
+            if count > limit:
+                excess = count - limit
                 old_ids = conn.execute(
                     "SELECT turn_id FROM turns ORDER BY updated_at ASC, rowid ASC LIMIT ?", (excess,)
                 ).fetchall()
