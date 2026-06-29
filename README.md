@@ -187,6 +187,47 @@ provider, the TUI footer shows your live account balance. Any OpenAI-compatible
 provider can be added in `~/.mo/config.yaml`; Codex/OpenAI fallback can use your
 local `~/.codex/auth.json` when configured.
 
+### Local models via Ollama (offline, no key, no cost)
+
+MO is provider-agnostic, and [Ollama](https://ollama.com) exposes an
+OpenAI-compatible endpoint — so a locally-served model is just another
+`chat_completions` provider, with **no extra dependency and no code change**.
+This lets MO run fully offline with no API key and no per-token cost.
+
+```bash
+ollama pull qwen2.5-coder:3b          # fast, tool-calling local coder
+```
+
+Add the provider to `~/.mo/config.yaml` (see `config.example.yaml` for the full
+block):
+
+```yaml
+providers:
+  - name: local-qwen
+    type: chat_completions
+    base_url: http://localhost:11434/v1
+    api_key: "ollama"        # required placeholder — Ollama ignores it
+    model: qwen2.5-coder:3b
+    timeout: 600             # local CPU is slow; the 60s default is too short
+model:
+  default: local-qwen        # make the local model the active engine
+```
+
+Three things to get right for a local engine:
+
+- **`api_key` is mandatory** even though Ollama ignores it — MO refuses to build a
+  provider with an empty key. Use any non-empty placeholder (`"ollama"`).
+- **Raise `timeout`.** Local generation runs at a few tokens/sec on CPU, so set
+  `timeout: 600` (or more) per local provider to avoid mid-answer aborts.
+- **Match the context window.** If your Ollama window is capped
+  (`OLLAMA_CONTEXT_LENGTH` / a model's `num_ctx`), also set
+  `agent.context_budget_tokens` to about that value minus `context_reserve_tokens`,
+  or MO will overstuff the prompt and the local model will silently truncate.
+
+Tool calling is required for MO's tools; `qwen2.5-coder` reports the `tools`
+capability, so it drives MO's agent loop. Local models are slower than cloud
+providers on CPU — best for short tasks, not long agentic loops.
+
 Run MO:
 
 ```bash

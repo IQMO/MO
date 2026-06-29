@@ -56,6 +56,24 @@ providers:
     auth_path: ~/.codex/auth.json
     model: gpt-5.5
 
+  # --- Local models via Ollama (fully offline, OpenAI-compatible) -------------
+  # Ollama exposes an OpenAI-compatible endpoint at http://localhost:11434/v1,
+  # so it is just another `chat_completions` provider — no extra dependency.
+  # Notes:
+  #   * api_key is REQUIRED but ignored by Ollama — any non-empty placeholder works.
+  #   * Local CPU is slow, so `timeout` is raised well above the 60s default.
+  #   * Pull first:  ollama pull qwen2.5-coder:3b
+  #   * CONTEXT: if your Ollama window is capped (OLLAMA_CONTEXT_LENGTH / num_ctx),
+  #     also set agent.context_budget_tokens to roughly that value minus the
+  #     reserve, or MO will overstuff the prompt and the local model will truncate.
+  #   * To make one the active engine, set model.default below to its name.
+  - name: local-qwen            # fast local coder (~15 tok/s CPU), tool-calling
+    type: chat_completions
+    base_url: http://localhost:11434/v1
+    api_key: "ollama"
+    model: qwen2.5-coder:3b
+    timeout: 600
+
 model:
   # Main MO: the official DeepSeek API (the `deepseek` provider) → OpenCode fallback,
   # so a zero DeepSeek balance never takes MO down. `default`/`fallback` select a

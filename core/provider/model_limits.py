@@ -54,6 +54,12 @@ def infer_model_limits(provider: str, model: str) -> ModelLimits:
         # context window to MO. Keep MO's conservative default unless the exact
         # public family above is matched.
         return ModelLimits(DEFAULT_CONTEXT_BUDGET_TOKENS, 8_192, "deepseek_family_conservative_default")
+    if "qwen2.5-coder" in model_l or "qwen2.5coder" in model_l:
+        # Qwen2.5-Coder model card: 32,768-token context, up to 8,192 output.
+        # Served locally (e.g. Ollama, http://localhost:11434/v1). NOTE: a local
+        # runtime may cap the live window below this (Ollama's num_ctx /
+        # OLLAMA_CONTEXT_LENGTH); set agent.context_budget_tokens to match it.
+        return ModelLimits(32_768, 8_192, "qwen2.5_coder_model_card")
     return ModelLimits(None, None, "unknown")
 
 

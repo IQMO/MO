@@ -125,10 +125,10 @@ def should_open_backend_monitor() -> bool:
     return _should_open_backend_monitor()
 
 
-def run_main_loop(agent: Any, gateway: Any, console, has_rich: bool):
+def run_main_loop(agent: Any, gateway: Any, console, has_rich: bool, startup_notice: str = ""):
     from .terminal_loop import run_main_loop as _run_main_loop
 
-    return _run_main_loop(agent, gateway, console, has_rich)
+    return _run_main_loop(agent, gateway, console, has_rich, startup_notice=startup_notice)
 
 
 def _record_session(agent: Any):
