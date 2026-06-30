@@ -7,7 +7,9 @@ runtime evidence and advances rows.
 """
 from __future__ import annotations
 
+import difflib
 import re
+from pathlib import Path
 from typing import Any
 
 from ..runtime.work_signals import tool_is_verification_signal
@@ -176,6 +178,49 @@ def taskboard_tool_summary(name: str, arguments: dict[str, Any]) -> str:
     if name == "shell":
         return str(arguments.get("command") or "")[:240]
     return ""
+
+
+def _count_diff_lines(old: str, new: str) -> tuple[int, int]:
+    """Return (added, removed) line counts between two texts, git-diff semantics."""
+    old_lines = old.splitlines()
+    new_lines = new.splitlines()
+    added = removed = 0
+    for line in difflib.unified_diff(old_lines, new_lines, lineterm=""):
+        if line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    return added, removed
+
+
+def edit_diffstat(name: str, arguments: dict[str, Any]) -> tuple[int, int] | None:
+    """Return (added, removed) line counts an edit/write would apply, else None.
+
+    Computed from the tool arguments (the *intended* change) so the activity line
+    can show a git-style ``+A -R`` before the write executes. ``edit_file`` diffs
+    old_text→new_text directly. ``write_file`` diffs the existing file (if any)
+    against the new content; a brand-new file reports ``(N, 0)``.
+    """
+    args = arguments or {}
+    if name == "edit_file":
+        old_text = args.get("old_text")
+        new_text = args.get("new_text")
+        if old_text is None or new_text is None:
+            return None
+        return _count_diff_lines(str(old_text), str(new_text))
+    if name == "write_file":
+        content = args.get("content")
+        if content is None:
+            return None
+        old_text = ""
+        try:
+            p = Path(str(args.get("path") or ""))
+            if p.is_file():
+                old_text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            old_text = ""
+        return _count_diff_lines(old_text, str(content))
+    return None
 
 
 def task_requires_broad_scope_evidence(title: str) -> bool:

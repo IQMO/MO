@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .graph import GraphData, NodeData, EdgeData, NodeRow, parse_json_graph, graph_to_dict
+from .graph import GraphData, NodeData, EdgeData, NodeRow, graph_to_dict
 from .render import to_mermaid, to_ascii_tree
 from .adapters import from_data, from_markdown, from_tree
 

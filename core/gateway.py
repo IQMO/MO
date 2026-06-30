@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 import traceback
 
 # Surfaces that must NEVER interleave into a Main-MO run: a Ghost/desktop turn is
@@ -19,14 +19,14 @@ import traceback
 # sharing the single agent/session/board. See run_turn().
 _SECONDARY_SURFACES = frozenset({"desktop", "ghost", "companion"})
 _SECONDARY_BUSY_MESSAGE = (
-    "MO is busy with a foreground task right now (it can only run one turn at a time "
-    "yet) — try again in a moment."
+    "MO is busy with a foreground task right now (it can only run one turn at a time) "
+    "— try again in a moment."
 )
 
 from . import local_extensions
 from .runtime.backend_monitor import BackendMonitor, monitor_context
 from .context.gateway_helpers import select_template
-from .runtime.heartbeat import normalize_surface
+from .runtime.heartbeat import normalize_surface, record_heartbeat
 from .runtime.work_signals import (
     looks_like_interrupted_resume_request,
     tool_is_runtime_work_signal,
@@ -44,6 +44,24 @@ from .context.work_patterns import is_research_method_question
 
 if TYPE_CHECKING:
     from .agent.agent import Agent
+
+
+# ── safe attribute / call helpers ──────────────────────────────────────
+def _safe_setattr(obj: object, name: str, value: object) -> None:
+    """Guard ``setattr`` against proxy/mock objects that reject it."""
+    try:
+        setattr(obj, name, value)
+    except Exception:
+        traceback.print_exc()
+
+
+def _safe_call(fn: Callable[[], object]) -> object | None:
+    """Guard zero-arg callables (e.g. lambda helpers) that may fail."""
+    try:
+        return fn()
+    except Exception:
+        traceback.print_exc()
+        return None
 
 
 class Gateway:
@@ -80,17 +98,7 @@ class Gateway:
 
     def should_show_task_board(self, user_input: str) -> bool:
         """Show a board for any real work turn; skip only chat/greetings/commands."""
-        text = str(user_input or "").lower().strip()
-        if text.startswith("/"):
-            return False
-        extension_decision = local_extensions.should_show_task_board(text)
-        if extension_decision is not None:
-            return extension_decision
-        if local_extensions.board_rows(text) is not None:
-            return True
-        if is_research_method_question(text):
-            return False
-        return select_template(text) != "simple_chat"
+        return _should_create_board(user_input, for_hint=True)
 
     def resumable_board(self) -> TaskBoard | None:
         """D5 fix: return the last incomplete board from ledger, or None.
@@ -161,6 +169,7 @@ class Gateway:
         finally:
             self._turn_lock.release()
 
+    # ── _run_turn_impl (orchestrator) ───────────────────────────────────
     def _run_turn_impl(
         self,
         user_input: str,
@@ -175,18 +184,44 @@ class Gateway:
         on_action: object = None,
     ) -> str:
         """Execute a turn; create a taskboard lazily on first tool activity."""
+        turn_state = self._prepare_turn(user_input, route_source)
+        result_text = ""
+        status = "ok"
+        try:
+            result_text, status = self._plan_and_run(
+                user_input,
+                turn_state,
+                on_board_update=on_board_update,
+                on_token=on_token,
+                on_activity=on_activity,
+                on_proposal=on_proposal,
+                cancel_event=cancel_event,
+                on_assistant_text=on_assistant_text,
+                on_board_event=on_board_event,
+                on_action=on_action,
+            )
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            result_text = self._finalize_turn(turn_state, result_text, status, route_source)
+        return result_text
+
+    # ── _prepare_turn ───────────────────────────────────────────────────
+    def _prepare_turn(
+        self,
+        user_input: str,
+        route_source: str,
+    ) -> dict:
+        """Set up session/board state before a turn. Returns turn_state dict."""
         turn_id = f"turn-{int(time.time() * 1000)}"
         started = time.time()
         session = getattr(self.agent, "session", None)
         session_id = str(getattr(session, "session_id", "") or "")
         surface = normalize_surface(route_source)
         instance_id = str(getattr(self.agent, "instance_id", "") or "")
-        result_text = ""
-        status = "ok"
-        # A secondary (desktop/Ghost) surface turn must NOT clobber the Main board
-        # that the TUI / heartbeat / /status all read from the shared last_task_board.
-        # Run it against its own registry slot and restore Main in the finally below;
-        # primary turns keep the original behavior exactly.
+
+        # A secondary (desktop/Ghost) surface turn must NOT clobber the Main board.
         secondary = route_source in _SECONDARY_SURFACES
         board_slot = surface if secondary else "main"
         saved_main_board = self.last_task_board
@@ -195,16 +230,10 @@ class Gateway:
         self.previous_task_board = self.last_task_board
         self.last_task_board = None
         if not secondary:
-            try:
-                setattr(self.agent, "_active_task_board", None)
-            except Exception:
-                traceback.print_exc()
+            _safe_setattr(self.agent, "_active_task_board", None)
         self.task_board_registry.clear_board(board_slot)
-        # A new session must not inherit a PRIOR session's board — neither in-memory (a
-        # persistent gateway carries last_task_board across sessions) nor in the persisted
-        # current.json (watchers / status / resume fast-path read it). Same-session state
-        # is preserved and the ledger stays authoritative. Primary turns only —
-        # secondary surfaces keep their own slot and restore Main in the finally.
+
+        # A new session must not inherit a PRIOR session's board.
         if not secondary and session_id:
             prev = self.previous_task_board
             if prev is not None and str(getattr(prev, "session_id", "") or "") not in ("", session_id):
@@ -215,21 +244,60 @@ class Gateway:
                     clear_current_board_if_empty()
             except Exception:
                 traceback.print_exc()
+
         resume_intent = _has_pending_resume_intent(self.agent, user_input)
         board_objective = _board_objective_text(self.agent, user_input, resume_intent=resume_intent)
 
         previous_route_source = getattr(self.agent, "_current_route_source", "")
-        try:
-            setattr(self.agent, "_current_route_source", route_source)
-        except Exception:
-            traceback.print_exc()
-        # R2: clear any stale pre-vision snapshot left by a prior (e.g. background
-        # worker) turn so THIS turn's capture_screen restore uses this turn's
-        # provider; restored in the finally below.
-        try:
-            setattr(self.agent, "_pre_vision_provider", None)
-        except Exception:
-            traceback.print_exc()
+        _safe_setattr(self.agent, "_current_route_source", route_source)
+        _safe_setattr(self.agent, "_pre_vision_provider", None)
+
+        # Shared mutable holder for lazy board creation in _plan_and_run.
+        self._board_holder = [None]
+
+        return {
+            "turn_id": turn_id,
+            "started": started,
+            "session_id": session_id,
+            "surface": surface,
+            "instance_id": instance_id,
+            "secondary": secondary,
+            "board_slot": board_slot,
+            "saved_main_board": saved_main_board,
+            "saved_previous_board": saved_previous_board,
+            "saved_active_board": saved_active_board,
+            "resume_intent": resume_intent,
+            "board_objective": board_objective,
+            "previous_route_source": previous_route_source,
+        }
+
+    # ── _plan_and_run ───────────────────────────────────────────────────
+    def _plan_and_run(
+        self,
+        user_input: str,
+        ts: dict,
+        *,
+        on_board_update: object = None,
+        on_token: object = None,
+        on_activity: object = None,
+        on_proposal: object = None,
+        cancel_event: object = None,
+        on_assistant_text: object = None,
+        on_board_event: object = None,
+        on_action: object = None,
+    ) -> tuple[str, str]:
+        """Core turn: Ghost plan → lazy board → agent run → continuations."""
+        result_text = ""
+        status = "ok"
+        session = getattr(self.agent, "session", None)
+        turn_id = ts["turn_id"]
+        session_id = ts["session_id"]
+        surface = ts["surface"]
+        instance_id = ts["instance_id"]
+        route_source = ts.get("route_source", "user")
+        resume_intent = ts["resume_intent"]
+        board_objective = ts["board_objective"]
+        board_slot = ts["board_slot"]
 
         with monitor_context(
             turn_id=turn_id,
@@ -245,11 +313,7 @@ class Gateway:
                 "instance_id": instance_id,
                 "messages": len(getattr(session, "messages", []) or []),
             })
-            try:
-                from .runtime.heartbeat import record_heartbeat
-                record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_start")
-            except Exception:
-                traceback.print_exc()
+            _safe_call(lambda: record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_start"))
 
             try:
                 # Ghost planning runs for all work turns — not just ghost-routed.
@@ -259,10 +323,7 @@ class Gateway:
                 # Local extensions may own their own task truth, so Gateway must
                 # not seed generic Ghost rows for those turns.
                 if local_extensions.should_skip_ghost_proposal(user_input):
-                    try:
-                        setattr(self.agent, "_pending_turn_proposal", "")
-                    except Exception:
-                        traceback.print_exc()
+                    _safe_setattr(self.agent, "_pending_turn_proposal", "")
                     event = local_extensions.ghost_skip_event(user_input) or {"kind": "local_extension_ghost_proposal_skipped"}
                     self.monitor.emit("session_event", event)
                 elif self.should_show_task_board(user_input) and hasattr(self.agent, "propose_work"):
@@ -272,17 +333,18 @@ class Gateway:
                         if on_proposal:
                             on_proposal(ghost_plan_text)
 
-                # Runtime-aware lazy board creation. The pre-turn heuristic is a
-                # display/proposal hint; actual board materialization waits for
-                # a tool/work signal and rejects simple read-only orientation.
-                board_holder = [None]
-
+                # Runtime-aware lazy board creation.
                 def _lazy_create_board(tool_name: str = "", arguments: dict | None = None):
-                    if board_holder[0]:
-                        return board_holder[0]
-                    if local_extensions.should_skip_task_board(user_input):
-                        return None
-                    if not _runtime_should_create_board(self.agent, user_input, route_source, tool_name, arguments, resume_intent=resume_intent):
+                    if self._board_holder[0]:
+                        return self._board_holder[0]
+                    if not _should_create_board(
+                        user_input,
+                        agent=self.agent,
+                        route_source=route_source,
+                        tool_name=tool_name,
+                        arguments=arguments,
+                        resume_intent=resume_intent,
+                    ):
                         return None
                     
                     if resume_intent and getattr(self, "previous_task_board", None):
@@ -290,7 +352,7 @@ class Gateway:
                         if board.state in ("abandoned", "blocked"):
                             board.state = "active"
                     else:
-                        model_owned = bool(getattr(self.agent, "_model_owned_taskboard_enabled", lambda: False)())
+                        model_owned = _callable_bool(getattr(self.agent, "_model_owned_taskboard_enabled", lambda: False))
                         board = _new_gateway_board(
                             turn_id, session_id, board_objective,
                             rows=None if model_owned else (ghost_plan_rows if ghost_plan_rows else None),
@@ -298,7 +360,7 @@ class Gateway:
                         )
                     self.last_task_board = board
                     self.task_board_registry.set_board(board_slot, board)
-                    board_holder[0] = board
+                    self._board_holder[0] = board
                     record_snapshot(board, "created", source="gateway")
                     event = board_update_event(board, update="created")
                     self.task_board_registry.record_event(board_slot, board, update="created", event=event)
@@ -370,49 +432,49 @@ class Gateway:
                     except Exception as e:
                         self.monitor.emit("turn_error_park_failed", {"error": str(e)[:200]})
                 raise
-            finally:
-                # R2: undo any per-turn capture_screen vision-provider switch so the
-                # next turn (and concurrent surfaces sharing this agent) start from
-                # the configured provider. No-op unless a screenshot switched it.
-                try:
-                    restore = getattr(self.agent, "restore_vision_provider", None)
-                    if callable(restore):
-                        restore()
-                except Exception:
-                    traceback.print_exc()
-                elapsed_ms = int((time.time() - started) * 1000)
-                if self.last_task_board is not None:
-                    event, state = terminal_board_event(self.last_task_board, status)
-                    record_terminal_snapshot(self.last_task_board, event, source="gateway", state=state)
-                    if not self.last_task_board.tasks:
-                        clear_current_board_if_empty()
-                    self.task_board_registry.record_event(board_slot, self.last_task_board, update=event)
-                self.monitor.emit("turn_end", {
-                    "status": status,
-                    "duration_ms": elapsed_ms,
-                    "result_chars": len(str(result_text or "")),
-                    "has_task_board": self.last_task_board is not None,
-                })
-                try:
-                    from .runtime.heartbeat import record_heartbeat
-                    record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_end", extra={"status": status, "duration_ms": elapsed_ms})
-                except Exception:
-                    traceback.print_exc()
-                try:
-                    setattr(self.agent, "_current_route_source", previous_route_source)
-                except Exception:
-                    traceback.print_exc()
-                # Restore the Main board after a secondary (desktop/Ghost) turn so a
-                # desktop turn never clobbers the board the TUI/heartbeat/status read.
-                if secondary:
-                    self.last_task_board = saved_main_board
-                    self.previous_task_board = saved_previous_board
-                    try:
-                        setattr(self.agent, "_active_task_board", saved_active_board)
-                    except Exception:
-                        traceback.print_exc()
+            return result_text, status
 
-            return result_text
+    # ── _finalize_turn ──────────────────────────────────────────────────
+    def _finalize_turn(
+        self,
+        ts: dict,
+        result_text: str,
+        status: str,
+        route_source: str,
+    ) -> str:
+        """Finally-block cleanup: vision restore, terminal event, heartbeat, board restore."""
+        restore = getattr(self.agent, "restore_vision_provider", None)
+        if callable(restore):
+            _safe_call(restore)
+
+        elapsed_ms = int((time.time() - ts["started"]) * 1000)
+        board_slot = ts["board_slot"]
+        secondary = ts["secondary"]
+
+        if self.last_task_board is not None:
+            event, state = terminal_board_event(self.last_task_board, status)
+            record_terminal_snapshot(self.last_task_board, event, source="gateway", state=state)
+            if not self.last_task_board.tasks:
+                clear_current_board_if_empty()
+            self.task_board_registry.record_event(board_slot, self.last_task_board, update=event)
+
+        self.monitor.emit("turn_end", {
+            "status": status,
+            "duration_ms": elapsed_ms,
+            "result_chars": len(str(result_text or "")),
+            "has_task_board": self.last_task_board is not None,
+        })
+        _safe_call(lambda: record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_end",
+                         extra={"status": status, "duration_ms": elapsed_ms}))
+        _safe_setattr(self.agent, "_current_route_source", ts["previous_route_source"])
+
+        # Restore the Main board after a secondary (desktop/Ghost) turn.
+        if secondary:
+            self.last_task_board = ts["saved_main_board"]
+            self.previous_task_board = ts["saved_previous_board"]
+            _safe_setattr(self.agent, "_active_task_board", ts["saved_active_board"])
+
+        return result_text
 
 
 def _continue_after_runtime_boundary(
@@ -613,16 +675,21 @@ def _callable_bool(callback: object) -> bool:
         return False
 
 
-def _runtime_should_create_board(
-    agent: object,
+def _should_create_board(
     user_input: str,
-    route_source: str,
+    *,
+    agent: object = None,
+    route_source: str = "",
     tool_name: str = "",
     arguments: dict | None = None,
-    *,
     resume_intent: bool = False,
+    for_hint: bool = False,
 ) -> bool:
-    """Decide board creation from the first real runtime signal.
+    """Unified board creation decision — single source of truth.
+
+    All board-creation gating runs through this function.  Callers choose the
+    mode: *for_hint=True* for the pre-turn TUI hint (``should_show_task_board``);
+    *for_hint=False* for the runtime creation decision (``_lazy_create_board``).
 
     Model-owned taskboards are materialized only by set_plan; otherwise a
     preliminary read/search can create a visible empty board and overwrite
@@ -630,6 +697,10 @@ def _runtime_should_create_board(
     """
     _ = agent, route_source
     text = str(user_input or "")
+
+    # -- common pre-gates (every mode) ---------------------------------------
+    if for_hint and text.startswith("/"):
+        return False
     if is_research_method_question(text):
         return False
     if local_extensions.should_skip_task_board(text):
@@ -641,24 +712,43 @@ def _runtime_should_create_board(
         return True
     if resume_intent:
         return True
+
+    # -- hint mode: stop here ------------------------------------------------
+    if for_hint:
+        return select_template(text) != "simple_chat"
+
+    # -- runtime mode: model-owned gate + tool signals -----------------------
     model_owned = False
     if agent is not None:
-        try:
-            model_owned = bool(getattr(agent, "_model_owned_taskboard_enabled", lambda: False)())
-        except Exception:
-            traceback.print_exc()
-            model_owned = False
+        model_owned = _callable_bool(getattr(agent, "_model_owned_taskboard_enabled", lambda: False))
     if model_owned:
         return str(tool_name) == "set_plan"
     if select_template(text) != "simple_chat":
         return True
-    # set_plan is MO explicitly declaring a multi-step plan (model_owned) — an
-    # explicit work-intent signal, so materialize the board it will populate even
-    # on an otherwise simple_chat turn. (Only exposed when model_owned is on.)
     if str(tool_name) == "set_plan":
         return True
-    # For simple_chat, still create board if the tool is a real work signal (edit, shell, etc.)
     return tool_is_runtime_work_signal(tool_name, arguments or {})
+
+
+def _runtime_should_create_board(
+    agent: object,
+    user_input: str,
+    route_source: str,
+    tool_name: str = "",
+    arguments: dict | None = None,
+    *,
+    resume_intent: bool = False,
+) -> bool:
+    """Thin compat wrapper around ``_should_create_board`` (for test API)."""
+    return _should_create_board(
+        user_input,
+        agent=agent,
+        route_source=route_source,
+        tool_name=tool_name,
+        arguments=arguments,
+        resume_intent=resume_intent,
+        for_hint=False,
+    )
 
 
 def _board_objective_text(agent: object, user_input: str, *, resume_intent: bool = False) -> str:
@@ -703,9 +793,6 @@ def terminal_board_event(board: TaskBoard, status: str) -> tuple[str, str]:
     if any(task.status == "blocked" for task in board.tasks):
         return "blocked", "blocked"
     return "updated", "active"
-
-# Legacy alias — internal callers use the public name.
-_terminal_board_event = terminal_board_event
 
 
 def _block_open_extension_board_at_turn_end(

@@ -11,7 +11,7 @@ from typing import Iterable
 
 from ..runtime.backend_monitor import redact_monitor_text
 
-PROJECT_CONTEXT_FILES = ("AGENTS.md", "CLAUDE.md")
+PROJECT_CONTEXT_FILES = ("AGENTS.md",)
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ def build_project_context(start: str | Path, *, max_chars: int = 3200) -> str:
 
     parts = [
         "### Project-local instructions",
-        "Read-only startup context from AGENTS.md/CLAUDE.md. Do not create or edit project instruction files unless the operator explicitly asks. Live checks still win.",
+        "Read-only startup context from AGENTS.md. Do not create or edit project instruction files unless the operator explicitly asks. Live checks still win.",
     ]
     for item in files:
         parts.append(f"## {redact_monitor_text(str(item.path), 220)}\n{redact_monitor_text(item.content, max(400, max_chars // max(1, len(files))))}")

@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-INTERNAL_SYSTEM_PROMPT_RELATIVE = "core/prompts/system.md"
 _LEGACY_DEFAULT_ALIASES = {"", "internal", ":internal:", "system.md"}
 _FALLBACK_SYSTEM_PROMPT = "You are MO. Evidence-first. Provider-first. You have full local tools."
 _OVERRIDE_ENV = "MO_ALLOW_SYSTEM_PROMPT_OVERRIDE"

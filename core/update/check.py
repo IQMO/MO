@@ -4,41 +4,21 @@ Mirrors ``core/provider/deepseek_balance``: a throttled background thread runs
 ``git fetch`` + ``git rev-list --count HEAD..@{u}`` and caches the count; the read
 path (``update_count`` / ``update_status_text``) NEVER blocks, so the TUI footer can
 call it on every frame. Best-effort: offline, a zip (non-git) download, or no
-upstream remote -> no notice (returns None). The checkout is AGENT_ROOT, the dir
-the ``mo`` shim runs from.
+upstream remote -> no notice (returns None).
 """
 from __future__ import annotations
 
-import subprocess
 import threading
 import time
-from pathlib import Path
 from typing import Any
+
+from ._git_utils import _git, _is_git_checkout
 
 _TTL_SECONDS = 3600.0  # fetch at most once an hour
 _FETCH_TIMEOUT = 20.0
 
 _lock = threading.Lock()
 _state: dict[str, Any] = {"behind": None, "checked_at": 0.0, "checking": False}
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
-
-
-def _git(args: list[str], *, timeout: float) -> subprocess.CompletedProcess | None:
-    try:
-        return subprocess.run(
-            ["git", "-C", str(_repo_root()), *args],
-            capture_output=True, text=True, timeout=timeout,
-        )
-    except Exception:
-        return None
-
-
-def _is_git_checkout() -> bool:
-    out = _git(["rev-parse", "--is-inside-work-tree"], timeout=5)
-    return bool(out and out.returncode == 0 and "true" in (out.stdout or "").lower())
 
 
 def _refresh() -> None:

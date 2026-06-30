@@ -29,7 +29,7 @@ from .agent_utils import (
     _prune_tool_audit_log,
 )
 from ..state.paths import repo_root
-from ..tasking.task_evidence import taskboard_tool_summary
+from ..tasking.task_evidence import edit_diffstat, taskboard_tool_summary
 
 
 @dataclass(frozen=True)
@@ -405,12 +405,27 @@ class AgentTurnDispatchMixin:
     @staticmethod
     def _parsed_tool_arguments(tc_data: dict) -> dict:
         raw = str(((tc_data.get("function") or {}).get("arguments")) or "")
-        parsed = json.loads(raw or "{}")
+        try:
+            parsed = json.loads(raw or "{}")
+        except (json.JSONDecodeError, ValueError):
+            parsed = {}
         return parsed if isinstance(parsed, dict) else {}
 
     @staticmethod
     def _safe_tool_summary(name: str, arguments: dict) -> str:
         return taskboard_tool_summary(name, arguments)
+
+    @staticmethod
+    def _safe_tool_diffstat(name: str, arguments: dict) -> str:
+        """Return a ' +A -R' activity suffix for edits/writes, else ''."""
+        try:
+            stat = edit_diffstat(name, arguments)
+        except Exception:
+            return ""
+        if not stat:
+            return ""
+        added, removed = stat
+        return f" +{added} -{removed}"
 
     @staticmethod
     def _tool_result_is_error(result: str) -> bool:

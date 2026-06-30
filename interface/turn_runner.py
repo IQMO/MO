@@ -16,7 +16,31 @@ def _strip_rich_tags(text: str) -> str:
     return re.sub(r"\[/?[a-z_]+(?:\d+)?\]", "", text)
 
 
+_DIFFSTAT_RE = re.compile(r"^(.*) (\+\d+) (-\d+)$")
+
+
 class TurnRunnerMixin:
+    def _diffstat_fragments(self, text: str, base_style: str) -> list[tuple[str, str]]:
+        """Split a trailing ' +A -B' edit diffstat into green/red fragments.
+
+        Returns a single base-styled fragment when no diffstat is present, so
+        non-edit activity lines render exactly as before.
+        """
+        match = _DIFFSTAT_RE.match(text)
+        if not match:
+            return [(base_style, text)]
+        head, added, removed = match.group(1), match.group(2), match.group(3)
+        return [
+            (base_style, head + " "),
+            ("class:diff-add", added),
+            (base_style, " "),
+            ("class:diff-del", removed),
+        ]
+
+    def _add_tool_activity_line(self, tool_name: str) -> None:
+        """Render an indented '▸ tool target' activity line, colouring +A/-B."""
+        self._add_fragments_line(self._diffstat_fragments(f"    ▸ {tool_name}", "class:dim"))
+
     def _gateway_board_finished(self) -> bool:
         board = getattr(self.gateway, "last_task_board", None)
         if not board:
@@ -167,7 +191,7 @@ class TurnRunnerMixin:
                 self.activity_text = act
                 if self._show_tool_activity and "tooling" in act:
                     tool_name = act.split("(")[-1].removesuffix(")...") if "(" in act else act
-                    self._add("class:dim", f"    ▸ {tool_name}")
+                    self._add_tool_activity_line(tool_name)
                 if self._app:
                     self._app.invalidate()
 
@@ -198,7 +222,7 @@ class TurnRunnerMixin:
                 if clean.startswith("💭"):
                     self._add("class:reasoning", clean)
                 elif clean.startswith("▸") or "tooling (" in clean:
-                    self._add("class:dim", clean)
+                    self._add_fragments_line(self._diffstat_fragments(clean, "class:dim"))
                 else:
                     self._add_response_block(clean)
                 if self._app:

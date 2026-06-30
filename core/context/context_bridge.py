@@ -96,7 +96,6 @@ def build_active_context_bridge(
         "### MO Active Context Bridge",
         "Priority 1 — Non-negotiable contract",
         "- The internal system prompt, sandbox/tool rules, taskboard truth, and the explicit current user request win over profile, memory, local skills, graph, and old session context.",
-        "- Evidence rule: use files, tool results, logs, tests, or runtime checks before factual claims or completion claims.",
         "- Scope rule: do not broaden the operator's request unless needed for safety, verification, or a clearly reported blocker.",
     ]
 

@@ -11,19 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
-
-
-def _git(args: list[str], *, timeout: float = 120.0) -> subprocess.CompletedProcess | None:
-    try:
-        return subprocess.run(
-            ["git", "-C", str(_repo_root()), *args],
-            capture_output=True, text=True, timeout=timeout,
-        )
-    except Exception:
-        return None
+from ._git_utils import _git, _is_git_checkout, _repo_root
 
 
 def _head() -> str:
@@ -42,8 +30,7 @@ def apply_update() -> str:
     """Pull the latest checkout fast-forward-only and refresh deps if needed.
     Returns a human-readable result string. Never raises."""
     root = _repo_root()
-    chk = _git(["rev-parse", "--is-inside-work-tree"], timeout=10)
-    if not chk or chk.returncode != 0 or "true" not in (chk.stdout or "").lower():
+    if not _is_git_checkout():
         return "MO update: not a git checkout - re-download from the repo to update."
     status = _git(["status", "--porcelain"], timeout=15)
     if status and status.returncode == 0 and (status.stdout or "").strip():

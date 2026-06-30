@@ -659,7 +659,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                         target = str(self._safe_tool_summary(name, arguments) or "").strip()
                         if len(target) > 60:
                             target = target[:57].rstrip() + "…"
-                        suffix = f" {target}" if target else ""
+                        # Append +added/-removed AFTER truncation so the edit
+                        # diffstat is never sliced off a long path; the TUI colours
+                        # the trailing "+A -R" green/red.
+                        diffstat = self._safe_tool_diffstat(name, arguments)
+                        suffix = f" {target}{diffstat}" if target else diffstat
                         on_activity(f"tooling ({label}{suffix})...")
 
                     if monitor:
