@@ -36,6 +36,42 @@ def _tool_label_from_activity(act: str) -> str:
 
 
 class TurnRunnerMixin:
+    def _reanchor_render(self) -> None:
+        """Force prompt-toolkit to re-anchor and fully repaint the inline region.
+
+        With ``full_screen=False`` PTK pins its render to the cursor's start row
+        and never repaints rows above it. Once the terminal scrolls (long output,
+        or the layout briefly exceeding the screen) that anchor drifts and the
+        orphaned rows pin at the top, swallowing the transcript — the only manual
+        cure is a resize or Ctrl+L. ``renderer.clear()`` does exactly that: erase
+        + home the cursor so the next draw is full. Marshalled onto the app loop
+        because the renderer is not thread-safe and turns run on a worker thread.
+        """
+        app = getattr(self, "_app", None)
+        if app is None:
+            return
+
+        def _do() -> None:
+            try:
+                renderer = getattr(app, "renderer", None)
+                if renderer is not None:
+                    renderer.clear()
+            except Exception:
+                pass
+            try:
+                app.invalidate()
+            except Exception:
+                pass
+
+        loop = getattr(app, "loop", None)
+        if loop is not None:
+            try:
+                loop.call_soon_threadsafe(_do)
+                return
+            except Exception:
+                pass
+        _do()
+
     def _diffstat_fragments(self, text: str, base_style: str) -> list[tuple[str, str]]:
         """Split a trailing ' +A -B' edit diffstat into green/red fragments.
 
@@ -172,8 +208,9 @@ class TurnRunnerMixin:
         self.activity_text = "preparing..."
         self.activity_started_at = time.time()
         self.board_text = ""
-        if self._app:
-            self._app.invalidate()
+        # Re-anchor at the turn boundary so any render drift accumulated since the
+        # last turn (full_screen=False pins above the anchor) can't persist.
+        self._reanchor_render()
 
         try:
             show_proposal = route_source == "ghost" and self.gateway.should_show_task_board(user_input)
@@ -315,7 +352,8 @@ class TurnRunnerMixin:
             self._maybe_notify_model_change(model_at_start)
             self._maybe_warn_low_balance()
             # Completed taskboards leave the final MO report in transcript; incomplete
-            # boards stay visible so unresolved work remains clear.
-            if self._app:
-                self._app.invalidate()
+            # boards stay visible so unresolved work remains clear. Re-anchor here too
+            # since the layout shrinks at turn end (board/activity lane removed), the
+            # case most likely to orphan rows at the top.
+            self._reanchor_render()
             self._process_next_queued_input()
