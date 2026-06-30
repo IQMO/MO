@@ -401,6 +401,21 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "git_check_ignore",
+            "description": "Check whether one or more file paths are ignored by Git (via .gitignore/exclude). Pass one path or a list of paths.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paths": {"type": "string", "description": "Space-separated file paths to check (e.g. 'tmp/scratch.py docs/output.md')"},
+                    "workdir": {"type": "string", "description": "Git working tree directory (default current working directory)"},
+                },
+                "required": ["paths"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "test_runner",
             "description": "Run the project test command with timeout and exit-code marker.",
             "parameters": {
@@ -453,6 +468,34 @@ TOOL_DEFINITIONS = [
                 "required": ["url"],
                 "properties": {
                     "url": {"type": "string", "description": "URL to snapshot"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_repo",
+            "description": "Inspect a GitHub repo/URL and produce an inert, approval-gated skill candidate bundle. Pass the full GitHub URL (or 'owner/repo' shorthand). Returns candidate metadata: name, kind, file count, risk tier, conflicts, and bundle location. No content is installed or executed — the operator must explicitly approve candidates before they become skills.",
+            "parameters": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                    "url": {"type": "string", "description": "GitHub URL or owner/repo shorthand (e.g. 'psf/requests', 'https://github.com/torvalds/linux')"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "use_repo",
+            "description": "Fetch a GitHub repo and return its content as temporary, untrusted context for the current turn — no install, no persistence. Use this when the operator asks about a repo's code or docs in conversation. Pass the full GitHub URL or 'owner/repo' shorthand.",
+            "parameters": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                    "url": {"type": "string", "description": "GitHub URL or owner/repo shorthand (e.g. 'IQMO/MO')"},
                 },
             },
         },
@@ -1096,6 +1139,24 @@ def execute_git_status(arguments: dict[str, Any]) -> str:
     return (output.strip() or "[clean/no output]") + f"\n[exit code {proc.returncode}]"
 
 
+def execute_git_check_ignore(arguments: dict[str, Any]) -> str:
+    cwd = str(Path(arguments.get("workdir") or os.getcwd()))
+    paths_raw = arguments["paths"].split()
+    try:
+        proc = subprocess.run(["git", "check-ignore", *paths_raw], cwd=cwd,
+                              text=True, capture_output=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        return "Error: git check-ignore timed out"
+    except Exception as exc:
+        return f"Error running git check-ignore: {exc}"
+    output = (proc.stdout or "").strip()
+    if proc.returncode == 1 and not output:
+        return f"[none ignored] (all paths are tracked or don't exist)\n[exit code {proc.returncode}]"
+    if proc.returncode == 0:
+        return (output or "[no output — all paths ignored?]") + f"\n[exit code {proc.returncode}]"
+    return ((output + "\n" + (proc.stderr or "")).strip() or "[empty]") + f"\n[exit code {proc.returncode}]"
+
+
 def execute_test_runner(arguments: dict[str, Any]) -> str:
     command = _bounded_pytest_command(arguments.get("command", "python -m pytest -q"))
     workdir = arguments.get("workdir")
@@ -1228,6 +1289,40 @@ def execute_web_snapshot(arguments: dict[str, Any]) -> str:
     if len(result) > 10000:
         result = result[:10000] + f"\n\n[...truncated {len(result)} chars total]"
     return f"[HTTP {status_code}]\n{result}"
+
+
+def execute_inspect_repo(arguments: dict[str, Any]) -> str:
+    """Inspect a GitHub repo into an inert, approval-gated skill candidate."""
+    from urllib.request import urlopen
+    from core.skills.importing import pipeline as _pipeline
+
+    url = (arguments.get("url") or "").strip()
+    if not url:
+        return "Error: inspect_repo requires a 'url'."
+
+    try:
+        result = _pipeline.inspect(url, network_allowed=True, opener=urlopen)
+    except Exception as exc:
+        return f"Error inspecting repo: {type(exc).__name__}: {exc}"
+
+    return json.dumps(result, indent=2, default=str)
+
+
+def execute_use_repo(arguments: dict[str, Any]) -> str:
+    """Fetch a GitHub repo as temporary turn context (no install/persistence)."""
+    from urllib.request import urlopen
+    from core.skills.importing import pipeline as _pipeline
+
+    url = (arguments.get("url") or "").strip()
+    if not url:
+        return "Error: use_repo requires a 'url'."
+
+    try:
+        result = _pipeline.use(url, network_allowed=True, opener=urlopen)
+    except Exception as exc:
+        return f"Error using repo: {type(exc).__name__}: {exc}"
+
+    return json.dumps(result, indent=2, default=str)
 
 
 def execute_web_fetch(arguments: dict[str, Any]) -> str:
@@ -1636,11 +1731,14 @@ TOOL_EXECUTORS = {
     "find_files": execute_find_files,
     "grep": execute_grep,
     "git_status": execute_git_status,
+"git_check_ignore": execute_git_check_ignore,
     "test_runner": execute_test_runner,
     "project_bridge": execute_project_bridge,
     "web_fetch": execute_web_fetch,
     "web_snapshot": execute_web_snapshot,
     "web_search": execute_web_search,
+    "inspect_repo": execute_inspect_repo,
+    "use_repo": execute_use_repo,
     "code_search": execute_code_search,
     "find_callers": execute_find_callers,
     "find_callees": execute_find_callees,
