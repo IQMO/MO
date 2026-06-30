@@ -21,6 +21,8 @@ class SlashCommandSpec:
     help_lines: tuple[str, ...] = ()
     palette: bool = True
     legacy: bool = False
+    palette_submenu: bool = True  # False = selecting in the palette runs it, no drill-down (e.g. /session)
+    palette_input: tuple[str, str, str] | None = None  # leading "type free text" row: (prefill, label, desc)
 
     @property
     def palette_desc(self) -> str:
@@ -274,6 +276,7 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
             ("stop", "stop active goal"),
             ("status", "show goal progress"),
         ),
+        palette_input=("/goal ", "new goal…", "type autonomous goal"),
         palette_description="autonomous goal mode",
         help_lines=(
             "/goal, /g         autonomous goal mode",
@@ -291,6 +294,7 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         subcommands=(
             ("fix", "run PRT and auto-fix findings"),
         ),
+        palette_input=("/prt ", "review files…", "review specific files"),
         help_lines=(
             "/prt              run a deep codebase review",
             "                  /prt fix         run review and auto-fix findings",
@@ -405,6 +409,7 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
             ("list", "list saved sessions"),
             ("remove", "remove a session"),
         ),
+        palette_submenu=False,  # selecting /session runs it (session manager); no drill-down
         help_lines=("/session, /s      manage saved sessions",),
     ),
     SlashCommandSpec(
@@ -564,6 +569,28 @@ def build_palette_categories(*, include_extensions: bool = True) -> list[tuple[s
                 else:
                     categories.append((name, entries))
     return categories
+
+
+def palette_children(command_root: str, *, include_extensions: bool = True) -> list[tuple[str, str, str]]:
+    """Palette submenu rows for a command, derived from the registry — the single
+    source of truth. Each row is ``(value, label, desc, kind)`` where kind is
+    ``"command"`` (run) or ``"insert"`` (prefill the input). Empty when the command
+    suppresses its submenu (``palette_submenu=False``, e.g. /session) or has neither
+    subcommands nor a ``palette_input`` row. Dynamic submenus (e.g. /model from live
+    providers) are built in the palette layer, not here.
+    """
+    spec = _command_by_name(include_extensions=include_extensions).get(command_root)
+    if not spec or not spec.palette_submenu:
+        return []
+    if not spec.subcommands and not spec.palette_input:
+        return []
+    rows: list[tuple[str, str, str, str]] = []
+    if spec.palette_input:
+        prefill, label, desc = spec.palette_input
+        rows.append((prefill, label, desc, "insert"))
+    rows.append((spec.name, spec.name, spec.palette_desc, "command"))
+    rows.extend((f"{spec.name} {sub[0]}", sub[0], sub[1], "command") for sub in spec.subcommands)
+    return rows
 
 
 PALETTE_CATEGORIES = build_palette_categories(include_extensions=False)

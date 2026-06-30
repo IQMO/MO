@@ -13,6 +13,7 @@ from .command_registry import (
     SLASH_COMMANDS,
     _command_hidden,
     build_palette_categories,
+    palette_children,
     slash_command_with_desc,
 )
 
@@ -53,34 +54,13 @@ def model_palette_items(agent: Any) -> list[PaletteItem]:
 
 
 def palette_children_for_item(item: PaletteItem, agent: Any) -> list[PaletteItem]:
+    """Submenu rows for a palette command. Static children come from the registry
+    (single source — see command_registry.palette_children); only genuinely dynamic
+    submenus (/model, built from live providers) are constructed here."""
     value = item.value.strip()
-    if value == "/session":
-        return []
     if value == "/model":
         return model_palette_items(agent)
-    if value == "/think":
-        return [PaletteItem(f"/think {level}", level, f"set reasoning {level}") for level in ("high", "medium", "low")]
-    if value == "/goal":
-        return [
-            PaletteItem("/goal ", "new goal…", "type autonomous goal", "insert"),
-            PaletteItem("/goal status", "status", "show goal progress"),
-            PaletteItem("/goal stop", "stop", "stop active goal"),
-        ]
-    if value == "/prt":
-        return [
-            PaletteItem("/prt", "review codebase", "run a deep codebase review"),
-            PaletteItem("/prt fix", "fix findings", "run review and auto-fix findings"),
-            PaletteItem("/prt ", "review files…", "review specific files", "insert"),
-        ]
-    if value == "/profile":
-        return [
-            PaletteItem("/profile", "show", "show profile"),
-            PaletteItem("/profile name ", "name…", "type operator name", "insert"),
-            PaletteItem("/profile tools ", "tools…", "type preferred tools", "insert"),
-            PaletteItem("/profile provider ", "provider…", "type favorite provider/model", "insert"),
-            PaletteItem("/profile mine", "review", "review safe learning updates"),
-        ]
-    return []
+    return [PaletteItem(v, label, desc, kind) for v, label, desc, kind in palette_children(value)]
 
 
 class CommandPalette:

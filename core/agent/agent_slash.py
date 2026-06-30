@@ -12,7 +12,6 @@ from ..ghost.ghost_audit import append_ghost_audit
 from ..provider.provider_audit import append_provider_audit
 from ..provider.provider import load_config, clean_provider_error
 from ..profile import Profile, format_profile_time
-from ..session.handoff import context_pressure, seed_session_from_handoff
 from ..session.session_closeout import (
     build_session_closeout,
     closeout_meta,
@@ -1080,37 +1079,6 @@ class AgentSlashCommands:
     @staticmethod
     def _ghost_safe_messages(raw_messages: list[dict], prompt: str) -> list[dict]:
         return ghost_safe_messages(raw_messages, prompt)
-
-    def _cmd_compact(self, rest: str) -> str:
-        """Legacy command: use Handsoff instead of destructive trimming."""
-        return self._cmd_handoff("start " + (rest or "manual compact replacement").strip())
-
-    def _cmd_handoff(self, rest: str) -> str:
-        """Manage MO context handoff."""
-        rest = str(rest or "").strip()
-        lower = rest.lower()
-        if not rest or lower in {"status", "check"}:
-            pressure = context_pressure(self)
-            return (
-                "Context handoff status:\n"
-                f"  used:     {pressure['pressure']:.0%}\n"
-                f"  chars:    {pressure['chars']:,} / {pressure['budget_chars']:,}\n"
-                f"  messages: {pressure['message_count']} / {pressure['max_history']}\n"
-                f"  compacted:{pressure.get('trimmed_messages_count', 0):>3}\n"
-                f"  mode:     {'automatic' if self.context_handoff_enabled else 'off'}"
-            )
-        if lower.startswith("import "):
-            path = Path(rest.split(None, 1)[1]).expanduser()
-            if not path.exists():
-                return f"Handoff file not found: {path}"
-            document = path.read_text(encoding="utf-8")
-            seed_session_from_handoff(self.session, document)
-            self.last_handoff_notice = f"Context handoff imported into clean session: {path}"
-            return self.last_handoff_notice
-        focus = rest
-        if lower.startswith("start"):
-            focus = rest[5:].strip()
-        return self._perform_context_handoff(focus=focus or "manual handoff", reason="manual handoff", latest_user="", expose_notice=True)
 
     def _cmd_undo(self, _rest: str) -> str:
         """Remove the last user+assistant exchange."""
