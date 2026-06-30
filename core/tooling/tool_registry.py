@@ -22,6 +22,7 @@ TOOL_SEARCH_NAME = "tool_search"
 CORE_TOOL_NAMES = frozenset({
     TOOL_SEARCH_NAME,
     "read_file",
+    "edit_file",
     "find_files",
     "grep",
     "git_status",
