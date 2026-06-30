@@ -37,6 +37,9 @@ def _emit_session_event(kind: str, **payload: Any) -> None:
         traceback.print_exc()
 
 
+SLOT_RETENTION_SECONDS = 14 * 24 * 3600  # prune auto-slots untouched > 14 days
+
+
 class SessionManager:
     """Manages named sessions as JSON files under memory/sessions/."""
 
@@ -44,6 +47,31 @@ class SessionManager:
         self.dir = Path(sessions_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
         self._current_name: str = str(default_name or "main").strip() or "main"
+        self._prune_stale_slots()
+
+    def _prune_stale_slots(self, *, retention_seconds: float = SLOT_RETENTION_SECONDS) -> None:
+        """Delete auto-generated per-instance slot files (and their pre-handoff
+        backups) untouched past the retention window, so they don't accumulate
+        forever (a fresh terminal never loads them in multi-instance mode). The
+        current slot and user-named sessions are always kept; failures never
+        break startup.
+        """
+        try:
+            now = time.time()
+            current = self._path(self._current_name).name
+            for f in self.dir.glob("*.json"):
+                if f.name == current:
+                    continue
+                # Only auto slots + pre-handoff backups; leave named sessions alone.
+                if not (f.name.startswith("main-") or "-pre-handoff-" in f.name):
+                    continue
+                try:
+                    if now - f.stat().st_mtime > retention_seconds:
+                        f.unlink()
+                except Exception:
+                    continue
+        except Exception:
+            return
 
     def _path(self, name: str) -> Path:
         safe = "".join(c for c in str(name or "") if c.isalnum() or c in "-_.")[:64] or "session"

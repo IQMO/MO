@@ -20,6 +20,7 @@ import traceback
 from ..utils.atomic_write import atomic_write_text
 from .backend_monitor import get_monitor, redact_monitor_text
 from .instance import get_instance_id
+from .lock import _pid_alive
 from ..utils.jsonl_utils import read_recent_ledger_entries, resolve_ledger_path
 from ..utils.number_utils import as_int as _as_int
 from ..state.paths import ENV_HEARTBEAT_LEDGER_DISABLE, ENV_HEARTBEAT_LEDGER_PATH, HEARTBEAT_LEDGER_PATH
@@ -104,6 +105,12 @@ def record_heartbeat(
         with ledger_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(snapshot, ensure_ascii=False, sort_keys=True) + "\n")
         _prune_heartbeat_ledger(ledger_path)
+        # Once per terminal launch, drop entries for instances whose process is
+        # long gone so the registry can't surface phantom "stale"/"live" siblings
+        # (the source of the mo-handoff drift notice). Gated on "startup" so the
+        # per-pid liveness probe runs once, not on every heartbeat.
+        if str(event) == "startup":
+            _prune_stale_instances(ledger_path)
         monitor = get_monitor()
         if monitor:
             monitor.emit("heartbeat", {k: v for k, v in snapshot.items() if k not in {"git", "extra"}})
@@ -135,6 +142,56 @@ def _prune_heartbeat_ledger(
             return
         kept = lines[-max_lines:]
         atomic_write_text(ledger_path, "\n".join(kept) + "\n", encoding="utf-8")
+    except Exception:
+        return
+
+
+STALE_INSTANCE_RETENTION_SECONDS = 1800  # keep dead-pid entries ~30 min (recent handoff history)
+
+
+def _prune_stale_instances(
+    ledger_path: Path,
+    *,
+    retention_seconds: float = STALE_INSTANCE_RETENTION_SECONDS,
+) -> None:
+    """Drop heartbeat entries for dead instances older than the retention window.
+
+    The append-only ledger otherwise carries every exited instance until the 2 MB
+    size cap, so the instance registry keeps surfacing phantom "stale"/"live"
+    siblings (the mo-handoff drift notice). Keep entries whose pid is still alive,
+    plus any recent enough to be a just-exited handoff; drop the rest. Unparseable
+    or pid-less lines are kept untouched.
+    """
+    try:
+        if not ledger_path.exists():
+            return
+        now = time.time()
+        lines = ledger_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        kept: list[str] = []
+        dropped = 0
+        alive_cache: dict[int, bool] = {}
+        for raw in lines:
+            if not raw.strip():
+                continue
+            try:
+                item = json.loads(raw)
+                pid = int(item.get("pid") or 0)
+                created = float(item.get("created_at") or 0.0)
+            except Exception:
+                kept.append(raw)
+                continue
+            if pid <= 0:
+                kept.append(raw)
+                continue
+            if pid not in alive_cache:
+                alive_cache[pid] = _pid_alive(pid)
+            recent = bool(created) and (now - created) <= retention_seconds
+            if alive_cache[pid] or recent:
+                kept.append(raw)
+            else:
+                dropped += 1
+        if dropped:
+            atomic_write_text(ledger_path, ("\n".join(kept) + "\n") if kept else "", encoding="utf-8")
     except Exception:
         return
 
