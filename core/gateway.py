@@ -245,7 +245,13 @@ class Gateway:
             except Exception:
                 traceback.print_exc()
 
-        resume_intent = _has_pending_resume_intent(self.agent, user_input)
+        resume_intent = _has_pending_resume_intent(self.agent, user_input) or (
+            # Cross-restart resume: a disk-persisted incomplete board survived a
+            # restart (no in-memory parked work), and the operator is asking to
+            # continue. Drives the same resume path so the prior board is adopted.
+            self.last_resumable_board is not None
+            and looks_like_interrupted_resume_request(user_input)
+        )
         board_objective = _board_objective_text(self.agent, user_input, resume_intent=resume_intent)
 
         previous_route_source = getattr(self.agent, "_current_route_source", "")
@@ -350,6 +356,15 @@ class Gateway:
                     if resume_intent and getattr(self, "previous_task_board", None):
                         board = self.previous_task_board
                         if board.state in ("abandoned", "blocked"):
+                            board.state = "active"
+                    elif resume_intent and getattr(self, "last_resumable_board", None):
+                        # Cross-restart resume: no in-memory previous board, but a
+                        # disk-persisted incomplete board survived the restart.
+                        # Adopt it so MO continues the prior open tasks instead of
+                        # starting fresh. Consumed once so a later turn won't re-adopt.
+                        board = self.last_resumable_board
+                        self.last_resumable_board = None
+                        if board.state in ("abandoned", "blocked", "completed"):
                             board.state = "active"
                     else:
                         model_owned = _callable_bool(getattr(self.agent, "_model_owned_taskboard_enabled", lambda: False))

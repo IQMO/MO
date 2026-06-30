@@ -91,6 +91,15 @@ def startup_header_fragment_lines(agent, gateway) -> list[list[tuple[str, str]]]
         rows.append(fragments)
     # First-step nudge: a new user knows commands exist (/help) but not what to ASK.
     rows.append([("class:dim", "Try: find issues in this project  ·  explain this codebase  ·  /help")])
+    # Resumable work: a disk-persisted incomplete task board survived a restart.
+    # Surface it so the operator can pick up the prior open work (type 'resume').
+    try:
+        resumable = gateway.resumable_board() if gateway is not None else None
+        open_n = int(resumable.open_count()) if resumable is not None else 0
+        if open_n > 0:
+            rows.append([("class:info", f"↻ {open_n} open task(s) from your last session — type 'resume' to continue")])
+    except Exception:
+        pass
     # Cold-start personalization: if MO has no operator name yet, invite the user to
     # seed the profile. Name auto-capture (terms_learning.capture_operator_name)
     # handles "I'm <Name>"; this nudge covers everyone who doesn't say it.
