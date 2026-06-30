@@ -63,12 +63,14 @@ def build_current_work_snapshot(agent: Any = None) -> dict[str, Any]:
     latest_trace = _latest_trace_summary()
     git = _git_summary(getattr(agent, "project_cwd", None) or os.getcwd())
     heartbeat = _latest_heartbeat()
+    resumable = _resumable_board_summary(gateway)
     messages = list(getattr(session, "messages", []) or [])
     latest_user = _latest_role(messages, "user")
     recent_activity = bool(
         latest_user
         or _board_open_count(live_board) > 0
         or int((latest_board or {}).get("open") or 0) > 0
+        or int((resumable or {}).get("open") or 0) > 0
         or str((latest_closeout or {}).get("topic") or "").strip()
         or str((latest_closeout or {}).get("terminal_marker") or "").strip()
         or str((latest_trace or {}).get("name") or "").strip()
@@ -84,11 +86,31 @@ def build_current_work_snapshot(agent: Any = None) -> dict[str, Any]:
         "heartbeat": heartbeat,
         "live_taskboard": _taskboard_summary(live_board),
         "latest_taskboard": latest_board,
+        "resumable_board": resumable,
         "latest_closeout": latest_closeout,
         "latest_trace": latest_trace,
         "git": git,
         "recent_activity": recent_activity,
     }
+
+
+def _resumable_board_summary(gateway: Any) -> dict[str, Any]:
+    """Genuine open work from a PRIOR session that survived a restart, read from the
+    SAME source as the startup resume hint (gateway.last_resumable_board). Surfacing
+    it here keeps a continuity answer consistent with the hint, instead of claiming
+    'nothing open / clean slate' while the hint advertises resumable work."""
+    try:
+        board = getattr(gateway, "last_resumable_board", None)
+        if board is None or int(board.open_count()) <= 0:
+            return {}
+        titles = [
+            str(getattr(task, "title", "") or "").strip()
+            for task in (getattr(board, "tasks", []) or [])
+            if str(getattr(task, "status", "")) in ("pending", "active", "blocked")
+        ]
+        return {"open": int(board.open_count()), "open_titles": [t for t in titles if t][:5]}
+    except Exception:
+        return {}
 
 
 def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
@@ -97,6 +119,7 @@ def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
     session = snap.get("current_session") or {}
     live_board = snap.get("live_taskboard") or {}
     latest_board = snap.get("latest_taskboard") or {}
+    resumable = snap.get("resumable_board") or {}
     closeout = snap.get("latest_closeout") or {}
     git = snap.get("git") or {}
     lines = [
@@ -112,6 +135,14 @@ def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
     )
     if int(latest_board.get("open") or 0) > 0:
         lines.append(f"- Open taskboard rows this session: {latest_board.get('open', 0)}.")
+    if int(resumable.get("open") or 0) > 0:
+        titles = "; ".join(resumable.get("open_titles") or [])
+        detail = f" — e.g. {_clip(titles, 160)}" if titles else ""
+        lines.append(
+            f"- Resumable work from a PRIOR session (survived a restart): {resumable['open']} open task(s)"
+            f"{detail}. The operator can type 'resume' to continue it. While this exists, do NOT answer "
+            "'nothing open' or 'clean slate' — acknowledge the unfinished work and offer to resume it."
+        )
     if closeout:
         lines.append(
             f"- Previous session ended {closeout.get('reason') or '?'} "
