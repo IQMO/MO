@@ -13,11 +13,43 @@ _SECTION_LABEL_RE = re.compile(r"^(\s*)(?:([-*•])\s+)?[*_`\s]*([A-Za-z][A-Za-z
 _TOKEN_LINE_RE = re.compile(r"^\s*(?:tokens?|token usage|usage)\s*:", re.I)
 
 
+_INLINE_MD_RE = re.compile(r"\*\*(.+?)\*\*|`(.+?)`")
+
+
 def _clean_inline_emphasis(value: str) -> str:
     text = str(value or "").strip()
     text = re.sub(r"^(?:[*_`]+\s*)+", "", text)
     text = re.sub(r"(?:\s*[*_`]+)+$", "", text)
     return text.strip()
+
+
+def _strip_inline_markers(text: str) -> str:
+    """Drop **bold**/`code` markers, keeping the inner text (for detection)."""
+    out = re.sub(r"\*\*(.+?)\*\*", r"\1", str(text or ""))
+    return re.sub(r"`(.+?)`", r"\1", out)
+
+
+def _inline_fragments(text: str, base_style: str) -> list[tuple[str, str]]:
+    """Split a string into fragments, styling **bold** and `code` spans.
+
+    Bold -> the bright/bold response head style; code -> the inline-code style;
+    everything else keeps *base_style*. The markers themselves are dropped, so
+    the plain text matches the old marker-stripped output exactly.
+    """
+    value = str(text or "")
+    fragments: list[tuple[str, str]] = []
+    pos = 0
+    for match in _INLINE_MD_RE.finditer(value):
+        if match.start() > pos:
+            fragments.append((base_style, value[pos:match.start()]))
+        if match.group(1) is not None:
+            fragments.append(("class:response-bullet-head", match.group(1)))
+        else:
+            fragments.append(("class:response-code", match.group(2)))
+        pos = match.end()
+    if pos < len(value):
+        fragments.append((base_style, value[pos:]))
+    return fragments or [(base_style, value)]
 
 
 def _section_label_fragments(text: str) -> list[tuple[str, str]] | None:
@@ -41,19 +73,25 @@ def _section_label_fragments(text: str) -> list[tuple[str, str]] | None:
 
 
 def response_line_fragments(line: str) -> list[tuple[str, str]]:
-    """Return one logical response line with the current lightweight typography."""
+    """Return one logical response line with the current lightweight typography.
+
+    Structure (headings, labels, bullets, code) is detected on a marker-stripped
+    copy so inline **bold**/`code` never disturbs detection; plain prose is then
+    rendered through ``_inline_fragments`` so emphasis shows as styled fragments.
+    """
     text = str(line)
-    stripped = text.strip()
+    detect = _strip_inline_markers(text)
+    stripped = detect.strip()
     if not stripped:
         return [("class:mo-response", text)]
     code_like = text.startswith("      ") or text.startswith("\t")
-    section = _section_label_fragments(text)
+    section = _section_label_fragments(detect)
     if section and (not code_like or stripped.startswith(("-", "*", "•"))):
         return section
-    if _TOKEN_LINE_RE.match(text):
-        return [("class:response-heading", text)]
+    if _TOKEN_LINE_RE.match(detect):
+        return [("class:response-heading", detect)]
     if stripped.endswith(":") and not stripped.startswith(("-", "*", "•")):
-        return [("class:response-heading", text)]
+        return [("class:response-heading", detect)]
     # Code-like lines (4+ space indent or tab-indented). Existing response
     # blocks pass rest lines through with a two-space prefix, so six spaces here
     # preserves the prior effective threshold.
@@ -61,7 +99,7 @@ def response_line_fragments(line: str) -> list[tuple[str, str]]:
         return [("class:response-code", text)]
     if section:
         return section
-    bullet = re.match(r"^(\s*)([-*•])\s+(.+)$", text)
+    bullet = re.match(r"^(\s*)([-*•])\s+(.+)$", detect)
     if bullet:
         indent, marker, body = bullet.groups()
         body = _clean_inline_emphasis(body)
@@ -78,7 +116,7 @@ def response_line_fragments(line: str) -> list[tuple[str, str]]:
             ("class:response-bullet-head", lead),
             ("class:response-bullet-rest", rest),
         ]
-    return [("class:mo-response", text)]
+    return _inline_fragments(text, "class:mo-response")
 
 
 def _split_markdown_table_row(line: str) -> list[str]:
@@ -245,9 +283,8 @@ def _strip_response_markdown_lines(lines: list[tuple[str, bool]]) -> list[tuple[
             result.append(("    " + line.rstrip(), False))
             continue
         if is_table:
-            clean = re.sub(r"\*\*(.+?)\*\*", r"\1", line.rstrip())
-            clean = re.sub(r"`(.+?)`", r"\1", clean)
-            result.append((clean, True))
+            # Keep inline markers; _table_row_fragments styles + strips them.
+            result.append((line.rstrip(), True))
             continue
         if line.startswith(("    ", "\t")):
             result.append(("    " + line.rstrip(), False))
@@ -264,13 +301,67 @@ def _strip_response_markdown_lines(lines: list[tuple[str, bool]]) -> list[tuple[
         if not s:
             result.append(("", False))
             continue
-        clean = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
-        clean = re.sub(r"`(.+?)`", r"\1", clean)
-        if re.match(r"^[-*\u2022]\s", clean):
-            result.append((f"    {clean}", False))
+        # Keep inline markers so response_line_fragments can style **bold**/`code`;
+        # bullets are stripped here since their lead/rest splitter renders plain.
+        if re.match(r"^[-*\u2022]\s", _strip_inline_markers(s)):
+            result.append((f"    {_strip_inline_markers(s)}", False))
         else:
-            result.append((f"  {clean}", False))
+            result.append((f"  {s}", False))
     return result
+
+
+_TABLE_STATUS_GREEN = {"yes", "y", "clean", "active", "done", "ok", "pass", "passed", "\u2705", "\u2713"}
+_TABLE_STATUS_RED = {"no", "n", "stale", "fail", "failed", "missing", "error", "blocked", "\u274c", "\u2717"}
+
+
+def _cell_style(cell: str) -> str:
+    """Pick a status colour for a table data cell, conservatively.
+
+    Only obvious status tokens get coloured (green for healthy, red for
+    stale/failed); everything else stays the default response colour so we never
+    mis-paint ordinary content.
+    """
+    token = _strip_inline_markers(cell).strip().lower()
+    if not token:
+        return "class:mo-response"
+    if token in _TABLE_STATUS_GREEN or token.startswith(("\u2705", "\u2713")):
+        return "class:diff-add"
+    if token in _TABLE_STATUS_RED or token.startswith(("\u274c", "\u2717")) or "stale" in token:
+        return "class:diff-del"
+    return "class:mo-response"
+
+
+def _table_row_fragments(line: str, *, is_header: bool) -> list[tuple[str, str]]:
+    """Render one bordered-table line as styled fragments.
+
+    Borders dim, the header row in the heading colour, data cells coloured by
+    status; ``|`` separators stay dim. Joined text is identical to the old plain
+    rendering, so width/alignment is unchanged.
+    """
+    s = line.rstrip()
+    body = s.strip()
+    if body and set(body) <= {"+", "-"}:
+        return [("class:dim", f"  {s}")]
+    segments = s.split("|")
+    if len(segments) < 2:
+        return [("class:mo-response", f"  {s}")]
+    fragments: list[tuple[str, str]] = [("class:mo-response", "  ")]
+    last = len(segments) - 1
+    for index, segment in enumerate(segments):
+        if index == 0:
+            if segment:
+                fragments.append(("class:mo-response", segment))
+            continue
+        fragments.append(("class:dim", "|"))
+        if index == last:
+            if segment:
+                fragments.append(("class:mo-response", segment))
+            continue
+        if is_header:
+            fragments.append(("class:response-heading", segment))
+        else:
+            fragments.extend(_inline_fragments(segment, _cell_style(segment)))
+    return fragments
 
 
 def response_block_fragment_lines(text: str, *, columns: int = DEFAULT_RESPONSE_COLUMNS, hide_marker: bool = False) -> list[list[tuple[str, str]]]:
@@ -278,15 +369,23 @@ def response_block_fragment_lines(text: str, *, columns: int = DEFAULT_RESPONSE_
     lines = _strip_response_markdown_lines(_normalize_markdown_table_lines(str(text or ""), columns=columns))
     if not lines:
         return []
-    first, first_is_table = lines[0]
     marker = "  " if hide_marker else "* "
-    if first_is_table:
-        rendered: list[list[tuple[str, str]]] = [[("class:mo-marker", marker), ("class:mo-response", first.lstrip())]]
-    else:
-        rendered = [[("class:mo-marker", marker)] + response_line_fragments(first.lstrip())]
-    for line, is_table in lines[1:]:
+    rendered: list[list[tuple[str, str]]] = []
+    table_border_count = 0  # borders seen in the current table block; header rows follow the 1st
+    for position, (line, is_table) in enumerate(lines):
         if is_table:
-            rendered.append([("class:mo-response", f"  {line.rstrip()}")])
+            body = line.strip()
+            is_border = bool(body) and set(body) <= {"+", "-"}
+            if is_border:
+                table_border_count += 1
+            if position == 0:
+                rendered.append([("class:mo-marker", marker), ("class:mo-response", line.lstrip())])
+            else:
+                rendered.append(_table_row_fragments(line, is_header=(not is_border and table_border_count == 1)))
+            continue
+        table_border_count = 0
+        if position == 0:
+            rendered.append([("class:mo-marker", marker)] + response_line_fragments(line.lstrip()))
         elif line.startswith(("    ", "\t")):
             stripped = line.lstrip()
             if stripped.startswith(("- ", "* ", "• ")):

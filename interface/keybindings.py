@@ -268,6 +268,10 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
             event.app.invalidate()
         elif b.complete_state:
             b.complete_previous()
+        elif not str(getattr(b, "text", "") or "").strip() and getattr(tui, "_last_queued_input", None) and tui._restore_last_queued_input_to_editor():
+            # With an empty editor and a queued message, Up recalls it for editing
+            # (and cancels the queue) — like shell history for a pending send.
+            event.app.invalidate()
         elif tui._ghost_panel_open and b.document.on_first_line:
             # Page Ghost history only at the top of the draft (shell-style); inside a
             # multi-line draft, Up must still move the cursor instead of hijacking it.
@@ -352,13 +356,9 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
         else:
             tui._scroll_transcript(-5)
 
-    @kb.add("home", eager=True)
-    def _(event):
-        tui._transcript_top()
-
-    @kb.add("end", eager=True)
-    def _(event):
-        tui._transcript_bottom()
+    # Home/End are intentionally NOT bound: they must reach the input buffer so
+    # the cursor jumps to the start/end of the typed message (prompt_toolkit's
+    # default). Transcript jump-to-top/bottom stays on PageUp/PageDown + arrows.
 
     @kb.add(Keys.BracketedPaste)
     def _(event):

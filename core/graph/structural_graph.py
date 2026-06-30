@@ -95,6 +95,45 @@ def compatibility_graph_path(root: str | Path | None = None) -> Path:
     return project_root(root) / COMPAT_STRUCTURAL_GRAPH_DIR / STRUCTURAL_GRAPH_FILE
 
 
+def _prune_stale_graph_caches(config: dict[str, Any] | None = None) -> None:
+    """Delete stale structural/code graph cache dirs whose project root no longer exists.
+
+    Caches are hash-named directories under ~/.mo/cache/<kind>/.
+    Without pruning they accumulate unbounded from deleted autopilot
+    worktrees and temp directories — each entry is ~3-7 MB of JSON/HTML.
+    """
+    if not private_state_enabled(config):
+        return
+    import shutil
+
+    for kind in ("structural_graph", "code_graph"):
+        cache_dir = project_cache_dir(kind, "", config=config).parent
+        if not cache_dir.is_dir():
+            continue
+        # Walk only immediate children — each is a hash-named dir for one root
+        for entry in sorted(cache_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            meta_file = entry / "graph.json"
+            if not meta_file.exists():
+                meta_file = entry / "knowledge-graph.json"
+            if not meta_file.exists():
+                continue
+            try:
+                data = json.loads(meta_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            root = data.get("project", {}).get("root", "")
+            if not root:
+                continue
+            if Path(root).is_dir():
+                continue  # still exists — keep
+            try:
+                shutil.rmtree(entry)
+            except Exception:
+                pass
+
+
 def graph_path(root: str | Path | None = None, *, config: dict[str, Any] | None = None) -> Path:
     root_path = project_root(root)
     native = native_graph_path(root_path, config=config)
@@ -284,6 +323,7 @@ def build_structural_graph(
     """Build or incrementally refresh MO's native community code map."""
     if not structural_graph_enabled():
         return {"built": False, "reason": "disabled"}
+    _prune_stale_graph_caches(config=config)
     root_path = project_root(root)
     try:
         from . import code_graph as private_map

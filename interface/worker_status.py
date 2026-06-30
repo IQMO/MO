@@ -9,6 +9,7 @@ class WorkerStatusMixin:
 
     def _workers_status_text(self) -> str:
         workers: list[str] = []
+        shell_count = 0
         registry = getattr(self.agent, "workers", None)
         if registry and hasattr(registry, "active"):
             try:
@@ -26,6 +27,8 @@ class WorkerStatusMixin:
                     workers.append("PRT")
                 elif record.kind == "main":
                     workers.append("MO")
+            # Count shell workers (including those beyond the display limit)
+            shell_count = sum(1 for r in active_records if r.kind == "shell")
         if self.busy and "MO" not in workers:
             workers.append("MO")
         if self._goal_worker_active and not any(item.startswith("Goal") for item in workers):
@@ -35,10 +38,14 @@ class WorkerStatusMixin:
                 workers.append("Ghost active")
             else:
                 workers.append("Ghost")
+        # If shell workers are active but no workers listed, show "MO" as the agent
+        if not workers and shell_count > 0:
+            workers.append("MO")
         if not workers:
             return ""
         elif len(workers) > 3:
             state = f"{len(workers)} active"
         else:
             state = " · ".join(workers)
-        return f"Active {moon_phase_frame()} {state}"
+        prefix = f"shell {shell_count}" if shell_count > 0 else "Active"
+        return f"{prefix} {moon_phase_frame()} {state}"

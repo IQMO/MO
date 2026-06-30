@@ -144,6 +144,24 @@ def _worker_summary(agent: Any) -> str:
     workers = worker_summary_lines(agent, limit=5)
     if workers:
         parts.append("Registered workers:\n" + "\n".join(workers))
+
+    # Check for completed background shells that need reporting
+    try:
+        registry = getattr(agent, "workers", None)
+        if registry and hasattr(registry, "active"):
+            completed_shells = [
+                r for r in registry.recent(limit=20)
+                if r.kind == "shell" and r.state == "completed"
+            ]
+            if completed_shells:
+                parts.append(
+                    "Completed background shells ready to report: "
+                    + ", ".join(f"{r.id} ({getattr(r, 'result_summary', '')[:80] or 'done'})"
+                    for r in completed_shells[-3:])
+                )
+    except Exception:
+        pass
+
     goal_rows = goal_summary_lines(agent, limit=3)
     if goal_rows:
         plan = getattr(agent, "_goal_plan", None)

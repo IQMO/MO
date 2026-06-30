@@ -13,6 +13,8 @@ import json
 import subprocess
 import fnmatch
 import threading
+import time
+import uuid
 import shlex
 from pathlib import Path
 from typing import Any
@@ -23,7 +25,43 @@ from core.tooling.shell_processes import (
     _register_shell_process,
     _unregister_shell_process,
     _kill_process_tree,
+    active_shell_processes,
 )
+
+# ── Background shell tracking ──────────────────────────────────────────
+_BACKGROUND_SHELLS: dict[str, dict] = {}
+_BACKGROUND_LOCK = threading.Lock()
+# Callback set by agent dispatch to register workers on the agent
+_SHELL_WORKER_CALLBACK = None
+
+
+def _set_shell_worker_callback(cb):
+    global _SHELL_WORKER_CALLBACK
+    _SHELL_WORKER_CALLBACK = cb
+
+
+def _completed_background_shells() -> list[dict]:
+    """Return shells that finished since last check and mark them reported."""
+    done = []
+    with _BACKGROUND_LOCK:
+        for sid, info in list(_BACKGROUND_SHELLS.items()):
+            if info.get("state") == "completed" and not info.get("reported"):
+                info["reported"] = True
+                done.append(dict(info))
+    return done
+
+
+def _looks_like_backgroundable(command: str, timeout: int) -> bool:
+    """Decide if a shell command should run in background (long-running)."""
+    if timeout >= 300:
+        return True
+    low = command.lower()
+    # Full pytest suite (not a single test or -k filtered)
+    if re.search(r'\b(pytest|python\s+-m\s+pytest)\b', low):
+        if "::" not in low and not re.search(r'\s+-k\s', low):
+            if timeout >= 120:
+                return True
+    return False
 from .screen import execute_capture_screen
 from .desktop import (
     execute_screen_size,
@@ -947,6 +985,114 @@ def _test_runner_timeout(command: object, requested: object = None) -> int:
     return _tool_timeout(command, requested, 420)
 
 
+def _execute_shell_background(
+    shell_cmd,
+    use_shell: bool,
+    registered_command: str,
+    command: str,
+    cwd: str,
+    timeout: int,
+    popen_kwargs: dict[str, Any],
+) -> str:
+    """Start a shell command in background, return immediately with status."""
+    shell_id = f"shell-{uuid.uuid4().hex[:8]}"
+    now = time.time()
+
+    with _BACKGROUND_LOCK:
+        _BACKGROUND_SHELLS[shell_id] = {
+            "id": shell_id,
+            "command": " ".join((command or "").split())[:120],
+            "cwd": str(cwd),
+            "started": now,
+            "timeout": timeout,
+            "state": "running",
+            "output": None,
+            "reported": False,
+        }
+
+    cb = _SHELL_WORKER_CALLBACK
+    if callable(cb):
+        cb("create", shell_id, " ".join((command or "").split())[:160])
+
+    def _run() -> None:
+        try:
+            proc = subprocess.Popen(shell_cmd, **popen_kwargs)
+            _register_shell_process(proc, registered_command, cwd, timeout)
+            stdout_chunks: list[str] = []
+            stderr_chunks: list[str] = []
+
+            def _drain(stream, chunks):
+                try:
+                    while True:
+                        chunk = stream.read(1)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                except Exception:
+                    pass
+
+            out_thread = threading.Thread(target=_drain, args=(proc.stdout, stdout_chunks), daemon=True)
+            err_thread = threading.Thread(target=_drain, args=(proc.stderr, stderr_chunks), daemon=True)
+            out_thread.start()
+            err_thread.start()
+
+            try:
+                proc.wait(timeout=timeout)
+                out_thread.join(timeout=2)
+                err_thread.join(timeout=2)
+                output = "".join(stdout_chunks)
+                stderr = "".join(stderr_chunks)
+                if stderr:
+                    output += "\n[stderr]\n" + stderr
+                if not output.strip():
+                    output = f"[Command completed with exit code {proc.returncode}]"
+                elif "exit code" not in output.lower():
+                    output = output.rstrip() + f"\n[exit code {proc.returncode}]"
+                if len(output) > 50000:
+                    output = output[:50000] + "\n[...truncated...]"
+                final_state = "completed"
+            except subprocess.TimeoutExpired:
+                _kill_process_tree(proc.pid)
+                out_thread.join(timeout=0.2)
+                err_thread.join(timeout=0.2)
+                stdout_partial = "".join(stdout_chunks)
+                stderr_partial = "".join(stderr_chunks)
+                partial = (stdout_partial + ("\n[stderr]\n" + stderr_partial if stderr_partial else "")).strip()
+                output = (
+                    f"[Timed out after {timeout}s]\n{partial[-6000:]}\n\n"
+                    "The command was killed. Re-run with a higher timeout or narrowed scope."
+                )
+                final_state = "timed_out"
+            except Exception as exc:
+                output = f"Error executing background command: {exc}"
+                final_state = "failed"
+            finally:
+                _unregister_shell_process(proc.pid)
+
+            with _BACKGROUND_LOCK:
+                entry = _BACKGROUND_SHELLS.get(shell_id)
+                if entry:
+                    entry["state"] = final_state
+                    entry["output"] = output
+                    entry["finished"] = time.time()
+
+            cb = _SHELL_WORKER_CALLBACK
+            if callable(cb):
+                cb("update", shell_id, final_state, output[:500] if output else "")
+
+        except Exception as exc:
+            with _BACKGROUND_LOCK:
+                entry = _BACKGROUND_SHELLS.get(shell_id)
+                if entry:
+                    entry["state"] = "failed"
+                    entry["output"] = f"Error: {exc}"
+
+    thread = threading.Thread(target=_run, name=f"mo-shell-{shell_id}", daemon=True)
+    thread.start()
+
+    return f"[BACKGROUND_ACTIVE|{shell_id}|{command[:100]}]"
+
+
 def execute_shell(arguments: dict[str, Any]) -> str:
     command = str(arguments.get("command", "")).strip()
     workdir = arguments.get("workdir") or os.getcwd()
@@ -954,6 +1100,35 @@ def execute_shell(arguments: dict[str, Any]) -> str:
     cwd = workdir
 
     shell_cmd, use_shell, registered_command = _shell_command(command)
+
+    # Background long-running commands (unless explicitly suppressed)
+    allow_background = bool(arguments.get("_allow_background", True))
+    if allow_background and _looks_like_backgroundable(command, timeout):
+        env = safe_env() if bool(arguments.get("_clean_env", True)) else os.environ.copy()
+        env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        popen_kwargs: dict[str, Any] = {
+            "shell": use_shell,
+            "cwd": cwd,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "env": env,
+        }
+        if sys.platform == "win32":
+            apply_windows_hidden_process_flags(popen_kwargs)
+        else:
+            popen_kwargs["start_new_session"] = True
+        return _execute_shell_background(
+            shell_cmd=shell_cmd,
+            use_shell=use_shell,
+            registered_command=registered_command,
+            command=command,
+            cwd=cwd,
+            timeout=timeout,
+            popen_kwargs=popen_kwargs,
+        )
 
     try:
         env = safe_env() if bool(arguments.get("_clean_env", True)) else os.environ.copy()
@@ -1009,10 +1184,9 @@ def execute_shell(arguments: dict[str, Any]) -> str:
                 partial = (stdout_partial + ("\n[stderr]\n" + stderr_partial if stderr_partial else "")).strip()
                 guidance = (
                     f"Error: Command timed out after {timeout}s and was killed. Do NOT re-run the "
-                    "same long command on a loop and do NOT background it and poll — that burns turns "
-                    "and never finishes. Run it ONCE with a higher `timeout`, narrow the scope, or use "
-                    "a bounded parallel invocation (for this suite: "
-                    "`python -m pytest -q -n 4 --dist loadfile`)."
+                    "same long command on a loop — that burns turns and never finishes. "
+                    "Run it ONCE with a higher `timeout`, narrow the scope, or use "
+                    "`python -m pytest -q -n 4 --dist loadfile` for faster parallel execution."
                 )
                 if partial:
                     return (
@@ -1172,6 +1346,7 @@ def execute_test_runner(arguments: dict[str, Any]) -> str:
             "workdir": workdir,
             "timeout": preflight_timeout,
             "_clean_env": clean_env,
+            "_allow_background": False,
         })
         if not _output_succeeded(preflight):
             return "[pytest preflight failed — full suite not run]\n" + preflight
@@ -1180,14 +1355,21 @@ def execute_test_runner(arguments: dict[str, Any]) -> str:
             "workdir": workdir,
             "timeout": timeout,
             "_clean_env": clean_env,
+            "_allow_background": True,
         })
+        # Pass through background status if the full suite was backgrounded
+        if isinstance(full, str) and full.startswith("[BACKGROUND_ACTIVE|"):
+            return "[pytest preflight passed]\n" + full
         return "[pytest preflight passed]\n" + preflight.rstrip() + "\n\n[pytest full suite]\n" + full
-    return execute_shell({
+    full = execute_shell({
         "command": command,
         "workdir": workdir,
         "timeout": timeout,
         "_clean_env": clean_env,
+        "_allow_background": True,
     })
+    # Pass through background status
+    return full
 
 
 def execute_project_bridge(arguments: dict[str, Any]) -> str:

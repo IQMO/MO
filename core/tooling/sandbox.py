@@ -903,7 +903,7 @@ def _large_existing_write_reason(arguments: dict[str, Any], *, max_lines: int = 
 
 def _guard_web_tools(name: str, arguments: dict[str, Any], cfg: dict[str, Any]) -> str | None:
     """Check web/network tool restrictions. Return block reason or None."""
-    if name not in {"web_fetch", "web_snapshot", "web_search", "browser_open", "open_url"}:
+    if name not in {"web_fetch", "web_snapshot", "web_search", "browser_open", "open_url", "inspect_repo", "use_repo"}:
         return None
     if cfg.get("enabled") and not cfg.get("web_fetch_enabled", True):
         return f"[SANDBOX BLOCKED] {name} network access disabled."

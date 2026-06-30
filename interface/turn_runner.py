@@ -19,6 +19,22 @@ def _strip_rich_tags(text: str) -> str:
 _DIFFSTAT_RE = re.compile(r"^(.*) (\+\d+) (-\d+)$")
 
 
+def _tool_label_from_activity(act: str) -> str:
+    """Extract the tool label from a ``tooling (<label>)...`` activity string.
+
+    The label is everything between the FIRST ``(`` and the trailing ``)...``.
+    Splitting on ``(`` (the old behaviour) broke on any summary containing a
+    paren — every shell ``python -c`` one-liner rendered as a garbage tail like
+    ``).st_size for…`` because ``split("(")[-1]`` grabbed the last inner group.
+    """
+    if "(" not in act:
+        return act
+    inner = act[act.index("(") + 1:]
+    if inner.endswith(")..."):
+        return inner[:-4].rstrip()
+    return inner.removesuffix("...").removesuffix(")").rstrip()
+
+
 class TurnRunnerMixin:
     def _diffstat_fragments(self, text: str, base_style: str) -> list[tuple[str, str]]:
         """Split a trailing ' +A -B' edit diffstat into green/red fragments.
@@ -190,8 +206,7 @@ class TurnRunnerMixin:
             def on_activity(act: str):
                 self.activity_text = act
                 if self._show_tool_activity and "tooling" in act:
-                    tool_name = act.split("(")[-1].removesuffix(")...") if "(" in act else act
-                    self._add_tool_activity_line(tool_name)
+                    self._add_tool_activity_line(_tool_label_from_activity(act))
                 if self._app:
                     self._app.invalidate()
 

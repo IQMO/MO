@@ -89,7 +89,7 @@ class QueueingMixin:
         if worker_id:
             ensure_worker_registry(self.agent).update(worker_id, "accepted", "steered next input")
         self._busy_escape_count = 0
-        self._add("class:activity", "  Queued request selected · Enter to stop current · Esc to cancel")
+        self._add("class:activity", "  Queued request selected · Enter to stop & send now · Esc to cancel")
         return True
 
     def _request_current_turn_stop(self) -> bool:
@@ -124,6 +124,35 @@ class QueueingMixin:
         stopped = self._request_current_turn_stop()
         self._busy_escape_count = 0
         self._add("class:activity", "  Stopping MO") if stopped else self._add("class:dim", "  Stop requested")
+        return True
+
+    def _restore_last_queued_input_to_editor(self) -> bool:
+        """Pull the queued message back into the input editor and cancel the queue.
+
+        Lets the operator recall a just-queued message with Up, edit/refine it,
+        and re-send with Enter. No-op (returns False) when there is no queued
+        item, when it's a goal start marker, or when the item isn't still queued.
+        """
+        item = self._last_queued_input
+        if not item:
+            return False
+        text = str(item.get("text") or "")
+        if not text or text == "[GOAL_START]":
+            return False
+        items = self._drain_pending_inputs()
+        remaining = [candidate for candidate in items if candidate is not item]
+        if len(remaining) == len(items):
+            self._restore_pending_inputs(items)
+            return False
+        self._restore_pending_inputs(remaining)
+        worker_id = str(item.get("worker_id") or "")
+        if worker_id:
+            ensure_worker_registry(self.agent).update(worker_id, "cancelled", "queued input pulled back to editor")
+        self._last_queued_input = None
+        self._busy_escape_count = 0
+        self._input_buf.text = text
+        self._input_buf.cursor_position = len(text)
+        self._add("class:dim", "  Queued message restored — edit, Enter re-queues")
         return True
 
     def _cancel_last_queued_input(self) -> bool:

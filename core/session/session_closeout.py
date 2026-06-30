@@ -244,7 +244,6 @@ def write_session_closeout(
     path = _unique_closeout_path(out_dir, stamp, _safe_slug(closeout.session_id or 'session'))
     atomic_write_text(path, render_session_closeout_markdown(closeout), encoding="utf-8")
     prune_session_closeouts(out_dir, keep=keep)
-    _append_session_index(closeout, path, out_dir)
     return path
 
 
@@ -274,7 +273,8 @@ def stage_session_closeout_feedback(
         "unresolved_count": len(closeout.unresolved),
         "dirty_count": len(closeout.dirty_files),
     }
-    _append_jsonl(observations_path, observation)
+    observations_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(observations_path, json.dumps(observation, ensure_ascii=False, sort_keys=True) + "\n")
 
     if not repeated or not profile:
         return {"staged": False, "patterns": patterns, "repeated": repeated, "reason": "no repeated closeout pattern"}
@@ -371,46 +371,6 @@ def _closeout_candidate_source(pattern: str, closeout: SessionCloseout) -> str:
     )
 
 
-def _append_session_index(closeout: SessionCloseout, closeout_path: Path, out_dir: Path) -> None:
-    """Append a compact entry to the session index for navigation/history."""
-    try:
-        index_path = Path(out_dir).parent / "session_index.jsonl"
-
-        # Determine session number by counting existing entries
-        session_number = 1
-        if index_path.exists():
-            try:
-                lines = [l for l in index_path.read_text(encoding="utf-8").splitlines() if l.strip()]
-                session_number = len(lines) + 1
-            except Exception:
-                pass
-
-        # Extract topic from spine (first user line)
-        topic = ""
-        for entry in closeout.session_spine:
-            if entry.lower().startswith("user:"):
-                topic = entry[5:].strip()[:160]
-                break
-
-        entry = {
-            "session": session_number,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(closeout.created_at)),
-            "reason": closeout.reason[:100],
-            "slot": closeout.slot[:40],
-            "topic": topic,
-            "clean": closeout.clean,
-            "unresolved_count": len(closeout.unresolved),
-            "dirty_count": len(closeout.dirty_files),
-            "turn_count": closeout.turn_count,
-            "closeout": str(closeout_path),
-        }
-        line = json.dumps(entry, ensure_ascii=False, default=str)
-        index_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(index_path, "a", encoding="utf-8") as fh:
-            fh.write(line + "\n")
-    except Exception:
-        traceback.print_exc()
-
 
 def _memory_root(profile: Any) -> Path:
     profile_path = getattr(profile, "_path", None)
@@ -429,14 +389,6 @@ def _last_closeout_observation(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
 
-
-def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-    except OSError:
-        pass
 
 
 def _pressure(agent: Any) -> dict[str, Any]:

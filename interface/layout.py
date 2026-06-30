@@ -40,6 +40,28 @@ class PlaceholderProcessor(Processor):
         return Transformation(transformation_input.fragments)
 
 
+class EnhanceHintProcessor(Processor):
+    """Append the Ctrl+E enhance hint inline, trailing the typed message.
+
+    Renders at the end of the last input line so the hint sits at the end of the
+    sentence instead of on a separate row below the composer. Visibility/threshold
+    are owned by ``enhance_hint_fragments``; this processor only places it.
+    """
+
+    def __init__(self, tui: Any) -> None:
+        self.tui = tui
+
+    def apply_transformation(self, transformation_input):
+        fragments = transformation_input.fragments
+        last_line = max(0, transformation_input.document.line_count - 1)
+        if transformation_input.lineno != last_line:
+            return Transformation(fragments)
+        hint = enhance_hint_fragments(self.tui)
+        if not hint:
+            return Transformation(fragments)
+        return Transformation(list(fragments) + list(hint))
+
+
 def input_visual_height(tui: Any, *, max_rows: int = INPUT_MAX_ROWS) -> int:
     """Return the visible input editor height, capped to keep transcript context."""
     if hasattr(tui, "_terminal_columns"):
@@ -59,18 +81,24 @@ def input_window_height(tui: Any) -> Dimension:
     return Dimension(min=1, preferred=rows, max=INPUT_MAX_ROWS)
 
 
-def enhance_hint_fragments(tui: Any) -> list:
-    """Contextual one-line hint shown at the end of the input.
+ENHANCE_HINT_MIN_WORDS = 25
+"""Only suggest Ctrl+E once the message is substantial enough to benefit from a
+rewrite — short asks don't need it, and the hint shouldn't flash on every keystroke."""
 
-    "Ctrl+E enhance message" while a real message is typed; after Ctrl+E applies,
-    "Esc to revert back". Hidden when busy, empty, or on a slash command.
+
+def enhance_hint_fragments(tui: Any) -> list:
+    """Contextual hint trailing the typed message at the end of the input line.
+
+    "Ctrl+E enhance message" once a real message of at least
+    ``ENHANCE_HINT_MIN_WORDS`` words is typed; after Ctrl+E applies, "Esc to
+    revert back". Hidden when busy, empty, or on a slash command.
     """
     if getattr(tui, "busy", False):
         return []
     if getattr(tui, "_enhance_holder_active", False):
         return [("class:input-placeholder", "  Esc to revert back")]
     text = str(getattr(getattr(tui, "_input_buf", None), "text", "") or "").strip()
-    if text and not text.startswith("/") and len(text) >= 8:
+    if text and not text.startswith("/") and len(text.split()) >= ENHANCE_HINT_MIN_WORDS:
         return [("class:input-placeholder", "  Ctrl+E enhance message")]
     return []
 
@@ -115,11 +143,7 @@ def build_tui_root(tui: Any, input_buffer: Any, prefix: HTML | None = None) -> F
             Window(content=FormattedTextControl(lambda: tui._palette.get_fragments()), dont_extend_height=True, height=Dimension(max=12)),
             filter=Condition(lambda: tui._palette.open),
         ),
-        Window(height=lambda: input_window_height(tui), content=BufferControl(buffer=input_buffer, input_processors=[BeforeInput(prefix), PlaceholderProcessor()]), dont_extend_height=True, wrap_lines=True),
-        ConditionalContainer(
-            Window(height=1, content=FormattedTextControl(lambda: enhance_hint_fragments(tui)), dont_extend_height=True),
-            filter=Condition(lambda: bool(enhance_hint_fragments(tui))),
-        ),
+        Window(height=lambda: input_window_height(tui), content=BufferControl(buffer=input_buffer, input_processors=[BeforeInput(prefix), PlaceholderProcessor(), EnhanceHintProcessor(tui)]), dont_extend_height=True, wrap_lines=True),
         Window(height=1, content=FormattedTextControl(lambda: tui._get_footer_fragments()), dont_extend_height=True),
     ])
 

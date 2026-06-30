@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -20,6 +21,22 @@ LOGO_LINES: tuple[str, ...] = (
     "  █ █ █  █   █",
     "  █   █   ███ ",
 )
+
+
+def _clear_terminal() -> None:
+    """Clear screen + scrollback and home the cursor before the TUI renders.
+
+    Only emits when stdout is a real terminal, so redirected/piped output (tests,
+    ``mo -p``) is never polluted with escape codes.
+    """
+    out = sys.stdout
+    if not getattr(out, "isatty", lambda: False)():
+        return
+    try:
+        out.write("\033[3J\033[2J\033[H")  # scrollback, screen, cursor home
+        out.flush()
+    except Exception:
+        pass
 
 
 def _active_provider_key_missing(agent) -> str:
@@ -135,6 +152,14 @@ class TuiAppMixin:
         # Invalidate while the app is alive; prompt_toolkit is not running yet
         # when this thread starts, so don't exit just because is_running is false.
         self._refresh_stop.clear()
+
+        # full_screen=False keeps MO in the main screen buffer (native selection +
+        # wheel scrollback), but prompt_toolkit then anchors its render region at
+        # the cursor's start row and never repaints rows above it. Anything printed
+        # before launch (e.g. the `mo_trace serve` banner) would stay pinned at the
+        # top AND steal rows from the height calc, hiding the bottom of the
+        # transcript. Clear to a fresh top-left so the app owns the whole terminal.
+        _clear_terminal()
 
         def _refresh_loop():
             while not self._refresh_stop.is_set():

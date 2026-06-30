@@ -789,10 +789,27 @@ class AgentTurnDispatchMixin:
         if name in {"shell", "test_runner"}:
             runtime_arguments["_clean_env"] = bool(self.sandbox_config.get("clean_env", True))
 
+        # Wire up background shell worker callback before execution
+        if name in {"shell", "test_runner"}:
+            from tools import _set_shell_worker_callback
+            _set_shell_worker_callback(self._make_shell_worker_callback())
+
         try:
             result = executor(runtime_arguments)
         except Exception as exc:
             return f"Error executing {name}: {exc}"
+
+        # Handle background shell activation
+        bg_match = re.search(r'\[BACKGROUND_ACTIVE\|([^|\]]+)\|([^\]]*)\]', result) if isinstance(result, str) else None
+        if bg_match:
+            shell_id = bg_match.group(1)
+            summary = bg_match.group(2)
+            self._register_shell_worker(shell_id, summary)
+            return (
+                f"[Running in background · {summary}]\n"
+                "This command is running in the background. You can continue working — "
+                "MO will report once it completes. Check /status for progress."
+            )
 
         max_out = int(self.sandbox_config.get("max_output_chars", 50000) or 50000)
         if len(result) > max_out:
@@ -839,6 +856,57 @@ class AgentTurnDispatchMixin:
         else:
             # Reset on success
             setattr(self, "_ssh_consecutive_failures", 0)
+
+    def _make_shell_worker_callback(self):
+        """Build a callback for background shell worker registration."""
+        agent_ref = self
+
+        def callback(action: str, shell_id: str, *args):
+            registry = getattr(agent_ref, "workers", None)
+            if not registry:
+                return
+            try:
+                if action == "create":
+                    summary = str(args[0]) if args else "shell command"
+                    registry.create(
+                        kind="shell",
+                        source="main",
+                        route="shell",
+                        objective=summary,
+                        state="running",
+                        note=f"Background shell: {summary[:80]}",
+                        worker_id=shell_id,
+                    )
+                elif action == "update":
+                    state = str(args[0]) if args else "completed"
+                    result_preview = str(args[1])[:200] if len(args) > 1 else ""
+                    registry.update(
+                        shell_id,
+                        state,
+                        note=f"Shell {state}",
+                        result_summary=result_preview,
+                    )
+            except Exception:
+                pass
+
+        return callback
+
+    def _register_shell_worker(self, shell_id: str, summary: str) -> None:
+        """Register a background shell in the agent worker registry."""
+        try:
+            from ..worker import ensure_worker_registry
+            registry = ensure_worker_registry(self)
+            registry.create(
+                kind="shell",
+                source="main",
+                route="shell",
+                objective=str(summary or "shell command")[:160],
+                state="running",
+                note=f"Background shell running",
+                worker_id=shell_id,
+            )
+        except Exception:
+            pass
 
     def _write_tool_audit(self, tool_name: str, arguments: dict, result: str, block_reason: str | None) -> None:
         """Write a redacted tool audit entry to logs/tool_audit.jsonl."""
