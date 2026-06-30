@@ -373,12 +373,13 @@ def economy_summary(
         "provider_requests": 0, "provider_responses": 0, "provider_errors": 0,
         "tool_calls": 0, "tool_errors": 0, "sandbox_blocked": 0,
         "compression_events": 0,
-        "error_tools": [], "blocked_tools": [],
+        "error_tools": [], "blocked_tools": [], "blocked_reasons": [],
     }
     if not path or not Path(path).exists():
         return out
     _err_tools: "set[str]" = set()
     _blk_tools: "set[str]" = set()
+    _blk_reasons: "set[str]" = set()
     events: list[tuple[str, dict[str, Any]]] = []
     for line in Path(path).open(encoding="utf-8", errors="replace"):
         line = line.strip()
@@ -440,6 +441,7 @@ def economy_summary(
             if p.get("blocked"):
                 out["sandbox_blocked"] += 1
                 _blk_tools.add(str(p.get("tool") or ""))
+                _blk_reasons.add(str(p.get("reason") or ""))
         elif t == "tool_error":
             tool = str(p.get("tool") or "")
             if not has_nearby_tool_result(index, tool, "error"):
@@ -450,10 +452,12 @@ def economy_summary(
             if not has_nearby_tool_result(index, tool, "blocked"):
                 out["sandbox_blocked"] += 1
                 _blk_tools.add(tool)
+                _blk_reasons.add(str(p.get("reason") or ""))
         elif t == "tool_compress":
             out["compression_events"] += 1
     out["error_tools"] = sorted(t for t in _err_tools if t)
     out["blocked_tools"] = sorted(t for t in _blk_tools if t)
+    out["blocked_reasons"] = sorted(r for r in _blk_reasons if r)
     return out
 
 
