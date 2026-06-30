@@ -134,6 +134,17 @@ truth. Skill packs are validated before save/load: exact-trigger packs must use
 only their exact trigger, and file-scoped conventions surface only when MO is
 working on matching paths.
 
+MO can also learn from outside your own sessions. Point it at a GitHub repo and
+it inspects it into an **inert, approval-gated skill candidate** — it classifies
+the URL (full link or `owner/repo`), fetches metadata, README, and dependency
+files, risk-scans them (secrets, prompt injection, executable markers) and runs a
+structural-conflict check, then stages a candidate you review before it ever
+becomes a local skill. Nothing is cloned, installed, or executed on inspect:
+`inspect_repo` (or `/learning inspect <url>`) stages the candidate,
+`/learning use <url>` gives a one-turn untrusted-context read without installing,
+`/learning candidates` lists what is staged, and `/learning promote <id>` turns an
+approved candidate into a real local skill.
+
 ### Sees and drives your machine
 
 MO can take a screenshot and reason over it with a vision-capable provider, drive
@@ -284,6 +295,7 @@ export PATH="$HOME/.mo/bin:$PATH"
 | Ghost | Side-check/planning lane available from the TUI, without owning completion truth |
 | PRT (`/prt`) | Post-work review pipeline with evidence-weighted findings, including proven overengineering/duplication as maintainability risk; optional local maintainer regression tests for fixed bugs (`prt.regression_tests`) |
 | Learning loop | Recurring-pattern and workflow suggestions stay pending until you confirm; approved reusable guidance becomes local skill packs, scoped conventions can persist to matching code areas, and direct corrections/term definitions apply to your local profile |
+| External repo inspection | Point MO at a GitHub repo — the `inspect_repo` tool or `/learning inspect <url>` — and it builds an inert, approval-gated skill-candidate bundle: classifies the URL (full link or `owner/repo`), fetches metadata + README + dependency files, risk-scans (secrets, prompt injection, executable markers) and checks structural conflicts, and stages a candidate with name, kind, file count, risk tier, conflicts, and bundle location. Nothing is installed or executed; `/learning use` gives one-turn untrusted context, `/learning candidates` lists staged bundles, and `/learning promote <id>` turns an approved candidate into a local skill |
 | Profile portability | Export/import local profile and learning state between MO installs |
 | Headless service | Optional service mode for non-TUI surfaces such as Telegram polling |
 | Desktop Ghost | Optional local text/tray surface (presents as **Ghost**, with its own persona on an isolated session): summon with `Win+Alt+M`, use a small MO window near the cursor, Guide/Do mode, tray, action log, panic-stop, and optional local STT/TTS. Off by default; requires `ghost.enabled: true` (legacy `desktop_companion.enabled` still honored); voice deps are needed only when voice is enabled. Screen/cursor pointing stays on-demand through `capture_screen` and `point_on_screen`, not continuous watching |
