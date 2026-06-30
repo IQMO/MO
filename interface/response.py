@@ -364,11 +364,69 @@ def _table_row_fragments(line: str, *, is_header: bool) -> list[tuple[str, str]]
     return fragments
 
 
+_SENTENCE_ABBREV = frozenset({
+    "e.g.", "i.e.", "etc.", "vs.", "cf.", "al.", "dr.", "mr.", "mrs.", "ms.", "st.",
+    "no.", "fig.", "inc.", "ltd.", "u.s.", "a.m.", "p.m.", "approx.", "sr.", "jr.",
+    "prof.", "gen.", "est.", "dept.", "corp.", "min.", "max.",
+})
+_SENTENCE_BOUNDARY_RE = re.compile(r'(?<=[.!?])\s+(?=["\'(\[]?[A-Z0-9])')
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split a prose line so each sentence sits on its own line. Conservative:
+    only breaks on .!? + space + a capital/quote/number, and never after a known
+    abbreviation or a bare list-number marker ("1."). Returns the original text
+    (single item) when there is nothing to split."""
+    text = str(text).strip()
+    parts = _SENTENCE_BOUNDARY_RE.split(text)
+    if len(parts) <= 1:
+        return [text]
+    out: list[str] = []
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if out:
+            tail = (out[-1].split() or [""])[-1].lower()
+            if tail in _SENTENCE_ABBREV or re.fullmatch(r"\d{1,3}\.", tail):
+                out[-1] = f"{out[-1]} {part}"
+                continue
+        out.append(part)
+    return out or [text]
+
+
+def _is_plain_prose(line: str) -> bool:
+    """True only for ordinary left-aligned prose — not code, headings, section
+    labels, token lines, or bullets (which must not be sentence-split)."""
+    if not line.strip() or line.startswith(("    ", "\t")):  # blank or code-indented
+        return False
+    detect = _strip_inline_markers(line)
+    stripped = detect.strip()
+    if not stripped or stripped.endswith(":"):
+        return False
+    if _section_label_fragments(detect) or _TOKEN_LINE_RE.match(detect):
+        return False
+    if re.match(r"^\s*[-*•]\s+", detect):
+        return False
+    return True
+
+
 def response_block_fragment_lines(text: str, *, columns: int = DEFAULT_RESPONSE_COLUMNS, hide_marker: bool = False) -> list[list[tuple[str, str]]]:
     """Return logical transcript lines for an assistant response block."""
     lines = _strip_response_markdown_lines(_normalize_markdown_table_lines(str(text or ""), columns=columns))
     if not lines:
         return []
+    # Sentence-per-line: expand plain-prose lines so each sentence renders on its
+    # own line (the marker/continuation-indent logic below then handles each).
+    expanded: list[tuple[str, bool]] = []
+    for line, is_table in lines:
+        if not is_table and _is_plain_prose(line):
+            sentences = _split_sentences(line)
+            if len(sentences) > 1:
+                expanded.extend((sentence, False) for sentence in sentences)
+                continue
+        expanded.append((line, is_table))
+    lines = expanded
     marker = "  " if hide_marker else "✶ MO "
     rendered: list[list[tuple[str, str]]] = []
     table_border_count = 0  # borders seen in the current table block; header rows follow the 1st
