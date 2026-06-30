@@ -53,16 +53,14 @@ def startup_identity_lines(agent: Any) -> list[str]:
         runtime_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cwd = os.getcwd()
     home = str(getattr(agent, "runtime_home", "") or "")
-    provider = str(getattr(agent, "provider_name", "") or "")
-    model = str(getattr(agent, "model", "") or "")
+    # Model is shown prominently by the branded welcome below, so it's omitted
+    # here to avoid a duplicate line. This block stays a tight diagnostic:
+    # which checkout is running + home (+ mcp), nothing the welcome repeats.
     lines = ["MO Agent", f"  runtime: {runtime_root}"]
     if cwd and os.path.normcase(os.path.abspath(cwd)) != os.path.normcase(os.path.abspath(runtime_root)):
         lines.append(f"  project: {cwd}")
     if home:
         lines.append(f"  home:    {home}")
-    if provider or model:
-        sep = " / " if provider and model else ""
-        lines.append(f"  model:   {provider}{sep}{model}")
     mcp = getattr(agent, "mcp_manager", None)
     if mcp:
         try:

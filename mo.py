@@ -351,9 +351,12 @@ def main(argv: list[str] | None = None):
         print(f"  config: {config_path}", file=sys.stderr)
         print("Fix provider credentials or run `mo --init` to regenerate a private config.", file=sys.stderr)
         sys.exit(2)
-    notice = _render_existing_instances_notice(getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {})
-    # Notice is rendered into the TUI transcript by run_main_loop (so it scrolls and
-    # clears with the session), not printed to native scrollback above the TUI.
+    # No instance/handoff notice in the startup banner -- it was noisy clutter
+    # (live/stale pids, "isolated instance", "Singleton resources locked") that
+    # made startup look unprofessional, and it's irrelevant to single-instance
+    # use. The multi-instance resource locking still happens regardless; the
+    # full instance list is available on demand via `/sessions`.
+    notice = ""
     gateway = gateway_cls(agent)
     telegram = None
     heartbeat = None

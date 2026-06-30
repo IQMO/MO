@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import queue
+import time
 import traceback
 from typing import Any
 
@@ -37,12 +38,31 @@ class QueueingMixin:
         self._queue_input(text)
 
     def _queue_input(self, text: str, *, worker_id: str | None = None, source: str = "user", note: str = "queued for MO", notice: str | None = None):
+        # Coalesce a rapid burst of submits into ONE queued message. A multi-line
+        # paste on a terminal without bracketed paste (e.g. Windows Terminal)
+        # arrives as separate Enter keys -- one per line -- which would otherwise
+        # become N queued items (and N worker records). When plain user inputs
+        # land within a short window, append to the last queued item in place
+        # (the same dict is held by the pending queue), so the paste stays one
+        # message and one queue entry.
+        now = time.monotonic()
+        last = self._last_queued_input
+        if (
+            notice is None and worker_id is None and source == "user"
+            and last is not None and last.get("source") == "user"
+            and not last.get("steer")
+            and (now - getattr(self, "_last_queue_at", 0.0)) < 0.18
+        ):
+            last["text"] = (str(last.get("text") or "") + "\n" + text).strip()
+            self._last_queue_at = now
+            return
         registry = ensure_worker_registry(self.agent)
         if not worker_id:
             record = registry.create(kind="queue", source=source, route="queue", objective=text, state="accepted", note=note)
             worker_id = record.id
-        item = {"text": text, "worker_id": worker_id, "steer": False, "enter_count": 1}
+        item = {"text": text, "worker_id": worker_id, "steer": False, "enter_count": 1, "source": source}
         self._last_queued_input = item
+        self._last_queue_at = now
         self._pending_inputs.put(item)
         self._busy_escape_count = 0
         self._add("class:dim" if notice is None else "class:activity", notice or "  Queued next · Enter to steer · Esc to cancel")
