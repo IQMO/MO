@@ -5,6 +5,19 @@ import threading
 
 
 class InputDispatchMixin:
+    def _add_user_echo(self, text: str) -> None:
+        """Echo a submitted user message, gradient-colouring any ``extrathink`` run.
+
+        Plain ``class:user-msg`` for ordinary messages; a static colour gradient on
+        the trigger word so it stands out in scrollback (the transcript can't animate
+        per-frame, so history is static — colour only, glyphs/width unchanged)."""
+        from .moon_visuals import _EXTRATHINK_RE, gradient_line
+        line = f"* {text}"
+        if _EXTRATHINK_RE.search(line):
+            self._add_fragments_line(gradient_line(line, "class:user-msg"))
+        else:
+            self._add("class:user-msg", line)
+
     def _on_input_changed(self, buff):
         text = buff.text
         if text == "/" and not self._palette.open:
@@ -88,7 +101,7 @@ class InputDispatchMixin:
             if pending_input:
                 if render_result:
                     self._add("", "")
-                    self._add("class:user-msg", f"* {pending_input}")
+                    self._add_user_echo(pending_input)
                     self._add("", "")
                 else:
                     self._set_notice(f"running: {pending_input[:80]}")
@@ -166,7 +179,7 @@ class InputDispatchMixin:
             return
 
         self._add("", "")
-        self._add("class:user-msg", f"* {text}")
+        self._add_user_echo(text)
         self._add("", "")
         self._last_speaker = "user"
         threading.Thread(target=self._run_turn_thread, args=(text,), daemon=True).start()

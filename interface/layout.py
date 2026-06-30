@@ -1,6 +1,8 @@
 """Prompt-toolkit layout construction for MO TUI."""
 from __future__ import annotations
 
+import re
+import time
 from typing import Any
 
 from prompt_toolkit.formatted_text import HTML
@@ -60,6 +62,40 @@ class EnhanceHintProcessor(Processor):
         if not hint:
             return Transformation(fragments)
         return Transformation(list(fragments) + list(hint))
+
+
+_EXTRATHINK_RE = re.compile(r"\bextrathink\b", re.IGNORECASE)
+
+
+class ExtrathinkShineProcessor(Processor):
+    """Live per-frame shine on the ``extrathink`` trigger as it's typed.
+
+    Recolours only the matched characters (one fragment per char, no spacing or
+    width change — bold is never toggled), so the word shimmers in the composer
+    without resizing. The refresh loop invalidates while the buffer holds the word.
+    """
+
+    def __init__(self, tui: Any) -> None:
+        self.tui = tui
+
+    def apply_transformation(self, transformation_input):
+        fragments = transformation_input.fragments
+        text = "".join(t for _, t in fragments)
+        if "extrathink" not in text.lower():
+            return Transformation(fragments)
+        from .moon_visuals import shine_fragments
+        chars: list[list] = []
+        for style, run in fragments:
+            for ch in run:
+                chars.append([style, ch])
+        ts = time.time()
+        for m in _EXTRATHINK_RE.finditer(text):
+            shine = shine_fragments(text[m.start():m.end()], ts)
+            for offset, (st, _ch) in enumerate(shine):
+                idx = m.start() + offset
+                if 0 <= idx < len(chars):
+                    chars[idx][0] = st
+        return Transformation([(st, ch) for st, ch in chars])
 
 
 def input_visual_height(tui: Any, *, max_rows: int = INPUT_MAX_ROWS) -> int:
@@ -143,7 +179,7 @@ def build_tui_root(tui: Any, input_buffer: Any, prefix: HTML | None = None) -> F
             Window(content=FormattedTextControl(lambda: tui._palette.get_fragments()), dont_extend_height=True, height=Dimension(max=12)),
             filter=Condition(lambda: tui._palette.open),
         ),
-        Window(height=lambda: input_window_height(tui), content=BufferControl(buffer=input_buffer, input_processors=[BeforeInput(prefix), PlaceholderProcessor(), EnhanceHintProcessor(tui)]), dont_extend_height=True, wrap_lines=True),
+        Window(height=lambda: input_window_height(tui), content=BufferControl(buffer=input_buffer, input_processors=[BeforeInput(prefix), PlaceholderProcessor(), EnhanceHintProcessor(tui), ExtrathinkShineProcessor(tui)]), dont_extend_height=True, wrap_lines=True),
         Window(height=1, content=FormattedTextControl(lambda: tui._get_footer_fragments()), dont_extend_height=True),
     ])
 

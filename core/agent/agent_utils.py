@@ -20,6 +20,20 @@ class TurnCancelled(Exception):
     """Raised inside a turn when the UI requests a safe abort."""
 
 
+_EXTRATHINK_RE = re.compile(r"\bextrathink\b", re.IGNORECASE)
+
+
+def _is_extrathink(text: str) -> bool:
+    """True when the user's message carries the inline ``extrathink`` trigger.
+
+    Word-boundary + case-insensitive: fires on ``extrathink`` / ``EXTRATHINK`` but
+    not on substrings like ``extrathinking``. The word is a turn modifier, not a
+    command — the full message (word included) is still processed normally; it just
+    arms the one-shot re-audit gate and the shine effect for this turn.
+    """
+    return bool(_EXTRATHINK_RE.search(str(text or "")))
+
+
 def _emit_task_board_update(task_board: TaskBoard, *, update: str = "updated", on_board_update: object = None, on_board_event: object = None) -> str:
     """Emit legacy render callback and optional structured event; return rich render."""
     rich = render_rich(task_board)

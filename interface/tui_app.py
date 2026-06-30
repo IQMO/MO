@@ -163,9 +163,19 @@ class TuiAppMixin:
 
         def _refresh_loop():
             while not self._refresh_stop.is_set():
-                if self._app and (self.busy or self._goal_running or self._goal_worker_active or self._ghost_panel_open):
+                animate = self.busy or self._goal_running or self._goal_worker_active or self._ghost_panel_open
+                if not animate:
+                    # Drive the extrathink shine: while the trigger word sits in the
+                    # composer, or the post-turn confirmation banner is still up.
+                    try:
+                        buf_text = self._input_buf.text if getattr(self, "_input_buf", None) else ""
+                    except Exception:
+                        buf_text = ""
+                    if "extrathink" in buf_text.lower() or time.time() < getattr(self, "_extrathink_banner_until", 0.0):
+                        animate = True
+                if self._app and animate:
                     self._app.invalidate()
-                time.sleep(0.25)
+                time.sleep(0.1)  # ~10 FPS for smooth glow/shine
 
         threading.Thread(target=_refresh_loop, daemon=True).start()
         try:

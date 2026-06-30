@@ -365,6 +365,12 @@ class TurnRunnerMixin:
             self.activity_started_at = 0.0
             self._maybe_notify_model_change()
             self._maybe_warn_low_balance()
+            # extrathink: if the re-audit gate fired this turn, confirm it with the
+            # same word — a static gradient line for the record + a ~3s shimmer banner.
+            if getattr(self.agent, "_extrathink_reaudited", False):
+                from .moon_visuals import gradient_line
+                self._add_fragments_line(gradient_line("  ✦ extrathink ✦ — re-audit ran this turn", "class:dim"))
+                self._extrathink_banner_until = time.time() + 3.0
             # Completed taskboards leave the final MO report in transcript; incomplete
             # boards stay visible so unresolved work remains clear. Re-anchor here too
             # since the layout shrinks at turn end (board/activity lane removed), the

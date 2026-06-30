@@ -84,6 +84,32 @@ def _pipeline_local_extension_raw_stop(agent, ctx):
     return _apply_extension_result(agent, ctx, result)
 
 
+def _pipeline_extrathink_reaudit(agent, ctx):
+    """One-shot re-audit pass when the turn was armed with the ``extrathink`` trigger.
+
+    Fires once (before critique/finalization): inject a re-audit challenge and force
+    another provider pass so MO re-verifies its work against live state instead of
+    finalizing on first answer. Bounded to a single pass — no loop — to keep cost
+    predictable. No-op for every turn without the trigger.
+    """
+    if not getattr(agent, "_extrathink_active", False):
+        return None
+    if "extrathink_reaudit" in ctx.final_gates_fired:
+        return None
+    ctx.final_gates_fired.add("extrathink_reaudit")
+    agent._extrathink_reaudited = True
+    agent.session.add_assistant(
+        "[EXTRATHINK RE-AUDIT] Before finalizing, re-audit this turn against live state: "
+        "re-verify every claim you made (files, tests, runtime — not memory), re-check the "
+        "conditions, edge-cases, and tests you may have skipped, and confirm nothing the "
+        "request implied was missed. If anything is unverified or wrong, fix it and continue. "
+        "Only finalize once everything is verified."
+    )
+    if ctx.on_activity:
+        ctx.on_activity("extrathink: re-auditing…")
+    return _CONTINUE
+
+
 def _pipeline_critique(agent, ctx):
     if ctx.final_text:
         return None
@@ -280,6 +306,7 @@ def _pipeline_local_extension_final(agent, ctx):
 
 _POST_PROVIDER_PIPELINE = [
     ("local_extension_raw_stop", "gate", _pipeline_local_extension_raw_stop),
+    ("extrathink_reaudit", "gate", _pipeline_extrathink_reaudit),
     ("critique", "action", _pipeline_critique),
     ("continuity_gate", "gate", _pipeline_continuity_gate),
     ("memory_index", "action", _pipeline_memory_index),

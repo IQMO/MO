@@ -38,6 +38,7 @@ from .agent_utils import (
     _call_on_first_tool,
     _code_graph_age,
     _emit_task_board_update,
+    _is_extrathink,
     _looks_like_trivial_greeting,
     _truncate_recall,
     _usage_tokens,
@@ -197,6 +198,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             self._active_task_board = task_board
         start = self._prepare_turn_start(user_input, monitor=monitor, cancel_event=cancel_event)
         user_input = str(start.get("user_input") or "")
+        # Arm the per-turn extrathink re-audit (one bounded pass) when the operator
+        # included the inline trigger. Reset each turn so the flag reflects only the
+        # current message; the gate flips _extrathink_reaudited once it fires.
+        self._extrathink_active = _is_extrathink(user_input)
+        self._extrathink_reaudited = False
         if start.get("final_text") is not None:
             return str(start.get("final_text") or "")
         pre_handoff = bool(start.get("pre_handoff"))

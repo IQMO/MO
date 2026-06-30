@@ -21,7 +21,7 @@ from .ghost_panel import (
     panel_fragments as ghost_panel_fragments,
 )
 from .task_board_view import task_board_fragments_from_text
-from .moon_visuals import calculate_moon_glow
+from .moon_visuals import calculate_moon_glow, shine_fragments
 from .terminal_metrics import TerminalMetricsMixin
 from .transcript import _board_max_height as _transcript_board_max_height
 
@@ -160,6 +160,12 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
             return [("", "")]
         if self._goal_worker_active and not self._goal_backgrounded:
             return [("", "")]  # activity spinner handles foreground goal
+        if time.time() < getattr(self, "_extrathink_banner_until", 0.0):
+            # Transient post-turn confirmation: the same word, shimmering (~3s).
+            frags = [("class:dim", "  ✦ ")]
+            frags.extend(shine_fragments("extrathink", time.time()))
+            frags.append(("class:dim", " ✦ re-audit ran"))
+            return frags
         cols = self._terminal_columns()
             
         idle_style = "class:notification-idle"
