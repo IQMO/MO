@@ -325,14 +325,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
     def active_provider(self) -> BaseProvider:
         return self.providers[self.provider_index]
 
-    def _apply_profile_provider_preference(self) -> bool:
-        """Deprecated compatibility hook.
-
-        Provider lanes are config/code owned. Profile provider fields are kept as
-        operator metadata only and must not reorder or select runtime providers.
-        """
-        return False
-
     def _ordered_tool_definitions(self, definitions: list[dict]) -> list[dict]:
         """Order full tool list by profile preference without filtering tools."""
         preferred = [str(name).strip() for name in getattr(getattr(self, "profile", None), "preferred_tools", []) or [] if str(name).strip()]
@@ -427,14 +419,6 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         )
         self._last_model_slot_resolution = resolution
         return resolution
-
-    def _review_provider_chain(self) -> list[BaseProvider]:
-        """Review provider order: DeepSeek Pro, then Codex."""
-        return list(self._resolve_model_slot("review").providers)
-
-    def _ghost_provider_chain(self) -> list[BaseProvider]:
-        """Ghost provider order: Flash, DeepSeek Pro, then Codex."""
-        return list(self._resolve_model_slot("ghost").providers)
 
     @staticmethod
     def _provider_matches_config_selector(provider: BaseProvider | None, selector: str) -> bool:

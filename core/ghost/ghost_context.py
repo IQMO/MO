@@ -15,7 +15,7 @@ from typing import Any
 from ..runtime.backend_monitor import redact_monitor_text, tool_call_names
 from ..graph.code_graph import build_code_graph_context, should_include_code_graph_context
 from ..context.coordination_state import goal_summary_lines, worker_summary_lines
-from ..tasking.task_board import read_recent_snapshots, status_marker
+from ..tasking.task_board import read_recent_snapshots
 from ..tasking.task_board_context import compile_board_context, compile_board_context_from_snapshot
 
 
@@ -140,23 +140,6 @@ def _task_board_text(gateway: Any | None, ui_state: dict[str, Any], *, session_i
     if recent:
         return compile_board_context_from_snapshot(recent[-1], max_chars=900)["text"]
     return ""
-
-
-def _task_board_snapshot_text(snapshot: dict[str, Any]) -> str:
-    tasks = list(snapshot.get("tasks") or [])
-    if not tasks:
-        return ""
-    completed = sum(1 for task in tasks if task.get("status") == "completed")
-    open_count = sum(1 for task in tasks if task.get("status") in {"pending", "active", "blocked"})
-    lines = [f"Last recorded task board: {len(tasks)} tasks ({completed} done, {open_count} open) · ledger {snapshot.get('event', 'updated')}/{snapshot.get('state', 'active')}"]
-    for task in tasks[:8]:
-        status = str(task.get("status") or "pending")
-        marker = status_marker(status)
-        suffix = f" — {task.get('blocker')}" if task.get("blocker") else ""
-        lines.append(f"{marker} {task.get('title', 'task')}{suffix}")
-    if len(tasks) > 8:
-        lines.append(f"… {len(tasks) - 8} more task(s)")
-    return "\n".join(lines)
 
 
 def _goal_text(agent: Any) -> str:
