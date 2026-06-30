@@ -39,41 +39,25 @@ def should_use_prompt_toolkit_tui() -> bool:
 
 
 def startup_identity_lines(agent: Any) -> list[str]:
-    """One-time startup identity banner.
+    """Anomaly-only startup line — empty in normal use.
 
-    Surfaces the resolved runtime path — derived from the actually-imported
-    ``core`` package, not a hardcoded label — so a checkout launched from an
-    unexpected folder (e.g. a second clone) is obvious immediately, instead of
-    after a confused mid-session "which codebase am I?" investigation.
+    The branded welcome already shows the project, model, and runtime state, so
+    a generic identity block here was pure duplication. The one thing it can add
+    that the welcome can't: the resolved runtime path is derived from the
+    actually-imported ``core`` package, so when you launch a *different* checkout
+    than the directory you're working in (the classic "second clone" footgun),
+    that mismatch surfaces immediately. When the running checkout matches the
+    working dir — the normal case — this returns nothing.
     """
     try:
         import core
         runtime_root = os.path.dirname(os.path.dirname(os.path.abspath(core.__file__)))
     except Exception:
-        runtime_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return []
     cwd = os.getcwd()
-    home = str(getattr(agent, "runtime_home", "") or "")
-    # Model is shown prominently by the branded welcome below, so it's omitted
-    # here to avoid a duplicate line. This block stays a tight diagnostic:
-    # which checkout is running + home (+ mcp), nothing the welcome repeats.
-    lines = ["MO Agent", f"  runtime: {runtime_root}"]
     if cwd and os.path.normcase(os.path.abspath(cwd)) != os.path.normcase(os.path.abspath(runtime_root)):
-        lines.append(f"  project: {cwd}")
-    if home:
-        lines.append(f"  home:    {home}")
-    mcp = getattr(agent, "mcp_manager", None)
-    if mcp:
-        try:
-            clients = getattr(mcp, "_clients", {}) or {}
-            if clients:
-                summary = ", ".join(f"{n} ({len(getattr(c, 'tools', []) or [])} tools)" for n, c in clients.items())
-                degraded = list(getattr(mcp, "degraded", []) or [])
-                if degraded:
-                    summary += f"; degraded: {', '.join(degraded)}"
-                lines.append(f"  mcp:     {summary}")
-        except Exception:
-            pass
-    return lines
+        return [f"⚠ running checkout {runtime_root} (working dir {cwd})"]
+    return []
 
 
 def run_main_loop(agent: Any, gateway: Any, console: Any, has_rich: bool, startup_notice: str = "") -> None:
