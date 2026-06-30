@@ -52,16 +52,27 @@ def _completed_background_shells() -> list[dict]:
 
 
 def _looks_like_backgroundable(command: str, timeout: int) -> bool:
-    """Decide if a shell command should run in background (long-running)."""
-    if timeout >= 300:
-        return True
+    """Background ONLY full pytest suites — nothing else.
+
+    Per operator intent, backgrounding exists solely so a full test-suite run
+    doesn't freeze the TUI. Individual tests (file / :: / -k) and every
+    non-pytest command run FOREGROUND, so ordinary commands can never spawn
+    stray "shell N ◕" background workers.
+    """
     low = command.lower()
-    # Full pytest suite (not a single test or -k filtered)
-    if re.search(r'\b(pytest|python\s+-m\s+pytest)\b', low):
-        if "::" not in low and not re.search(r'\s+-k\s', low):
-            if timeout >= 120:
-                return True
-    return False
+    # Non-test commands always run foreground (no timeout-based backgrounding).
+    if not re.search(r'\b(pytest|python\s+-m\s+pytest)\b', low):
+        return False
+    if timeout < 120:
+        return False
+    # A specific target (file path, ::node, or -k expr) is not a full suite.
+    if "::" in low:
+        return False
+    if re.search(r'\s+-k\s', low):
+        return False
+    if re.search(r'\.py[\s"\'&|]|\.py$', low):
+        return False
+    return True
 from .screen import execute_capture_screen
 from .desktop import (
     execute_screen_size,
@@ -145,7 +156,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "tool_search",
-            "description": "Search MO's local tool catalog and activate matching deferred tool schemas for the next provider request. Use this before calling tools that are not currently available, such as editing, shell/test execution, web, browser, desktop, or memory-recording tools.",
+            "description": "Search MO's local tool catalog and activate matching deferred tool schemas for the next provider request. Use this before calling tools that are not currently available, such as shell/test execution, web, browser, desktop, or memory-recording tools.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1010,9 +1021,9 @@ def _execute_shell_background(
             "reported": False,
         }
 
-    cb = _SHELL_WORKER_CALLBACK
-    if callable(cb):
-        cb("create", shell_id, " ".join((command or "").split())[:160])
+    create_cb = _SHELL_WORKER_CALLBACK
+    if callable(create_cb):
+        create_cb("create", shell_id, " ".join((command or "").split())[:160])
 
     def _run() -> None:
         try:
@@ -1076,9 +1087,11 @@ def _execute_shell_background(
                     entry["output"] = output
                     entry["finished"] = time.time()
 
-            cb = _SHELL_WORKER_CALLBACK
-            if callable(cb):
-                cb("update", shell_id, final_state, output[:500] if output else "")
+            # Use the captured callback from outer scope to ensure the update
+            # reaches the same WorkerRegistry that created the record, even if
+            # the session/agent changes between start and completion.
+            if callable(create_cb):
+                create_cb("update", shell_id, final_state, output[:500] if output else "")
 
         except Exception as exc:
             with _BACKGROUND_LOCK:
@@ -1086,6 +1099,12 @@ def _execute_shell_background(
                 if entry:
                     entry["state"] = "failed"
                     entry["output"] = f"Error: {exc}"
+            # Mirror the inner-path update: tell the SAME WorkerRegistry that
+            # created the record that this worker failed, or it stays "running"
+            # forever (the stale "shell N ◕ MO" worker). Uses the captured
+            # create_cb, never a module-global refetch.
+            if callable(create_cb):
+                create_cb("update", shell_id, "failed", str(exc)[:500])
 
     thread = threading.Thread(target=_run, name=f"mo-shell-{shell_id}", daemon=True)
     thread.start()
@@ -1913,7 +1932,7 @@ TOOL_EXECUTORS = {
     "find_files": execute_find_files,
     "grep": execute_grep,
     "git_status": execute_git_status,
-"git_check_ignore": execute_git_check_ignore,
+    "git_check_ignore": execute_git_check_ignore,
     "test_runner": execute_test_runner,
     "project_bridge": execute_project_bridge,
     "web_fetch": execute_web_fetch,
