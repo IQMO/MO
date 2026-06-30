@@ -171,11 +171,11 @@ class TuiAppMixin:
                         buf_text = self._input_buf.text if getattr(self, "_input_buf", None) else ""
                     except Exception:
                         buf_text = ""
-                    if "extrathink" in buf_text.lower() or time.time() < getattr(self, "_extrathink_banner_until", 0.0):
+                    if "extrathink" in buf_text.lower():
                         animate = True
                 if self._app and animate:
                     self._app.invalidate()
-                time.sleep(0.1)  # ~10 FPS for smooth glow/shine
+                time.sleep(0.05)  # ~20 FPS for smooth glow/shine
 
         threading.Thread(target=_refresh_loop, daemon=True).start()
         try:

@@ -7,22 +7,27 @@ import time
 import threading
 from typing import Any
 
+# MO's "own-method" signal colour: gold. When MO runs its own features
+# (extrathink, owner protocols) the activity lane + footer "MO" glow gold.
+GOLD_RGB = (255, 180, 0)
+
+
+def _pulse_glow(timestamp: float, base: tuple[int, int, int]) -> str:
+    """Animated fg style: pulse a base colour brighter/back via its green channel."""
+    r_base, g_base, b_base = base
+    g = max(0, min(255, int(g_base + 40 * math.sin(timestamp * 2.0))))
+    return f"fg:#{r_base:02x}{g:02x}{b_base:02x} bold"
+
+
 def calculate_moon_glow(timestamp: float) -> str:
-    """
-    Generate an animated foreground color style for the MO logo.
-    Cycles between the skin's base glow and a brighter pulse.
-    """
+    """Animated fg for the MO logo — cycles the skin's base glow brighter."""
     from interface.theming import get_moon_glow_base
-    r_base, g_base, b_base = get_moon_glow_base()
-    speed = 2.0
+    return _pulse_glow(timestamp, get_moon_glow_base())
 
-    # Pulse the green channel to go between base and brighter
-    g_val = g_base + 40 * math.sin(timestamp * speed)
-    g = max(0, min(255, int(g_val)))
 
-    hex_color = f"#{r_base:02x}{g:02x}{b_base:02x}"
-    # Return as foreground color and bold
-    return f"fg:{hex_color} bold"
+def calculate_gold_glow(timestamp: float) -> str:
+    """Animated gold fg for the activity lane / footer while MO uses its own methods."""
+    return _pulse_glow(timestamp, GOLD_RGB)
 
 
 # ── extrathink shine ────────────────────────────────────────────────────────
@@ -30,12 +35,12 @@ def calculate_moon_glow(timestamp: float) -> str:
 # below keeps the exact glyphs/width of the word (one fragment per character, no
 # inserted spacing, no bold toggling that could reflow width).
 _SHINE_SPECTRUM = [
-    (0x8b, 0xe9, 0xfd),  # cyan
-    (0x50, 0xfa, 0x7b),  # green
-    (0xf1, 0xfa, 0x8c),  # yellow
-    (0xff, 0xb8, 0x6c),  # orange
-    (0xff, 0x79, 0xc6),  # pink
-    (0xbd, 0x93, 0xf9),  # purple
+    (0xb8, 0x86, 0x0b),  # dark goldenrod
+    (0xda, 0xa5, 0x20),  # goldenrod
+    (0xff, 0xd7, 0x00),  # gold
+    (0xff, 0xec, 0x8b),  # light gold
+    (0xff, 0xd7, 0x00),  # gold
+    (0xda, 0xa5, 0x20),  # goldenrod
 ]
 
 _EXTRATHINK_RE = re.compile(r"\bextrathink\b", re.IGNORECASE)
@@ -77,8 +82,10 @@ def shine_fragments(word: str, timestamp: float) -> list[tuple[str, str]]:
     n = len(word)
     if n == 0:
         return []
-    from interface.theming import get_moon_glow_base
-    br, bg, bb = get_moon_glow_base()
+    # Gold shimmer: deep gold base, peak to a bright pale gold (never pure white,
+    # so it reads as gold throughout — MO's own-method colour).
+    br, bg, bb = (170, 120, 10)
+    pr, pg, pb = (255, 240, 150)
     speed = 3.0
     span = n + 2.0
     centre = (timestamp * speed) % span - 1.0  # sweeps in and out smoothly
@@ -86,9 +93,9 @@ def shine_fragments(word: str, timestamp: float) -> list[tuple[str, str]]:
     for i, ch in enumerate(word):
         d = i - centre
         intensity = math.exp(-(d * d) / (2 * 1.4 * 1.4))  # gaussian bump ~1.4 wide
-        r = _lerp(br, 255, intensity)
-        g = _lerp(bg, 255, intensity)
-        b = _lerp(bb, 255, intensity)
+        r = _lerp(br, pr, intensity)
+        g = _lerp(bg, pg, intensity)
+        b = _lerp(bb, pb, intensity)
         out.append((f"fg:#{r:02x}{g:02x}{b:02x}", ch))
     return out
 
@@ -117,7 +124,7 @@ def start_moon_animation_tick(agent: Any, app: Any):
 
     def tick():
         while not stop.is_set():
-            time.sleep(0.1)  # ~10 FPS for smooth text glow
+            time.sleep(0.05)  # ~20 FPS for smooth text glow
             if getattr(agent, "_moon_mode_active", False):
                 if app:
                     app.invalidate()

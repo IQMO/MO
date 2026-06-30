@@ -21,7 +21,7 @@ from .ghost_panel import (
     panel_fragments as ghost_panel_fragments,
 )
 from .task_board_view import task_board_fragments_from_text
-from .moon_visuals import calculate_moon_glow, shine_fragments
+from .moon_visuals import calculate_gold_glow, calculate_moon_glow
 from .terminal_metrics import TerminalMetricsMixin
 from .transcript import _board_max_height as _transcript_board_max_height
 
@@ -54,10 +54,14 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
         if bool(self.busy) and time.time() <= float(getattr(self, "_ghost_route_flash_until", 0.0) or 0.0):
             return [("class:ghost-route", f" {self._ghost_route_bridge_text()} ")]
             
+        # MO's own-method signal: while extrathink (or any own method) is active,
+        # the activity lane glows gold instead of carrying a separate banner.
         moon_style = ""
-        if getattr(self.agent, "_moon_mode_active", False):
+        if getattr(self.agent, "_extrathink_active", False):
+            moon_style = calculate_gold_glow(time.time())
+        elif getattr(self.agent, "_moon_mode_active", False):
             moon_style = calculate_moon_glow(time.time())
-            
+
         return activity_fragments(
             busy=bool(self.busy),
             goal_worker_active=bool(self._goal_worker_active),
@@ -106,10 +110,13 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
     def _get_footer_fragments(self):
         cols = max(20, self._terminal_columns())
         
+        # Footer "MO" (worker status) glows gold while MO runs its own method.
         moon_style = ""
-        if getattr(self.agent, "_moon_mode_active", False):
+        if getattr(self.agent, "_extrathink_active", False):
+            moon_style = calculate_gold_glow(time.time())
+        elif getattr(self.agent, "_moon_mode_active", False):
             moon_style = calculate_moon_glow(time.time())
-            
+
         return footer_fragments(self._footer_left_fragments(), columns=cols, right=self._workers_status_text(), right_style=moon_style)
 
     def _footer_left_fragments(self) -> list[tuple[str, str]]:
@@ -160,12 +167,6 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
             return [("", "")]
         if self._goal_worker_active and not self._goal_backgrounded:
             return [("", "")]  # activity spinner handles foreground goal
-        if time.time() < getattr(self, "_extrathink_banner_until", 0.0):
-            # Transient post-turn confirmation: the same word, shimmering (~3s).
-            frags = [("class:dim", "  ✦ ")]
-            frags.extend(shine_fragments("extrathink", time.time()))
-            frags.append(("class:dim", " ✦ re-audit ran"))
-            return frags
         cols = self._terminal_columns()
             
         idle_style = "class:notification-idle"
