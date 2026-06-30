@@ -613,8 +613,12 @@ def _numbered_lines(lines: list[str], start_line: int = 1) -> str:
 
 def execute_read_file(arguments: dict[str, Any]) -> str:
     path = arguments["path"]
-    offset = arguments.get("offset")
-    limit = arguments.get("limit")
+    offset = _coerce_positive_int(arguments.get("offset"), "offset")
+    limit = _coerce_positive_int(arguments.get("limit"), "limit")
+    if isinstance(offset, str):
+        return offset
+    if isinstance(limit, str):
+        return limit
     p = Path(path)
     if not p.exists():
         return f"Error: File not found: {path}"
@@ -636,6 +640,20 @@ def execute_read_file(arguments: dict[str, Any]) -> str:
     if total_lines > 2000 or len(content) > 50000:
         return f"[Truncated — showing first 2000 of {total_lines} lines]\n" + _numbered_lines(lines[:2000], 1)
     return f"[Lines 1-{total_lines} of {total_lines}]\n" + _numbered_lines(lines, 1)
+
+
+def _coerce_positive_int(value: Any, name: str) -> int | None | str:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return f"Error: {name} must be a positive integer."
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return f"Error: {name} must be a positive integer."
+    if coerced < 1:
+        return f"Error: {name} must be a positive integer."
+    return coerced
 
 
 def execute_write_file(arguments: dict[str, Any]) -> str:
@@ -980,7 +998,10 @@ def execute_shell(arguments: dict[str, Any]) -> str:
 def execute_find_files(arguments: dict[str, Any]) -> str:
     pattern = str(arguments.get("pattern", ""))
     root = arguments.get("root") or os.getcwd()
-    limit = max(1, min(int(arguments.get("limit", 200)), 1000))
+    limit_value = _coerce_positive_int(arguments.get("limit", 200), "limit")
+    if isinstance(limit_value, str):
+        return limit_value
+    limit = min(limit_value or 200, 1000)
     root_path = Path(root)
     if not root_path.exists():
         return f"Error: root not found: {root_path}"
@@ -1019,7 +1040,10 @@ def execute_grep(arguments: dict[str, Any]) -> str:
     pattern = arguments["pattern"]
     root = arguments.get("root") or os.getcwd()
     file_glob = str(arguments.get("file_glob", ""))
-    limit = max(1, min(int(arguments.get("limit", 200)), 1000))
+    limit_value = _coerce_positive_int(arguments.get("limit", 200), "limit")
+    if isinstance(limit_value, str):
+        return limit_value
+    limit = min(limit_value or 200, 1000)
     root_path = Path(root)
     if not root_path.exists():
         return f"Error: root not found: {root_path}"
