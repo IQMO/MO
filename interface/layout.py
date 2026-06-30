@@ -185,6 +185,7 @@ def build_tui_root(tui: Any, input_buffer: Any, prefix: HTML | None = None) -> F
 
     return FloatContainer(
         content=body,
+        style="class:body",  # skin-painted backdrop (resolves live on /skin)
         floats=[Float(
             xcursor=True,
             ycursor=True,

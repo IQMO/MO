@@ -290,6 +290,10 @@ def skin_to_tui_style_dict(skin: Skin | None = None) -> dict[str, str]:
     s = skin or get_skin()
     b = s.brand_primary       # short alias
     return {
+        # Painted app background so the skin owns the backdrop (not the terminal's
+        # bare black). full_screen=False means only drawn rows get it, but the layout
+        # fills the height, so the visible area carries the skin's bg_dark.
+        "body": f"bg:{s.bg_dark} {s.text_primary}",
         "separator": s.text_placeholder,
         "footer": s.text_dim,
         "spinner": s.spinner,
