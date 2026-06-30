@@ -26,7 +26,27 @@ from .terminal_metrics import TerminalMetricsMixin
 from .transcript import _board_max_height as _transcript_board_max_height
 
 
+# MO's own-capability tools — graph/code-structure + memory. When one of these is
+# the active tool, MO is "thinking with its own methods" → the activity lane and
+# footer "MO" glow gold. Generic ops (read/edit/write/shell/grep/web/browser) don't.
+_MO_OWN_TOOLS = frozenset({
+    "code_search", "find_callers", "find_callees", "inspect_repo",
+    "visualize", "record_convention", "record_profile_fact",
+})
+
+
 class DisplayDelegatesMixin(TerminalMetricsMixin):
+    def _activity_is_own_method(self) -> bool:
+        """True while the current activity is one of MO's own-capability tools
+        (graph/code-structure, memory) — drives the gold glow, reverting to the
+        normal colour for generic tools or idle."""
+        act = str(getattr(self, "activity_text", "") or "")
+        _head, _open, rest = act.partition("(")
+        if not rest.strip():
+            return False
+        verb = rest.split(None, 1)[0].rstrip(")")
+        return verb in _MO_OWN_TOOLS
+
     def _board_max_height(self) -> int:
         """Dynamic max rows a board window may occupy.
 
@@ -54,10 +74,9 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
         if bool(self.busy) and time.time() <= float(getattr(self, "_ghost_route_flash_until", 0.0) or 0.0):
             return [("class:ghost-route", f" {self._ghost_route_bridge_text()} ")]
             
-        # MO's own-method signal: while extrathink (or any own method) is active,
-        # the activity lane glows gold instead of carrying a separate banner.
+        # Gold while MO uses its own tooling (graph/memory), normal otherwise.
         moon_style = ""
-        if getattr(self.agent, "_extrathink_active", False):
+        if self._activity_is_own_method():
             moon_style = calculate_gold_glow(time.time())
         elif getattr(self.agent, "_moon_mode_active", False):
             moon_style = calculate_moon_glow(time.time())
@@ -110,9 +129,9 @@ class DisplayDelegatesMixin(TerminalMetricsMixin):
     def _get_footer_fragments(self):
         cols = max(20, self._terminal_columns())
         
-        # Footer "MO" (worker status) glows gold while MO runs its own method.
+        # Footer "MO" (worker status) glows gold while MO uses its own tooling.
         moon_style = ""
-        if getattr(self.agent, "_extrathink_active", False):
+        if self._activity_is_own_method():
             moon_style = calculate_gold_glow(time.time())
         elif getattr(self.agent, "_moon_mode_active", False):
             moon_style = calculate_moon_glow(time.time())

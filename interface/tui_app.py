@@ -175,7 +175,7 @@ class TuiAppMixin:
                         animate = True
                 if self._app and animate:
                     self._app.invalidate()
-                time.sleep(0.05)  # ~20 FPS for smooth glow/shine
+                time.sleep(0.016)  # ~60 FPS for smooth glow/shine
 
         threading.Thread(target=_refresh_loop, daemon=True).start()
         try:
