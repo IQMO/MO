@@ -344,18 +344,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                 if on_token:
                     on_token(token)
 
-            # Pre-call capacity gate: skip exhausted providers proactively
-            cap = get_capacity()
-            if not cap.can_accept(self.provider_name):
-                cap_reason = "primary provider rate/concurrency limit (pre-call capacity check)"
-                if self._next_provider(cap_reason):
-                    if on_activity:
-                        on_activity(f"capacity-aware fallback to {self.provider_name}/{self.model}")
-                    if monitor:
-                        monitor.emit("provider_fallback", {"request": provider_requests, "provider": self.provider_name, "model": self.model, "reason": cap_reason})
-                    turn_provider_fallbacks += 1
-                    continue
-
+            # No proactive pre-call capacity skip: stay on the operator's chosen
+            # model and only fall back AFTER a real failed call (the reactive path
+            # in the except block below), never preemptively. Rate-limit state is
+            # still recorded on a real error and used to pick a live target WHEN a
+            # genuine fallback fires.
             try:
                 response = self._call_provider(on_token=checked_on_token if on_token else None, extra_context=extra_context)
             except TurnCancelled:

@@ -149,21 +149,28 @@ class TurnRunnerMixin:
                 traceback.print_exc()
         _apply()
 
-    def _maybe_notify_model_change(self, model_at_start: tuple) -> None:
-        """Surface a mid-turn provider/model fallback in the transcript.
+    def _maybe_notify_model_change(self) -> None:
+        """Surface a provider/model fallback the MOMENT it happens.
 
         The runtime auto-falls-through the provider chain on rate/route/balance
         blocks, which can silently land on a weaker model (e.g. big-pickle) — the
-        operator had to ask "why did you change model". This makes it visible: one
-        notice only when the model actually changes during the turn.
+        operator had to ask "why did you change model". This is called live from
+        on_activity (the agent fires on_activity at the fallback point) so the
+        notice appears immediately, not buffered until the turn finishes
+        reporting. It dedupes against the last-notified model so each real change
+        shows exactly once, and a post-turn call acts as a backstop.
         """
         try:
             now = (getattr(self.agent, "provider_name", ""), getattr(self.agent, "model", ""))
-            if not model_at_start or now == model_at_start or not now[1]:
+            if not now[1]:
+                return
+            last = getattr(self, "_last_notified_model", None)
+            if last is None or now == last:
                 return
             reason = str(getattr(self.agent, "last_fallback_notice", "") or "").strip()
             tail = f" - {reason}" if reason else ""
             self._add("class:model-fallback", f"  ⚠ Model fallback: now on {now[0]}/{now[1]}{tail}")
+            self._last_notified_model = now
         except Exception:
             traceback.print_exc()
 
@@ -197,6 +204,9 @@ class TurnRunnerMixin:
         # Snapshot the model so a mid-turn provider fallback is surfaced to the
         # operator (e.g. deepseek-v4-pro -> big-pickle on a rate/route block).
         model_at_start = (getattr(self.agent, "provider_name", ""), getattr(self.agent, "model", ""))
+        # Baseline for the live model-fallback notice: any change away from this
+        # is surfaced the instant on_activity fires at the fallback point.
+        self._last_notified_model = model_at_start
         main_worker_id = getattr(self, "_active_main_worker_id", "") or ""
         route_source = "user"
         if main_worker_id:
@@ -242,6 +252,10 @@ class TurnRunnerMixin:
 
             def on_activity(act: str):
                 self.activity_text = act
+                # Surface a provider/model fallback the instant it happens — the
+                # agent calls on_activity at the fallback point, so this no longer
+                # waits for the turn to finish reporting.
+                self._maybe_notify_model_change()
                 if self._show_tool_activity and "tooling" in act:
                     self._add_tool_activity_line(_tool_label_from_activity(act))
                 if self._app:
@@ -349,7 +363,7 @@ class TurnRunnerMixin:
             self._busy_escape_count = 0
             self.activity_text = ""
             self.activity_started_at = 0.0
-            self._maybe_notify_model_change(model_at_start)
+            self._maybe_notify_model_change()
             self._maybe_warn_low_balance()
             # Completed taskboards leave the final MO report in transcript; incomplete
             # boards stay visible so unresolved work remains clear. Re-anchor here too
