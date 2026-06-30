@@ -60,6 +60,15 @@ def _shorten_target(target: str, limit: int = 52) -> str:
     return head.rstrip() + "…"
 
 
+def _reasoning_body(text: str) -> str:
+    """Strip the reasoning marker (the ASCII ``[reasoning]`` tag from the agent, or
+    a leading ``💭``) so only the reasoning content shows — no bracketed tag."""
+    body = str(text).strip()
+    if body.startswith("[reasoning]"):
+        body = body[len("[reasoning]"):].strip()
+    return body.lstrip("💭").strip()
+
+
 def _reasoning_gist(text: str) -> str:
     """Collapse a reasoning chunk to one line: the model's own first sentence.
 
@@ -67,7 +76,7 @@ def _reasoning_gist(text: str) -> str:
     literally the start of what the model reasoned) while the full chain stays
     behind /show reasoning.
     """
-    body = text.lstrip("💭").strip()
+    body = _reasoning_body(text)
     line = body.splitlines()[0] if body else ""
     for end in (". ", "? ", "! "):
         i = line.find(end)
@@ -369,17 +378,17 @@ class TurnRunnerMixin:
                 clean = str(text or "").strip()
                 if not clean:
                     return
-                is_reasoning = clean.startswith("💭")
+                is_reasoning = clean.startswith("💭") or clean.startswith("[reasoning]")
                 is_tool = clean.startswith("▸") or "tooling (" in clean
                 if is_tool and not getattr(self, "_show_tool_activity", True):
                     return
                 # Colour by content type so secondary chrome doesn't wear the answer
-                # colour: reasoning -> dim italic, tool activity -> dim (same as the
-                # live activity line), real prose -> the answer response block.
+                # colour: reasoning -> dim italic (no bracketed tag), tool activity ->
+                # dim, real prose -> the answer response block.
                 if is_reasoning:
                     if getattr(self, "_show_reasoning", True):
                         interim_seen.append(clean)
-                        self._add("class:reasoning", clean)
+                        self._add("class:reasoning", f"💭 {_reasoning_body(clean)}")
                     elif not getattr(self, "_reasoning_gist_shown", False):
                         # Collapsed view: one gist line for the turn, suppress the rest.
                         self._reasoning_gist_shown = True
