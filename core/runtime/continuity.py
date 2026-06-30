@@ -95,56 +95,33 @@ def render_current_work_snapshot(snapshot: dict[str, Any] | None = None) -> str:
     """Render provider-facing continuity context."""
     snap = snapshot or build_current_work_snapshot()
     session = snap.get("current_session") or {}
-    heartbeat = snap.get("heartbeat") or {}
     live_board = snap.get("live_taskboard") or {}
     latest_board = snap.get("latest_taskboard") or {}
     closeout = snap.get("latest_closeout") or {}
-    trace = snap.get("latest_trace") or {}
     git = snap.get("git") or {}
     lines = [
-        "### Current Work Snapshot - runtime truth for continuity questions",
-        "Use this before episodic memory. Memory recall is older orientation, not current work truth.",
-        "Do not answer 'nothing active' unless the live taskboard, latest closeout, heartbeat, and git lines below support it.",
-        f"- Current session: slot {session.get('slot') or '?'}; turns {session.get('turn_count', 0)}; messages {session.get('message_count', 0)}.",
+        "### Current Work Snapshot - recent runtime state for a continuity answer",
+        "This is private orientation. Summarize it in your own words; never transcribe internal ledger fields, trace names, closeout topics, or markers to the user.",
+        f"- Current session: turns {session.get('turn_count', 0)}; messages {session.get('message_count', 0)}.",
     ]
     if session.get("latest_user"):
         lines.append(f"- Latest user in this session: {_clip(session.get('latest_user'), 180)}")
-    if heartbeat:
-        lines.append(
-            f"- Latest heartbeat: event {heartbeat.get('event') or '?'}; slot {heartbeat.get('slot') or '?'}; "
-            f"turns {heartbeat.get('turn_count', 0)}; taskboard open {heartbeat.get('taskboard_open', 0)}."
-        )
     lines.append(
         f"- Live taskboard: {live_board.get('state', 'none')}; total {live_board.get('total', 0)}, "
         f"open {live_board.get('open', 0)}, completed {live_board.get('completed', 0)}."
     )
-    if latest_board:
-        lines.append(
-            f"- Latest taskboard ledger: {latest_board.get('state') or latest_board.get('event') or '?'}; "
-            f"open {latest_board.get('open', 0)}; "
-            f"title {_clip(latest_board.get('title') or latest_board.get('objective') or '', 140)}."
-        )
+    if int(latest_board.get("open") or 0) > 0:
+        lines.append(f"- Open taskboard rows this session: {latest_board.get('open', 0)}.")
     if closeout:
-        closeout_line = (
-            f"- Latest closeout: {closeout.get('reason') or '?'}; "
-            f"{closeout.get('status') or '?'}; turns/messages "
-            f"{closeout.get('turn_count', 0)}/{closeout.get('message_count', 0)}"
+        lines.append(
+            f"- Previous session ended {closeout.get('reason') or '?'} "
+            f"({closeout.get('status') or '?'}); turns/messages "
+            f"{closeout.get('turn_count', 0)}/{closeout.get('message_count', 0)}."
         )
-        if closeout.get("topic"):
-            closeout_line += f"; topic {_clip(closeout.get('topic'), 160)}"
-        if closeout.get("terminal_marker"):
-            closeout_line += f"; marker {closeout.get('terminal_marker')}"
-        lines.append(closeout_line + ".")
-        if int(closeout.get("turn_count") or 0) == 0 and int(closeout.get("message_count") or 0) > 0:
-            lines.append("- Note: a 0-turn runtime closeout with messages is not an empty/no-work session.")
-    if trace:
-        validation = trace.get("validation") or ""
-        suffix = f"; validation {validation}" if validation else ""
-        lines.append(f"- Latest trace: {trace.get('name')}{suffix}.")
     if git:
         dirty = int(git.get("dirty_count") or 0)
-        lines.append(f"- Git: branch {git.get('branch') or '?'}; dirty lines {dirty}.")
-    lines.append("Answer continuity by naming open work first, then latest completed/closed work. Mention older memory only after these runtime facts.")
+        lines.append(f"- Git: branch {git.get('branch') or '?'}; {dirty} uncommitted line(s).")
+    lines.append("If nothing is open, say so plainly and ask what to pick up. Do not manufacture continuity from stale prior-session scraps, and do not surface trace/validation diagnostics - those are not conversational.")
     return "\n".join(lines)
 
 
@@ -213,32 +190,21 @@ def continuity_gate_instruction(user_input: str, final_text: str, snapshot: dict
     if not looks_like_continuity_question(user_input):
         return None
     if not snapshot:
-        return (
-            "You are answering a continuity/current-work question without the Current Work Snapshot. "
-            "Use runtime continuity state first: current session, heartbeat, taskboard ledger, latest closeout/session index, latest trace, and git. "
-            "Then answer again; use episodic memory only as older orientation."
-        )
+        return None
+    # The only thing worth a retry: claiming "nothing active" when the taskboard
+    # actually has open rows for THIS session. We no longer coerce the model into
+    # reciting closeout topics, markers, or trace diagnostics -- that machinery
+    # turned stale, cross-session, and sometimes garbage internal fields into
+    # user-facing answers (the continuity drift). Phrasing is the model's job.
     text = str(final_text or "")
-    closeout = snapshot.get("latest_closeout") or {}
     live_board = snapshot.get("live_taskboard") or {}
     latest_board = snapshot.get("latest_taskboard") or {}
-    topic = str(closeout.get("topic") or "").strip()
-    marker = str(closeout.get("terminal_marker") or "").strip()
-    turn_count = int(closeout.get("turn_count") or 0)
-    message_count = int(closeout.get("message_count") or 0)
     open_count = int(live_board.get("open") or 0) + int(latest_board.get("open") or 0)
-
-    if _NEGATIVE_CONTINUITY_RE.search(text):
-        if open_count > 0:
-            return _continuity_retry_text("You said there was no active work, but runtime taskboard state has open work.", snapshot)
-        if topic and not _topic_words_present(text, topic):
-            return _continuity_retry_text("You made a no-active-work claim without naming the latest runtime closeout topic.", snapshot)
-        if marker and marker.lower() not in text.lower():
-            return _continuity_retry_text("You made a no-active-work claim without naming the latest terminal closeout marker.", snapshot)
-        if turn_count == 0 and message_count > 0 and re.search(r"(?i)\b0\s+turns\b", text):
-            return _continuity_retry_text("You treated a 0-turn runtime closeout with messages as empty work.", snapshot)
-    if topic and "recalled" in text.lower() and not _topic_words_present(text, topic):
-        return _continuity_retry_text("You cited recalled older interactions but skipped the latest runtime closeout topic.", snapshot)
+    if open_count > 0 and _NEGATIVE_CONTINUITY_RE.search(text):
+        return _continuity_retry_text(
+            "You said there is no active work, but the taskboard has open rows for this session.",
+            snapshot,
+        )
     return None
 
 
@@ -288,8 +254,14 @@ def _board_open_count(board: Any | None) -> int:
 
 def _latest_taskboard_snapshot(*, session_id: str = "") -> dict[str, Any]:
     try:
-        recent = read_recent_snapshots(limit=12, session_id=session_id) if session_id else []
-        if not recent:
+        # Scope to THIS session. A fresh terminal does not resume prior work, so
+        # falling back to a global (cross-session) board here surfaced another
+        # session's open rows as if they were current — the phantom "N open"
+        # that made continuity answers drift. Only read globally when we have no
+        # session context at all.
+        if session_id:
+            recent = read_recent_snapshots(limit=12, session_id=session_id)
+        else:
             recent = read_recent_snapshots(limit=12)
     except Exception:
         return {}
@@ -464,13 +436,3 @@ def _public_trace_label(value: str) -> str:
 def _clip(value: Any, limit: int) -> str:
     text = " ".join(str(value or "").replace("\r", "\n").split())
     return text[: max(0, limit - 1)].rstrip() + ("..." if len(text) > limit else "")
-
-
-def _topic_words_present(text: str, topic: str) -> bool:
-    final_words = {word.lower() for word in re.findall(r"[A-Za-z0-9_]{4,}", text)}
-    topic_words = [word.lower() for word in re.findall(r"[A-Za-z0-9_]{4,}", topic)]
-    if not topic_words:
-        return True
-    important = [word for word in topic_words if word not in {"start", "what", "were", "with", "this", "that"}]
-    important = important or topic_words
-    return any(word in final_words for word in important[:5])
