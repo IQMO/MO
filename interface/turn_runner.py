@@ -168,36 +168,63 @@ class TurnRunnerMixin:
             return bool(tasks) and not any(str(getattr(task, "status", "") or "") in {"pending", "active", "blocked"} for task in tasks)
 
     def _start_prompt_enhance(self, original: str) -> None:
-        """Kick off Ctrl+E prompt enhancement off the UI thread.
+        """Hybrid Ctrl+E: show the instant local enhancement now, refine in the bg.
 
-        The enhancer makes a provider call (~1-2s); running it inline would freeze
-        the TUI. We run it on a daemon thread and apply the result back on the
-        event loop. The operator's original is stashed so Esc can revert.
+        The deterministic local pass is instant (no provider call), so the input
+        row updates with zero latency. The slower provider rewrite then runs on a
+        daemon thread and only replaces the shown text if it's a real improvement
+        AND the operator hasn't edited it meanwhile. The original is stashed so Esc
+        reverts.
         """
         if getattr(self, "_enhance_in_flight", False):
             return
+        original_stripped = str(original or "").strip()
+        instant = ""
+        try:
+            fn = getattr(self.agent, "enhance_prompt_local", None)
+            if callable(fn):
+                instant = str(fn(original) or "").strip()
+        except Exception:
+            traceback.print_exc()
+        if instant and instant != original_stripped:
+            self._pre_enhance_text = original
+            self._enhance_holder_active = True
+            self._input_buf.text = instant
+            self._input_buf.cursor_position = len(instant)
+            self._set_notice("Enhanced · refining…")
+        else:
+            instant = ""
+            self._set_notice("Refining…")
         self._enhance_in_flight = True
-        self._set_notice("Enhancing…")
+        self._enhance_shown_text = instant  # detect operator edits before the swap
         if self._app:
             self._app.invalidate()
         threading.Thread(target=self._run_enhance_thread, args=(original,), daemon=True).start()
 
     def _run_enhance_thread(self, original: str) -> None:
-        enhanced = ""
+        refined = ""
         try:
             fn = getattr(self.agent, "enhance_prompt_for_input", None)
             if callable(fn):
-                enhanced = str(fn(original) or "").strip()
+                refined = str(fn(original) or "").strip()
         except Exception:
             traceback.print_exc()
 
         def _apply() -> None:
             self._enhance_in_flight = False
-            if enhanced and enhanced != str(original or "").strip():
+            shown = str(getattr(self, "_enhance_shown_text", "") or "")
+            current = str(self._input_buf.text or "").strip()
+            original_stripped = str(original or "").strip()
+            # Swap to the provider refinement only if it's a genuine improvement
+            # and the operator hasn't typed over the instant result meanwhile.
+            untouched = (current == shown) or (not shown and current == original_stripped)
+            if refined and refined != current and refined != original_stripped and untouched:
                 self._pre_enhance_text = original
                 self._enhance_holder_active = True
-                self._input_buf.text = enhanced
-                self._input_buf.cursor_position = len(enhanced)
+                self._input_buf.text = refined
+                self._input_buf.cursor_position = len(refined)
+                self._set_notice("Enhanced — Esc to revert")
+            elif shown:
                 self._set_notice("Enhanced — Esc to revert")
             else:
                 self._set_notice("No change")

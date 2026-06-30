@@ -1651,6 +1651,15 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
             value = value[:max_chars].rsplit(" ", 1)[0] + "…"
         return value
 
+    def enhance_prompt_local(self, rough: str) -> str:
+        """Instant, deterministic prompt enhancement — no provider call.
+
+        The fast first half of the hybrid Ctrl+E flow: the TUI shows this with zero
+        latency, then refines with enhance_prompt_for_input in the background.
+        """
+        from ..context.prompt_enhancer import enhance_prompt
+        return enhance_prompt(str(rough or "").strip(), getattr(self, "profile", None))
+
     def enhance_prompt_for_input(self, rough: str, *, include_marker: bool = False) -> str:
         """Provider-backed Ctrl+E prompt enhancement with local deterministic fallback.
 
