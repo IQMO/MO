@@ -67,19 +67,36 @@ def auto_build_enabled() -> bool:
     return str(raw).strip().lower() not in {"0", "false", "off", "no", "disabled"}
 
 
+_PROJECT_ROOT_CACHE: dict[str, Path] = {}
+
+
 def project_root(cwd: str | Path | None = None) -> Path:
-    """Resolve a project root using git when available."""
-    path = Path(cwd or os.getcwd()).resolve()
+    """Resolve a project root using git when available.
+
+    Memoized by the input cwd: the git toplevel for a directory is stable within
+    a session, and the path helpers below (graph_path, native_graph_path,
+    graph_status, load_graph_data, ...) call this ~13 times per select_context.
+    Without the cache that is ~13 `git rev-parse` subprocess spawns per turn
+    (~260ms of pure process overhead) — the real cost behind the "slow" per-turn
+    code-graph context, not the node ranking.
+    """
+    key = str(cwd or os.getcwd())
+    cached = _PROJECT_ROOT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    path = Path(key).resolve()
+    result = path
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             cwd=str(path), text=True, capture_output=True, timeout=3,
         )
         if proc.returncode == 0 and proc.stdout.strip():
-            return Path(proc.stdout.strip()).resolve()
+            result = Path(proc.stdout.strip()).resolve()
     except Exception:
         traceback.print_exc()
-    return path
+    _PROJECT_ROOT_CACHE[key] = result
+    return result
 
 
 def native_graph_path(root: str | Path | None = None, *, config: dict[str, Any] | None = None) -> Path:
@@ -157,14 +174,33 @@ def graph_exists(root: str | Path | None = None) -> bool:
     return structural_graph_enabled() and graph_path(root).is_file()
 
 
+_GRAPH_DATA_CACHE: dict[str, tuple[str, dict[str, Any]]] = {}
+
+
 def load_graph_data(root: str | Path | None = None) -> dict[str, Any] | None:
-    """Load structural graph node-link JSON if present and small enough."""
+    """Load structural graph node-link JSON if present and small enough.
+
+    Memoized by the graph file's (mtime, size). select_context and graph_status
+    each call this within a single turn, re-reading + JSON-parsing the same
+    multi-MB file every time. The cache self-invalidates the instant the graph is
+    rebuilt (new mtime/size), so a stale graph is never served. All callers treat
+    the returned dict as read-only.
+    """
     if not structural_graph_enabled():
         return None
     path = graph_path(root)
     try:
-        if not path.is_file() or path.stat().st_size > MAX_GRAPH_BYTES:
+        st = path.stat()
+        if not path.is_file() or st.st_size > MAX_GRAPH_BYTES:
             return None
+    except Exception:
+        return None
+    key = str(path)
+    fingerprint = f"{st.st_mtime_ns}:{st.st_size}"
+    cached = _GRAPH_DATA_CACHE.get(key)
+    if cached is not None and cached[0] == fingerprint:
+        return cached[1]
+    try:
         data = _load_graph_json(path)
     except Exception:
         return None
@@ -172,7 +208,10 @@ def load_graph_data(root: str | Path | None = None) -> dict[str, Any] | None:
         return None
     if not isinstance(_edge_list(data), list):
         return None
-    return _migrate_graph(data)
+    migrated = _migrate_graph(data)
+    if migrated is not None:
+        _GRAPH_DATA_CACHE[key] = (fingerprint, migrated)
+    return migrated
 
 
 def _load_graph_json(path: Path) -> dict[str, Any] | None:
