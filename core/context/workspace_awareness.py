@@ -39,7 +39,7 @@ def should_include_workspace_awareness(user_input: str) -> bool:
 def build_workspace_awareness(agent: Any, *, cwd: str | None = None, max_files: int = 12) -> str:
     """Return a short safe context block for main MO coordination."""
     lines: list[str] = []
-    git_summary = _git_status_summary(cwd or os.getcwd(), max_files=max_files)
+    git_summary = _git_status_summary(cwd or os.getcwd(), max_files=max_files, agent=agent)
     if git_summary:
         lines.append(git_summary)
 
@@ -58,7 +58,7 @@ def build_workspace_awareness(agent: Any, *, cwd: str | None = None, max_files: 
     return "### Workspace / worker awareness\n" + "\n".join(lines) + "\n" + guidance
 
 
-def _git_status_summary(cwd: str, *, max_files: int) -> str:
+def _git_status_summary(cwd: str, *, max_files: int, agent: Any = None) -> str:
     try:
         proc = subprocess.run(
             ["git", "status", "--short", "--branch"],
@@ -82,10 +82,61 @@ def _git_status_summary(cwd: str, *, max_files: int) -> str:
         branch_text = f" ({redact_monitor_text(branch, 120)})" if branch else ""
         return f"Git state: clean{branch_text}"
 
+    # Extract filenames from git status short output (e.g. " M path/to/file.py" → "path/to/file.py")
+    import re
+    _status_re = re.compile(r"^..?\s+(.+)$")
+    changed_files = set()
+    for line in changes:
+        m = _status_re.match(line)
+        if m:
+            changed_files.add(m.group(1).rstrip())
+
     preview = [redact_monitor_text(line, 180) for line in changes[:max_files]]
     suffix = f"; +{len(changes) - max_files} more" if len(changes) > max_files else ""
     branch_text = f" {redact_monitor_text(branch, 120)};" if branch else ""
-    return f"Git state:{branch_text} {len(changes)} uncommitted file(s): " + "; ".join(preview) + suffix
+
+    # Cross-reference with worker claimed_paths for attribution
+    attr = ""
+    if agent is not None and changed_files:
+        try:
+            workers = getattr(agent, "workers", None)
+            if workers:
+                active_ids = set(workers.list_ids())
+                my_id = getattr(agent, "worker_id", None) or getattr(agent, "name", None)
+                # Collect claimed paths per worker
+                worker_files: dict[str, set[str]] = {}
+                for wid in active_ids:
+                    w = workers.get(wid) if hasattr(workers, "get") else None
+                    paths = set(getattr(w, "claimed_paths", []) or [])
+                    if paths:
+                        worker_files[wid] = paths
+                if worker_files:
+                    mine = 0
+                    other = 0
+                    other_ids: set[str] = set()
+                    for f in changed_files:
+                        owners = [wid for wid, paths in worker_files.items() if any(f.startswith(p) or p.endswith(f) or f == p for p in paths)]
+                        if not owners:
+                            continue
+                        if my_id and my_id in owners:
+                            mine += 1
+                            continue
+                        other += 1
+                        other_ids.update(owners)
+                    parts = []
+                    if mine:
+                        parts.append(f"{mine} mine")
+                    if other:
+                        parts.append(f"{other} other agent{'s' if other > 1 else ''} ({', '.join(sorted(other_ids))})")
+                    unclaimed = len(changed_files) - mine - other
+                    if unclaimed:
+                        parts.append(f"{unclaimed} unattributed")
+                    if parts:
+                        attr = f" [{', '.join(parts)}]"
+        except Exception:
+            pass
+
+    return f"Git state:{branch_text} {len(changes)} uncommitted file(s): " + "; ".join(preview) + suffix + attr
 
 
 def _worker_summary(agent: Any) -> str:

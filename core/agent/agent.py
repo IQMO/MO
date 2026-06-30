@@ -1582,10 +1582,10 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         # Ghost only needs recent context, not full history — prevents flash model OOM
         recent = self._ghost_context_messages(user_input)
         messages = [{"role": "system", "content": ghost_system}] + recent + [
-            {"role": "user", "content": f"Plan the work for this request:\n{user_input}\n\nOutput both intent guardrails AND structured task rows as specified in your system prompt."}
+            {"role": "user", "content": f"Provide scope guardrails for this request:\n{user_input}\n\nOutput only scope guardrail text as specified in your system prompt."}
         ]
         if monitor:
-            monitor.emit("backend_status", {"message": "ghost intent handoff & planning running"})
+            monitor.emit("backend_status", {"message": "ghost scope guardrails running"})
         try:
             response, _provider = self.complete_ghost_no_tools(
                 surface="ghost_proposal",

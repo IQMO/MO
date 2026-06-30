@@ -316,8 +316,8 @@ class Gateway:
             _safe_call(lambda: record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_start"))
 
             try:
-                # Ghost planning runs for all work turns — not just ghost-routed.
-                # Ghost generates intent guardrails AND structured taskboard rows.
+                # Ghost scope guardrails run for all work turns.
+                # Ghost provides lightweight scope boundaries — NOT planning or task rows.
                 ghost_plan_text = ""
                 ghost_plan_rows: list[dict[str, object]] = []
                 # Local extensions may own their own task truth, so Gateway must
@@ -895,10 +895,12 @@ def _work_procedure_rows(user_input: str, target: str = "") -> list[dict[str, ob
 
 
 def _parse_ghost_proposal(raw: str) -> tuple[str, list[dict[str, object]]]:
-    """Split Ghost's proposal into text context and structured task rows.
-    
-    Ghost outputs: intent text --- JSON tasks block.
-    Returns (text_context, rows_list).
+    """Split Ghost's proposal into scope guardrail text and task rows.
+
+    Ghost now outputs scope guardrails only (no JSON task rows).  The rows
+    list will always be empty; it is kept for backward compatibility with
+    callers that still destructure both values.
+    Returns (text_context, []).
     """
     import json
     text_part = raw
