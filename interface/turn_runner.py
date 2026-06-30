@@ -35,6 +35,50 @@ def _tool_label_from_activity(act: str) -> str:
     return inner.removesuffix("...").removesuffix(")").rstrip()
 
 
+_CHIP_SHORTEN = {
+    "read_file": "read", "edit_file": "edit", "write_file": "write",
+    "find_files": "find", "code_search": "search", "find_callers": "callers",
+    "find_callees": "callees", "git_status": "git", "tool_search": "search",
+    "test_runner": "test",
+}
+
+
+def _shorten_target(target: str, limit: int = 52) -> str:
+    """Boundary-aware truncation of a tool target for display only (never mid-token).
+
+    The real command/args are unchanged — this only trims the *shown* text so a long
+    path or one-liner doesn't garble the line.
+    """
+    target = target.strip()
+    if len(target) <= limit:
+        return target
+    head = target[:limit]
+    for sep in ("/", "\\", " "):
+        idx = head.rfind(sep)
+        if idx > limit // 2:
+            return head[:idx].rstrip() + "…"
+    return head.rstrip() + "…"
+
+
+def _reasoning_gist(text: str) -> str:
+    """Collapse a reasoning chunk to one line: the model's own first sentence.
+
+    Display-only — no summarization pass. Keeps the collapsed view honest (it's
+    literally the start of what the model reasoned) while the full chain stays
+    behind /show reasoning.
+    """
+    body = text.lstrip("💭").strip()
+    line = body.splitlines()[0] if body else ""
+    for end in (". ", "? ", "! "):
+        i = line.find(end)
+        if 0 < i < 100:
+            line = line[: i + 1]
+            break
+    if len(line) > 100:
+        line = line[:99].rstrip() + "…"
+    return f"💭 {line}  · /show reasoning" if line else "💭 thinking…  · /show reasoning"
+
+
 class TurnRunnerMixin:
     def _reanchor_render(self) -> None:
         """Force prompt-toolkit to re-anchor and fully repaint the inline region.
@@ -89,9 +133,29 @@ class TurnRunnerMixin:
             ("class:diff-del", removed),
         ]
 
+    def _tool_line_fragments(self, label: str) -> list[tuple[str, str]]:
+        """Build '▸ [tool] target  +A -B' — tool name as a fg-only chip, target dim
+        and boundary-truncated, trailing edit diffstat kept green/red."""
+        diff: list[tuple[str, str]] = []
+        match = _DIFFSTAT_RE.match(label)
+        if match:
+            label = match.group(1).rstrip()
+            diff = [("class:dim", "  "), ("class:diff-add", match.group(2)),
+                    ("class:dim", " "), ("class:diff-del", match.group(3))]
+        parts = label.split(None, 1)
+        verb = parts[0] if parts else label
+        target = parts[1] if len(parts) > 1 else ""
+        chip = _CHIP_SHORTEN.get(verb, verb)
+        frags: list[tuple[str, str]] = [("class:dim", "    ▸ "), ("class:tool-chip", f"[{chip}]")]
+        target = _shorten_target(target)
+        if target:
+            frags.append(("class:dim", f" {target}"))
+        frags.extend(diff)
+        return frags
+
     def _add_tool_activity_line(self, tool_name: str) -> None:
-        """Render an indented '▸ tool target' activity line, colouring +A/-B."""
-        self._add_fragments_line(self._diffstat_fragments(f"    ▸ {tool_name}", "class:dim"))
+        """Render an indented '▸ [tool] target' activity line, colouring +A/-B."""
+        self._add_fragments_line(self._tool_line_fragments(tool_name))
 
     def _gateway_board_finished(self) -> bool:
         board = getattr(self.gateway, "last_task_board", None)
@@ -218,6 +282,7 @@ class TurnRunnerMixin:
         self.activity_text = "preparing..."
         self.activity_started_at = time.time()
         self.board_text = ""
+        self._reasoning_gist_shown = False  # one collapsed-reasoning gist line per turn
         # Re-anchor at the turn boundary so any render drift accumulated since the
         # last turn (full_screen=False pins above the anchor) can't persist.
         self._reanchor_render()
@@ -277,19 +342,26 @@ class TurnRunnerMixin:
                 clean = str(text or "").strip()
                 if not clean:
                     return
-                if clean.startswith("💭") and not getattr(self, "_show_reasoning", True):
+                is_reasoning = clean.startswith("💭")
+                is_tool = clean.startswith("▸") or "tooling (" in clean
+                if is_tool and not getattr(self, "_show_tool_activity", True):
                     return
-                if (clean.startswith("▸") or "tooling (" in clean) and not getattr(self, "_show_tool_activity", True):
-                    return
-                interim_seen.append(clean)
                 # Colour by content type so secondary chrome doesn't wear the answer
                 # colour: reasoning -> dim italic, tool activity -> dim (same as the
                 # live activity line), real prose -> the answer response block.
-                if clean.startswith("💭"):
-                    self._add("class:reasoning", clean)
-                elif clean.startswith("▸") or "tooling (" in clean:
+                if is_reasoning:
+                    if getattr(self, "_show_reasoning", True):
+                        interim_seen.append(clean)
+                        self._add("class:reasoning", clean)
+                    elif not getattr(self, "_reasoning_gist_shown", False):
+                        # Collapsed view: one gist line for the turn, suppress the rest.
+                        self._reasoning_gist_shown = True
+                        self._add("class:reasoning", _reasoning_gist(clean))
+                elif is_tool:
+                    interim_seen.append(clean)
                     self._add_fragments_line(self._diffstat_fragments(clean, "class:dim"))
                 else:
+                    interim_seen.append(clean)
                     self._add_response_block(clean)
                 if self._app:
                     self._app.invalidate()

@@ -328,6 +328,7 @@ def skin_to_tui_style_dict(skin: Skin | None = None) -> dict[str, str]:
         "diff-del": s.accent_red,
         "reasoning": f"{s.text_dim} italic",
         "info": b,
+        "tool-chip": f"{s.accent_blue} bold",  # bracketed tool label, fg-only (no bg → terminal-safe)
         "input-placeholder": f"{s.text_placeholder} italic",
         "notification-idle": f"{b} italic",
         "notification-learning": f"{s.accent_green} italic",

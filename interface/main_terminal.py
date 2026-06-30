@@ -73,6 +73,7 @@ class MoTui(
         self._notice_text = ""
         self._notice_until = 0.0
         self._extrathink_banner_until = 0.0
+        self._reasoning_gist_shown = False
         self._paste_holder_text = ""
         self._paste_holder_active = False
         self._pre_paste_buffer_text = ""
