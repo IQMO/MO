@@ -364,8 +364,12 @@ def main(argv: list[str] | None = None):
     ghost_hotkey = None
     ghost_hotkey = _start_ghost_hotkey_launcher_if_enabled(agent)
     try:
-        from core.telegram import start_telegram_gateway_if_enabled
-        telegram = start_telegram_gateway_if_enabled(agent, gateway)
+        # Only import the telegram stack when it's actually enabled — the import
+        # alone is ~100ms, and from_agent() eagerly builds SQLite stores. Gating
+        # on the config flag here keeps a disabled telegram off the startup path.
+        if (agent.config.get("telegram") or {}).get("enabled"):
+            from core.telegram import start_telegram_gateway_if_enabled
+            telegram = start_telegram_gateway_if_enabled(agent, gateway)
     except Exception as exc:
         print(f"MO: Telegram gateway failed to start: {exc}", file=sys.stderr)
         telegram = None

@@ -94,9 +94,10 @@ def build_embedder(config: dict[str, Any] | None) -> Callable[[str], list[float]
         model = str(emb.get("model") or "").strip()
 
         if backend == "local":
-            try:
-                return _local_embedder(model)
-            except ImportError:
+            # Cheap availability probe (~0.4ms, no import) keeps the bm25 fallback
+            # when fastembed isn't installed...
+            import importlib.util
+            if importlib.util.find_spec("fastembed") is None:
                 if not _local_warned:
                     _local_warned = True
                     sys.stderr.write(
@@ -104,9 +105,24 @@ def build_embedder(config: dict[str, Any] | None) -> Callable[[str], list[float]
                         "falling back to keyword (bm25) recall.\n"
                     )
                 return None
-            except Exception:
-                traceback.print_exc()
-                return None
+            # ...but DEFER the heavy fastembed import + ONNX model init (~1.2s for
+            # bge-small) to the FIRST embed call. A startup that never touches
+            # semantic recall no longer pays it. _embed_safe tolerates a [] return,
+            # so a deferred build failure degrades to keyword recall.
+            _state: dict[str, Any] = {}
+
+            def _lazy_local(text: str) -> list[float]:
+                fn = _state.get("fn")
+                if fn is None:
+                    try:
+                        fn = _local_embedder(model)
+                    except Exception:
+                        traceback.print_exc()
+                        fn = lambda _t: []
+                    _state["fn"] = fn
+                return fn(text)
+
+            return _lazy_local
 
         # Default: OpenAI-compatible HTTP endpoint.
         base_url = str(emb.get("base_url") or "").strip()
