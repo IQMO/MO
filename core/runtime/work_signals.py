@@ -42,7 +42,7 @@ def looks_like_interrupted_resume_request(user_input: str) -> bool:
     if declined:
         return False
     if re.search(
-        r"\b(?:finish|complete|jump\s+back|go\s+back|work\s+on|keep\s+working|pick\s+(?:it\s+)?back\s+up)\b",
+        r"\b(?:finish|complete|jump\s+back|go\s+back|work\s+on|keep\s+working|pick\s+(?:it|that|this|them)?\s*(?:back\s+)?up)\b",
         text,
     ) and re.search(r"\b(?:this|that|it|work|unfinished|parked|previous|back|left)\b", text):
         return True
