@@ -369,7 +369,7 @@ def response_block_fragment_lines(text: str, *, columns: int = DEFAULT_RESPONSE_
     lines = _strip_response_markdown_lines(_normalize_markdown_table_lines(str(text or ""), columns=columns))
     if not lines:
         return []
-    marker = "  " if hide_marker else "* "
+    marker = "  " if hide_marker else "✶ MO "
     rendered: list[list[tuple[str, str]]] = []
     table_border_count = 0  # borders seen in the current table block; header rows follow the 1st
     for position, (line, is_table) in enumerate(lines):

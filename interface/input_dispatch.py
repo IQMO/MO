@@ -6,17 +6,24 @@ import threading
 
 class InputDispatchMixin:
     def _add_user_echo(self, text: str) -> None:
-        """Echo a submitted user message, gradient-colouring any ``extrathink`` run.
+        """Echo a submitted user message with a ``✶ <name>`` speaker marker.
 
-        Plain ``class:user-msg`` for ordinary messages; a static colour gradient on
-        the trigger word so it stands out in scrollback (the transcript can't animate
-        per-frame, so history is static — colour only, glyphs/width unchanged)."""
+        The trigger word ``extrathink`` keeps its static colour gradient (history is
+        static — colour only, glyphs/width unchanged); everything else is plain
+        ``class:user-msg``."""
         from .moon_visuals import _EXTRATHINK_RE, gradient_line
-        line = f"* {text}"
-        if _EXTRATHINK_RE.search(line):
-            self._add_fragments_line(gradient_line(line, "class:user-msg"))
+        name = ""
+        try:
+            name = str(getattr(getattr(self.agent, "profile", None), "user_name", "") or "").strip()
+        except Exception:
+            name = ""
+        marker = (f"✶ {name}  " if name else "✶ ")
+        frags = [("class:mo-marker", marker)]
+        if _EXTRATHINK_RE.search(text):
+            frags.extend(gradient_line(text, "class:user-msg"))
         else:
-            self._add("class:user-msg", line)
+            frags.append(("class:user-msg", text))
+        self._add_fragments_line(frags)
 
     def _on_input_changed(self, buff):
         text = buff.text
