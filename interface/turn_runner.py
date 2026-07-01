@@ -395,7 +395,14 @@ class TurnRunnerMixin:
                         self._add("class:reasoning", _reasoning_gist(clean))
                 elif is_tool:
                     interim_seen.append(clean)
-                    self._add_fragments_line(self._diffstat_fragments(clean, "class:dim"))
+                    if "tooling (" in clean:
+                        # Forwarded activity ("tooling (tool target +A -B)...") — render
+                        # with the same chip + coloured-diffstat treatment as live tools
+                        # (the raw string put +A/-B inside the parens, so the plain
+                        # diffstat renderer never coloured them).
+                        self._add_tool_activity_line(_tool_label_from_activity(clean))
+                    else:
+                        self._add_fragments_line(self._diffstat_fragments(clean, "class:dim"))
                 else:
                     interim_seen.append(clean)
                     self._add_response_block(clean)
