@@ -85,7 +85,7 @@ def _reasoning_gist(text: str) -> str:
             break
     if len(line) > 100:
         line = line[:99].rstrip() + "…"
-    return f"💭 {line}  · /show reasoning" if line else "💭 thinking…  · /show reasoning"
+    return f"{line}  · /show reasoning" if line else "thinking…  · /show reasoning"
 
 
 class TurnRunnerMixin:
@@ -388,7 +388,7 @@ class TurnRunnerMixin:
                 if is_reasoning:
                     if getattr(self, "_show_reasoning", True):
                         interim_seen.append(clean)
-                        self._add("class:reasoning", f"💭 {_reasoning_body(clean)}")
+                        self._add("class:reasoning", _reasoning_body(clean))
                     elif not getattr(self, "_reasoning_gist_shown", False):
                         # Collapsed view: one gist line for the turn, suppress the rest.
                         self._reasoning_gist_shown = True
