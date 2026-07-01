@@ -755,22 +755,24 @@ def read_latest_closeout_summary(root: str | Path = "memory/session_closeouts", 
     if dirty_count:
         summary += f" · {dirty_count} dirty file(s)"
     if spine:
-        # First user line carries the topic
-        for entry in spine:
+        # Last user message carries the real topic — the first user message
+        # is stale in multi-turn sessions and misleads context injection.
+        topic_idx = -1
+        for idx, entry in enumerate(spine):
             if entry.lower().startswith("user:"):
+                topic_idx = idx
                 topic = entry[5:].strip()
-                summary += f"\nTopic: {topic[:200]}"
-                break
+        if topic_idx >= 0:
+            summary += f"\nTopic: {topic[:200]}"
         for entry in spine:
             marker_match = re.search(r"\[([A-Z_]+ (?:COMPLETE|BLOCKED))\]", entry)
             if marker_match:
                 terminal_marker = marker_match.group(1)
                 summary += f"\nMarker: {terminal_marker}"
                 break
-        # First line of dialogue gives continuity
-        if len(spine) > 1:
-            next_line = spine[1] if not spine[0].lower().startswith("user:") or spine[1].lower().startswith("assistant:") else spine[2] if len(spine) > 2 else ""
-            next_line = next_line or spine[1]
+        # Next line after the real topic gives session continuity
+        if topic_idx >= 0 and topic_idx + 1 < len(spine):
+            next_line = spine[topic_idx + 1]
             summary += f"\nNext: {next_line[:200]}"
     if turn_count == 0 and message_count > 0:
         summary += "\nNote: 0-turn session closeouts with messages can still contain recent work."
