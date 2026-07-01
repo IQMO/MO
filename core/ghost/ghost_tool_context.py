@@ -140,6 +140,7 @@ def _run_readonly_tool(agent: Any, name: str, args: dict[str, Any]) -> tuple[str
             "worker_id": worker_id,
             "tool": name,
             "blocked": bool(block_reason),
+            "reason": str(block_reason or "")[:240],
             "error": _tool_result_is_error(result),
             "chars": len(str(result)),
         })

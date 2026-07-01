@@ -759,7 +759,7 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
                             pass
 
                     if monitor:
-                        monitor.emit("tool_result", {"request": provider_requests, "surface": self._provider_surface(), "worker_id": self._provider_worker_id(), "tool": name, "blocked": bool(block_reason), "error": tool_is_error, "chars": len(result)})
+                        monitor.emit("tool_result", {"request": provider_requests, "surface": self._provider_surface(), "worker_id": self._provider_worker_id(), "tool": name, "blocked": bool(block_reason), "reason": str(block_reason or "")[:240], "error": tool_is_error, "chars": len(result)})
                     if not block_reason and not tool_is_error and name in {"write_file", "edit_file"}:
                         turn_files_modified = True
                         file_path = arguments.get("path", "")
