@@ -974,6 +974,33 @@ def _output_exit_code(output: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _empty_output_note(command: object, returncode: int) -> str:
+    """Message for a command that finished with no stdout/stderr.
+
+    Keeps the exact ``[Command completed with exit code N]`` first line so
+    downstream substring checks (e.g. the SSH-255 detector) still match. When
+    the command is an inline ``python -c`` that exited 0, append a diagnostic:
+    an empty result there almost always means a real mistake (a ``#`` in a
+    one-liner comments out the rest of the physical line, or the script never
+    called ``print()``). Without this the model can't tell *why* nothing showed
+    and flails — re-running variants or redirecting to files, burning turns.
+    Non-python and non-zero exits keep the bare message (many commands such as
+    ``git add`` / ``mkdir`` are legitimately silent — no noise added there)."""
+    base = f"[Command completed with exit code {returncode}]"
+    text = str(command or "")
+    is_inline_py = bool(re.search(r"(^|\s)(python3?|py)\s+-c\b", text, re.IGNORECASE))
+    if returncode == 0 and is_inline_py:
+        return (
+            base + "\n"
+            "This `python -c` command exited cleanly but printed nothing. Common causes: "
+            "a `#` in a one-line -c comments out the rest of that physical line (including "
+            "the print()); the script computed values but never called print(); or output "
+            "was written to a file. Fix: put statements before any `#`, use real newlines "
+            "or a temp .py file, and confirm you actually call print()."
+        )
+    return base
+
+
 def _output_succeeded(output: str) -> bool:
     code = _output_exit_code(output)
     if code is not None:
@@ -1056,7 +1083,7 @@ def _execute_shell_background(
                 if stderr:
                     output += "\n[stderr]\n" + stderr
                 if not output.strip():
-                    output = f"[Command completed with exit code {proc.returncode}]"
+                    output = _empty_output_note(command, proc.returncode)
                 elif "exit code" not in output.lower():
                     output = output.rstrip() + f"\n[exit code {proc.returncode}]"
                 if len(output) > 50000:
@@ -1221,7 +1248,7 @@ def execute_shell(arguments: dict[str, Any]) -> str:
         if stderr:
             output += "\n[stderr]\n" + stderr
         if not output.strip():
-            output = f"[Command completed with exit code {proc.returncode}]"
+            output = _empty_output_note(command, proc.returncode)
         elif "exit code" not in output.lower():
             output = output.rstrip() + f"\n[exit code {proc.returncode}]"
         if len(output) > 50000:
