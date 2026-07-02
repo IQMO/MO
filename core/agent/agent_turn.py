@@ -301,7 +301,11 @@ class AgentTurn(AgentTurnDispatchMixin, AgentTurnRecoveryMixin):
             # === Early turn health guard: compact, handoff, or warn before budget runs out ===
             extra_context = self._check_turn_health(tool_rounds, extra_context, monitor=monitor)
             if on_activity:
-                on_activity(f"thinking (request #{provider_requests})...")
+                # "Waiting on model", not "Thinking": at this point the request is
+                # sent and MO is blocked on the provider — this elapsed time is API
+                # latency, not observed reasoning. Claiming "Thinking…" for a slow
+                # response the model barely reasoned over misleads the operator.
+                on_activity(f"waiting on model (request #{provider_requests})...")
             append_provider_audit(
                 "provider_request",
                 surface=self._provider_surface(),

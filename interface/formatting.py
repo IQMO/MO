@@ -74,6 +74,11 @@ def activity_label(activity: str) -> str:
     text = str(activity or "").lower()
     if "preparing" in text:
         return "Preparing…"
+    if "waiting on model" in text or "awaiting model" in text:
+        # Honest label for the pre-response wait: the request is sent and MO is
+        # blocked on the provider/API. This is latency, not observed reasoning —
+        # genuine model reasoning is surfaced separately as dim reasoning lines.
+        return "Waiting on model…"
     if "thinking" in text:
         return "Thinking…"
     if "finalizing" in text or "critiquing" in text or "critique" in text:
