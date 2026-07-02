@@ -298,28 +298,40 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         self._session = value
 
     @contextmanager
+    def _scoped_thread_attr(self, **attrs: object):
+        """Context manager: set thread-local attrs on _thread_state, restore on exit.
+
+        Used by lane_scope, isolated_session, and provider_scope to avoid
+        repeating the same get/set/delattr restoration pattern.
+        """
+        state = getattr(self, "_thread_state", None)
+        if state is None:
+            self._thread_state = threading.local()
+            state = self._thread_state
+        previous = {name: getattr(state, name, None) for name in attrs}
+        for name, value in attrs.items():
+            setattr(state, name, value)
+        try:
+            yield
+        finally:
+            for name, prev_val in previous.items():
+                if prev_val is None:
+                    try:
+                        delattr(state, name)
+                    except AttributeError:
+                        pass
+                else:
+                    setattr(state, name, prev_val)
+
+    @contextmanager
     def isolated_session(self, session: Session):
         """Temporarily route self.session to a thread-local session.
 
         Used by background goal workers so normal chat can continue without
         goal prompts/tool chains contaminating the main conversation session.
         """
-        state = getattr(self, "_thread_state", None)
-        if state is None:
-            self._thread_state = threading.local()
-            state = self._thread_state
-        previous = getattr(state, "session", None)
-        state.session = session
-        try:
+        with self._scoped_thread_attr(session=session):
             yield
-        finally:
-            if previous is None:
-                try:
-                    delattr(state, "session")
-                except AttributeError:
-                    pass
-            else:
-                state.session = previous
 
     @property
     def active_provider(self) -> BaseProvider:
@@ -583,22 +595,8 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
         The companion uses this for Guide mode ('companion-guide') so the sandbox
         blocks actuation for that turn only, without racing the TUI's lane state.
         """
-        state = getattr(self, "_thread_state", None)
-        if state is None:
-            self._thread_state = threading.local()
-            state = self._thread_state
-        previous = getattr(state, "lane_override", None)
-        state.lane_override = lane
-        try:
+        with self._scoped_thread_attr(lane_override=lane):
             yield
-        finally:
-            if previous is None:
-                try:
-                    delattr(state, "lane_override")
-                except AttributeError:
-                    pass
-            else:
-                state.lane_override = previous
 
     def _context_budget_tokens_for(self, provider: str, model: str) -> int:
         return resolve_context_budget_tokens(
@@ -668,46 +666,28 @@ class Agent(AgentTaskBoard, AgentPRT, AgentSlashCommands, AgentStatusCommands, A
 
     @contextmanager
     def provider_scope(self, surface: str, worker_id: str = "", role=None):
-        state = getattr(self, "_thread_state", None)
-        if state is None:
-            self._thread_state = threading.local()
-            state = self._thread_state
-        previous_surface = getattr(state, "provider_surface", None)
-        previous_worker_id = getattr(state, "provider_worker_id", None)
-        previous_role = getattr(state, "active_role", None)
-        state.active_role = role
+        # Save agent-level state (not thread-local, restored manually in finally)
         previous_provider_index = getattr(self, "provider_index", 0)
         previous_provider_name = getattr(self, "provider_name", "")
         previous_model = getattr(self, "model", "")
         previous_api_mode = getattr(self, "api_mode", "")
         previous_context_budget = getattr(self, "context_budget_tokens", 0)
         previous_context_source = getattr(self, "context_budget_source", "")
-        state.provider_surface = surface
-        state.provider_worker_id = worker_id
-        try:
-            yield
-        finally:
-            self.provider_index = previous_provider_index
-            self.provider_name = previous_provider_name
-            self.model = previous_model
-            self.api_mode = previous_api_mode
-            self.context_budget_tokens = previous_context_budget
-            self.context_budget_source = previous_context_source
-            if previous_surface is None:
-                try:
-                    delattr(state, "provider_surface")
-                except AttributeError:
-                    pass
-            else:
-                state.provider_surface = previous_surface
-            if previous_worker_id is None:
-                try:
-                    delattr(state, "provider_worker_id")
-                except AttributeError:
-                    pass
-            else:
-                state.provider_worker_id = previous_worker_id
-            state.active_role = previous_role
+
+        with self._scoped_thread_attr(
+            provider_surface=surface,
+            provider_worker_id=worker_id,
+            active_role=role,
+        ):
+            try:
+                yield
+            finally:
+                self.provider_index = previous_provider_index
+                self.provider_name = previous_provider_name
+                self.model = previous_model
+                self.api_mode = previous_api_mode
+                self.context_budget_tokens = previous_context_budget
+                self.context_budget_source = previous_context_source
 
     def _is_foreground_session(self) -> bool:
         return getattr(self, "session", None) is getattr(self, "_session", None) and self._provider_surface() == "main"
