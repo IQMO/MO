@@ -319,6 +319,7 @@ class TurnRunnerMixin:
         self.activity_started_at = time.time()
         self.board_text = ""
         self._reasoning_gist_shown = False  # one collapsed-reasoning gist line per turn
+        self._last_reasoning_body = ""  # suppress back-to-back duplicate reasoning segments
         # Re-anchor at the turn boundary so any render drift accumulated since the
         # last turn (full_screen=False pins above the anchor) can't persist.
         self._reanchor_render()
@@ -387,8 +388,16 @@ class TurnRunnerMixin:
                 # dim, real prose -> the answer response block.
                 if is_reasoning:
                     if getattr(self, "_show_reasoning", True):
+                        body = _reasoning_body(clean)
+                        norm = " ".join(body.split())
+                        # Verbose reasoners (e.g. DeepSeek) often re-emit the same
+                        # segment back-to-back; render each distinct segment once so
+                        # the transcript doesn't fill with duplicated thinking.
+                        if norm and norm == getattr(self, "_last_reasoning_body", ""):
+                            return
+                        self._last_reasoning_body = norm
                         interim_seen.append(clean)
-                        self._add("class:reasoning", _reasoning_body(clean))
+                        self._add("class:reasoning", body)
                     elif not getattr(self, "_reasoning_gist_shown", False):
                         # Collapsed view: one gist line for the turn, suppress the rest.
                         self._reasoning_gist_shown = True
