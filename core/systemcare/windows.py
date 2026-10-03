@@ -1050,14 +1050,19 @@ class WindowsSystemCareAdapter:
         return path.resolve(strict=False) if path.is_absolute() else None
 
     @staticmethod
-    def _run_read_command(command: list[str], *, timeout: int, output_limit: int = 32_000) -> dict[str, Any]:
+    def _run_read_command(command: list[str], *, timeout: int, output_limit: int = 32_000,
+                          cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
         from core.runtime.backend_monitor import monitor_phase
         status: dict[str, Any] = {}
         try:
             with monitor_phase("systemcare_native_command", executable=Path(command[0]).name,
                                timeout_seconds=max(1, min(300, int(timeout))), result=status):
                 try:
-                    completed = run_with_file_capture(command, timeout=max(1, min(300, int(timeout))), encoding=None)
+                    completed = run_with_file_capture(command, timeout=max(1, min(300, int(timeout))), encoding=None,
+                        **({"cancelled": cancelled} if cancelled is not None else {}))
+                except InterruptedError:
+                    status.update(cancelled=True, error_kind="ScanCancelled")
+                    raise ScanCancelled("Native inspection cancelled")
                 except (FileNotFoundError, PermissionError, OSError, subprocess.TimeoutExpired) as exc:
                     status.update(returncode=-1, error_kind=type(exc).__name__)
                     raise

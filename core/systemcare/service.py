@@ -137,10 +137,10 @@ class SystemCareService:
                 result = {"state": "measured", "resources": resource_snapshot(self.adapter), "at": time.time()}
             elif section == "software_updates":
                 from .inspection import software_updates
-                result = software_updates(self.adapter)
+                result = software_updates(self.adapter, cancelled=cancelled)
             elif section == "driver_updates":
                 from .checks import windows_updates
-                result = windows_updates(self.adapter, drivers=True, inventory=update_result)
+                result = windows_updates(self.adapter, drivers=True, inventory=update_result, cancelled=cancelled)
             elif section == "registry":
                 from .registry import inspect_registry
                 result = inspect_registry(self.adapter, cancelled=cancelled)
@@ -171,7 +171,7 @@ class SystemCareService:
                     result["shortcut_coverage"] = {k: v for k, v in shortcuts.items() if k != "rows"}
                     result["coverage"] = "Run registrations, startup-trigger tasks and bounded Windows folder shortcuts; registration presence is distinct from startup approval and measured impact"
                     from .inspection import startup_measurements
-                    result["measurements"] = startup_measurements(self.adapter)
+                    result["measurements"] = startup_measurements(self.adapter, cancelled=cancelled)
                     result["state"] = "partial"
         elif context == "mo":
             from .mo_care import inspect_mo
@@ -428,7 +428,7 @@ class SystemCareService:
                             if section in {"updates", "driver_updates"} and update_result is None:
                                 from .checks import update_inventory
                                 try:
-                                    update_result = update_inventory(self.adapter)
+                                    update_result = update_inventory(self.adapter, cancelled=cancelled)
                                 except ScanCancelled:
                                     raise
                                 except Exception as exc:

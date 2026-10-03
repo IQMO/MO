@@ -7,6 +7,7 @@ from typing import Any, Callable, Iterable
 
 from core.systemcare.models import Plan, ProgressEvent, ScanMode
 from core.systemcare.service import SystemCareError, SystemCareService
+from core.systemcare.windows import ScanCancelled
 
 
 GuiPost = Callable[[Callable[[], None]], Any]
@@ -197,6 +198,8 @@ class SystemCareViewModel:
                         self._resource_used = True
                         self._emit_resource("first_use", label)
                     result = work(report)
+                except ScanCancelled:
+                    result = {"state": "cancelled", "detail": "Operation stopped; no completed result was published."}
                 except SystemCareError as exc:
                     error = str(exc)
                 except Exception as exc:  # Surface boundary; core owns detail.

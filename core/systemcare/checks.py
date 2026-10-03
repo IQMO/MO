@@ -9,7 +9,7 @@ from .actions import ps_query
 from .inspection import resource_snapshot
 
 
-def update_inventory(adapter: Any) -> dict[str, Any]:
+def update_inventory(adapter: Any, *, cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     """One Windows Update search supplies both software and driver evidence."""
     return ps_query(adapter, "$s=New-Object -ComObject Microsoft.Update.Session;$s.ClientApplicationID='MO SystemCare';"
         "$r=$s.CreateUpdateSearcher().Search('IsInstalled=0 and IsHidden=0');"
@@ -18,12 +18,14 @@ def update_inventory(adapter: Any) -> dict[str, Any]:
         "$counts[$kind]++;if($counts[$kind] -gt 100){continue};"
         "$rows+=[pscustomobject]@{name=$u.Title;update_id=$u.Identity.UpdateID;revision=$u.Identity.RevisionNumber;"
         "type=$kind;eula_accepted=$u.EulaAccepted;downloaded=$u.IsDownloaded;state='available';detail=($u.KBArticleIDs -join ',')}};"
-        "@{result_code=[int]$r.ResultCode;counts=$counts;rows=$rows}|ConvertTo-Json -Compress -Depth 5", timeout=180)
+        "@{result_code=[int]$r.ResultCode;counts=$counts;rows=$rows}|ConvertTo-Json -Compress -Depth 5", timeout=180,
+        **({"cancelled": cancelled} if cancelled is not None else {}))
 
 
-def windows_updates(adapter: Any, *, drivers: bool = False, inventory: dict[str, Any] | None = None) -> dict[str, Any]:
+def windows_updates(adapter: Any, *, drivers: bool = False, inventory: dict[str, Any] | None = None,
+                    cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     kind = "Driver" if drivers else "Software"
-    result = inventory if inventory is not None else update_inventory(adapter)
+    result = inventory if inventory is not None else update_inventory(adapter, **({"cancelled": cancelled} if cancelled is not None else {}))
     if result.get("error"):
         return {"state": "failed", "at": time.time(), "rows": [], "detail": result["error"]}
     complete = result.get("result_code") == 2
@@ -43,11 +45,12 @@ def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], t
         return {"state": "unavailable", "rows": [], "at": time.time(), "detail": "Windows owner unavailable"}
     if section == "filesystem":
         from .actions import capture
-        before = capture(adapter, {"kind": "volume", "drive": target})
+        before = capture(adapter, {"kind": "volume", "drive": target}, cancelled=cancelled)
         if not adapter._is_admin():
             return {"state": "unavailable", "rows": [], "at": time.time(), "detail": "File-system checks require Windows permission"}
-        result = adapter._run_read_command(["chkdsk.exe", target], timeout=300, output_limit=128_000)
-        after = capture(adapter, {"kind": "volume", "drive": target})
+        result = adapter._run_read_command(["chkdsk.exe", target], timeout=300, output_limit=128_000,
+                                          cancelled=cancelled)
+        after = capture(adapter, {"kind": "volume", "drive": target}, cancelled=cancelled)
         complete = not result.get("truncated") and result["returncode"] in {0, 1, 2} and after == before
         return {"state": "measured" if complete else "partial", "at": time.time(), "drive": target,
                 "rows": [{"name": target + " file system", "state": "completed" if complete else "incomplete or needs review",
@@ -60,7 +63,7 @@ def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], t
             "$dns=(@($_.DNSServer.ServerAddresses)|Select-Object -First 16) -join ', ';"
             "$gateway=(@($_.IPv4DefaultGateway.NextHop)+@($_.IPv6DefaultGateway.NextHop)|Select-Object -First 16) -join ', ';"
             "[pscustomobject]@{name=$_.InterfaceAlias;state=if($_.NetAdapter){$_.NetAdapter.Status.ToString()}else{'not observed'};"
-            "detail=('Addresses: '+$ip+'; DNS: '+$dns+'; gateway: '+$gateway)}})|ConvertTo-Json -Compress")
+            "detail=('Addresses: '+$ip+'; DNS: '+$dns+'; gateway: '+$gateway)}})|ConvertTo-Json -Compress", cancelled=cancelled)
         rows = rows if isinstance(rows, list) else [rows] if isinstance(rows, dict) else []
         return {"state": "partial", "at": time.time(), "rows": rows,
                 "detail": "Current adapter addresses, DNS and default gateways; at most 64 interfaces and 16 entries per field. No external connection probe or network preference changed."}
@@ -68,7 +71,7 @@ def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], t
         command = ["sfc.exe", "/verifyonly"] if section == "integrity" else ["dism.exe", "/Online", "/Cleanup-Image", "/AnalyzeComponentStore", "/English"]
         if not adapter._is_admin():
             return {"state": "unavailable", "rows": [], "at": time.time(), "detail": "This protected check requires an elevated SystemCare process"}
-        result = adapter._run_read_command(command, timeout=300, output_limit=128_000)
+        result = adapter._run_read_command(command, timeout=300, output_limit=128_000, cancelled=cancelled)
         completed = result["returncode"] == 0 and not result.get("truncated")
         return {"state": "measured" if completed else "unavailable", "at": time.time(),
                 "rows": [{"name": "Windows native check", "state": "completed" if completed else "failed or incomplete",
@@ -76,10 +79,10 @@ def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], t
                 "detail": "Native output is the evidence. Exit code alone does not establish a healthy system."}
     if section == "updates":
         signals = adapter._pending_restart_signals()
-        rows = ps_query(adapter, "@(Get-Service -Name wuauserv,bits,TrustedInstaller|Select-Object Name,@{n='State';e={$_.Status.ToString()}})|ConvertTo-Json -Compress")
+        rows = ps_query(adapter, "@(Get-Service -Name wuauserv,bits,TrustedInstaller|Select-Object Name,@{n='State';e={$_.Status.ToString()}})|ConvertTo-Json -Compress", cancelled=cancelled)
         readiness = ([{"name": r["Name"], "state": r["State"], "detail": "Servicing owner state"} for r in rows] +
                 [{"name": "Pending restart", "state": "attention" if signals else "not observed", "detail": ", ".join(signals) or "Known restart signals not observed"}])
-        available = windows_updates(adapter, inventory=update_result)
+        available = windows_updates(adapter, inventory=update_result, cancelled=cancelled)
         available["readiness"] = readiness
         return available
     if section == "environment":
@@ -108,12 +111,12 @@ def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], t
                 rows.append({"name": scope + " PATH", "state": state, "detail": part, "scope": scope, "index": index})
         return {"state": "partial", "at": time.time(), "rows": rows, "detail": "Typed User/Machine PATH. Only a selected literal duplicate can be removed with restoration; an absent directory alone does not prove an entry is unnecessary"}
     if section == "desktop":
-        rows = ps_query(adapter, "@(Get-Process|Where-Object {$_.MainWindowHandle -ne 0}|Select-Object -First 100 ProcessName,Id,Responding,WorkingSet64)|ConvertTo-Json -Compress")
+        rows = ps_query(adapter, "@(Get-Process|Where-Object {$_.MainWindowHandle -ne 0}|Select-Object -First 100 ProcessName,Id,Responding,WorkingSet64)|ConvertTo-Json -Compress", cancelled=cancelled)
         return {"state": "measured", "at": time.time(), "resources": resource_snapshot(adapter),
                 "rows": [{"name": r["ProcessName"], "state": "responding" if r["Responding"] else "review",
                           "detail": "PID " + str(r["Id"]), "bytes": r["WorkingSet64"]} for r in rows],
                 "detail": "Visible app responsiveness and memory; no process terminated or memory emptied"}
     if section == "protection":
-        result = ps_query(adapter, "Get-MpComputerStatus|Select-Object AntivirusEnabled,AntispywareEnabled,RealTimeProtectionEnabled,AntivirusSignatureLastUpdated|ConvertTo-Json -Compress")
+        result = ps_query(adapter, "Get-MpComputerStatus|Select-Object AntivirusEnabled,AntispywareEnabled,RealTimeProtectionEnabled,AntivirusSignatureLastUpdated|ConvertTo-Json -Compress", cancelled=cancelled)
         return {"state": "measured", "at": time.time(), "rows": [{"name": k, "state": "enabled" if v is True else "disabled" if v is False else "observed", "detail": str(v)} for k, v in result.items()], "detail": "Current Microsoft Defender owner state"}
     raise ValueError("Unknown native check")

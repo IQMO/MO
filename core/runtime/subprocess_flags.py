@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 CREATE_NO_WINDOW = 0x08000000
@@ -79,6 +79,7 @@ def gui_python_executable() -> str:
 def run_with_file_capture(
     command: list[str], *, timeout: float, cwd: str | None = None,
     encoding: str | None = "utf-8", errors: str = "replace",
+    cancelled: Callable[[], bool] | None = None,
 ) -> subprocess.CompletedProcess[Any]:
     """Capture a bounded helper without waiting for inherited pipe writers.
 
@@ -86,17 +87,48 @@ def run_with_file_capture(
     exits. File-backed output lets process completion and timeout remain bounded.
     """
     import tempfile
+    import time
 
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as error_output:
         kwargs = {"cwd": cwd, "stdin": subprocess.DEVNULL, "stdout": output,
-                  "stderr": error_output, "timeout": timeout}
+                  "stderr": error_output}
         apply_windows_hidden_process_flags(kwargs)
-        result = subprocess.run(command, **kwargs)
+        if cancelled is not None:
+            if cancelled():
+                raise InterruptedError("Native inspection cancelled before launch")
+            if sys.platform != "win32":
+                kwargs["start_new_session"] = True
+        with subprocess.Popen(command, **kwargs) as process:
+            deadline = time.monotonic() + timeout
+            try:
+                if cancelled is None:
+                    process.wait(timeout=timeout)
+                else:
+                    while True:
+                        if cancelled():
+                            raise InterruptedError("Native inspection cancelled")
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise subprocess.TimeoutExpired(command, timeout)
+                        try:
+                            process.wait(timeout=min(0.1, remaining))
+                            break
+                        except subprocess.TimeoutExpired:
+                            continue
+            except BaseException:
+                if process.poll() is None:
+                    if cancelled is not None:
+                        from core.tooling.shell_processes import kill_process_tree
+                        kill_process_tree(process.pid)
+                    if process.poll() is None:
+                        process.kill()
+                process.wait()
+                raise
         output.seek(0)
         error_output.seek(0)
         stdout, stderr = output.read(), error_output.read()
         return subprocess.CompletedProcess(
-            command, result.returncode,
+            command, process.returncode,
             stdout.decode(encoding, errors=errors) if encoding else stdout,
             stderr.decode(encoding, errors=errors) if encoding else stderr,
         )

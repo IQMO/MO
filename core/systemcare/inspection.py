@@ -37,7 +37,8 @@ def windows_inventory(adapter: Any, section: str, *, cancelled: Callable[[], boo
         return {"state": "unavailable", "rows": [], "detail": "Windows native query owner is unavailable", "at": time.time()}
     script = "$ErrorActionPreference='Stop';[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();" + _SCRIPTS[section]
     result = adapter._run_read_command([executable, "-NoProfile", "-NonInteractive", "-Command", script],
-                                      timeout=45, output_limit=256_000)
+                                      timeout=45, output_limit=256_000,
+                                      **({"cancelled": cancelled} if cancelled is not None else {}))
     if result["returncode"] or result.get("truncated"):
         return {"state": "unavailable", "rows": [], "detail": "Native query failed or exceeded the bounded result size", "at": time.time()}
     try:
@@ -69,15 +70,19 @@ def power_schemes(adapter: Any) -> list[dict[str, str]]:
     return rows[:64]
 
 
-def startup_measurements(adapter: Any) -> dict[str, Any]:
+def startup_measurements(adapter: Any, *, cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     """Windows' recorded boot/degradation samples, not inferred Task Manager impact."""
     from .actions import ps_query
+    from .windows import ScanCancelled
     try:
         rows = ps_query(adapter, "$events=@(Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Diagnostics-Performance/Operational';Id=100,101} -MaxEvents 40);"
             "@($events|ForEach-Object {$event=$_;[xml]$x=$event.ToXml();$d=@{};foreach($v in $x.Event.EventData.Data){$d[$v.Name]=[string]$v.'#text'};"
             "[pscustomobject]@{name=if($event.Id -eq 100){'Windows boot'}else{$d.Name};source_event=$event.Id;record_id=$event.RecordId;"
             "observed_at=$event.TimeCreated.ToUniversalTime().ToString('o');milliseconds=if($event.Id -eq 100){$d.BootTime}else{$d.TotalTime};"
-            "degradation_milliseconds=$d.DegradationTime}})|ConvertTo-Json -Compress", timeout=20)
+            "degradation_milliseconds=$d.DegradationTime}})|ConvertTo-Json -Compress", timeout=20,
+            **({"cancelled": cancelled} if cancelled is not None else {}))
+    except ScanCancelled:
+        raise
     except (OSError, ValueError, RuntimeError):
         return {"state": "unavailable", "rows": [], "detail": "Windows boot/degradation events are absent or inaccessible; no startup impact is invented"}
     rows = rows if isinstance(rows, list) else [rows] if isinstance(rows, dict) else []
@@ -128,13 +133,14 @@ def startup_shortcuts(adapter: Any, *, cancelled: Callable[[], bool]) -> dict[st
     return {"rows": rows, "bounded": bounded, "unavailable": unavailable}
 
 
-def software_updates(adapter: Any) -> dict[str, Any]:
+def software_updates(adapter: Any, *, cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     """Read WinGet's own available-update table; reject ambiguous/truncated IDs."""
     executable = shutil.which("winget.exe") if os.name == "nt" else None
     if not executable:
         return {"state": "unavailable", "rows": [], "at": time.time(), "detail": "Installed Windows Package Manager is unavailable"}
     result = adapter._run_read_command([executable, "list", "--upgrade-available", "--disable-interactivity"],
-                                      timeout=60, output_limit=128_000)
+                                      timeout=60, output_limit=128_000,
+                                      **({"cancelled": cancelled} if cancelled is not None else {}))
     if result["returncode"] or result.get("truncated"):
         return {"state": "unavailable", "rows": [], "at": time.time(), "detail": "WinGet did not provide complete evidence; source agreements may require review in its native owner"}
     rows = parse_updates(result["stdout"])

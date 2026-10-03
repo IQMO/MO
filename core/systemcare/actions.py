@@ -46,13 +46,14 @@ def validate_subject(action: str, subject: dict[str, Any]) -> None:
         raise ValueError("Ambiguous task selectors are unavailable")
 
 
-def ps_query(adapter: Any, script: str, *, timeout: int = 30) -> Any:
+def ps_query(adapter: Any, script: str, *, timeout: int = 30,
+             cancelled: Callable[[], bool] | None = None) -> Any:
     executable = shutil.which("powershell.exe")
     if not executable or os.name != "nt":
         raise RuntimeError("Windows PowerShell query owner is unavailable")
     result = adapter._run_read_command([executable, "-NoProfile", "-NonInteractive", "-Command",
         "$ErrorActionPreference='Stop';[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();" + script],
-        timeout=timeout, output_limit=128_000)
+        timeout=timeout, output_limit=128_000, **({"cancelled": cancelled} if cancelled is not None else {}))
     if result["returncode"] or result.get("truncated"):
         raise RuntimeError("Native owner did not return complete evidence")
     return json.loads(result["stdout"])
@@ -71,7 +72,8 @@ def _service_name(subject: dict[str, Any]) -> str:
     return name
 
 
-def capture(adapter: Any, subject: dict[str, Any], *, state: Any = None) -> dict[str, Any]:
+def capture(adapter: Any, subject: dict[str, Any], *, state: Any = None,
+            cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     kind = subject.get("kind")
     if kind == "browser":
         from .browser_care import capture_browser
@@ -127,7 +129,8 @@ def capture(adapter: Any, subject: dict[str, Any], *, state: Any = None) -> dict
         if not re.fullmatch(r"[A-Z]:", drive):
             raise ValueError("Choose an exact fixed volume")
         volume = ps_query(adapter, f"Get-Volume -DriveLetter {drive[0]}|Select-Object DriveLetter,UniqueId,"
-                          "@{n='DriveType';e={$_.DriveType.ToString()}},FileSystem,HealthStatus,Size|ConvertTo-Json -Compress")
+                          "@{n='DriveType';e={$_.DriveType.ToString()}},FileSystem,HealthStatus,Size|ConvertTo-Json -Compress",
+                          **({"cancelled": cancelled} if cancelled is not None else {}))
         if (not isinstance(volume, dict) or volume.get("DriveLetter") != drive[0]
                 or volume.get("DriveType") != "Fixed" or not volume.get("UniqueId")):
             raise ValueError("The selected fixed volume identity is unavailable")

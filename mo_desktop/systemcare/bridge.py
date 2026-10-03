@@ -160,7 +160,7 @@ class SystemCareBridge:
             self._emit({"kind": "notice", "title": "SystemCare scan " + ("stopped" if stopped else "failed" if failed else "finished"),
                         "detail": f"{recorded} checks recorded; {limited} with limits or errors. Results are saved."})
         elif notifications and "state" in receipt and ("rows" in receipt or self._finish_then_close):
-            self._emit({"kind": "notice", "title": "SystemCare inspection finished",
+            self._emit({"kind": "notice", "title": "SystemCare inspection " + ("stopped" if receipt.get("state") == "cancelled" else "finished"),
                         "detail": str(receipt.get("detail") or receipt.get("state") or "Results are saved.")})
         with self._lock:
             if self._finish_then_close:

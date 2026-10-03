@@ -29,6 +29,14 @@ journal, reports completion according to the notification preference, then exits
 Reopening before completion cancels the pending exit. Native close and the
 workspace close control use the same choice; Desktop shutdown or control-pipe
 loss cancels owned work and waits for its safe boundary before disposal.
+Stop and close interrupts owned read-only native checks, inventory and update
+queries through the existing subprocess owner, including its process
+descendants, rather than waiting for the native timeout. Separately approved
+repair commands retain their safe completion boundary. Unrelated sessions,
+services and processes are never selected for termination.
+The protected worker receives one cancellation request for its own operation;
+waiting does not repeatedly initialize the state store. Cancelled inspections
+report stopped results rather than a host crash, including across elevation.
 Completion notices use the existing tray notification owner and reopen saved
 results when clicked. The notification switch controls all SystemCare notices,
 including scheduled care. The default scope reports background results; visible

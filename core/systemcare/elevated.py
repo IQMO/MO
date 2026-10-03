@@ -48,6 +48,8 @@ def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, An
     kernel.CloseHandle.argtypes = (ctypes.c_void_p,)
     finished = False
     last_sequence = 0
+    cancel_state = None
+    cancel_sent = False
     try:
         if not shell.ShellExecuteExW(ctypes.byref(info)) or not info.process:
             finished = True
@@ -71,12 +73,13 @@ def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, An
                 break
             if wait != 258:
                 raise RuntimeError("Protected operation status is unavailable; inspect its active state")
-            if cancel_event is not None and cancel_event.is_set():
+            if cancel_event is not None and cancel_event.is_set() and not cancel_sent:
                 from .state import SystemCareState
-                state = SystemCareState(config)
-                active = state.active_operation()
+                if cancel_state is None:
+                    cancel_state = SystemCareState(config)
+                active = cancel_state.active_operation()
                 if worker_pid and active.get("pid") == worker_pid:
-                    state.request_cancel(str(active.get("operation_id") or ""))
+                    cancel_sent = cancel_state.request_cancel(str(active.get("operation_id") or ""))
             if time.monotonic() >= deadline:
                 raise RuntimeError("Protected operation is still running; its journal and active state are retained")
         if not response.is_file():
@@ -109,6 +112,7 @@ def main() -> int:
     from core.state.paths import resolve_state_path
     from core.utils.atomic_write import atomic_write_json
     from .service import SystemCareService
+    from .windows import ScanCancelled
     root = Path(resolve_state_path("run/systemcare"))
     response = root / (options.request + ".response.json")
     try:
@@ -133,6 +137,10 @@ def main() -> int:
         else:
             raise ValueError("Unknown protected operation")
         atomic_write_json(response, {"ok": True, "result": result})
+        return 0
+    except ScanCancelled:
+        atomic_write_json(response, {"ok": True, "result": {
+            "state": "cancelled", "detail": "Inspection stopped; no completed result was published."}})
         return 0
     except Exception as exc:
         from core.runtime.backend_monitor import redact_monitor_text

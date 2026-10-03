@@ -210,7 +210,8 @@ else: rows.append({'name':'MO service','state':'not checked','detail':'Host serv
 print(json.dumps({'state':'partial','rows':rows,'bounded':len(rows)>=100 or len(units)>=16,'coverage':'Selected host and matching system/user MO units; 16 units and 100 log rows maximum; custom service/dependency names and deployment health are not inferred'}))"""
     remote = "python3 -c " + shlex.quote(code)
     result = adapter._run_read_command([executable, "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-                                       "-o", "StrictHostKeyChecking=yes", target, remote], timeout=30, output_limit=128_000)
+                                       "-o", "StrictHostKeyChecking=yes", target, remote], timeout=30, output_limit=128_000,
+                                      cancelled=cancelled)
     try:
         if result["returncode"] or result.get("truncated"):
             raise ValueError("Transport unavailable")

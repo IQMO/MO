@@ -15,7 +15,8 @@ from .targets import PROJECT_EXCLUDED_DIRS, _reparse, project_target
 _LEFTOVER_SUFFIXES = {".exe", ".dll", ".pdb", ".log", ".tmp", ".dmp"}
 
 
-def _leftover_root(adapter: Any, subject: dict[str, Any], state: Any) -> Path:
+def _leftover_root(adapter: Any, subject: dict[str, Any], state: Any, *,
+                   cancelled: Callable[[], bool] | None = None) -> Path:
     from .actions import capture, ps_query
     if state is None:
         raise ValueError("A verified SystemCare uninstall receipt is required")
@@ -48,7 +49,8 @@ def _leftover_root(adapter: Any, subject: dict[str, Any], state: Any) -> Path:
         "$_.InstallLocation -and (($_.InstallLocation.TrimEnd('\\')+'\\').StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -or "
         "$root.StartsWith(($_.InstallLocation.TrimEnd('\\')+'\\'),[StringComparison]::OrdinalIgnoreCase))}}});"
         "$running=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)});"
-        "@{registered=$apps.Count;running=$running.Count}|ConvertTo-Json -Compress")
+        "@{registered=$apps.Count;running=$running.Count}|ConvertTo-Json -Compress",
+        **({"cancelled": cancelled} if cancelled is not None else {}))
     if evidence.get("registered") != 0 or evidence.get("running") != 0:
         raise ValueError("Folder has a current app or process owner; leftovers remain protected")
     return root
@@ -73,12 +75,15 @@ def capture_app_leftover(adapter: Any, subject: dict[str, Any], state: Any) -> d
 
 
 def inspect_app_leftovers(adapter: Any, state: Any, *, cancelled: Callable[[], bool]) -> dict[str, Any]:
+    from .windows import ScanCancelled
     rows, excluded, examined = [], 0, 0
     deadline, bounded = time.monotonic() + 10, False
     # Irreversible uninstall originals intentionally do not appear in the undo
     # list. Use retained apply receipts, rather than inventing a second ledger.
     step_ids = dict.fromkeys(step for receipt in state.recent_receipts(200) for step in receipt.get("applied_steps", []))
     for step_id in step_ids:
+        if cancelled():
+            raise ScanCancelled("app leftover inspection cancelled")
         if time.monotonic() >= deadline:
             bounded = True
             break
@@ -89,7 +94,9 @@ def inspect_app_leftovers(adapter: Any, state: Any, *, cancelled: Callable[[], b
             continue
         subject = {"kind": "app_leftover", "uninstall_step": step_id}
         try:
-            root = _leftover_root(adapter, subject, state)
+            root = _leftover_root(adapter, subject, state, cancelled=cancelled)
+        except ScanCancelled:
+            raise
         except (OSError, ValueError, RuntimeError):
             excluded += 1
             continue
@@ -101,7 +108,6 @@ def inspect_app_leftovers(adapter: Any, state: Any, *, cancelled: Callable[[], b
                 with os.scandir(directory) as entries:
                     for entry in entries:
                         if cancelled():
-                            from .windows import ScanCancelled
                             raise ScanCancelled("app leftover inspection cancelled")
                         if examined >= 1000 or len(rows) >= 300 or time.monotonic() >= deadline:
                             bounded = True
