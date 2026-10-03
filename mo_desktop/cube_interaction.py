@@ -23,7 +23,7 @@ class CubeInteractionMixin:
 
     def _update_hover_presence(self, hovered: bool, *, now: float | None = None) -> None:
         active = bool(hovered)
-        current = time.monotonic() if now is None else now
+        current = time.perf_counter() if now is None else now
         same = active == bool(getattr(self, "_hovering_cube", False))
         if same and (not active or current < getattr(self, "_hover_refresh_at", 0.0)):
             return
@@ -91,7 +91,7 @@ class CubeInteractionMixin:
         self._press_at = point
         if (getattr(event, "num", 1) == 1 and self._pressed_cube_index is not None
                 and self._pressed_cube_index in (self._bottom_left_cube_index(), 3)):
-            self._cube_hold_started_at = time.monotonic()
+            self._cube_hold_started_at = time.perf_counter()
             self._cube_hold_after = self._gui.schedule(_CUBE_HOLD_MS, self._fire_cube_hold)
 
     def _bottom_left_cube_index(self) -> int | None:
@@ -213,7 +213,7 @@ class CubeInteractionMixin:
         dist = math.hypot(float(x_root) - self._x, float(y_root) - self._y)
         self._drag_dist = dist
         self._drag_leave_at = 0.0  # still here: cancel any leave awaiting confirmation
-        self._drag_seen_at = time.monotonic()
+        self._drag_seen_at = time.perf_counter()
         self.set_drag(True, 1.0 - min(1.0, dist / reach))
 
     def drag_leave(self) -> None:
@@ -221,7 +221,7 @@ class CubeInteractionMixin:
         first one can fire on the frame between DropEnter and the drag-catch alpha being
         painted, and treating that as a real leave is what made the cube stutter."""
         if getattr(self, "_drag", False):
-            self._drag_leave_at = time.monotonic()
+            self._drag_leave_at = time.perf_counter()
         else:
             self.drag_end()
 
@@ -245,7 +245,7 @@ class CubeInteractionMixin:
             self.drag_end()
 
     def _handle_click(self, button: str) -> None:
-        now = time.monotonic()
+        now = time.perf_counter()
         if button == "left" and (now - self._double_at) < 0.35:
             return  # tail release of a double-click — suppress the spurious single
         last_btn, last_at = self._last_click
@@ -259,7 +259,7 @@ class CubeInteractionMixin:
     def _handle_double(self) -> None:
         if bool(getattr(self, "_launcher_active", False)):
             return
-        self._double_at = time.monotonic()
+        self._double_at = time.perf_counter()
         cb = self._left_double
         if callable(cb):
             cb()

@@ -85,8 +85,13 @@ and Desktop skin definitions remain outside this package.
   The real form is hidden before changing layout, so it cannot flash its target
   geometry before the fold. The native layout and terminal grid are committed
   once. At completion the actual form
-  and expanded attachment are revealed. The shared clock uses its 16 ms budget
-  only during these finite presentation transitions and returns to 33 ms afterward.
+  and expanded attachment are revealed. The same WinForms clock requests 15 ms
+  for finite folds, group movement, control/title hover and drop feedback;
+  passive terminal work uses 31 ms. These requests avoid rounding above the
+  default Windows timer quantum, without changing global timer resolution.
+  Hover and drag easing use actual `Stopwatch` elapsed time, so delayed ticks
+  do not change their speed. Settled idle stops the clock entirely; grouped
+  work alone never selects the finite-interaction rate.
   Shell/divider movement resynchronizes the selection, and the terminal process
   is not rebuilt.
 - Window handles are never persisted. One shell session owns at most one

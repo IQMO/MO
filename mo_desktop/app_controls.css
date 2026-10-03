@@ -29,3 +29,7 @@ button{transition:background .16s,color .16s,border-color .16s,transform .2s var
 .settings-switch:before{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--muted);transition:transform .18s var(--ease),background .18s}
 .settings-switch:checked{background:color-mix(in srgb,var(--brand) 16%,var(--surface));border-color:var(--brand)}
 .settings-switch:checked:before{background:var(--brand);transform:translateX(14px)}
+
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes toast-in{from{transform:translate(-50%,5px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

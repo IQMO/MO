@@ -376,7 +376,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 self._set_label(self._label_value, until=self._label_until,
                                 side=getattr(self, "_label_side_override", None))
         if self._visible:
-            self._render(time.monotonic())
+            self._render(time.perf_counter())
 
     # ------------------------------------------------------------------ public control
     def set_click_handlers(
@@ -457,7 +457,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._last_geometry = ""
         if self._visible:
             self._reposition()
-            self._render(time.monotonic())
+            self._render(time.perf_counter())
 
     def set_hold_handlers(self, *, capture: Callable[[], None], focus: Callable[[], None]) -> None:
         """Share the stationary hold gesture between the two lower cubes."""
@@ -486,7 +486,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 self._computer_activity = ComputerActivityOverlay(self)
         activity = getattr(self, "_computer_activity", None)
         if activity is not None:
-            activity.set_active(bool(on), time.monotonic())
+            activity.set_active(bool(on), time.perf_counter())
 
     def enable_follow(self, enabled: bool = True) -> None:
         if self.game_session_active():
@@ -509,7 +509,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         was, self._home = getattr(self, "_home", None), target
         if was == target:
             return  # the poll repeats; only the transition is a movement
-        now = time.monotonic()
+        now = time.perf_counter()
         if target is not None:  # attaching: dash home, trailing footsteps
             self._from = (self._x, self._y)
             self._to = target
@@ -568,7 +568,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             return
         self._build_sprites()
         if self._visible:
-            self._render(time.monotonic())
+            self._render(time.perf_counter())
 
     def apply_form(self, form: CubeFormSpec | dict) -> None:
         """Apply a cube form/design spec live for studio previews or vetted product defaults."""
@@ -581,7 +581,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._last_geometry = ""
         if self._visible:
             self._reposition()
-            self._render(time.monotonic())
+            self._render(time.perf_counter())
 
     def apply_label_design(self, design: LabelBubbleDesign) -> None:
         self._label_design = design or DEFAULT_LABEL_BUBBLE_DESIGN
@@ -616,7 +616,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._last_geometry = ""  # force _reposition to re-apply geometry at the new size
         if self._visible:
             self._reposition()
-            self._render(time.monotonic())
+            self._render(time.perf_counter())
 
     def set_follow_params(self, distance: float | None = None, ease: float | None = None) -> None:
         """Chase feel (settings): trailing gap in px + spring 0..1 (lower = more delay)."""
@@ -654,7 +654,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         count = self._cube_count()
         if count < (2 if app == "shell" else 4) or not self._visible or self._ulw is None:
             return None
-        now = time.monotonic()
+        now = time.perf_counter()
         if not self._render(now):
             return None
         pieces = []
@@ -693,13 +693,13 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     def release_launch_origin(self, origin: dict) -> None:
         if getattr(self, "_app_launch_origin", None) is origin:
             self._app_launch_origin = None
-            self._last_tick_at = time.monotonic()
+            self._last_tick_at = time.perf_counter()
 
     def cube_center(self, index: int, *, now: float | None = None) -> tuple[float, float] | None:
         """Screen-space centre of one rendered cube in the current formation."""
         try:
             cube_index = int(index)
-            current = time.monotonic() if now is None else float(now)
+            current = time.perf_counter() if now is None else float(now)
             cx, cy, _bright, _alpha = self._cube_state(cube_index, current)
         except (IndexError, TypeError, ValueError):
             return None
@@ -708,7 +708,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
 
     def cube_at_screen(self, x: float, y: float, *, now: float | None = None) -> int | None:
         """Return the independently rendered cube under a screen point, if any."""
-        current = time.monotonic() if now is None else float(now)
+        current = time.perf_counter() if now is None else float(now)
         edge = max(4.0, float(getattr(self, "_cube_edge", 1.0) or 1.0))
         half = edge * 0.62  # include the quiet glow while excluding formation gaps
         best: tuple[float, int] | None = None
@@ -740,7 +740,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         except Exception:
             emote, dur = None, 0.0
         if emote:
-            self._emote = (emote, time.monotonic(), float(dur))
+            self._emote = (emote, time.perf_counter(), float(dur))
 
     def react(self, event: str) -> None:
         """The single event→emote choke point: play the emote mapped to a desktop event."""
@@ -759,7 +759,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         if self._app_pulse_restore_rgb is None:
             self._app_pulse_restore_rgb = self._color_rgb
         self._color_rgb = ImageColor.getrgb(str(color))
-        self._app_pulse_until = time.monotonic() + 0.9
+        self._app_pulse_until = time.perf_counter() + 0.9
         self._build_sprites()
         self.play_emote("app_heartbeat")
 
@@ -768,7 +768,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         the dock uses, for as long as the bounded presence stays current. The
         deadline is monotonic; expiry ends the loop at a cycle boundary and a
         fresh presence report simply extends it."""
-        self._phone_charging_until = time.monotonic() + max(0.0, float(seconds))
+        self._phone_charging_until = time.perf_counter() + max(0.0, float(seconds))
         if self._emote is None and not self._thinking:
             self.play_emote("charging")
 
@@ -791,7 +791,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         driven while a turn runs — the cube IS the thinking/responding indicator, so turn
         status never opens a surface (it is recorded to the desktop log instead)."""
         if on and not self._thinking:
-            self._thinking_started_at = time.monotonic()
+            self._thinking_started_at = time.perf_counter()
         self._thinking = bool(on)
         if on:
             self._stop_looping_emote()  # the recharge loop yields to the working spinner
@@ -816,7 +816,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self._show()
         elif not self._is_gliding():
             self._hide_label()
-            self._hide_at = time.monotonic() + 0.6
+            self._hide_at = time.perf_counter() + 0.6
 
     def set_speaking(self, on: bool) -> None:
         """Show a distinct steady cadence while MO is producing audible speech."""
@@ -825,10 +825,10 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self._hide_at = 0.0
             self._show()
         elif not self._listening and not self._is_gliding():
-            self._hide_at = time.monotonic() + 0.6
+            self._hide_at = time.perf_counter() + 0.6
 
     def point_to(self, x: int, y: int, label: str = _DEFAULT_POINT_LABEL, seconds: float = 4.0) -> bool:
-        now = time.monotonic()
+        now = time.perf_counter()
         hold = max(0.5, float(seconds or 4.0))
         if getattr(self, "_label_kind", "bubble") == "notice" and bool(getattr(self, "_label_value", "")):
             remaining = max(0.5, float(getattr(self, "_label_until", now) or now) - now)
@@ -862,7 +862,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         return True
 
     def wake(self, x: int | None = None, y: int | None = None, seconds: float = 2.4) -> bool:
-        now = time.monotonic()
+        now = time.perf_counter()
         if x is not None and y is not None:
             self._x, self._y = float(x), float(y)
             self._from = self._to = (self._x, self._y)
@@ -879,7 +879,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         then chase it. Pure reuse — the point-glide leaves the same fading footsteps as
         ``point_to`` and ``chase`` is the existing follow spring; this only wires the
         gesture, no new animation. ``x``/``y`` default to the current pointer."""
-        now = time.monotonic()
+        now = time.perf_counter()
         if x is None or y is None:
             try:
                 x, y = pointer_position()
@@ -1250,7 +1250,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self._last_layered_frame_signature = None
             try:
                 self._reposition()
-                self._render(time.monotonic())
+                self._render(time.perf_counter())
                 self._win.show()
             except Exception:
                 pass

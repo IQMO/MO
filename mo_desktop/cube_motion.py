@@ -144,7 +144,7 @@ class CubeMotionMixin:
             self.show_bubble(label, seconds=1.25)
 
     def tick(self, now: float | None = None) -> None:
-        current = time.monotonic() if now is None else float(now)
+        current = time.perf_counter() if now is None else float(now)
         activity = getattr(self, "_computer_activity", None)
         if activity is not None:
             activity.tick(current)
@@ -282,7 +282,7 @@ class CubeMotionMixin:
         ~60 Hz active path. Movement springs are wall-clock scaled, so moving
         between those cadences does not change chase or wander speed.
         """
-        current = time.monotonic() if now is None else float(now)
+        current = time.perf_counter() if now is None else float(now)
         activity = getattr(self, "_computer_activity", None)
         if activity is not None and activity.needs_active_frames(current):
             return True
@@ -341,7 +341,7 @@ class CubeMotionMixin:
 
     # ------------------------------------------------------------------ internals
     def _is_gliding(self) -> bool:
-        return self._glide_dur > 0.0 and (time.monotonic() - self._glide_start) < self._glide_dur
+        return self._glide_dur > 0.0 and (time.perf_counter() - self._glide_start) < self._glide_dur
 
     def _advance_wander(self, now: float) -> None:
         """Gentle free-mode drift: ease toward a slowly-changing nearby point so the
@@ -578,7 +578,7 @@ class CubeMotionMixin:
         ):
             return False
         if float(getattr(self, "_glide_dur", 0.0) or 0.0) > 0.0 and (
-            time.monotonic() - float(getattr(self, "_glide_start", 0.0) or 0.0)
+            time.perf_counter() - float(getattr(self, "_glide_start", 0.0) or 0.0)
         ) < float(getattr(self, "_glide_dur", 0.0) or 0.0):
             return False
         since = getattr(self, "_cursor_idle_since", None)

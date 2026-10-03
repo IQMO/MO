@@ -25,11 +25,8 @@ button:disabled{opacity:.42;cursor:default}button:focus-visible,select:focus-vis
 @keyframes pen-stroke{0%{opacity:0;transform:rotate(35deg) scale(.3)}40%{opacity:.8;transform:rotate(35deg) scale(1)}100%{opacity:0;transform:rotate(35deg) scale(1)}}
 @keyframes frame-pass{0%,100%{background:color-mix(in srgb,var(--brand) 6%,var(--surface))}25%{background:color-mix(in srgb,var(--brand) 26%,var(--surface))}}
 @keyframes drawer-in{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes toast-in{from{transform:translate(-50%,5px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
-@keyframes fade{from{opacity:0}to{opacity:1}}
 @media(max-width:850px){.workspace-body{grid-template-columns:195px minmax(0,1fr);gap:18px;padding:20px}.device-card{padding:14px}.action-card{padding:14px}.workspace-caption{display:none}.capture-tool{gap:8px;padding:12px 10px}.capture-tool small{font-size:.64rem}.appbar-note{font-size:.7rem}}
 @media(max-width:670px){.workspace-body{grid-template-columns:1fr}.device-card{display:none}.appbar-note{display:none}.devicebar{padding:0 15px}.device-ready{display:none}.phone-footer{padding:0 15px}.workspace-heading{margin-bottom:13px}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 
 /* Native app bounds are owned by the shared host, never a nested mock window. */
 html,body{overflow:hidden} .phone-workspace{height:100%;max-width:none;margin:0;border:0;border-radius:var(--panel-radius);box-shadow:none;display:flex;flex-direction:column;background:var(--surface)}

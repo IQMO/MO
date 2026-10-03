@@ -1145,7 +1145,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         starting_transition = bool(getattr(self, "_transition_pending_start", False))
         composer = self._mode == "input" and callable(getattr(self._cube, "launch_piece", None))
         if composer and getattr(self._cube, "_composer_controller", None) is not self:
-            self._cube_source_center, source = self._cube.launch_piece(1, time.monotonic())
+            self._cube_source_center, source = self._cube.launch_piece(1, time.perf_counter())
             from PIL import Image
             self._cube_source_image = Image.frombytes("RGBA", source.size, source.convert("RGBa").tobytes())
             self._cube._composer_controller = self
@@ -1153,7 +1153,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._cube._composer_controller = None
         progress = 0.0 if starting_transition else self._transition_progress()
         morphing = starting_transition or progress < 1.0
-        now = time.monotonic()
+        now = time.perf_counter()
         # Direct input edits use 1x so one key never triggers a full 3x card rebuild.
         # Streaming uses 2x, while morphs and the scheduled settle remain crisp at 3x.
         self._ss, fast = self._render_supersample(morphing=morphing, now=now)
@@ -1258,7 +1258,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if starting_transition:
             self._transition_pending_start = False
             if ok:
-                self._transition_started_at = time.monotonic()
+                self._transition_started_at = time.perf_counter()
                 self._schedule_panel_transition()
             else:
                 self._transition_started_at = 0.0
@@ -1399,7 +1399,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         seconds = self._transition_seconds()
         if started <= 0.0 or seconds <= 0.0:
             return 1.0
-        raw = max(0.0, min(1.0, (time.monotonic() - started) / seconds))
+        raw = max(0.0, min(1.0, (time.perf_counter() - started) / seconds))
         amount = raw * raw * (3.0 - 2.0 * raw)
         return 1-amount if getattr(self, "_cube_closing", False) else amount
 
@@ -1523,7 +1523,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             # unevenly spaced frames on a short transition.
             elapsed_ms = max(
                 0.0,
-                (time.monotonic() - float(self._transition_started_at)) * 1000.0,
+                (time.perf_counter() - float(self._transition_started_at)) * 1000.0,
             )
             frame_ms = 16.0
             delay = max(1, int(round(frame_ms - (elapsed_ms % frame_ms))))
@@ -1539,7 +1539,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _panel_transition_tick(self) -> None:
         self._transition_after = None
         if getattr(self, "_cube_closing", False):
-            if time.monotonic()-self._transition_started_at >= self._transition_seconds():
+            if time.perf_counter()-self._transition_started_at >= self._transition_seconds():
                 self.hide()
             else:
                 self._repaint()
@@ -1956,19 +1956,28 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         self._keyboard_hit = key
         if key == "collapse":
+            if getattr(self, "_cube_closing", False):
+                return
             self._stash_input_draft()
             self._cancel_panel_transition()
             self._stop_blink()
             if self._transition_seconds() <= 0 or getattr(self._cube, "_composer_controller", None) is not self:
                 self.hide()
                 return
-            bx, by = self._cube._bases[1]
-            self._cube_source_center = (self._cube._x+bx-self._cube._size/2,
-                                        self._cube._y+by-self._cube._size/2)
+            now = time.perf_counter()
+            duration = self._transition_seconds()
+            started = self._transition_started_at
+            opened_for = (0.0 if self._transition_pending_start else
+                          min(duration, max(0.0, now-started)) if started > 0 else duration)
+            if opened_for >= duration:
+                bx, by = self._cube._bases[1]
+                self._cube_source_center = (self._cube._x+bx-self._cube._size/2,
+                                            self._cube._y+by-self._cube._size/2)
             self._cube_closing = True
             self._transition_pending_start = False
-            self._transition_started_at = time.monotonic()
-            self._transition_base = None
+            # Smoothstep is symmetric: reverse the current phase and cached
+            # pixels instead of jumping to a fresh, fully expanded close pose.
+            self._transition_started_at = now - (duration-opened_for)
             self._repaint()
             self._schedule_panel_transition()
         elif key == "role":

@@ -78,6 +78,11 @@ acknowledges reveal. Completion, failure and early exit use the same stdout
 receipt; a failed source read restores the native surface. Launch checks the
 selected native DLL against source timestamps so a temporary test build cannot
 silently leave the normal executable stale.
+After native source changes, isolated verification builds do not refresh the
+launcher executable. Build the normal Release output with the command below
+before handing the app back for use, and verify normal startup. Preserve
+the freshness check; an isolated test pass is not evidence that the launcher's
+binary is current.
 
 The surface uses one native resize-grip width for hit-testing and the outer
 attachment edges. The top inset also clears the existing header bounds. A

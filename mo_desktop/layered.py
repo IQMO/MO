@@ -541,8 +541,8 @@ class NativeLayeredWindow(LayeredWindow):
             return self._deliver_event(hwnd, message, wparam, lparam)
         if self._post is not None:
             if message in (0x0200, 0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x020A, 0x0100, 0x0006):
-                # Tcl releases the GIL around its Windows message pump. Native
-                # callbacks must not re-enter Tk; the existing GUI queue owns work.
+                # Defer surface work out of the native message callback;
+                # the existing GUI queue owns handler dispatch.
                 self._post(lambda: self._message_handler(hwnd, message, wparam, lparam)
                            if self._native_hwnd else None)
                 return 0

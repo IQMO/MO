@@ -121,7 +121,7 @@ class FocusBar:
         self._cube_sprites = []
         self._image = None
         self._opacity = 1.0
-        self._tick_at = time.monotonic()
+        self._tick_at = time.perf_counter()
         self._scan_at = self._hold_until = self._feedback_until = 0.0
         self._hover = self._pressed = self._drag = None
         self._hover_at = self._last_toggle_press = 0.0
@@ -135,7 +135,7 @@ class FocusBar:
         self._popup_hits = {}
         self._popup_preview = None
         self._opening = True
-        self._opening_at = time.monotonic()
+        self._opening_at = time.perf_counter()
         self._expansion = 0.0
         self._source_center, source = self.cube.launch_piece(3, self._opening_at)
         from PIL import Image
@@ -188,7 +188,7 @@ class FocusBar:
         if geometry == self._geometry and size == getattr(self, "_target_size", None):
             return
         if animate and self._geometry is not None:
-            self._layout_motion = (time.monotonic(), self._geometry, geometry)
+            self._layout_motion = (time.perf_counter(), self._geometry, geometry)
             self._layout_source = self._published_image
             self._layout_before_collapsed = self._published_image.width <= 40
             self._layout_amount = 0.0
@@ -298,7 +298,7 @@ class FocusBar:
             if sprite_key != self._sprite_key:
                 self._sprite_key = sprite_key
                 self._cube_sprites = self.cube._render_sprite_set(self.cube._color_rgb, edge=self.COLLAPSED_EDGE)
-            brightness = self.cube._cube_state(3, time.monotonic(), projected=True)[2]
+            brightness = self.cube._cube_state(3, time.perf_counter(), projected=True)[2]
             level = max(0, min(len(self._cube_sprites)-1, round(brightness*(len(self._cube_sprites)-1))))
             sprite = self._cube_sprites[level]
         key = (self._target_size, self._collapsed, tuple(rows), self._hover, self._failed_handle,
@@ -391,7 +391,7 @@ class FocusBar:
 
     def _message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
         import win32gui
-        now = time.monotonic()
+        now = time.perf_counter()
         point = (lparam & 0xffff, (lparam >> 16) & 0xffff)
         if message == 0x0200:  # WM_MOUSEMOVE
             if self._settings_drag and wparam & 1:
@@ -423,7 +423,7 @@ class FocusBar:
                     return 0
                 self._last_toggle_press = now
                 self._collapse_at = 0.0
-                # Native input is queued onto Tk's lane. The pointer may already
+                # Native input is queued onto the resident GUI lane. The pointer may already
                 # have moved when this press is consumed; anchor the press itself.
                 self._drag, self._drag_moved = win32gui.ClientToScreen(hwnd, point), False
                 self._drag_origin = self._cube_center
@@ -490,7 +490,7 @@ class FocusBar:
                 self._launch_path(key[1])
         elif key == "toggle":
             from mo_desktop.focus_native import _api
-            self._collapse_at = time.monotonic()+_api().user.GetDoubleClickTime()/1000
+            self._collapse_at = time.perf_counter()+_api().user.GetDoubleClickTime()/1000
         elif key == "tray": self._open_tray()
         elif key == "clock": self._show_calendar()
         elif key == "search":
@@ -512,18 +512,18 @@ class FocusBar:
             self._power_control(key)
         elif key == "dimming":
             self._idle_opacity = .9 if self._idle_opacity <= .15 else max(.1, self._idle_opacity-.1)
-            self._settings_preview_until = time.monotonic()+1.5
+            self._settings_preview_until = time.perf_counter()+1.5
             self._paint_page()
 
     def _set_dimming(self, x: int) -> None:
         left, _y, width, _h = self._hits["dimming"]
         self._idle_opacity = max(.1, min(1., 1-(x-left)/width))
-        self._settings_preview_until = time.monotonic()+1.5
+        self._settings_preview_until = time.perf_counter()+1.5
         self._paint_page()
 
     def _power_remaining(self) -> int:
         from math import ceil
-        return max(1, ceil(self._power_deadline-time.monotonic())) if self._power_deadline else 0
+        return max(1, ceil(self._power_deadline-time.perf_counter())) if self._power_deadline else 0
 
     def _power_confirm_label(self) -> str:
         action = {"sleep": "Sleep", "restart": "Restart", "shutdown": "Shut down"}.get(self._power_action, "Power")
@@ -547,7 +547,7 @@ class FocusBar:
                 self._power_minutes = max(1, min(240, self._power_minutes + (-5 if action == "less" else 5)))
             elif action == "confirm" and self._power_action:
                 if self._power_delay:
-                    self._power_deadline = time.monotonic()+self._power_minutes*60
+                    self._power_deadline = time.perf_counter()+self._power_minutes*60
                 else:
                     self._execute_power()
         self._paint_page()
@@ -593,7 +593,7 @@ class FocusBar:
             os.startfile(path)
         except OSError:
             self._failed_handle = path
-            self._feedback_until = time.monotonic()+2
+            self._feedback_until = time.perf_counter()+2
             self._paint_page()
 
     def _search_changed(self, value: str) -> None:
@@ -602,7 +602,7 @@ class FocusBar:
         self._query = value
         self._results, self._result_icons, self._search_note = [], {}, ""
         self._offset = self._result_selected = 0
-        self._search_at = time.monotonic()+.25 if value.strip() else 0.0
+        self._search_at = time.perf_counter()+.25 if value.strip() else 0.0
         self._close_popup()
         self._paint_page()
 
@@ -681,7 +681,7 @@ class FocusBar:
                                  by-self.cube._size/2-self.cube._cube_edge/2)
         self._close_popup()
         self._hover = None
-        self._hold_until = time.monotonic()+.6
+        self._hold_until = time.perf_counter()+.6
         self._fit_visible_rows(animate=True)
         self._paint_page()
 
@@ -696,7 +696,7 @@ class FocusBar:
             self._saved = {}
             self.cube._focus_opacity = 1.0
         center = (self.cube._x, self.cube._y)
-        cx, cy, _brightness, _alpha = self.cube._cube_state(3, time.monotonic() if now is None else now, projected=True)
+        cx, cy, _brightness, _alpha = self.cube._cube_state(3, time.perf_counter() if now is None else now, projected=True)
         margin = (self._target_size[0]-self.COLLAPSED_EDGE)/2
         offset = (cx-self.cube._size/2-self.cube._cube_edge/2-margin,
                   cy-self.cube._size/2-self.cube._cube_edge/2-margin)
@@ -758,7 +758,7 @@ class FocusBar:
         self._popup_geometry = (*self._popup_position(self._popup_anchor(anchor), image.size, below=kind == "tray", side=kind == "preview"), *image.size)
         self._popup_image = image
         self._popup_amount = 0.0
-        self._popup_until = time.monotonic()+.25
+        self._popup_until = time.perf_counter()+.25
         import win32api
         self._popup_mouse_down = bool(win32api.GetAsyncKeyState(1) & 0x8000)
         x, y, _w, _h = self._popup_geometry
@@ -928,7 +928,7 @@ class FocusBar:
         self._hover = None
         if not activate_switchable_window(handle, limit=WINDOW_LIMIT, minimize_active=not close):
             self._failed_handle = handle
-            self._feedback_until = self._hold_until = time.monotonic()+2.0
+            self._feedback_until = self._hold_until = time.perf_counter()+2.0
             self._paint_page()
             return
         self._failed_handle = None
@@ -1025,7 +1025,7 @@ class FocusBar:
             return
         import threading
         self._close_popup()
-        self._hold_until = time.monotonic()+2.0
+        self._hold_until = time.perf_counter()+2.0
         self._tray_pending = True
         def completed(opened: bool, items: Any = None) -> None:
             if self._closed:
@@ -1036,15 +1036,15 @@ class FocusBar:
                 self._tray_items, self._tray_hover = items, None
                 image, hits = tray_image(items, self._visuals)
                 self._open_popup("tray", image, "tray")
-                self._popup_until = time.monotonic()+.6
+                self._popup_until = time.perf_counter()+.6
                 self._popup_hits = hits
                 self._popup.set_controls({key: (items[key].name, box) for key, box in hits.items()}, self._invoke_tray)
                 self._tray_failed = False
                 self._paint_page()
                 return
             self._tray_failed = not opened
-            self._tray_until = time.monotonic()+1 if opened else 0.0
-            self._feedback_until = time.monotonic()+2 if not opened else 0.0
+            self._tray_until = time.perf_counter()+1 if opened else 0.0
+            self._feedback_until = time.perf_counter()+2 if not opened else 0.0
             self._paint_page()
         def invoke() -> None:
             try:
@@ -1093,7 +1093,7 @@ class FocusBar:
                 def failed() -> None:
                     if not self._closed:
                         self._tray_failed = True
-                        self._feedback_until = time.monotonic()+2
+                        self._feedback_until = time.perf_counter()+2
                         self._paint_page()
                 self.owner._post_gui(failed)
         threading.Thread(target=invoke, name="mo-focus-tray-action", daemon=True).start()

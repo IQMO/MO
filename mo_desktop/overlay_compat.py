@@ -1,6 +1,6 @@
 """Bounded compatibility for approved third-party always-on-top overlays.
 
-MO's layered Tk surfaces already live in Windows' topmost band. Some dimmers and
+MO's native layered surfaces already live in Windows' topmost band. Some dimmers and
 accessibility overlays periodically move themselves to the front of that same band,
 placing the cube underneath even though both windows are topmost. This module listens
 for external window reorders and restores MO as one non-activating batch only when an

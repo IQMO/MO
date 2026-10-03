@@ -773,6 +773,44 @@ disabled profiles contribute no rows and import no private code.
 - Android release acceptance exercises the real notification/overlay permission round trip on a supported physical device, then proves process survival, foreground service, cube visibility, and explicit disable. Keep authenticated `FragmentActivity` compatible with Compose Activity Result launchers; do not replace the instrumentation compatibility test with mocked permission-ready rendering.
 - Public Android behavior, requirements, and availability are recorded in [`ANDROID.md`](../ANDROID.md). In a maintainer checkout where the ignored private client tree is present, `clients/android/MAINTAINING.md` owns source/release maintenance and `clients/android/CHANGELOG.md` owns versioned package history and actual-device evidence. Every Android behavior, UI, permission, protocol, dependency, compatibility, packaging, or release change updates those matching public/private authorities together. Never turn planned coverage into a shipped claim.
 
+## Rendering and motion ownership
+
+| Surface | Existing owner | Motion and resource boundary |
+| --- | --- | --- |
+| Main cubes, chase, gestures, emotes, trail | `cube.py`, `cube_motion.py`, `cube_interaction.py`, `cube_panel.py` | One resident frame lane; elapsed-time springs and bounded sprite/trace caches. |
+| Four-cube launcher and folder menus | `tray.CubeLauncher` | Uses the resident cube's pixels and surface; finite open/close callbacks, then the resident tick for interaction. |
+| Composer, replies, attachment cards | `ReplyBubble`, `card.py` | One cached base per reveal; finite callbacks stop at completion. Closing during opening reverses its current pose. |
+| Focus face and popovers | `focus.py`, `focus_paint.py`, `focus_native.py` | Uses the cube tick; layout/opacity settle, stationary artwork is cached, and only the current hover owns a DWM preview. |
+| Tray controls | `tray.TrayPopup`, `interface.desktop_widgets` | Shared switch artwork; the existing finite callback stops after opacity and switches settle. |
+| Native app entrances | `mo_renderer`, `NativeLayeredWindow` | One finite WinForms clock per opening; stops while waiting for content and disposes on completion, failure or close. |
+| Shared WebView controls | `app_controls.css` | Owns buttons, switches, toast/fade keyframes and reduced-motion rules for Phone, Settings and SystemCare. App-specific scenes remain local. |
+| Shell folds, linked pairs, hover and drop feedback | `mo_shell/native/ShellSurface.cs` and its partials | Separate native presentation owner; see [Shell's contract](../mo_shell/MAINTAINING.md). |
+
+Presentation timestamps, gestures and finite deadlines on the resident lane use
+`time.perf_counter()`, the same precise monotonic clock as `NativeGuiLoop`.
+Do not mix them with `time.monotonic()` values: older Windows Python versions
+back that API with a coarse clock and a different epoch. Service polling,
+retry deadlines and wall-clock dates retain their own independent clocks.
+The resident's 16/42/125 ms active/passive/hidden frame budgets include time
+already spent doing work. A missed budget yields at least 1 ms; it never queues
+catch-up frames. Native app entrances request 15 ms WinForms ticks to avoid
+rounding a 16 ms request into two default Windows timer quanta. These are
+requested budgets, not a guarantee of presented frames under load.
+
+Retarget finite motion from its current pose. Composer collapse and launcher
+menu dismissal reverse their existing symmetric curve without a full-size or
+full-opacity flash; repeated collapse does not restart it. Keep completed
+artwork cached, preserve premultiplied-alpha boundaries, and publish the final
+frame before releasing its transition state. Theme, radius, typography and
+glyphs still come from the shared visual owners above; timing fixes do not
+introduce alternative palettes or renderers.
+
+Verification distinguishes deterministic state/pixel checks, hidden native
+handle/timer checks and visible acceptance on the running Desktop. Passing
+the first two does not establish DWM frame pacing or the final visual feel.
+Measure finite interaction separately from passive and hidden work; a faster
+interaction clock must not become an always-running background animation.
+
 ## Activity, replies, and walkthroughs
 
 - Concise live activity reuses the cube-side glance label already used by volume, sync, and notices. It never creates an activity state in the reply/specialized-content panel. Raw provider phases remain diagnostic-only and map to a small deterministic vocabulary, never raw provider text or hidden reasoning.

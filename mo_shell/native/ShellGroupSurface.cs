@@ -38,7 +38,7 @@ internal sealed partial class ShellSurface
     private static double Since(long timestamp) => timestamp == 0 ? double.PositiveInfinity :
         (Stopwatch.GetTimestamp() - timestamp) / (double)Stopwatch.Frequency;
     internal static float Ease(float progress) => 1 - MathF.Pow(1 - Math.Clamp(progress, 0, 1), 3);
-    private bool GroupNeedsFrames => HasCompactGroup && (GroupWorking || Since(_groupMotionStarted) < .24 ||
+    private bool GroupNeedsFrames => HasCompactGroup && (Since(_groupMotionStarted) < .24 ||
         _groupIdleStarted != 0 || Since(_groupReturnStarted) < .14 || _groupPointerDown);
 
     public Color InstanceColor

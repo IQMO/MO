@@ -40,14 +40,15 @@ internal sealed partial class ShellSurface : Control
         AutoPopDelay = 5000,
         ShowAlways = true,
     };
-    private readonly System.Windows.Forms.Timer _identityAnimation = new() { Interval = 33 };
+    // Below whole Windows timer quanta; 16/33 ms can round up to 31/47 ms.
+    private readonly System.Windows.Forms.Timer _identityAnimation = new() { Interval = 31 };
+    private long _identityFrameAt;
     private bool _visualMotion;
     public event Action? VisualFrame;
 
     public void SetVisualMotion(bool active)
     {
         _visualMotion = active;
-        _identityAnimation.Interval = active ? 16 : 33;
         UpdateIdentityAnimation();
     }
     private TerminalFragment[][] _screen = Array.Empty<TerminalFragment[]>();
@@ -236,6 +237,9 @@ internal sealed partial class ShellSurface : Control
 
     private void TickIdentityAnimation()
     {
+        var frameAt = Stopwatch.GetTimestamp();
+        var elapsed = Math.Clamp((frameAt - _identityFrameAt) / (double)Stopwatch.Frequency, 0, .25);
+        _identityFrameAt = frameAt;
         if (ControlsNeedFrames)
         {
             var now = Stopwatch.GetTimestamp();
@@ -251,14 +255,15 @@ internal sealed partial class ShellSurface : Control
         TickGroupAnimation();
         var target = _collapsed && _identityHovered ? 1f : 0f;
         var previous = _identityLabelOpacity;
+        var identityStep = (float)(IdentityFadeStep * elapsed / .033);
         _identityLabelOpacity = target > previous
-            ? Math.Min(target, previous + IdentityFadeStep)
-            : Math.Max(target, previous - IdentityFadeStep);
+            ? Math.Min(target, previous + identityStep)
+            : Math.Max(target, previous - identityStep);
         var identityChanged = Math.Abs(previous - _identityLabelOpacity) > 0.001f;
         var previousMouth = _dragMouth;
         var mouthEase = 1f - (float)Math.Pow(
             1f - 0.28f,
-            _identityAnimation.Interval / (1000f / 30f));
+            elapsed * 30);
         _dragMouth = Math.Abs(_dragMouthTarget - _dragMouth) < 0.002f
             ? _dragMouthTarget
             : _dragMouth + (_dragMouthTarget - _dragMouth) * mouthEase;
@@ -291,11 +296,14 @@ internal sealed partial class ShellSurface : Control
     private void UpdateIdentityAnimation()
     {
         var target = _collapsed && _identityHovered ? 1f : 0f;
-        if (_visualMotion || GroupNeedsFrames || ControlsNeedFrames || _working || _applicationDrag || _applicationDragLeaveStarted != 0 ||
+        var interactive = _visualMotion || GroupNeedsFrames || ControlsNeedFrames || _applicationDrag || _applicationDragLeaveStarted != 0 ||
             _dragMouth > 0.002f ||
             _dropReactionStarted != 0 ||
-            Math.Abs(target - _identityLabelOpacity) > 0.001f)
+            Math.Abs(target - _identityLabelOpacity) > 0.001f;
+        if (interactive || _working || HasCompactGroup && GroupWorking)
         {
+            _identityAnimation.Interval = interactive ? 15 : 31;
+            if (!_identityAnimation.Enabled) _identityFrameAt = Stopwatch.GetTimestamp();
             _identityAnimation.Start();
         }
         else

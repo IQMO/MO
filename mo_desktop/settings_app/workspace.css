@@ -31,7 +31,6 @@ dialog{color:var(--text);background:var(--surface);border:1px solid var(--border
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{border-radius:8px;background:color-mix(in srgb,var(--text) 15%,transparent)}::-webkit-scrollbar-thumb:hover{background:var(--muted)}.page-section{animation:page-in .18s var(--ease)}
 @keyframes page-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}@keyframes menu-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 @media(max-width:850px){.sidebar{width:188px;padding-left:8px;padding-right:8px}main{padding:21px 22px}.setting-row{gap:12px}.control{min-width:130px}.range-control{width:170px}input[type=range]{width:110px}.page-scope{display:none}.hero-mark{width:95px}.setting-row p{max-width:245px}.appearance-hero h2{font-size:1.5rem}}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 #skin-gallery{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 12px;margin-bottom:8px;scrollbar-width:thin}
 .skin-tile{flex:0 0 100px;padding:5px;border-radius:var(--button-radius);text-align:left;font-size:.79rem;color:var(--muted);transition:background .16s var(--ease),color .16s var(--ease)}

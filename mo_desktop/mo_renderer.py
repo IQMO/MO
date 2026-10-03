@@ -827,13 +827,15 @@ class _DesignNativeVisualController:
                     threading.Thread(target=receive, name="mo-app-source", daemon=True).start()
             return
         try:
-            entrance.update(started=time.monotonic(), fade_started=None,
+            entrance.update(started=time.perf_counter(), fade_started=None,
                             surface=NativeLayeredWindow(int(self._window.native.Handle.ToInt64())))
         except (OSError, RuntimeError):
             self._finish_app_entrance(False)
             return
         timer = Timer()
-        timer.Interval = 16
+        # Stay below the default 15.625 ms Windows timer quantum: requesting
+        # 16 ms can produce 31 ms frames. This clock exists only during reveal.
+        timer.Interval = 15
         timer.Tick += self._tick_app_entrance
         entrance["timer"] = timer
         self._tick_app_entrance(first=True)
@@ -844,7 +846,7 @@ class _DesignNativeVisualController:
         entrance = self._entrance
         if entrance is None:
             return
-        now = time.monotonic()
+        now = time.perf_counter()
         elapsed = 0 if first else now - entrance["started"]
         duration = entrance["art"].get("duration", .88)
         if elapsed >= duration and self._content_ready and entrance["fade_started"] is None:

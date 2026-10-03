@@ -204,9 +204,9 @@ _DUPLICATE_POINT_SUPPRESS_SECONDS = 8.0
 # MO Desktop keeps its OWN persisted session slot (never "main"): isolated from
 
 
-def _desktop_frame_delay_ms(surface: Any, now: float | None = None) -> int:
+def _desktop_frame_delay_ms(surface: Any, now: float | None = None, *, render_ms: float = 0.0) -> int:
     """Choose a responsive cadence without continuously redrawing an idle cube."""
-    current = time.monotonic() if now is None else float(now)
+    current = time.perf_counter() if now is None else float(now)
     cube = getattr(surface, "_cube", None)
     active = bool(getattr(surface, "_recording_voice", False))
     if cube is not None:
@@ -219,7 +219,7 @@ def _desktop_frame_delay_ms(surface: Any, now: float | None = None) -> int:
                 or getattr(cube, "_speaking", False)
             )
     if active:
-        return _GUI_ACTIVE_FRAME_MS
+        return max(1, round(_GUI_ACTIVE_FRAME_MS - render_ms))
     role_view = getattr(surface, "_role_workspace", None)
     role_window = getattr(role_view, "window", None)
     role_visible = False
@@ -231,7 +231,8 @@ def _desktop_frame_delay_ms(surface: Any, now: float | None = None) -> int:
     visible = bool(getattr(surface, "_visible", False)) or bool(
         cube is not None and getattr(cube, "_visible", False)
     ) or role_visible
-    return _GUI_PASSIVE_FRAME_MS if visible else _GUI_HIDDEN_FRAME_MS
+    interval = _GUI_PASSIVE_FRAME_MS if visible else _GUI_HIDDEN_FRAME_MS
+    return max(1, round(interval - render_ms))
 
 
 class CompanionSurface(
@@ -2122,6 +2123,7 @@ class CompanionSurface(
 
         def _gui_tick() -> None:
             delay = _GUI_HIDDEN_FRAME_MS
+            frame_started = time.perf_counter()
             try:
                 if not self._running:
                     root.stop()
@@ -2144,13 +2146,15 @@ class CompanionSurface(
                         if self._recording_voice and self._voice is not None:
                             recorder = getattr(self._voice, "recorder", None)
                             self._cube.set_level(float(getattr(recorder, "level", 0.0) or 0.0))
-                        # Reuse the cadence timestamp and the cube's single pointer sample.
-                        self._cube.tick(current)
+                        # Presentation shares the scheduler's precise clock. Service
+                        # deadlines above retain their own monotonic time domain.
+                        self._cube.tick(frame_started)
                     except Exception:
                         self._cube_tick_retry_at = current + _CUBE_TICK_RETRY_SECONDS
                         log_exception("mo-desktop-cube-tick-error", config=getattr(self._agent, "config", None))
                         _write_stderr(traceback.format_exc())
-                delay = _desktop_frame_delay_ms(self, current)
+                delay = _desktop_frame_delay_ms(self, frame_started,
+                    render_ms=(time.perf_counter() - frame_started) * 1000)
             except Exception:
                 if self._running:
                     log_exception("mo-desktop-gui-tick-error", config=getattr(self._agent, "config", None))

@@ -247,7 +247,7 @@ class CompanionDashboardMixin:
                        activate=self.summon)]
 
     def _collect_notices_async(self) -> None:
-        """Collect filesystem/SQLite-backed notice sources off the Tk frame lane."""
+        """Collect filesystem/SQLite-backed notice sources off the resident GUI lane."""
         if bool(getattr(self, "_notice_poll_in_flight", False)):
             return
         self._notice_poll_in_flight = True
@@ -334,7 +334,7 @@ class CompanionDashboardMixin:
     def _display_dashboard(self) -> None:
         """Right-click / 2nd Ctrl+Ctrl: show the compact dashboard
         on the cube-attached panel. The panel is the ONLY surface: if it cannot render, this records
-        why and shows nothing. Disk/profile/graph synthesis never runs on Tk's GUI thread: the
+        why and shows nothing. Disk/profile/graph synthesis never runs on the resident GUI thread: the
         current snapshot (or an honest empty state on first open) paints immediately. The daemon
         refresh starts only after the reveal's final frame, then updates this same panel in place."""
         data, actions = self._dashboard_compact_data(self._dashboard_snapshot_cache)

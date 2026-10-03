@@ -34,7 +34,7 @@ class CubePanelMixin:
         if not specs or self._guidance_owns_label():
             return
         if (self._label_kind != "running" and self._label_value
-                and time.monotonic() < self._label_until):
+                and time.perf_counter() < self._label_until):
             return
         if self._label_kind != "running" and self._label_value:
             self._hide_label()
@@ -190,7 +190,7 @@ class CubePanelMixin:
 
     def show_bubble(self, text: str, seconds: float = 2.6, side: str | None = None) -> None:
         """Show a small speech bubble next to the cubes (e.g. 'what's up?')."""
-        now = time.monotonic()
+        now = time.perf_counter()
         duration = max(0.5, float(seconds or 2.6))
         if self._guidance_owns_label(now):
             pending = getattr(self, "_pending_glance", None)
@@ -212,7 +212,7 @@ class CubePanelMixin:
         The label window is click-through, so it can never receive <Enter>. The cube already ticks
         every frame, so the pointer is polled there instead — one call, no new window, no new surface.
         """
-        now = time.monotonic()
+        now = time.perf_counter()
         duration = max(0.5, float(seconds or 3.0))
         if self._guidance_owns_label(now):
             self._pending_glance = (str(title or ""), duration, None, str(detail or ""), "notice")
@@ -223,7 +223,7 @@ class CubePanelMixin:
         )
 
     def _guidance_owns_label(self, now: float | None = None) -> bool:
-        current = time.monotonic() if now is None else float(now)
+        current = time.perf_counter() if now is None else float(now)
         return (
             getattr(self, "_label_variant", "glance") == "guidance"
             and bool(getattr(self, "_label_value", ""))
@@ -240,7 +240,7 @@ class CubePanelMixin:
         kind: str = "bubble",
         activate: Any = None,
     ) -> None:
-        now = time.monotonic()
+        now = time.perf_counter()
         self._label_variant = "glance"
         self._label_kind = "notice" if kind == "notice" else "bubble"
         self._notice_title = str(text or "") if kind == "notice" else ""
@@ -266,7 +266,7 @@ class CubePanelMixin:
     def activate_notice(self) -> bool:
         """Consume the current glance action when the operator clicks the cube."""
         action = getattr(self, "_notice_action", None)
-        if not callable(action) or time.monotonic() > float(getattr(self, "_notice_action_until", 0.0) or 0.0):
+        if not callable(action) or time.perf_counter() > float(getattr(self, "_notice_action_until", 0.0) or 0.0):
             self._notice_action = None
             self._notice_action_until = 0.0
             return False

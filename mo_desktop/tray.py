@@ -524,7 +524,7 @@ class CompanionTray:
         """Best-effort tray balloon so silent actions (e.g. a failed startup toggle)
         give the user feedback. Degrades quietly if the backend can't notify."""
         self._notification_action = action if callable(action) else None
-        self._notification_action_until = time.monotonic() + 30.0 if self._notification_action else 0.0
+        self._notification_action_until = time.perf_counter() + 30.0 if self._notification_action else 0.0
         try:
             if self._tray is not None:
                 self._tray.notify(message, TRAY_TOOLTIP)
@@ -534,7 +534,7 @@ class CompanionTray:
     def _activate_notification(self) -> bool:
         action = self._notification_action
         self._notification_action = None
-        if not callable(action) or time.monotonic() > self._notification_action_until:
+        if not callable(action) or time.perf_counter() > self._notification_action_until:
             self._notification_action_until = 0.0
             return False
         self._notification_action_until = 0.0
@@ -648,7 +648,7 @@ class CubeLauncher:
         self._group_motion: tuple[float, dict[int, tuple[float, float]]] | None = None
         self._entry_motion: tuple[float, dict[str, tuple[float, float]]] | None = None
         self._remove_app = ""
-        self._press_at = self._last_activity = time.monotonic()
+        self._press_at = self._last_activity = time.perf_counter()
         self._last_pointer: tuple | None = None
         self._hold_consumed = False
         self._buzz_started = 0.0
@@ -720,7 +720,7 @@ class CubeLauncher:
         self._remove_app = ""
         self._animation_from = self._progress
         self._animation_target = 0.0
-        self._animation_started = time.monotonic()
+        self._animation_started = time.perf_counter()
         self._animate()
 
     def _finish_hide(self) -> None:
@@ -731,7 +731,7 @@ class CubeLauncher:
             cube._launcher_interacting = False
             cube._last_geometry = ""
             cube._reposition()
-            cube._render(time.monotonic())
+            cube._render(time.perf_counter())
             focus = getattr(cube, "_focus_controller", None)
             if focus is not None:
                 focus.set_launcher_active(False)
@@ -784,13 +784,13 @@ class CubeLauncher:
         self._focus_amounts = [0.0] * 4
         self._row_amounts.clear()
         self._pressed_app = ""
-        self._hover_tick_at = time.monotonic()
+        self._hover_tick_at = time.perf_counter()
         self._last_activity = self._hover_tick_at
         self._last_pointer = None
         self._buzz_started = 0.0
         self._render()
         cube = self.owner._companion._cube
-        now = time.monotonic()
+        now = time.perf_counter()
         pieces = tuple(cube.launch_piece(index, now) for index in range(min(4, cube._cube_count())))
         width, height = self._WIDTH, self._HEIGHT
         x, y = self._position(width, height, pieces)
@@ -809,7 +809,7 @@ class CubeLauncher:
         cube._launcher_active = True
         self.window.position(x, y, width, height)
         self._paint_size = (width, height)
-        self._animation_started = time.monotonic()
+        self._animation_started = time.perf_counter()
         self._animation_from = self._progress = 0.0
         self._animation_target = 1.0
         self._blit(self._animation_frame(0.0))
@@ -821,15 +821,15 @@ class CubeLauncher:
         from mo_desktop.cube_motion import _ease_out
         if self.window is None or self.mode != "full":
             return
-        elapsed = time.monotonic() - self._animation_started
+        elapsed = time.perf_counter() - self._animation_started
         distance = abs(self._animation_target - self._animation_from)
         phase = min(1.0, elapsed / max(0.001, self._EXPAND_SECONDS * distance))
         ease = _ease_out(phase)
         self._progress = self._animation_from + (self._animation_target - self._animation_from) * ease
-        frame_started = time.monotonic()
+        frame_started = time.perf_counter()
         self._blit(self._animation_frame(self._progress))
         if phase < 1:
-            delay = max(1, 16 - round((time.monotonic() - frame_started) * 1000))
+            delay = max(1, 16 - round((time.perf_counter() - frame_started) * 1000))
             self._animation = self.gui.schedule(delay, self._animate)
         else:
             self._animation = None
@@ -981,7 +981,7 @@ class CubeLauncher:
         from mo_desktop.cube_motion import _ease_out
         from interface.theming import contrast_text
 
-        now = time.monotonic() if now is None else now
+        now = time.perf_counter() if now is None else now
         image = Image.new("RGBA", (self._WIDTH, self._HEIGHT))
         cube = self.owner._companion._cube
         radius = round((self._TILE_WIDTH - 12) * float(cube._corner)) + 2
@@ -1264,13 +1264,20 @@ class CubeLauncher:
         from mo_desktop.cube_motion import _ease_out
         from mo_desktop.design import DEFAULT_DESKTOP_PANEL_DESIGN
 
-        current = time.monotonic() if now is None else now
+        current = time.perf_counter() if now is None else now
         x, y, _right, bottom = menu["bounds"]
         closing = bool(menu.get("closing"))
         layout_key = closing
         if menu.get("motion_key") != layout_key:
-            started = current if "motion_key" in menu else menu.get("opened_at", current)
             duration = getattr(self.owner._companion._cube, "_panel_design", DEFAULT_DESKTOP_PANEL_DESIGN).transition_ms / 1000
+            if "motion_key" in menu:
+                old_duration = max(.001, menu["motion_until"]-menu["motion_started"])
+                phase = min(1.0, max(0.0, (current-menu["motion_started"])/old_duration))
+                # The shared ease is symmetric; reverse without an opacity or
+                # position jump when dismissal interrupts the opening fade.
+                started = current-duration*(1-phase)
+            else:
+                started = current-duration if closing else menu.get("opened_at", current)
             menu.update(motion_key=layout_key, motion_started=started,
                         motion_until=started + duration, motion_complete=False)
         duration = max(.001, menu["motion_until"] - menu["motion_started"])
@@ -1292,7 +1299,7 @@ class CubeLauncher:
         if alpha < 1:
             menu_image = menu_image.copy()
             menu_image.putalpha(menu_image.getchannel("A").point(lambda value: round(value * alpha)))
-        shift = round(2 * (1 - ease) * (1 if up else -1)) if not closing else 0
+        shift = round(2 * (1 - alpha) * (1 if up else -1))
         image.alpha_composite(menu_image, (x, y + shift))
         if not closing and alpha > 0:
             for (x0, y0, x1, y1), row in menu["paint_hits"]:
@@ -1325,7 +1332,7 @@ class CubeLauncher:
                     if self._menu is menu and self.mode == "full" and not menu.get("closing"):
                         menu.update(rows=rows, needs_listing=False)
                         if not menu.get("paint"):
-                            menu["opened_at"] = time.monotonic()
+                            menu["opened_at"] = time.perf_counter()
                         self._art = self._highlight_app()
                         self._blit(self._art)
                 self.owner._companion._post_gui_call(publish_rows)
@@ -1373,7 +1380,7 @@ class CubeLauncher:
         if not self._save_layout():
             self._group_ids = prior
         elif self._editing:
-            self._entry_motion = (time.monotonic(), starts)
+            self._entry_motion = (time.perf_counter(), starts)
         self._render()
         self._blit(self._art)
 
@@ -1408,10 +1415,10 @@ class CubeLauncher:
         previous = self._menu if root and self._menu else None
         menu = {"kind": "folder", "path": str(Path(path)), "root": root or str(Path(path)),
                 "anchor": anchor, "rows": [{"id": "__loading", "label": "Loading…", "disabled": True}],
-                "query": "", "offset": 0, "opened_at": time.monotonic(), "needs_listing": True}
+                "query": "", "offset": 0, "opened_at": time.perf_counter(), "needs_listing": True}
         self._menu = menu
         if previous:
-            menu.update(width=previous.get("width"), opened_at=previous.get("opened_at", time.monotonic()))
+            menu.update(width=previous.get("width"), opened_at=previous.get("opened_at", time.perf_counter()))
             if previous.get("paint") is not None:
                 menu.update(paint=previous["paint"], paint_hits=[], bounds=previous["bounds"],
                             paint_extent=previous["paint_extent"])
@@ -1419,7 +1426,7 @@ class CubeLauncher:
         self._blit(self._art)
 
     def _menu_action(self, spec: dict[str, Any]) -> None:
-        self._last_activity = time.monotonic()
+        self._last_activity = time.perf_counter()
         app_id = spec["id"]
         if app_id == "__game_mode":
             opener = getattr(self.owner._companion, "open_systemcare_game_mode", None)
@@ -1437,7 +1444,7 @@ class CubeLauncher:
                                      {"id": "__folder", "label": "Add folder…"},
                                      {"id": "__reset", "label": "Reset layout"},
                                      {"id": "__appearance", "label": "Appearance…"}],
-                          "anchor": (self._gear_bounds[0]+4, self._gear_bounds[3]+6), "opened_at": time.monotonic()}
+                          "anchor": (self._gear_bounds[0]+4, self._gear_bounds[3]+6), "opened_at": time.perf_counter()}
         elif app_id == "__appearance":
             settings = next((row for row in self.owner.item_specs() if row["id"] == "settings"), None)
             if settings:
@@ -1528,13 +1535,13 @@ class CubeLauncher:
             origin = self._TILE_POSITIONS[source]
             dropped = (origin[0]+self._drag_point[0]-self._press_point[0],
                        origin[1]+self._drag_point[1]-self._press_point[1])
-            self._group_motion = (time.monotonic(), {target: dropped, source: self._TILE_POSITIONS[target]})
+            self._group_motion = (time.perf_counter(), {target: dropped, source: self._TILE_POSITIONS[target]})
         self._art = self._highlight_app()
 
     def _on_key(self, event: Any) -> str | None:
         if self.mode != "full":
             return None
-        self._last_activity = time.monotonic()
+        self._last_activity = time.perf_counter()
         if event.keysym == "Escape":
             if self._menu is not None:
                 self._dismiss_menu()
@@ -1704,7 +1711,7 @@ class CubeLauncher:
     def _on_press(self, event: Any) -> None:
         if self.mode != "full" or self._animation is not None or self._group_motion:
             return
-        self._press_at = self._last_activity = time.monotonic()
+        self._press_at = self._last_activity = time.perf_counter()
         self._hold_consumed = False
         control = any(x0 <= event.x <= x1 and y0 <= event.y <= y1
                       for (x0, y0, x1, y1), _ in self._menu_hits)
@@ -1721,12 +1728,12 @@ class CubeLauncher:
     def _on_click(self, event: Any) -> None:
         if self.mode != "full" or self._animation is not None or self._group_motion:
             return
-        self._last_activity = time.monotonic()
+        self._last_activity = time.perf_counter()
         source, self._pressed_group = self._dragging_group, -1
         self._dragging_group = -1
         if source >= 0:
             origin = self._TILE_POSITIONS[source]
-            self._group_motion = (time.monotonic(), {source: (
+            self._group_motion = (time.perf_counter(), {source: (
                 origin[0]+self._drag_point[0]-self._press_point[0],
                 origin[1]+self._drag_point[1]-self._press_point[1])})
             target = next((i for i, (x, y) in enumerate(self._TILE_POSITIONS)
@@ -1778,7 +1785,7 @@ class CubeLauncher:
         if self.mode != "full" or self._animation is not None:
             return
         self._set_hover(event.x, event.y)
-        self._last_activity = time.monotonic()
+        self._last_activity = time.perf_counter()
         self._buzz_started = 0.0
         if self._pressed_group >= 0 and math.dist(self._press_point, (event.x, event.y)) >= 6:
             self._dragging_group = self._pressed_group
@@ -1794,7 +1801,7 @@ class CubeLauncher:
     def _on_wheel(self, event: Any) -> None:
         if self.mode != "full":
             return
-        self._last_activity = time.monotonic()
+        self._last_activity = time.perf_counter()
         delta = -1 if event.delta > 0 else 1
         if self._menu is not None:
             if self._menu.get("kind") == "folder":
@@ -1873,13 +1880,13 @@ class TrayPopup:
 
     def _schedule(self) -> None:
         if self._after is None and self._surface is not None:
-            self._frame_at = time.monotonic()
+            self._frame_at = time.perf_counter()
             self._after = self.gui.schedule(16, self._frame)
 
     def _frame(self) -> None:
         from mo_desktop.cube_motion import _time_scaled_ease
         self._after = None
-        now = time.monotonic()
+        now = time.perf_counter()
         ease = _time_scaled_ease(.45, now-self._frame_at)
         self._frame_at = now
         target = float(self._visible)
@@ -1909,7 +1916,7 @@ class TrayPopup:
             self._effects.refresh_hwnd(self._surface._native_hwnd, *self._size,
                 self._visuals.metrics.panel_corner_radius, self._visuals.effects, self._visuals.token("_GLOW"))
         if moving:
-            self._after = self.gui.schedule(16, self._frame)
+            self._after = self.gui.schedule(max(1, 16-(time.perf_counter()-now)*1000), self._frame)
 
     def _render(self) -> None:
         import win32api, win32gui

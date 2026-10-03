@@ -21,7 +21,7 @@ This module owns only the *state machine*. It reuses the companion's capabilitie
 (``_display_input_dialog`` / ``_display_dashboard``) and the
 cube's controls (``enable_follow`` / ``summon_to`` / ``play_emote``) — no duplicate
 machinery. Single vs double click is resolved with a short delayed-single timer on
-the cube's Tk window, so a single action never fires as half of a double.
+the resident GUI loop, so a single action never fires as half of a double.
 """
 from __future__ import annotations
 
