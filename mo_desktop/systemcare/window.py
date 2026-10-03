@@ -44,7 +44,7 @@ class MoSystemCareWindow(NativeAppWindow):
 
     def _post(self, callback: Any) -> None:
         if callable(callback):
-            self.parent.after(0, callback)
+            self.parent.schedule(0, callback)
 
     def _handle_status(self, status: dict[str, Any]) -> None:
         kind = status.get("kind")

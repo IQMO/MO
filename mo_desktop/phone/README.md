@@ -98,16 +98,19 @@ The model, configuration, parent receipts and host/lifecycle callbacks are priva
 to the bridge; WebView's automatic API discovery cannot expose those internal
 owners as a second device/action path.
 The worker watches session liveness only while a mirror or Trackpad is active.
-An idle cached host waits for work rather than continuously scanning devices.
+An idle open or minimized host waits for work rather than continuously scanning devices.
 Hub health, coordinator and inventory checks run once during initial discovery and then
 only for explicit connection checks or QR requests on that same worker. A
-cached window has no idle network polling or duplicate Hub registry.
+retained window has no idle network polling or duplicate Hub registry.
 Errors remain in the workspace; finite motion reflects connection and successful
 capture/input changes and respects reduced motion.
 
-Closing hides the same native host and stops Trackpad after any in-flight start
-finishes. It preserves the separately running scrcpy mirror. Reopening and
-theme changes retain the same controls and device selection. Desktop shutdown
+Closing stops Trackpad after any in-flight start finishes, then exits the native
+host when no mirror is running, releasing its WebView processes. A separately
+running scrcpy mirror keeps its existing hidden owner until it ends; reopening
+cancels that pending exit and retains its controls and device selection. After
+an idle close, reopening creates a fresh workspace and discovers devices again.
+Theme changes retain a running workspace. Desktop shutdown
 or command-pipe loss rejects queued work, completes Trackpad cleanup and releases
 the host and shared native effect layer. Minimizing retains active sessions.
 

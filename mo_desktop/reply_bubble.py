@@ -27,6 +27,8 @@ Two modes, ONE surface (no tkinter dialog anywhere):
 """
 from __future__ import annotations
 
+from mo_desktop.gui_loop import pointer_position, screen_size, clipboard_text, set_clipboard_text
+
 import re
 import time
 from typing import Any, Callable
@@ -60,30 +62,17 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     """MO's reply/input, rendered as a smooth floating card on a layered window."""
 
-    def __init__(self, root: Any, cube: Any, visuals: DesktopVisualState,
+    def __init__(self, gui: Any, cube: Any, visuals: DesktopVisualState,
                  design: BubbleDesign | None = None,
                  panel_design: DesktopPanelDesign | None = None) -> None:
-        import tkinter as tk
-        from mo_desktop.layered import LayeredWindow
+        from mo_desktop.layered import NativeLayeredWindow
 
-        self._root = root
+        self._gui = gui
         self._cube = cube
         self._panel_design = panel_design or DEFAULT_DESKTOP_PANEL_DESIGN
         self._design = design or self._panel_design.bubble or DEFAULT_BUBBLE_DESIGN
         self._apply_visual_state(visuals)
 
-        self._win = tk.Toplevel(root)
-        # The frame is visually borderless, but a stable native title keeps the
-        # one interactive Desktop surface discoverable to Windows accessibility
-        # and automation clients.  It does not create a second panel or taskbar UI.
-        self._win.title("MO Desktop")
-        self._win.overrideredirect(True)
-        self._win.withdraw()
-        try:
-            self._win.attributes("-topmost", True)
-        except Exception:
-            pass
-        self._layered = LayeredWindow(self._win)
         self._last_error = ""
         self._visible = False
         self._on_visibility_changed: Callable[[bool], None] | None = None
@@ -157,23 +146,31 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._dashboard_compact_actions: dict[str, Callable[[], None]] = {}
         self._dashboard_view = "overview"
         self._hit: dict[str, tuple[int, int, int, int]] = {}  # window-space rects of footer controls
-        self._win.bind("<Key>", self._on_key)
-        # Explicit arrow bindings are more reliable than relying on <Key> for reply history.
-        self._win.bind("<Up>", lambda _event: self._nav(-1))
-        self._win.bind("<Down>", lambda _event: self._nav(+1))
-        self._win.bind("<MouseWheel>", self._on_wheel)
-        self._win.bind("<Button-4>", lambda _e: self._scroll_body(-3))
-        self._win.bind("<Button-5>", lambda _e: self._scroll_body(+3))
-        # Click the footer controls (↑/↓ history + Reply). Clicks land in window
-        # coordinates = final-image pixels (the window is sized to the blitted image).
-        self._win.bind("<ButtonRelease-1>", self._on_click)
-        # Interactive crop (Phase 4) needs press+drag+release; these no-op outside crop mode.
-        self._win.bind("<ButtonPress-1>", self._on_press)
-        self._win.bind("<B1-Motion>", self._on_drag)
-        # Nothing told the operator a control was clickable: the panel had no <Motion> binding at
-        # all and never changed the cursor.
-        self._win.bind("<Motion>", self._on_motion)
-        self._win.bind("<Leave>", self._on_leave)
+        self._win = NativeLayeredWindow(
+            title="MO Desktop", on_event=self._on_native_event, post=cube._post_gui,
+        )
+        self._layered = self._win
+
+    def _on_native_event(self, kind: str, event: Any) -> None:
+        if kind in {"key", "text"}:
+            if event.keysym in {"Up", "Down"} and not getattr(self, "_role_menu_open", False):
+                self._nav(-1 if event.keysym == "Up" else 1)
+            elif kind == "text" or event.keysym != "space":
+                self._on_key(event)
+        elif kind == "wheel":
+            self._on_wheel(event)
+        elif kind == "release" and event.num == 1:
+            self._on_click(event)
+        elif kind == "press" and event.num == 1:
+            self._on_press(event)
+        elif kind == "motion":
+            if event.dragging:
+                self._on_drag(event)
+            self._on_motion(event)
+        elif kind == "leave":
+            self._on_leave(event)
+        elif kind == "close":
+            self.hide()
 
     def available(self) -> bool:
         return self._layered.available()
@@ -493,7 +490,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         option_layout = wrapped_options[1]
         options_content_h = sum(height + 6 for _label, _detail, height in option_layout)
         try:
-            card_budget = max(320, int(self._win.winfo_screenheight()) - 100)
+            card_budget = max(320, int(screen_size()[1]) - 100)
         except Exception:
             card_budget = 668
         preview_height = min(232 if not option_rows else 168, max(64, card_budget - options_content_h - 120))
@@ -1136,8 +1133,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         try:
             cx, cy = self._cube.center()
             half = int(getattr(self._cube, "_size", 84) / 2)
-            sw = int(self._win.winfo_screenwidth())
-            sh = int(self._win.winfo_screenheight())
+            sw = int(screen_size()[0])
+            sh = int(screen_size()[1])
         except Exception as exc:
             self._last_error = f"panel geometry failed ({type(exc).__name__})"
             return False
@@ -1254,9 +1251,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._layered.set_input_bounds(self._bounds)
             self._last_error = ""
         try:
-            self._win.deiconify()
-            self._win.lift()
-            self._win.attributes("-topmost", True)
+            self._win.show()
         except Exception:
             pass
         self._publish_visibility(ok)
@@ -1321,7 +1316,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if focused:
             title += f" — Focus: {focused}"
         try:
-            self._win.title(title)
+            self._win.set_title(title)
         except Exception:
             pass
 
@@ -1467,8 +1462,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if painted:
             if is_input:
                 try:
-                    self._win.focus_force()
-                    self._win.focus_set()
+                    self._win.activate()
                 except Exception:
                     pass
             self._hold(True)
@@ -1510,7 +1504,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _cancel_panel_transition(self) -> None:
         if getattr(self, "_transition_after", None) is not None:
             try:
-                self._win.after_cancel(self._transition_after)
+                self._gui.cancel(self._transition_after)
             except Exception:
                 pass
             self._transition_after = None
@@ -1538,7 +1532,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             # Never clear an elapsed transition here: the completion tick owns the
             # final cached-base/latest-content paint.  Skipping it can strand a panel
             # on its last almost-full frame when one render crosses the deadline.
-            self._transition_after = self._win.after(delay, self._panel_transition_tick)
+            self._transition_after = self._gui.schedule(delay, self._panel_transition_tick)
         except Exception:
             self._transition_after = None
 
@@ -1610,11 +1604,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         quality so the resting card is crisp."""
         if getattr(self, "_settle_after", None) is not None:
             try:
-                self._win.after_cancel(self._settle_after)
+                self._gui.cancel(self._settle_after)
             except Exception:
                 pass
         try:
-            self._settle_after = self._win.after(240, self._settle_repaint)
+            self._settle_after = self._gui.schedule(240, self._settle_repaint)
         except Exception:
             self._settle_after = None
 
@@ -1784,7 +1778,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._cancel_panel_transition()
         if getattr(self, "_settle_after", None) is not None:
             try:
-                self._win.after_cancel(self._settle_after)
+                self._gui.cancel(self._settle_after)
             except Exception:
                 pass
             self._settle_after = None
@@ -1812,7 +1806,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._recall_from_composer = False
         self._hold(False)
         try:
-            self._win.withdraw()
+            self._win.hide()
         except Exception:
             pass
 
@@ -1876,8 +1870,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 self._select_all = True
                 self._finish_input_edit()
             elif key in {"c", "x"} and self._select_all:
-                self._win.clipboard_clear()
-                self._win.clipboard_append(self._body)
+                set_clipboard_text(self._body)
                 if key == "x":
                     self._body = ""
                     self._cursor = 0
@@ -1885,7 +1878,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     self._finish_input_edit()
             elif key == "v":
                 try:
-                    pasted = str(self._win.clipboard_get())
+                    pasted = str(clipboard_text())
                 except Exception:
                     return "break"
                 pasted = " ".join(pasted.replace("\r", "\n").replace("\t", " ").splitlines())
@@ -2370,14 +2363,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _start_blink(self) -> None:
         self._stop_blink()
         try:
-            self._blink_after = self._win.after(530, self._blink)
+            self._blink_after = self._gui.schedule(530, self._blink)
         except Exception:
             self._blink_after = None
 
     def _stop_blink(self) -> None:
         if self._blink_after is not None:
             try:
-                self._win.after_cancel(self._blink_after)
+                self._gui.cancel(self._blink_after)
             except Exception:
                 pass
             self._blink_after = None
@@ -2398,14 +2391,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         if self._watch_after is not None:
             try:
-                self._win.after_cancel(self._watch_after)
+                self._gui.cancel(self._watch_after)
             except Exception:
                 pass
         if not bool(getattr(self, "_dismissible", True)):
             self._watch_after = None
             return
         try:
-            self._watch_after = self._win.after(220, self._watch_click_away)
+            self._watch_after = self._gui.schedule(220, self._watch_click_away)
         except Exception:
             self._watch_after = None
 
@@ -2451,7 +2444,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         self._hover = key
         try:
-            self._win.configure(cursor="hand2" if key else "")
+            self._win.set_cursor("hand" if key else "arrow")
         except Exception:
             pass
         self._repaint()
@@ -2461,7 +2454,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         self._hover = ""
         try:
-            self._win.configure(cursor="")
+            self._win.set_cursor("arrow")
         except Exception:
             pass
         if getattr(self, "_visible", False):
@@ -2529,7 +2522,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._transition_started_at = 0.0
             self._cube_closing = False
             self._stop_blink()
-            self._win.withdraw()
+            self._win.hide()
         else:
             self._repaint()
             self._start_blink()
@@ -2538,9 +2531,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not text:
             return False
         try:
-            self._win.clipboard_clear()
-            self._win.clipboard_append(text)
-            self._win.update_idletasks()   # the clipboard survives this window closing
+            set_clipboard_text(text)
         except Exception:
             return False
         return True
@@ -2553,7 +2544,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._copied = True
         self._repaint()
         try:
-            self._win.after(900, self._clear_copied)
+            self._gui.schedule(900, self._clear_copied)
         except Exception:
             pass
 
@@ -2571,7 +2562,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._arm_click_away()
         elif getattr(self, "_watch_after", None) is not None:
             try:
-                self._win.after_cancel(self._watch_after)
+                self._gui.cancel(self._watch_after)
             except Exception:
                 pass
             self._watch_after = None
@@ -2588,7 +2579,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         try:
             from core.desktop.win32 import VK_LBUTTON, mouse_button_held
             if mouse_button_held((VK_LBUTTON,)):
-                px, py = self._win.winfo_pointerxy()
+                px, py = pointer_position()
                 x0, y0, x1, y1 = self._bounds
                 inside = (x0 <= px <= x1 and y0 <= py <= y1)
                 near_cube = False
@@ -2606,7 +2597,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         except Exception:
             pass
         try:
-            self._watch_after = self._win.after(90, self._watch_click_away)
+            self._watch_after = self._gui.schedule(90, self._watch_click_away)
         except Exception:
             self._watch_after = None
 
@@ -2615,11 +2606,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._cancel_panel_transition()
         self._transition_callbacks = []
         self._stop_blink()
+        for name in ("_watch_after", "_settle_after"):
+            timer = getattr(self, name, None)
+            if timer is not None:
+                self._gui.cancel(timer)
+                setattr(self, name, None)
         try:
             self._layered.destroy()
-        except Exception:
-            pass
-        try:
-            self._win.destroy()
         except Exception:
             pass

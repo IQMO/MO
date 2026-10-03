@@ -6,6 +6,8 @@ and exit. Pystray is optional.
 """
 from __future__ import annotations
 
+from mo_desktop.gui_loop import pointer_position, screen_size
+
 import os
 import math
 import threading
@@ -286,7 +288,7 @@ class CompanionTray:
 
     def _show_popup(self, *, positioner: Any = None) -> bool:
         """Post the skin-aware popup when the GUI owner is ready."""
-        root = getattr(self._companion, "_root", None)
+        root = getattr(self._companion, "_gui", None)
         if root is None:
             return False
 
@@ -344,7 +346,7 @@ class CompanionTray:
         return tuple(rows)
 
     def show_cube_launcher(self) -> None:
-        root = getattr(self._companion, "_root", None)
+        root = getattr(self._companion, "_gui", None)
         if root is None:
             return
         if self._launcher is None:
@@ -412,14 +414,14 @@ class CompanionTray:
         if self._launcher is not None and self._launcher.mode == "full":
             self._launcher.hide(on_complete=self._toggle_focus_gui)
             return
-        root = getattr(self._companion, "_root", None)
+        root = getattr(self._companion, "_gui", None)
         cube = getattr(self._companion, "_cube", None)
         if root is None or cube is None:
             return
         from mo_desktop.focus import FocusBar
         focus = FocusBar.__new__(FocusBar)
         try:
-            focus.__init__(root, self)
+            focus.__init__(self)
             self._focus = focus
         except Exception:
             if getattr(focus, "_surface", None) is not None:
@@ -610,13 +612,10 @@ class CubeLauncher:
     _EXPAND_SECONDS = 0.18
 
     def __init__(self, root: Any, owner: CompanionTray) -> None:
-        self.root, self.owner = root, owner
+        self.gui, self.owner = root, owner
         self.window: Any = None
         self.mode = ""
         self._surface: Any = None
-        self._cube_bound = False
-        self._fallback_canvas: Any = None
-        self._fallback_photo: Any = None
         self._animation: Any = None
         self._row_offsets = [0] * 4
         self._editing = False
@@ -682,37 +681,34 @@ class CubeLauncher:
         self.window = cube._win
         cube._launcher_painter = self._tick_hover
         self._surface = cube._ulw
-        self._fallback_canvas = cube._canvas
-        if not self._cube_bound:
-            targets = (self.window,) if self._fallback_canvas is None else (self.window, self._fallback_canvas)
-            for target in targets:
-                target.bind("<ButtonPress-1>", self._on_press, add="+")
-                target.bind("<ButtonRelease-1>", self._on_click, add="+")
-                target.bind("<MouseWheel>", self._on_wheel, add="+")
-                target.bind("<Motion>", self._on_motion, add="+")
-            self.window.bind("<KeyPress>", self._on_key, add="+")
-            self.window.bind("<FocusOut>", self._on_focus_out, add="+")
-            self._cube_bound = True
+        cube._launcher_input = self._on_native_event
         return True
 
-    def _on_focus_out(self, _event: Any) -> None:
-        if self._picking:
-            return
-        # Tk emits FocusOut while changing focus between children of this same
-        # native cube. Decide after that transition, against the actual owner.
-        def check() -> None:
-            if self.mode != "full" or self._picking or self._animation is not None:
-                return
-            focused = self.window.focus_get()
-            if focused is None or focused.winfo_toplevel() != self.window:
-                self.hide()
-        self.window.after_idle(check)
+    def _on_native_event(self, kind: str, event: Any) -> None:
+        if kind == "press" and event.num == 1:
+            self._on_press(event)
+        elif kind == "release" and event.num == 1:
+            self._on_click(event)
+        elif kind == "wheel":
+            self._on_wheel(event)
+        elif kind == "motion":
+            self._on_motion(event)
+        elif kind == "text" or kind == "key" and event.keysym != "space":
+            self._on_key(event)
+        elif kind == "blur" and not self._picking:
+            self.gui.schedule(0, self._check_focus)
+
+    def _check_focus(self) -> None:
+        import win32gui
+        if (self.mode == "full" and not self._picking and self._animation is None
+                and win32gui.GetForegroundWindow() != self.window.hwnd):
+            self.hide()
 
     def hide(self, *, on_complete: Any = None) -> None:
         if self.mode != "full" or self._animation_target == 0.0:
             return
         if self._animation is not None:
-            self.window.after_cancel(self._animation)
+            self.gui.cancel(self._animation)
             self._animation = None
         self._after_close = on_complete
         self._menu = None
@@ -734,10 +730,7 @@ class CubeLauncher:
             cube._launcher_painter = None
             cube._launcher_interacting = False
             cube._last_geometry = ""
-            if cube._canvas is not None:
-                cube._canvas.configure(width=cube._size, height=cube._size)
             cube._reposition()
-            cube._win.update_idletasks()
             cube._render(time.monotonic())
             focus = getattr(cube, "_focus_controller", None)
             if focus is not None:
@@ -752,7 +745,7 @@ class CubeLauncher:
             action()
 
     def apply_visual_state(self, _visuals: DesktopVisualState) -> None:
-        if self.mode == "full" and self.window is not None and self.window.winfo_viewable():
+        if self.mode == "full" and self.window is not None and self.window.is_visible():
             self._render()
             self._blit(self._animation_frame(self._progress) if self._animation is not None else self._art)
 
@@ -762,14 +755,14 @@ class CubeLauncher:
         cube = getattr(self.owner._companion, "_cube", None)
         anchor = getattr(cube, "_win", None)
         center_x, center_y = (cube.center() if cube is not None
-                              else (self.root.winfo_pointerx(), self.root.winfo_pointery()))
+                              else (pointer_position()[0], pointer_position()[1]))
         if pieces:
             center_x = (min(cx-sprite.width/2 for (cx, cy), sprite in pieces)
                         + max(cx+sprite.width/2 for (cx, cy), sprite in pieces))/2
             center_y = (min(cy-sprite.height/2 for (cx, cy), sprite in pieces)
                         + max(cy+sprite.height/2 for (cx, cy), sprite in pieces))/2
         left, top, right, bottom = (_monitor_work_area(anchor) or
-                                    (0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()))
+                                    (0, 0, screen_size()[0], screen_size()[1]))
         self._work_area = (left, top, right, bottom)
         x = round(center_x - width / 2)
         y = round(center_y - height / 2)
@@ -779,7 +772,7 @@ class CubeLauncher:
         return max(left + 8, min(x, right - width - 8)), max(top + 8, min(y, bottom - height - 8))
 
     def show_full(self) -> None:
-        if self.mode == "full" and self.window.winfo_viewable():
+        if self.mode == "full" and self.window.is_visible():
             self.hide()
             return
         if not self._use_cube():
@@ -814,15 +807,14 @@ class CubeLauncher:
         if bubble is not None and bubble._visible:
             bubble.set_launcher_active(True)
         cube._launcher_active = True
-        self.window.geometry(f"{width}x{height}+{x}+{y}")
+        self.window.position(x, y, width, height)
         self._paint_size = (width, height)
         self._animation_started = time.monotonic()
         self._animation_from = self._progress = 0.0
         self._animation_target = 1.0
         self._blit(self._animation_frame(0.0))
-        self.window.deiconify()
-        self.window.lift()
-        self.window.focus_force()
+        self.window.show()
+        self.window.activate()
         self._animate()
 
     def _animate(self) -> None:
@@ -838,7 +830,7 @@ class CubeLauncher:
         self._blit(self._animation_frame(self._progress))
         if phase < 1:
             delay = max(1, 16 - round((time.monotonic() - frame_started) * 1000))
-            self._animation = self.window.after(delay, self._animate)
+            self._animation = self.gui.schedule(delay, self._animate)
         else:
             self._animation = None
             if self._animation_target == 0.0:
@@ -1386,7 +1378,7 @@ class CubeLauncher:
         self._blit(self._art)
 
     def _pick_shortcut(self, kind: str) -> None:
-        from tkinter import filedialog
+        from mo_desktop.native_files import choose_path
         import uuid
 
         self._menu = None
@@ -1394,8 +1386,7 @@ class CubeLauncher:
         self._art = self._highlight_app()
         self._blit(self._art)
         try:
-            picker = filedialog.askdirectory if kind == "folder" else filedialog.askopenfilename
-            selected = picker(parent=self.window, title="Choose folder" if kind == "folder" else "Choose file")
+            selected = choose_path(self.window.hwnd, folder=kind == "folder")
         finally:
             self._picking = False
         if selected:
@@ -1409,7 +1400,7 @@ class CubeLauncher:
                     self._shortcuts.remove(row)
                     group.remove(row["id"])
                 self._render()
-        self.window.focus_force()
+        self.window.activate()
         self._art = self._highlight_app()
         self._blit(self._art)
 
@@ -1701,17 +1692,10 @@ class CubeLauncher:
             return
         if image.size != self._paint_size:
             x, y = self._window_position
-            self.window.geometry(f"{image.width}x{image.height}+{x}+{y}")
+            self.window.position(x, y, image.width, image.height)
             self._paint_size = image.size
         if self._surface is not None and self._surface.available():
             self._surface.blit(image, *self._window_position)
-        elif self._fallback_canvas is not None:
-            from PIL import ImageTk
-
-            self._fallback_canvas.configure(width=image.width, height=image.height)
-            self._fallback_photo = ImageTk.PhotoImage(image, master=self.window)
-            self._fallback_canvas.delete("all")
-            self._fallback_canvas.create_image(0, 0, image=self._fallback_photo, anchor="nw")
 
     def _hit(self, x: int, y: int) -> dict[str, Any] | None:
         return next((spec for (x0, y0, x1, y1), spec in self._hitboxes
@@ -1835,7 +1819,7 @@ class TrayPopup:
 
     def __init__(self, root: Any, owner: CompanionTray) -> None:
         from interface.desktop_widgets import DesktopWindowEffectLayer
-        self.root, self.owner = root, owner
+        self.gui, self.owner = root, owner
         self._visuals = owner._visuals
         self.palette = self._visuals.palette
         self._surface = None
@@ -1869,7 +1853,7 @@ class TrayPopup:
 
     def destroy(self) -> None:
         if self._after is not None:
-            self.root.after_cancel(self._after)
+            self.gui.cancel(self._after)
             self._after = None
         if self._surface is not None:
             self._surface.destroy()
@@ -1890,7 +1874,7 @@ class TrayPopup:
     def _schedule(self) -> None:
         if self._after is None and self._surface is not None:
             self._frame_at = time.monotonic()
-            self._after = self.root.after(16, self._frame)
+            self._after = self.gui.schedule(16, self._frame)
 
     def _frame(self) -> None:
         from mo_desktop.cube_motion import _time_scaled_ease
@@ -1925,7 +1909,7 @@ class TrayPopup:
             self._effects.refresh_hwnd(self._surface._native_hwnd, *self._size,
                 self._visuals.metrics.panel_corner_radius, self._visuals.effects, self._visuals.token("_GLOW"))
         if moving:
-            self._after = self.root.after(16, self._frame)
+            self._after = self.gui.schedule(16, self._frame)
 
     def _render(self) -> None:
         import win32api, win32gui

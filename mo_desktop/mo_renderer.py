@@ -240,10 +240,32 @@ def _purpose_entrance_frame(art: dict, elapsed: float) -> Any:
                 sx, sy = math.floor(min(a[0], b[0]) - pad), math.floor(min(a[1], b[1]) - pad)
                 size = (math.ceil(max(a[0], b[0]) + pad) - sx,
                         math.ceil(max(a[1], b[1]) + pad) - sy)
-                ink = Image.new("RGBa", (size[0] * 2, size[1] * 2))
-                ImageDraw.Draw(ink).line([(round((x-sx)*2), round((y-sy)*2)) for x, y in (a, b)],
-                                         fill=rgba(art["accent"], alpha, True), width=line_width * 2)
-                frame.alpha_composite(ink.resize(size, Image.Resampling.BOX).convert("RGBA"), (sx-left, sy-top))
+                if size[0] * size[1] <= 32768:
+                    ink = Image.new("RGBa", (size[0] * 2, size[1] * 2))
+                    ImageDraw.Draw(ink).line([(round((x-sx)*2), round((y-sy)*2)) for x, y in (a, b)],
+                                             fill=rgba(art["accent"], alpha, True), width=line_width * 2)
+                    frame.alpha_composite(ink.resize(size, Image.Resampling.BOX).convert("RGBA"), (sx-left, sy-top))
+                    continue
+                # Long diagonals occupy a thin band. Rasterize disjoint strips
+                # instead of allocating/resizing their mostly empty rectangle.
+                axis = 0 if abs(b[0]-a[0]) >= abs(b[1]-a[1]) else 1
+                origin = (sx, sy)
+                delta = b[axis]-a[axis]
+                points_2x = [(round((x-sx)*2), round((y-sy)*2)) for x, y in (a, b)]
+                mask = Image.new("1", (size[0] * 2, size[1] * 2))
+                ImageDraw.Draw(mask).line(points_2x, fill=1, width=line_width * 2)
+                for offset in range(0, size[axis], 128):
+                    lo, hi = origin[axis]+offset, origin[axis]+min(size[axis], offset+128)
+                    other = [a[1-axis]+(value-a[axis])*(b[1-axis]-a[1-axis])/delta
+                             for value in (lo, hi)] if delta else [a[1-axis]]
+                    low = max(origin[1-axis], math.floor(min(other)-pad))
+                    high = min(origin[1-axis]+size[1-axis], math.ceil(max(other)+pad))
+                    tx, ty, tw, th = ((lo, low, hi-lo, high-low) if axis == 0
+                                      else (low, lo, high-low, hi-lo))
+                    ink = Image.new("RGBa", (tw * 2, th * 2))
+                    ink.paste(rgba(art["accent"], alpha, True), (0, 0, tw*2, th*2),
+                              mask.crop(((tx-sx)*2, (ty-sy)*2, (tx-sx+tw)*2, (ty-sy+th)*2)))
+                    frame.alpha_composite(ink.resize((tw, th), Image.Resampling.BOX).convert("RGBA"), (tx-left, ty-top))
         def panel(rect, alpha=150, fill=16):
             x0, y0, x1, y1 = (round(value) for value in rect)
             radius = max(0, round(min(art["radius"], (x1-x0)/4, (y1-y0)/4)))
@@ -272,7 +294,7 @@ def _purpose_entrance_frame(art: dict, elapsed: float) -> Any:
                 frame.alpha_composite(corners.crop(crop), (position[0]-left, position[1]-top))
         x0, y0, x1, y1 = box
         if app == "dashboard":
-            gap = 8 * (1 - unfold) + 4
+            gap = min(8 * (1 - unfold) + 4, cw / 8, ch / 8)
             for row in range(2):
                 for col in range(2):
                     px, py = x0 + col * cw/2, y0 + row * ch/2

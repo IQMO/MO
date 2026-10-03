@@ -32,8 +32,6 @@ DESKTOP_STRUCTURAL_RADIUS_WHITELIST = MappingProxyType({
         "open/copy/delete action glyph detail",
     ("interface/desktop_brand.py", "make_glyph_icon", "s * 0.05"):
         "delete action glyph detail",
-    ("mo_desktop/cube.py", "_render", "int(W * 0.28)"):
-        "cube-cluster backing silhouette",
     ("mo_desktop/cube_motion.py", "paint_cube_trace", "max(0, size * corner)"):
         "shared cube trace follows each actual piece's size and character radius",
     ("mo_desktop/focus_paint.py", "cube_face", "2 * SS"):

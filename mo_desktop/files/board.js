@@ -613,11 +613,20 @@
     const initial=window.MO_FILES_INITIAL || {};
     try {
       await browse(0,initial.source_id || '',initial.location_id || '','');
+      let transferTimer = null, transferPolling = false;
       async function pollTransfers() {
-        await refreshTransfers();
-        const active = state.transfers.some(row => !['done','cancelled','expired','failed'].includes(row.state));
-        setTimeout(pollTransfers,active ? 3000 : 15000);
+        clearTimeout(transferTimer);
+        transferTimer = null;
+        if (document.hidden || transferPolling) return;
+        transferPolling = true;
+        try { await refreshTransfers(); }
+        finally {
+          transferPolling = false;
+          const active = state.transfers.some(row => !['done','cancelled','expired','failed'].includes(row.state));
+          if (!document.hidden) transferTimer = setTimeout(pollTransfers,active ? 3000 : 15000);
+        }
       }
+      document.addEventListener('visibilitychange',pollTransfers);
       pollTransfers();
     }
     catch (_) {

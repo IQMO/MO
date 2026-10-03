@@ -189,7 +189,7 @@ def native_handle(window: Any) -> int:
     if isinstance(window, int):
         return window
     api = _api()
-    handle = int(window.winfo_id())
+    handle = int(window.hwnd if hasattr(window, "hwnd") else window.winfo_id())
     return int(api.user.GetAncestor(handle, 2) or handle)
 
 

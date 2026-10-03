@@ -85,11 +85,11 @@ class FocusBar:
 
     COLLAPSED_EDGE = 32
 
-    def __init__(self, root: Any, owner: Any) -> None:
+    def __init__(self, owner: Any) -> None:
         from mo_desktop.layered import NativeLayeredWindow
         from interface.desktop_widgets import DesktopWindowEffectLayer
 
-        self.owner, self.root = owner, root
+        self.owner = owner
         self.cube = owner._companion._cube
         self._visuals = owner._visuals
         self._closed = False

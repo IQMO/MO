@@ -110,7 +110,7 @@ def mark_ready(
     ``source_stamp=None`` preserves the synchronous helper contract for callers
     that explicitly need a complete marker.  MO Desktop publishes ``pending``
     first and replaces it from a short worker so Git latency can never hold the
-    Tk event loop closed after the surfaces are ready.
+    GUI event loop closed after the surfaces are ready.
     """
     try:
         from core.utils.atomic_write import atomic_write_text

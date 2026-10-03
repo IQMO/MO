@@ -9,11 +9,11 @@ class MoPhoneWindow(NativeAppWindow):
     app_module = "mo_desktop.phone.app"
     app_title = "MO Phone"
 
-    def __init__(self, root: Any, config: dict[str, Any] | None = None, *,
+    def __init__(self, gui: Any, config: dict[str, Any] | None = None, *,
                  on_notice: Any = None, on_open_files: Any = None,
                  live_control_status: Any = None) -> None:
         super().__init__(config)
-        self.root = root
+        self.gui = gui
         self.on_notice = on_notice
         self.on_open_files = on_open_files
         self.live_control_status = live_control_status
@@ -60,9 +60,9 @@ class MoPhoneWindow(NativeAppWindow):
                 finally:
                     if self.is_running():
                         self._send({"cmd": "files_result", "ok": ok})
-            self.root.after(0, open_files)
+            self.gui.schedule(0, open_files)
         elif kind == "notice" and self.on_notice:
-            self.root.after(0, lambda: self.on_notice(str(status.get("title") or "Phone"), str(status.get("detail") or "")))
+            self.gui.schedule(0, lambda: self.on_notice(str(status.get("title") or "Phone"), str(status.get("detail") or "")))
 
     def destroy(self) -> None:
         super().destroy()

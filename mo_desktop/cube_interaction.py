@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mo_desktop.gui_loop import pointer_position
+
 import math
 import time
 from typing import Any
@@ -31,23 +33,26 @@ class CubeInteractionMixin:
         if callable(callback):
             callback(active)
 
-    def _bind_cube_events(self, target: Any) -> None:
-        # A click is a press AND a release on the cube. The hit area grows while a button is held
-        # nearby, so a release that merely wandered in must not read as a click on MO.
-        target.bind("<ButtonPress-1>", self._press_cube)
-        target.bind("<ButtonPress-3>", self._press_cube)
-        target.bind("<ButtonRelease-1>", lambda event: self._release_click("left", event))
-        target.bind("<ButtonRelease-3>", lambda event: self._release_click("right", event))
-        target.bind("<Double-Button-1>", lambda _e: self._handle_double())
-        if self._volume_controls:
-            # Scroll over the cube = system volume up/down, shown as a brief text label.
-            target.bind("<MouseWheel>", lambda e: self._on_scroll(e.delta))
+    def _on_native_event(self, kind: str, event: Any) -> None:
+        if self._launcher_active and self._launcher_input is not None:
+            self._launcher_input(kind, event)
+            return
+        if kind == "press":
+            self._press_cube(event)
+        elif kind == "release":
+            self._release_click("right" if event.num == 3 else "left", event)
+        elif kind == "double":
+            self._handle_double()
+        elif kind == "wheel" and self._volume_controls:
+            self._on_scroll(event.delta)
+        elif kind == "key" and event.keysym == "Escape" and self._escape is not None:
+            self._escape()
 
     def _event_screen_point(self, event: Any | None = None) -> tuple[float, float] | None:
         try:
             if event is not None and hasattr(event, "x_root") and hasattr(event, "y_root"):
                 return float(event.x_root), float(event.y_root)
-            px, py = self._win.winfo_pointerxy()
+            px, py = pointer_position()
             return float(px), float(py)
         except Exception:
             return None
@@ -55,7 +60,7 @@ class CubeInteractionMixin:
     def _sample_frame_pointer(self, now: float) -> tuple[float, float] | None:
         """Read the OS pointer once for all consumers in one rendered frame."""
         try:
-            px, py = self._win.winfo_pointerxy()
+            px, py = pointer_position()
             point = (float(px), float(py))
         except Exception:
             point = None
@@ -71,7 +76,7 @@ class CubeInteractionMixin:
         if bool(getattr(self, "_pointer_sample_ready", False)) and abs(sampled_at - current) <= 1e-9:
             return getattr(self, "_pointer_sample", None)
         try:
-            px, py = self._win.winfo_pointerxy()
+            px, py = pointer_position()
             return float(px), float(py)
         except Exception:
             return None
@@ -87,7 +92,7 @@ class CubeInteractionMixin:
         if (getattr(event, "num", 1) == 1 and self._pressed_cube_index is not None
                 and self._pressed_cube_index in (self._bottom_left_cube_index(), 3)):
             self._cube_hold_started_at = time.monotonic()
-            self._cube_hold_after = self._win.after(_CUBE_HOLD_MS, self._fire_cube_hold)
+            self._cube_hold_after = self._gui.schedule(_CUBE_HOLD_MS, self._fire_cube_hold)
 
     def _bottom_left_cube_index(self) -> int | None:
         bases = getattr(self, "_bases", ())
@@ -98,7 +103,7 @@ class CubeInteractionMixin:
         self._cube_hold_after = None
         self._cube_hold_started_at = 0.0
         if timer is not None:
-            self._win.after_cancel(timer)
+            self._gui.cancel(timer)
 
     def _cube_hold_progress(self, index: int, now: float) -> float:
         """Skin-accent ramp for the held cube; no separate animation clock."""

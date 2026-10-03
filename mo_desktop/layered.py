@@ -1,10 +1,7 @@
-"""Shared per-pixel-alpha layered-window helper (UpdateLayeredWindow / ULW_ALPHA).
+"""Shared native per-pixel-alpha surfaces (UpdateLayeredWindow / ULW_ALPHA).
 
-Lets a borderless Tk ``Toplevel`` be painted directly from a PIL RGBA image, so a
-surface can float on the desktop with SMOOTH anti-aliased edges, a soft shadow, and a
-glow — the same rendering language as the 4-cube (``cube.py``). A binary chroma key or
-``SetWindowRgn`` can't do soft edges; this can. Windows-only; ``available()`` is False
-elsewhere so callers fall back to a plain window.
+Pillow owns the pixels; this Windows adapter owns their presentation and input.
+The resident's existing GUI queue schedules callbacks outside native WndProc.
 """
 from __future__ import annotations
 
@@ -143,6 +140,8 @@ def _winapi() -> Any:
     user32.DestroyWindow.restype = wintypes.BOOL
     user32.IsWindow.argtypes = [wintypes.HWND]
     user32.IsWindow.restype = wintypes.BOOL
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
     user32.PeekMessageW.argtypes = [
         ctypes.POINTER(wintypes.MSG),
         wintypes.HWND,
@@ -198,10 +197,9 @@ def pump_native_window_messages() -> None:
 
 
 class LayeredWindow:
-    """Wrap a Tk Toplevel as a per-pixel-alpha layered window painted from PIL images."""
+    """Paint Pillow pixels on a borrowed HWND; cache and release its GDI resources."""
 
-    def __init__(self, win: Any, *, click_through: bool = False) -> None:
-        self._win = win
+    def __init__(self, hwnd: int, *, click_through: bool = False) -> None:
         self._click_through = click_through
         self._ok = False
         self._last_error = "not initialized"
@@ -211,9 +209,8 @@ class LayeredWindow:
         self._ppv = None
         self._w = 0
         self._h = 0
-        self._cached_hwnd = 0
+        self._cached_hwnd = int(hwnd)
         self._input_bounds = None
-        self._input_procs: dict[int, tuple[Any, Any]] = {}
         self._setup()
 
     def available(self) -> bool:
@@ -221,24 +218,7 @@ class LayeredWindow:
 
     def set_input_bounds(self, bounds: tuple[int, int, int, int]) -> None:
         """Keep the painted shadow passive without clipping its antialiased pixels."""
-        import win32gui
         self._input_bounds = bounds
-        for hwnd in {self._hwnd(), win32gui.GetAncestor(self._hwnd(), 2)}:
-            if hwnd in self._input_procs:
-                continue
-            def install(handle: int) -> None:
-                previous = None
-                def dispatch(h: int, message: int, wparam: int, lparam: int) -> int:
-                    if message == 0x0084:  # WM_NCHITTEST carries signed screen coordinates.
-                        x, y = lparam & 0xffff, lparam >> 16 & 0xffff
-                        x, y = x-65536 if x & 32768 else x, y-65536 if y & 32768 else y
-                        left, top, right, bottom = self._input_bounds
-                        if not (left <= x < right and top <= y < bottom):
-                            return -1  # HTTRANSPARENT: the original cube remains interactive.
-                    return win32gui.CallWindowProc(previous, h, message, wparam, lparam)
-                previous = win32gui.SetWindowLong(handle, -4, dispatch)
-                self._input_procs[handle] = (previous, dispatch)
-            install(hwnd)
 
     def set_click_through(self, enabled: bool) -> bool:
         """Switch one existing layered surface between a passive hint and a control."""
@@ -286,15 +266,7 @@ class LayeredWindow:
 
     # ------------------------------------------------------------------
     def _hwnd(self) -> int:
-        cached = int(getattr(self, "_cached_hwnd", 0) or 0)
-        if cached:
-            return cached
-        try:
-            hwnd = int(self._win.winfo_id())
-            self._cached_hwnd = hwnd
-            return hwnd
-        except Exception:
-            return 0
+        return self._cached_hwnd
 
     def _setup(self) -> None:
         import sys
@@ -309,7 +281,6 @@ class LayeredWindow:
         try:
             from core.desktop.win32 import apply_layered_exstyle
 
-            self._win.update_idletasks()
             hwnd = self._hwnd()
             if not hwnd:
                 self._fail("native window handle unavailable")
@@ -426,8 +397,7 @@ class LayeredWindow:
     ) -> bool:
         """Paint PIL RGBA ``img`` at screen ``(x, y)``; the window resizes to match.
 
-        Positions the window via Tk ``geometry`` and paints the content in place
-        (``pptDst = NULL``) — the same order the cube uses, which repositions reliably.
+        Positions the HWND before painting the content in place (``pptDst = NULL``).
         ``premultiplied=True`` means the caller already multiplied RGB by alpha (e.g. it
         resized in premultiplied space to avoid edge darkening), so only reorder to BGRA.
         """
@@ -451,23 +421,17 @@ class LayeredWindow:
                                             ImageChops.multiply(r, a), a)).tobytes()
             ctypes.memmove(self._ppv, bgra, min(len(bgra), w * h * 4))
             if position:
-                try:
-                    self._win.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
-                except Exception:
-                    pass
+                if not api.user32.SetWindowPos(self._hwnd(), None, int(x), int(y), w, h, 0x0014):
+                    return self._fail("layered surface could not be positioned")
 
             return self._update_layered_opacity(opacity)
         except Exception as exc:
             return self._fail(f"layered blit failed ({type(exc).__name__})", disable=True)
 
     def destroy(self) -> None:
-        if self._input_procs:
-            import win32gui
-            for hwnd, (previous, _dispatch) in self._input_procs.items():
-                if win32gui.IsWindow(hwnd):
-                    win32gui.SetWindowLong(hwnd, -4, previous)
-            self._input_procs.clear()
         self._free()
+        self._ok = False
+        self._cached_hwnd = 0
 
 
 class NativeLayeredWindow(LayeredWindow):
@@ -484,11 +448,17 @@ class NativeLayeredWindow(LayeredWindow):
     _SWP_SHOWWINDOW = 0x0040
 
     def __init__(self, target_hwnd: int = 0, *, on_message: Any = None, post: Any = None,
-                 title: str = "", activate: bool = True) -> None:
+                 title: str = "", activate: bool = True, on_event: Any = None) -> None:
         api = _winapi()
         self._target_hwnd = int(target_hwnd)
-        self._interactive = on_message is not None
+        self._interactive = on_message is not None or on_event is not None
         self._message_handler = on_message
+        self._event_handler = on_event
+        self._cursor = "arrow"
+        self._pointer_inside = False
+        self._high_surrogate = 0
+        self._pending_motion = None
+        self._drop_target: Any = None
         self._post = post
         self._window_proc: Any = None
         self._previous_proc: Any = None
@@ -525,20 +495,7 @@ class NativeLayeredWindow(LayeredWindow):
             raise RuntimeError("native layered effect window could not be created")
         self._native_hwnd = int(hwnd)
 
-        class _NativeProxy:
-            def __init__(self, value: int) -> None:
-                self.value = value
-
-            def winfo_id(self) -> int:
-                return self.value
-
-            def update_idletasks(self) -> None:
-                return None
-
-            def geometry(self, _value: str) -> None:
-                return None
-
-        super().__init__(_NativeProxy(self._native_hwnd), click_through=not self._interactive)
+        super().__init__(self._native_hwnd, click_through=not self._interactive)
         if not self.available():
             api.user32.DestroyWindow(self._native_hwnd)
             self._native_hwnd = 0
@@ -547,6 +504,14 @@ class NativeLayeredWindow(LayeredWindow):
             import win32gui
             def dispatch(hwnd: int, message: int, wparam: int, lparam: int) -> int:
                 previous = self._previous_proc
+                if message == 0x0084 and self._input_bounds is not None:
+                    # WM_NCHITTEST carries signed screen coordinates. Keep it in
+                    # this procedure: stacking Python WndProcs on one HWND recurses.
+                    x, y = lparam & 0xffff, lparam >> 16 & 0xffff
+                    x, y = x-65536 if x & 32768 else x, y-65536 if y & 32768 else y
+                    left, top, right, bottom = self._input_bounds
+                    if not (left <= x < right and top <= y < bottom):
+                        return -1  # HTTRANSPARENT: the underlying cube stays interactive.
                 if message == 0x0111 and lparam == self._text_input and wparam >> 16 == 0x0300:
                     value = win32gui.GetWindowText(self._text_input)
                     if self._post is not None:
@@ -572,6 +537,8 @@ class NativeLayeredWindow(LayeredWindow):
             self._previous_proc = win32gui.SetWindowLong(self._native_hwnd, -4, dispatch)
 
     def _deliver_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
+        if getattr(self, "_event_handler", None) is not None:
+            return self._deliver_event(hwnd, message, wparam, lparam)
         if self._post is not None:
             if message in (0x0200, 0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x020A, 0x0100, 0x0006):
                 # Tcl releases the GIL around its Windows message pump. Native
@@ -581,6 +548,135 @@ class NativeLayeredWindow(LayeredWindow):
                 return 0
             return None
         return self._message_handler(hwnd, message, wparam, lparam)
+
+    @property
+    def hwnd(self) -> int:
+        return self._native_hwnd
+
+    def is_visible(self) -> bool:
+        return bool(self.hwnd and _winapi().user32.IsWindowVisible(self.hwnd))
+
+    def position(self, x: int, y: int, width: int, height: int) -> None:
+        if not _winapi().user32.SetWindowPos(self.hwnd, None, x, y, width, height, 0x0014):
+            raise OSError("Native surface positioning failed")
+
+    def show(self) -> None:
+        _winapi().user32.SetWindowPos(self.hwnd, -1, 0, 0, 0, 0, 0x0053)
+
+    def activate(self) -> bool:
+        import pywintypes
+        import win32gui
+        try:
+            win32gui.SetForegroundWindow(self.hwnd)
+        except pywintypes.error:
+            # Windows can reject background focus stealing; keep the surface
+            # usable and let the next direct click activate it normally.
+            return False
+        win32gui.SetFocus(self.hwnd)
+        return True
+
+    def set_title(self, title: str) -> None:
+        import win32gui
+        win32gui.SetWindowText(self.hwnd, title)
+
+    def set_cursor(self, cursor: str) -> None:
+        self._cursor = cursor
+
+    def accept_files(self, *, drag: Any, leave: Any, drop: Any) -> None:
+        from mo_desktop.native_files import FileDropTarget
+        if self._post is None:
+            raise ValueError("File drops require the Desktop GUI queue")
+        if self._drop_target is not None:
+            self._drop_target.close()
+        self._drop_target = FileDropTarget(self.hwnd, self._post, drag=drag, leave=leave, drop=drop)
+
+    def _emit_event(self, kind: str, event: Any) -> None:
+        # Native callbacks return before painting. Retain the latest contiguous
+        # move, as Windows normally does while a synchronous GUI handler paints;
+        # never merge across a press, release, key, or other ordering boundary.
+        if kind == "motion" and self._pending_motion is not None:
+            self._pending_motion[0] = event
+            return
+        pending = [event]
+        self._pending_motion = pending if kind == "motion" else None
+        def deliver() -> None:
+            if self._pending_motion is pending:
+                self._pending_motion = None
+            if self.hwnd:
+                self._event_handler(kind, pending[0])
+        if self._post is not None:
+            self._post(deliver)
+        else:
+            deliver()
+
+    def _deliver_event(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
+        """Snapshot native input before queueing it onto the existing GUI lane."""
+        import win32api
+        import win32gui
+        from types import SimpleNamespace
+
+        if message == 0x0020:  # WM_SETCURSOR
+            cursor = {"hand": 32649, "cross": 32515}.get(self._cursor, 32512)
+            win32gui.SetCursor(win32gui.LoadCursor(0, cursor))
+            return 1
+        state = (1 if win32api.GetKeyState(16) < 0 else 0) | (4 if win32api.GetKeyState(17) < 0 else 0)
+        event = SimpleNamespace(x=0, y=0, x_root=0, y_root=0, num=1, delta=0,
+                                state=state, keysym="", char="")
+        if message in (0x0200, 0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0206, 0x020A):
+            x, y = lparam & 0xffff, (lparam >> 16) & 0xffff
+            x, y = x-65536 if x & 32768 else x, y-65536 if y & 32768 else y
+            if message == 0x020A:
+                event.x_root, event.y_root = x, y
+                x, y = win32gui.ScreenToClient(hwnd, (x, y))
+                delta = (wparam >> 16) & 0xffff
+                event.delta = delta-65536 if delta & 32768 else delta
+            else:
+                event.x_root, event.y_root = win32gui.ClientToScreen(hwnd, (x, y))
+            event.x, event.y = x, y
+            event.num = 3 if message in (0x0204, 0x0205, 0x0206) else 1
+            if message in (0x0201, 0x0203, 0x0204, 0x0206):
+                win32gui.SetCapture(hwnd)
+            elif message in (0x0202, 0x0205) and win32gui.GetCapture() == hwnd:
+                win32gui.ReleaseCapture()
+            if message == 0x0200 and not self._pointer_inside:
+                win32gui._TrackMouseEvent((0x2, hwnd, 0))  # TME_LEAVE
+                self._pointer_inside = True
+                self._emit_event("enter", event)
+            event.dragging = bool(wparam & 1) if message == 0x0200 else False
+            kind = {0x0200: "motion", 0x0201: "press", 0x0202: "release", 0x0203: "double",
+                    0x0204: "press", 0x0205: "release", 0x0206: "press", 0x020A: "wheel"}[message]
+        elif message == 0x02A3:
+            self._pointer_inside = False
+            kind = "leave"
+        elif message == 0x0008:
+            kind = "blur"
+        elif message == 0x0010:
+            kind = "close"
+        elif message == 0x0100:
+            keys = {8: "BackSpace", 9: "Tab", 13: "Return", 27: "Escape", 32: "space",
+                    35: "End", 36: "Home", 37: "Left", 38: "Up", 39: "Right", 40: "Down", 46: "Delete"}
+            event.keysym = keys.get(wparam, chr(wparam).lower() if 65 <= wparam <= 90 and state & 4 else "")
+            if not event.keysym:
+                return None
+            kind = "key"
+        elif message == 0x0102:
+            if wparam < 32 or state & 4:
+                return 0
+            if 0xD800 <= wparam <= 0xDBFF:
+                self._high_surrogate = wparam
+                return 0
+            if 0xDC00 <= wparam <= 0xDFFF and self._high_surrogate:
+                wparam = 0x10000 + ((self._high_surrogate-0xD800) << 10) + wparam-0xDC00
+            self._high_surrogate = 0
+            if 0xD800 <= wparam <= 0xDFFF:
+                return 0
+            event.char = chr(wparam)
+            event.keysym = "space" if wparam == 32 else event.char
+            kind = "text"
+        else:
+            return None
+        self._emit_event(kind, event)
+        return 0
 
     def set_controls(self, controls: dict[Any, tuple[str, tuple[int, int, int, int]]], invoke: Any) -> None:
         """Expose the painted hit targets as real, named Windows buttons for UIA.
@@ -699,7 +795,7 @@ class NativeLayeredWindow(LayeredWindow):
             return False
         api = _winapi()
         width, height = img.size
-        positioned = api.user32.SetWindowPos(
+        positioned = not position or api.user32.SetWindowPos(
             self._native_hwnd,
             None,
             int(x),
@@ -723,8 +819,10 @@ class NativeLayeredWindow(LayeredWindow):
             self.hide()
             return True
         if self._interactive:
-            return bool(api.user32.SetWindowPos(self._native_hwnd, -1, int(x), int(y), width, height,
-                                               self._SWP_NOACTIVATE | self._SWP_SHOWWINDOW))
+            if self.is_visible():
+                return True
+            return bool(api.user32.SetWindowPos(self._native_hwnd, -1, 0, 0, 0, 0,
+                                               0x0003 | self._SWP_NOACTIVATE | self._SWP_SHOWWINDOW))
         return self.place_behind(x, y, width, height)
 
     def place_behind(self, x: int, y: int, width: int, height: int) -> bool:
@@ -749,6 +847,9 @@ class NativeLayeredWindow(LayeredWindow):
             _winapi().user32.ShowWindow(self._native_hwnd, self._SW_HIDE)
 
     def destroy(self) -> None:
+        if self._drop_target is not None:
+            self._drop_target.close()
+            self._drop_target = None
         super().destroy()
         if self._native_hwnd:
             try:

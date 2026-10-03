@@ -44,6 +44,7 @@ class SettingsBridge:
     def __init__(self) -> None:
         self._window: Any = None
         self._on_ready: Any = None
+        self._exiting = False
 
     def request(self, request_id: str, action: str, payload: dict[str, Any]) -> None:
         if not isinstance(payload, dict) or len(json.dumps(payload)) > 16000:
@@ -57,8 +58,10 @@ class SettingsBridge:
 
     def window_control(self, action: str, width: int = 0, height: int = 0) -> None:
         if action == "close":
-            self._window.hide()
-            emit({"kind": "visible", "visible": False})
+            self._window.evaluate_js("window.moSettingsClose()")
+        elif action == "dispose":
+            self._exiting = True
+            self._window.destroy()
         elif action == "minimize":
             self._window.minimize()
         elif action == "resize":
@@ -104,7 +107,7 @@ def run(config: dict[str, Any], *, launch_snapshot: dict | None = None) -> int:
     exiting = False
 
     def closing() -> bool:
-        if exiting:
+        if exiting or bridge._exiting:
             return True
         threading.Thread(target=lambda: bridge.window_control("close"), daemon=True).start()
         return False

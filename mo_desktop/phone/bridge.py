@@ -42,12 +42,14 @@ class PhoneBridge:
         self._config = config or {}
         self._on_status: Any = None
         self._on_ui_ready: Any = None
+        self._on_idle_close: Any = None
         self._window: Any = None
         self._lock = threading.RLock()
         self._queue: queue.Queue[tuple[str, dict[str, Any]]] = queue.Queue()
         self._closed = False
         self._visible = True
         self._closing = False
+        self._exit_when_idle = False
         self._refresh_pending = False
         self._auto_trackpad = False
         self._pairing_image: Path | None = None
@@ -258,6 +260,7 @@ class PhoneBridge:
         with self._lock:
             if self._closed or self._closing or self._state["trackpad"]:
                 return
+            self._exit_when_idle = False
             self._auto_trackpad = True
         self.refresh()
 
@@ -274,6 +277,8 @@ class PhoneBridge:
     def _set_visible(self, visible: bool) -> None:
         with self._lock:
             self._visible = bool(visible)
+            if visible:
+                self._exit_when_idle = False
             if not visible:
                 self._clear_pairing()
         if visible:
@@ -287,12 +292,26 @@ class PhoneBridge:
             self._visible = False
             self._clear_pairing()
             self._closing = True
+            self._exit_when_idle = True
             self._auto_trackpad = self._refresh_pending = False
+        try:
+            if self._window is not None:
+                self._window.hide()
+            if self._on_status:
+                self._on_status({"kind": "visible", "visible": False})
+        finally:
             self._queue.put(("close", {}))
-        if self._window is not None:
-            self._window.hide()
-        if self._on_status:
-            self._on_status({"kind": "visible", "visible": False})
+
+    def _exit_if_idle(self) -> None:
+        """Called only at the serialized worker's safe device boundary."""
+        with self._lock:
+            if (self._closed or self._closing or not self._exit_when_idle
+                    or self._state["mirror"] or self._state["trackpad"]):
+                return
+            self._exit_when_idle = False
+            callback = self._on_idle_close
+        if callback is not None:
+            callback()
 
     def window_control(self, action: str, width: int = 0, height: int = 0) -> dict[str, Any]:
         window = self._window
@@ -335,6 +354,7 @@ class PhoneBridge:
         if mirror != self._state["mirror"] or trackpad != self._state["trackpad"]:
             self._publish(mirror=mirror, trackpad=trackpad,
                           message="Mirroring ended." if self._state["mirror"] and not mirror else self._state["message"])
+        self._exit_if_idle()
 
     def _discover(self) -> None:
         devices = self._model.devices()
@@ -366,6 +386,7 @@ class PhoneBridge:
                     self._publish(trackpad=False, trackpad_connection="", busy="")
                     with self._lock:
                         self._closing = False
+                    self._sessions()
                     continue
                 if action == "trackpad_state":
                     self._sessions()

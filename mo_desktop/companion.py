@@ -14,11 +14,13 @@ admission; replies show visually in a compact MO-branded dialog. By default
 `/desktop` launches this as a detached resident process.
 
 Architecture
-    [Tk event root + layered cube/bubble surfaces]
+    [Native GUI loop + layered cube/bubble surfaces]
       → Gateway.run_turn(route_source="mo_desktop") on an isolated desktop session
       → MO sees/acts/verifies on that isolated session (sandboxed desktop lane) → compact dialog
 """
 from __future__ import annotations
+
+from mo_desktop.gui_loop import pointer_position
 
 import json
 import queue
@@ -183,7 +185,7 @@ _UNEXECUTABLE_OPTION_RE = re.compile(
     r"\b(?:hand\s*off|delegate|assign|send|message)\b",
     re.I,
 )
-# Interactive motion gets a true ~60 Hz budget. The visible idle character uses
+# Interactive motion targets a ~60 Hz budget. The visible idle character uses
 # a stable ~24 Hz floor so its slow breathing stays smooth without defeating the
 # existing passive-frame cache; hidden residency stays inexpensive.
 _GUI_ACTIVE_FRAME_MS = 16
@@ -287,7 +289,7 @@ class CompanionSurface(
         self._stream_buf = ""
         self._recording_voice = False
         self._voice_transcribing = False
-        self._root: Any = None
+        self._gui: Any = None
         self._running = False
         self._restart_requested = False
         self._live_control_host: Any = None
@@ -393,10 +395,6 @@ class CompanionSurface(
         """Start the companion in a daemon GUI thread. Returns True on success."""
         if self._running:
             return True
-        import importlib.util
-        if importlib.util.find_spec("tkinter") is None:
-            return False  # tkinter missing (unusual but possible on headless)
-
         agent = getattr(self, "_agent", None)
         config = getattr(agent, "config", None)
         try:
@@ -426,7 +424,7 @@ class CompanionSurface(
         thread = threading.Thread(target=self._gui_loop, name="mo-desktop", daemon=True)
         self._gui_thread = thread
         thread.start()
-        if self._gui_ready.wait(timeout=_GUI_START_TIMEOUT_SECONDS) and self._root is not None:
+        if self._gui_ready.wait(timeout=_GUI_START_TIMEOUT_SECONDS) and self._gui is not None:
             self._try_register_hotkey()
             self._start_live_control_host()
             return True
@@ -486,7 +484,6 @@ class CompanionSurface(
         self._persist_desktop_session()
         self._close_voice_input()
         self._close_speech()
-        self._shutdown_private_desktop_apps()
         if self._tray:
             self._tray.stop()
         if not self._post_gui_call("<<CompanionStop>>"):
@@ -886,7 +883,7 @@ class CompanionSurface(
         self._native_interaction_kind = str(kind or "").strip()
         self._native_interaction_text = str(text or "").strip()
         # Set this before queueing the GUI paint.  The provider can finish before
-        # Tk drains its queue; _set_result must still know that the native card wins.
+        # the GUI drains its queue; _set_result must still know that the native card wins.
         self._last_reply_dialog_text = self._native_interaction_text
 
     def _clear_native_interaction(self) -> None:
@@ -1248,13 +1245,13 @@ class CompanionSurface(
             return ()
 
     def open_private_desktop_app(self, app_id: str) -> None:
-        """Open one profile-owned app on the existing Tk GUI lane."""
+        """Open one profile-owned app on the existing GUI lane."""
         normalized = str(app_id or "").strip().casefold()
         if normalized:
             self._post_gui_call(lambda: self._display_private_desktop_app(normalized))
 
     def _display_private_desktop_app(self, app_id: str) -> None:
-        if self._root is None:
+        if self._gui is None:
             return
         app = self._private_desktop_apps.get(app_id)
         try:
@@ -1262,7 +1259,7 @@ class CompanionSurface(
                 from core import local_extensions
 
                 app = local_extensions.create_desktop_app(app_id, {
-                    "root": self._root,
+                    "root": self._optional_tk_root(),
                     "visual_state": self._visuals,
                     "monitor_anchor": getattr(self._cube, "_win", None),
                     "notify": lambda label, detail: self._cube_notice(label, detail),
@@ -1293,13 +1290,13 @@ class CompanionSurface(
                     pass
 
     def _display_systemcare_panel(self, *, start_scan: bool = False, quick_action: str = "") -> None:
-        if self._root is None:
+        if self._gui is None:
             return
         if self._systemcare_window is None:
             from mo_desktop.systemcare import MoSystemCareWindow
 
             self._systemcare_window = MoSystemCareWindow(
-                self._root,
+                self._gui,
                 self._config(),
                 on_notice=self._systemcare_notice,
                 on_persist=self.persist_desktop_settings,
@@ -1448,13 +1445,13 @@ class CompanionSurface(
                 self._pulse_desktop_app("trackpad")
 
     def _display_phone_panel(self) -> None:
-        if self._root is None:
+        if self._gui is None:
             return
         if self._phone_window is None:
             from mo_desktop.phone import MoPhoneWindow
 
             self._phone_window = MoPhoneWindow(
-                self._root,
+                self._gui,
                 self._config(),
                 on_notice=lambda label, detail: self._cube_notice(label, detail),
                 on_open_files=self._show_files_panel,
@@ -1470,7 +1467,7 @@ class CompanionSurface(
         self._pulse_desktop_app("phone")
 
     def _show_files_panel(self, *, source_id: str = "", location_id: str = "") -> None:
-        if self._root is None:
+        if self._gui is None:
             return
         if self._files_window is None:
             from mo_desktop.files import MoFilesWindow
@@ -2009,27 +2006,20 @@ class CompanionSurface(
     # ------------------------------------------------------------------
 
     def _gui_loop(self) -> None:
-        import tkinter as tk
+        from mo_desktop.gui_loop import NativeGuiLoop
 
-        dnd_ok = False
         try:
-            try:
-                from tkinterdnd2 import TkinterDnD
-                root = TkinterDnD.Tk()  # enables OS file drag-and-drop
-                dnd_ok = True
-            except Exception:
-                root = tk.Tk()
+            root = NativeGuiLoop()
         except Exception:
             self._running = False
             self._gui_ready.set()
             log_exception("mo-desktop-gui-root-create-failed", config=getattr(self._agent, "config", None))
             _write_stderr(traceback.format_exc())
             return
-        root.withdraw()  # hidden until summoned
-        self._root = root
+        self._gui = root
         # MO's on-screen 4-cube companion. Register it as the desktop pointer so
         # point_on_screen drives the cubes (not the bare Windows cursor). Best-effort:
-        # if it can't build (odd Tk backend) the surface still works text-first.
+        # if native rendering is unavailable, the resident reports that failure.
         try:
             from mo_desktop.settings import load_settings
             from mo_desktop.visuals import load_and_publish_desktop_visual_state
@@ -2039,7 +2029,8 @@ class CompanionSurface(
             self._visuals = visuals
             self._last_visual_state = visuals
             self._cube = DesktopCube(root, visuals=visuals, character=settings.character,
-                                     label_side_provider=self._activity_label_side)
+                                     label_side_provider=self._activity_label_side,
+                                     post=self._post_gui_call)
             self._cube.set_follow_params(settings.behavior.follow_distance, settings.behavior.follow_ease)
             self._modes = CompanionModes(self, self._cube, default_mode=settings.behavior.default_mode)
             self._cube.set_hold_handlers(capture=self._start_screen_selection,
@@ -2079,16 +2070,11 @@ class CompanionSurface(
         # target moved here from the removed window; the cube is the companion's body.
         # The drag events make MO react as the file comes in: wiggle on approach, open the
         # mouth by nearness, swallow on drop.
-        if dnd_ok and self._cube is not None:
+        if self._cube is not None:
             try:
-                from tkinterdnd2 import DND_FILES
-                cube_win = getattr(self._cube, "_win", None)
-                if cube_win is not None:
-                    cube_win.drop_target_register(DND_FILES)
-                    cube_win.dnd_bind("<<DropEnter>>", self._on_files_drag)
-                    cube_win.dnd_bind("<<DropPosition>>", self._on_files_drag)
-                    cube_win.dnd_bind("<<DropLeave>>", self._on_files_drag_leave)
-                    cube_win.dnd_bind("<<Drop>>", self._on_files_dropped)
+                self._cube._win.accept_files(drag=self._on_files_drag,
+                                            leave=self._on_files_drag_leave,
+                                            drop=self._on_files_dropped)
             except Exception:
                 _write_stderr(traceback.format_exc())
 
@@ -2116,20 +2102,10 @@ class CompanionSurface(
         def _do_stop(*_args: Any) -> None:
             self._running = False
             self._stopped = True
-            try:
-                root.after_idle(root.quit)
-            except Exception:
-                try:
-                    root.quit()
-                except Exception:
-                    pass
+            root.stop()
 
         def _do_show_log(*_args: Any) -> None:
             self._show_log_popup(root)
-
-        def _hide_and_break(_event: Any | None = None) -> str:
-            _do_hide()
-            return "break"
 
         handlers = {
             "<<CompanionShow>>": _do_show,
@@ -2137,19 +2113,6 @@ class CompanionSurface(
             "<<CompanionStop>>": _do_stop,
             "<<CompanionShowLog>>": _do_show_log,
         }
-
-        try:
-            root.bind("<Escape>", _hide_and_break)
-        except Exception:
-            pass
-        try:
-            root.bind_all("<Escape>", _hide_and_break, add="+")
-        except Exception:
-            pass
-        try:
-            root.protocol("WM_DELETE_WINDOW", _do_hide)
-        except Exception:
-            pass
 
         config = getattr(self._agent, "config", None)
         mark_ready(config=config, source_stamp="pending")
@@ -2161,20 +2124,7 @@ class CompanionSurface(
             delay = _GUI_HIDDEN_FRAME_MS
             try:
                 if not self._running:
-                    try:
-                        root.quit()
-                    except Exception:
-                        pass
-                    return
-                self._drain_gui_events(handlers)
-                if not self._running:
-                    try:
-                        root.after_idle(root.quit)
-                    except Exception:
-                        try:
-                            root.quit()
-                        except Exception:
-                            pass
+                    root.stop()
                     return
                 self._poll_voice_autostop()
                 current = time.monotonic()
@@ -2207,13 +2157,13 @@ class CompanionSurface(
                     _write_stderr(traceback.format_exc())
             if self._running:
                 try:
-                    root.after(delay, _gui_tick)
+                    root.schedule(delay, _gui_tick)
                 except Exception:
                     self._running = False
 
         try:
-            root.after(0, _gui_tick)
-            root.mainloop()
+            root.schedule(0, _gui_tick)
+            root.run(lambda: self._drain_gui_events(handlers))
         except Exception:
             if self._running:
                 log_exception("mo-desktop-mainloop-error", config=getattr(self._agent, "config", None))
@@ -2237,17 +2187,40 @@ class CompanionSurface(
             settings = getattr(self, "_settings_panel", None)
             if settings is not None:
                 settings.destroy()
+            selection = getattr(self, "_screen_selection", None)
+            if selection is not None:
+                selection.close()
+            self._shutdown_private_desktop_apps()
+            view = getattr(self, "_role_workspace", None)
+            if view is not None:
+                if view.connections is not None:
+                    view.connections.close()
+                view.destroy()
+                self._role_workspace = None
+            host = getattr(self, "_tk_host", None)
+            if host is not None:
+                host.close()
+                self._tk_host = None
+            bubble = getattr(self, "_bubble", None)
+            if bubble:
+                bubble.destroy()
+                self._bubble = None
             if self._cube is not None:
                 try:
                     self._cube.destroy()
                 except Exception:
                     pass
                 self._cube = None
-            try:
-                if root.winfo_exists():
-                    root.destroy()
-            except Exception:
-                pass
+            root.close()
+            self._gui = None
+
+    def _optional_tk_root(self) -> Any:
+        """Preserve parked/profile Tk apps without loading Tk in the resident."""
+        if getattr(self, "_tk_host", None) is None:
+            from mo_desktop.tk_host import OptionalTkHost
+
+            self._tk_host = OptionalTkHost(self._gui)
+        return self._tk_host.root
 
     # ------------------------------------------------------------------
     # Turn submission
@@ -2322,7 +2295,7 @@ class CompanionSurface(
             try:
                 if item is None:
                     return
-                if getattr(self, "_root", None) is not None and not getattr(self, "_running", False):
+                if getattr(self, "_gui", None) is not None and not getattr(self, "_running", False):
                     return
                 if self._submit_text_request(
                     item["text"],
@@ -2648,7 +2621,7 @@ class CompanionSurface(
                 from mo_desktop.screen_selection import ScreenSelection
 
                 self._screen_selection = ScreenSelection(
-                    self._root,
+                    post=self._post_gui_call,
                     accent=self._visuals.palette.accent,
                     on_capture=self._save_screen_selection,
                     on_close=self._close_screen_selection,
@@ -2657,7 +2630,7 @@ class CompanionSurface(
                 self._close_screen_selection()
                 self._set_status(f"Screen selection unavailable: {type(exc).__name__}", self._visual_palette.error_soft)
 
-        self._root.after(70, open_selection)
+        self._gui.schedule(70, open_selection)
 
     def _close_screen_selection(self) -> None:
         self._screen_selection = None
@@ -2666,7 +2639,7 @@ class CompanionSurface(
             cube.set_actuation_yield(False)
 
     def _save_screen_selection(self, image: Any) -> None:
-        """Encode the original-resolution pixels off Tk; open the existing image panel."""
+        """Encode original pixels off the GUI lane; open the existing image panel."""
         config = self._config()
 
         def save() -> None:
@@ -2789,12 +2762,12 @@ class CompanionSurface(
                         and tuple(getattr(bubble, "_attachment_preview_paths", []) or []) == before):
                     self._show_attachment_panel([Path(out)])
 
-            if getattr(self, "_root", None) is None:
+            if getattr(self, "_gui", None) is None:
                 present()
             else:
                 self._post_gui_call(present)
 
-        if getattr(self, "_root", None) is None:
+        if getattr(self, "_gui", None) is None:
             edit()
         else:
             threading.Thread(target=edit, name="mo-desktop-image-edit", daemon=True).start()
@@ -2810,12 +2783,6 @@ class CompanionSurface(
                 drag_over(int(getattr(event, "x_root", 0)), int(getattr(event, "y_root", 0)))
             except Exception:
                 _write_stderr(traceback.format_exc())
-        from tkinterdnd2 import COPY
-
-        # Always COPY. Refusing here sets DROPIMAGE_NONE, and Windows then hides the dragged item's
-        # image entirely — the file "disappeared" and the drag felt stuck. The cube still only
-        # ACCEPTS what is brought to it; that is enforced on release, in _on_files_dropped.
-        return COPY
 
     def _on_files_drag_leave(self, event: Any = None) -> None:
         """The drag moved off the cube without dropping. The cube confirms this after a
@@ -2834,6 +2801,7 @@ class CompanionSurface(
     def _on_files_dropped(self, event: Any) -> None:
         """Attach locally; paired-device transfer belongs to explicit Send."""
         cube = getattr(self, "_cube", None)
+        self._on_files_drag(event)
         accepts = getattr(cube, "accepts_drop", None)
         if callable(accepts) and not accepts():
             # Released inside the reach but not on the cube: the mouth opened, MO did not swallow.
@@ -2843,23 +2811,14 @@ class CompanionSurface(
         self._cube_drag("drag_end")   # the drag is definitively over — no grace, close now
         self._cube_react("file_drop")
         from pathlib import Path
-        try:
-            raw = self._root.tk.splitlist(event.data)
-        except Exception:
-            raw = str(getattr(event, "data", "") or "").split()
-
-        sources = [
-            Path(str(item).strip("{}").strip())
-            for item in raw
-            if str(item).strip("{}").strip()
-        ]
+        sources = [Path(item) for item in event.paths]
         if not sources:
             self._set_status("No files attached", self._visual_palette.warn)
             return
         self._attach_dropped_files(sources)
 
     def _choose_drop_destination(self, sources: list[Any]) -> None:
-        """Resolve stable device IDs off the Tk lane, then reuse the reply picker."""
+        """Resolve stable device IDs off the GUI lane, then reuse the reply picker."""
         self._set_status("Finding file destinations…", self._visual_palette.accent)
         session_id = str(getattr(getattr(self, "_desktop_session", None), "session_id", ""))
         request = getattr(self, "_turn_thread", None)
@@ -3070,7 +3029,7 @@ class CompanionSurface(
             return
         session_id = str(getattr(session, "session_id", "") or "")
         turn_count = int(getattr(session, "turn_count", 0) or 0)
-        selected = [Path(str(item).strip("{}").strip()) for item in raw[:MAX_ATTACHMENTS_PER_TURN]]
+        selected = [Path(item) for item in raw[:MAX_ATTACHMENTS_PER_TURN]]
         initial_rejected = max(0, len(raw) - MAX_ATTACHMENTS_PER_TURN)
         self._set_status("Loading attachment…", self._visual_palette.accent)
 
@@ -3474,7 +3433,7 @@ class CompanionSurface(
         return data
 
     def _open_project_role_workspace(self, *, landing: bool = False) -> None:
-        if not bool(getattr(self, "_role_workspace_requested", False)) or self._root is None:
+        if not bool(getattr(self, "_role_workspace_requested", False)) or self._gui is None:
             return
         self._role_workspace_landing = landing
         session = None if landing else self._ensure_desktop_session()
@@ -3487,7 +3446,7 @@ class CompanionSurface(
             from mo_desktop.mologrthim.app import MologrthimWindow
 
             self._role_workspace = MologrthimWindow(
-                self._root,
+                self._optional_tk_root(),
                 self._role_workspace_snapshot,
                 self._show_role_workspace_conversation,
                 on_dismiss=self._role_workspace_dismissed,
@@ -3913,7 +3872,7 @@ class CompanionSurface(
             )
             if cube is not None and not pointer_sequence_active:
                 # A completed provider turn may still have several authored
-                # pointer labels queued on Tk. Their own queue, not generic turn
+                # pointer labels queued on the GUI thread. Their own queue, not generic turn
                 # cleanup, owns the cube until the final recap is ready.
                 self._post_gui_call(self._clear_activity)
             self._schedule_next_desktop_follow_up()
@@ -3989,7 +3948,7 @@ class CompanionSurface(
 
         queued = self._post_gui_call(_do)
         # _on_activity runs on the Gateway turn thread. Do not let the following
-        # physical tool call race ahead of Tk and hit MO's own still-visible body.
+        # physical tool call race ahead of the GUI and hit MO's own still-visible body.
         if queued and not hidden.wait(1.0):
             raise RuntimeError("MO Desktop could not step aside before desktop actuation")
 
@@ -4256,9 +4215,9 @@ class CompanionSurface(
         return str(text or "").strip() == _ABORTED_TURN_TEXT
 
     def _on_assistant_text(self, delta: str, metadata: dict | None = None) -> None:
-        # Called from the Gateway thread — tkinter is NOT thread-safe, so never
+        # Called from the Gateway thread; native windows belong to the GUI lane. Never
         # touch widgets here. Accumulate and queue the update on the GUI thread.
-        if not self._root:
+        if not self._gui:
             return
         meta = metadata if isinstance(metadata, dict) else {}
         # Tool-call metadata can arrive after the provider's setup sentence has
@@ -4307,7 +4266,7 @@ class CompanionSurface(
             )
 
     # ------------------------------------------------------------------
-    # UI helpers (thread-safe via tkinter event queue)
+    # UI helpers (thread-safe via the native GUI queue)
     # ------------------------------------------------------------------
 
     def _config(self) -> Any:
@@ -4355,7 +4314,7 @@ class CompanionSurface(
         self._post_gui_call(_apply)
 
     def _schedule_walkthrough_recap(self) -> None:
-        root = getattr(self, "_root", None)
+        root = getattr(self, "_gui", None)
         if root is None:
             return
         now = time.time()
@@ -4368,7 +4327,7 @@ class CompanionSurface(
         delay = max(1, int(max(0.0, wait_until - now) * 1000))
         self._cancel_walkthrough_timer("_walkthrough_recap_after")
         try:
-            self._walkthrough_recap_after = root.after(
+            self._walkthrough_recap_after = root.schedule(
                 delay,
                 self._flush_pending_walkthrough_recap,
             )
@@ -4460,13 +4419,13 @@ class CompanionSurface(
         b = getattr(self, "_bubble", None)
         if b is not None:
             return b if b is not False else None
-        if getattr(self, "_root", None) is None or getattr(self, "_cube", None) is None:
+        if getattr(self, "_gui", None) is None or getattr(self, "_cube", None) is None:
             return None
         try:
             from interface.desktop_ui import active_desktop_visual_state
             from mo_desktop.reply_bubble import ReplyBubble
             bubble = ReplyBubble(
-                self._root,
+                self._gui,
                 self._cube,
                 active_desktop_visual_state(),
             )
@@ -4751,10 +4710,11 @@ class CompanionSurface(
     def _post_gui_call(self, callback: str | Callable[[], None]) -> bool:
         # Once stopped, the drain loop has exited and nothing will run a queued
         # callback — report False rather than a misleading "queued" success.
-        if getattr(self, "_root", None) is None or bool(getattr(self, "_stopped", False)):
+        if getattr(self, "_gui", None) is None or bool(getattr(self, "_stopped", False)):
             return False
         try:
             self._gui_events.put_nowait(callback)
+            self._gui.wake()
             return True
         except Exception:
             return False
@@ -4795,7 +4755,7 @@ class CompanionSurface(
             x = y = None
             if at_pointer:
                 try:
-                    x, y = self._root.winfo_pointerxy()
+                    x, y = pointer_position()
                 except Exception:
                     x = y = None
             cube.wake(x, y)
@@ -4845,7 +4805,7 @@ class CompanionSurface(
             set_home(None)
             return
         try:
-            px, py = self._root.winfo_pointerxy()
+            px, py = pointer_position()
         except Exception:
             return
         focused = home.terminal_focused()
@@ -4897,7 +4857,7 @@ class CompanionSurface(
             windows.append(panel._hwnd)
         focus = getattr(getattr(self, "_tray", None), "_focus", None)
         if focus is not None:
-            windows.extend(surface._win for surface in (focus._surface, focus._popup) if surface is not None)
+            windows.extend(surface for surface in (focus._surface, focus._popup) if surface is not None)
         return [win for win in windows if win is not None]
 
     def _update_overlay_compat(self, *, force: bool = False) -> None:
@@ -4927,7 +4887,7 @@ class CompanionSurface(
         except Exception:
             _write_stderr(traceback.format_exc())
         try:
-            self._root.after(_HOME_POLL_MS, self._poll_home_dock)
+            self._gui.schedule(_HOME_POLL_MS, self._poll_home_dock)
         except Exception:
             pass
 
@@ -5152,8 +5112,7 @@ class CompanionSurface(
         return (cut or clean[:limit]).rstrip(" ,.;:") + "…"
 
     def _set_panel_dismissible(self, on: bool) -> None:
-        """Called from the TURN thread. _get_reply_bubble() builds Tk widgets lazily, so calling it
-        here constructed a Toplevel off the GUI thread — which is what froze the walkthrough. Only
+        """Called from the TURN thread. _get_reply_bubble() creates native windows lazily. Only
         an already-built panel is touched, and the call is marshalled onto the GUI thread."""
         bubble = getattr(self, "_bubble", None)
         fn = getattr(bubble, "set_dismissible", None) if bubble else None
@@ -5176,7 +5135,7 @@ class CompanionSurface(
 
         ``_sync_with_terminal`` is reached two ways: a cube click (GUI thread) and the
         ``desktop_sync`` tool (turn thread). ``emit`` plays the emote and blits the glance label —
-        both Tk work on a layered window — so running it inline on the turn thread raced the GUI
+        both GUI work on a layered window — so running it inline on the turn thread raced the GUI
         thread's own repaint, which is how a bubble ends up drawn at a position nothing measures
         afterwards.
 
@@ -5260,10 +5219,10 @@ class CompanionSurface(
     def _cancel_walkthrough_timer(self, attribute: str) -> None:
         handle = getattr(self, attribute, None)
         if handle is not None:
-            root = getattr(self, "_root", None)
+            root = getattr(self, "_gui", None)
             try:
                 if root is not None:
-                    root.after_cancel(handle)
+                    root.cancel(handle)
             except Exception:
                 pass
         setattr(self, attribute, None)
@@ -5281,13 +5240,13 @@ class CompanionSurface(
         self._last_reply_dialog_text = ""
 
     def _schedule_walkthrough_point_drain(self, delay_seconds: float) -> None:
-        root = getattr(self, "_root", None)
+        root = getattr(self, "_gui", None)
         if root is None:
             return
         self._cancel_walkthrough_timer("_walkthrough_point_after")
         try:
             delay_ms = max(1, int(max(0.0, float(delay_seconds or 0.0)) * 1000))
-            self._walkthrough_point_after = root.after(delay_ms, self._drain_walkthrough_point_queue)
+            self._walkthrough_point_after = root.schedule(delay_ms, self._drain_walkthrough_point_queue)
         except Exception:
             self._walkthrough_point_after = None
 

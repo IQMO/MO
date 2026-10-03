@@ -3,6 +3,7 @@
   const $ = (id) => document.getElementById(id);
   const all = (query, root = document) => [...root.querySelectorAll(query)];
   const pending = new Map(), bindings = new Map(), unsaved = new Set();
+  let closing = false;
   let sequence = 0, state, page = 'appearance', selectedSkin, skinPicker, draftColors = {}, openPicker, modelTarget = 'desktop', chosenProject, modelPoll = 0;
   const descriptions = {
     general: ['General', 'Small preferences that shape your day.'],
@@ -37,13 +38,15 @@
   }
   function request(action, payload = {}) {
     const id = String(++sequence);
-    return new Promise((resolve, reject) => {
+    const response = new Promise((resolve, reject) => {
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('MO did not respond. Refresh Settings to reconnect.')); }, 20000);
       pending.set(id, {resolve, reject, timer});
       Promise.resolve(window.pywebview.api.request(id, action, payload)).catch(error => {
         clearTimeout(timer); pending.delete(id); reject(error);
       });
     });
+    pending.get(id).response = response;
+    return response;
   }
   window.moSettingsResult = ({request_id, result}) => {
     const entry = pending.get(request_id);
@@ -52,6 +55,23 @@
     entry.resolve(result);
   };
   window.moSettingsTheme = css => { $('settings-theme').textContent = css; };
+  window.moSettingsClose = async () => {
+    if (closing) return;
+    closing = true;
+    document.activeElement?.blur();
+    document.body.inert = true;
+    modelPoll++;
+    try {
+      await Promise.all([...bindings.values()].map(binding => binding.lane.flush()));
+      while (pending.size) await Promise.all([...pending.values()].map(entry => entry.response));
+      if (unsaved.size) throw new Error('A preview has not been saved. Save or reset it before closing.');
+      await window.pywebview.api.window_control('dispose');
+    } catch (error) {
+      status(error.message, true);
+      closing = false;
+      document.body.inert = false;
+    }
+  };
   async function act(action, payload = {}) {
     try {
       const result = await request(action, payload);
@@ -115,25 +135,32 @@
   // Each slider has one ordered lane. A pending preview is replaced by the
   // latest value; release queues the final save after any in-flight preview.
   function liveControl(id, update, initial) {
-    let latest, busy = false, timer, savedValue = initial;
-    async function drain() {
+    let latest, busy = false, timer, savedValue = initial, idle = Promise.resolve();
+    function drain() {
       if (busy || !latest) return;
       busy = true;
-      const next = latest; latest = null;
-      const result = await act(next.save ? 'save' : 'preview', {id, value: next.value});
-      if (result.ok && next.save) { savedValue = result.value; unsaved.delete(id); }
-      if (!result.ok && next.save) {
-        if (result.value !== undefined) unsaved.add(id);
-        else if (!latest) { update(savedValue); unsaved.delete(id); }
-      }
-      $('unsaved').hidden = !unsaved.size;
-      if (!latest && result.ok && next.save) update(result.value);
-      if (id === 'voice.role' && result.ok) bindings.get('voice.role_active')?.update(result.role_active);
-      busy = false; if (latest) drain();
+      idle = (async () => {
+        const next = latest; latest = null;
+        const result = await act(next.save ? 'save' : 'preview', {id, value: next.value});
+        if (result.ok && next.save) { savedValue = result.value; unsaved.delete(id); }
+        if (!result.ok && next.save) {
+          if (result.value !== undefined) unsaved.add(id);
+          else if (!latest) { update(savedValue); unsaved.delete(id); }
+        }
+        $('unsaved').hidden = !unsaved.size;
+        if (!latest && result.ok && next.save) update(result.value);
+        if (id === 'voice.role' && result.ok) bindings.get('voice.role_active')?.update(result.role_active);
+        busy = false; if (latest) drain();
+      })();
     }
     return {queue(value, save) {
       latest = {value, save}; clearTimeout(timer);
       if (save) { status('Saving…'); drain(); } else { unsaved.add(id); $('unsaved').hidden = false; timer = setTimeout(drain, 33); }
+    }, async flush() {
+      clearTimeout(timer);
+      if (latest) latest.save = true;
+      drain();
+      while (busy) await idle;
     }, get savedValue() { return savedValue; }};
   }
   function makeControl(field) {
@@ -180,7 +207,7 @@
       update = value => { input.value = Array.isArray(value) ? value.join(', ') : value || ''; };
     }
     if (input) { input.id = field.id; input.setAttribute('aria-label', field.label); control.prepend(input); }
-    update(field.value); bindings.set(field.id, {root, update, choice, input}); return root;
+    update(field.value); bindings.set(field.id, {root, update, choice, input, lane}); return root;
   }
   function roleOptions(value) {
     const values = [...new Set(['', ...state.roles, ...(value ? [value] : [])])];

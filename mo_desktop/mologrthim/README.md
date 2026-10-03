@@ -12,7 +12,9 @@ and responsibilities; they have no separate character names or invented rank.
   session identity and are presented as project workers. It writes no state and
   starts no work. Worker reports remain reports, not accepted outcomes.
 - `app.py` owns the frameless native workroom and its Terminal/Desktop adapters.
-  Both surfaces use this one implementation.
+  Both surfaces use this one implementation. Desktop creates its optional Tk
+  host only when this room or a profile Tk app is opened; normal residency uses
+  the native GUI loop. The room remains parked for concept/visual changes.
 - `/role show` and Project Architect activation retain their existing behavior.
   The execution role still gates specialist registration, dispatch and reports.
   Moving the presentation does not migrate those permissions or remove the

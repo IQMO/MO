@@ -126,7 +126,7 @@ def top_level_hwnd(win: Any) -> int:
     if sys.platform != "win32" or win is None:
         return 0
     try:
-        child = win if isinstance(win, int) else int(win.winfo_id())
+        child = win if isinstance(win, int) else int(win.hwnd if hasattr(win, "hwnd") else win.winfo_id())
         root = int(_winapi().user32.GetAncestor(child, _GA_ROOT) or 0)
         return root or child
     except Exception:
@@ -225,6 +225,9 @@ def _visible_top_level_hwnds(windows: Iterable[Any]) -> tuple[int, ...]:
         try:
             if isinstance(win, int):
                 if not win or not _winapi().user32.IsWindowVisible(win):
+                    continue
+            elif hasattr(win, "hwnd"):
+                if not win.is_visible():
                     continue
             elif win is None or not bool(win.winfo_exists()) or not bool(win.winfo_viewable()):
                 continue

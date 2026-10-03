@@ -109,16 +109,14 @@ title bar and the same skin-colored window buttons. Pin uses an outlined
 pushpin, filled when the window stays on top. Existing app-specific minimize,
 close and save-confirmation behavior stays with each app.
 
-Tk has not been removed from Desktop entirely. The frameless
-[Mologrthim workroom](mologrthim/README.md), opened from the Work cube or Project
-Architect, uses a custom painted scene with shared skin, typography and cube
-settings. The resident cube, composer and screen-selection overlay still use
-Tk for window/input lifecycle with custom painted surfaces. Pointer and UIA
-annotation labels use passive native alpha windows and the shared Desktop card
-renderer; obsolete Tk utility dialogs and control wrappers have been removed. Settings,
-Phone and Files no longer have a parallel Tk app renderer. Shell owns its
-native control strip; Windows file pickers and attached third-party windows
-retain their own window chrome.
+Desktop's resident cube, composer, launcher, tray and screen selection use native
+alpha windows and a single Windows message/timer loop. Clipboard, pointer and
+screen services no longer require Tk. The parked [Mologrthim workroom](mologrthim/README.md)
+and existing profile Tk apps retain their widgets in an on-demand host on the
+same GUI thread; normal Desktop startup neither imports Tk nor creates an
+interpreter. Their concept and visuals remain parked. Settings, Phone and Files
+use the shared native WebView renderer. Shell owns its native control strip;
+Windows file pickers and attached third-party windows retain their own chrome.
 
 ## What the companion can do
 
@@ -232,7 +230,9 @@ owners. External automation that does not publish MO activity has no such signal
 ### Settings
 
 Settings opens in MO's shared native WebView window, with searchable pages,
-inline choices, and live appearance controls. It replaces the former Tk Settings
+inline choices, and live appearance controls. Closing Settings waits for pending
+saves and exits its renderer, releasing its WebView processes. Minimizing keeps
+it available; reopening after closing starts a fresh view from saved settings. It replaces the former Tk Settings
 window and retains its cube, movement, panel, skin, voice, startup, Chrome bridge,
 and maintenance actions. It also edits declared Agent, learning, service, device
 and policy preferences through the shared configuration writer, with explicit
@@ -698,10 +698,11 @@ phone, or connect and authorize it by USB, Refresh and select its ADB connection
 The existing **Create pairing QR** action reuses the authenticated coordinator
 grant, QR renderer and private expiry cleanup. A rejected host is labelled
 **Host needs pairing**, with steps to restore its separate identity. Setup checks
-do not issue grants, and no idle network polling is added. Closing hides
-the cached native host and stops its original Trackpad session after any current
-device boundary finishes. Reopening keeps the same workspace and any separately
-running scrcpy mirror. Desktop exit or loss of its control pipe disposes the host
+do not issue grants, and no idle network polling is added. Closing stops the
+original Trackpad session after any current device boundary finishes, then exits
+the host if no mirror is running. A separate scrcpy mirror keeps its existing
+hidden owner until it ends. Reopening during mirroring keeps that workspace;
+after an idle close it opens a fresh one. Desktop exit or loss of its control pipe disposes the host
 and Trackpad resources. See [Phone's contract](phone/README.md).
 
 Mirroring is scrcpy's job and MO does not reimplement it. scrcpy streams
@@ -952,9 +953,14 @@ The major ownership boundaries are:
 | `diagnostics.py`, `desktop_log.py` | Redacted trace and private lifecycle evidence |
 
 The Windows renderer uses Pillow-backed sprites for the cube, label, and card.
-Per-pixel-alpha and chroma-key platform adapters render those same sprites;
-there is no square or token-incomplete alternate visual path, and a missing
-required visual adapter fails explicitly. Optional `keyboard`, `pystray`,
+Those surfaces, the launcher and screen selection use the shared native
+per-pixel-alpha window adapter. File drops use Windows OLE and the launcher
+opens Windows file/folder pickers. There is no chroma-key canvas fallback.
+The resident uses `gui_loop.py` to wait for native messages, posted work and
+monotonic timer deadlines. `tk_host.py` loads only for a parked workroom or
+existing profile Tk app; that optional host and its widgets are cleaned up on
+the GUI thread at shutdown. Tk has not been eliminated from the whole project. A missing required visual adapter fails explicitly.
+Optional `keyboard`, `pystray`,
 `pywin32`, RTL, voice, and volume packages load only when needed; there is no
 Node runtime.
 

@@ -260,8 +260,9 @@ class SettingsPanel(NativeAppWindow):
         if action == "chrome_copy":
             from core.browser_bridge import status
             directory = str(status().get("extension_dir") or "")
-            self._c._root.clipboard_clear()
-            self._c._root.clipboard_append(directory)
+            from mo_desktop.gui_loop import set_clipboard_text
+
+            set_clipboard_text(directory)
             return {"message": "Extension folder copied."}
         if action.startswith("skin_"):
             return self._skin(action, payload)

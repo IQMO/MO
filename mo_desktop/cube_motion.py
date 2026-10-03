@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mo_desktop.gui_loop import screen_size
+
 import math
 import os
 import time
@@ -348,8 +350,8 @@ class CubeMotionMixin:
             import random
 
             try:
-                sw = int(self._win.winfo_screenwidth())
-                sh = int(self._win.winfo_screenheight())
+                sw = int(screen_size()[0])
+                sh = int(screen_size()[1])
             except Exception:
                 return
             margin = self._size
@@ -387,7 +389,7 @@ class CubeMotionMixin:
         self._trace_last_at = 0.0
         self._summon_trace_until = 0.0
         try:
-            self._trace_win.withdraw()
+            self._trace_win.hide()
         except Exception:
             pass
 
@@ -447,8 +449,8 @@ class CubeMotionMixin:
             if point is None:
                 return
             px, py = point
-            sw = int(self._win.winfo_screenwidth())
-            sh = int(self._win.winfo_screenheight())
+            sw = int(screen_size()[0])
+            sh = int(screen_size()[1])
         except Exception:
             return
         px, py = float(px), float(py)
@@ -594,11 +596,11 @@ class CubeMotionMixin:
         w = self._hit_size()
         left = int(round(self._x - w / 2.0))
         top = int(round(self._y - w / 2.0))
-        geo = f"{w}x{w}+{left}+{top}"
+        geo = (left, top, w, w)
         if geo != self._last_geometry:
             self._last_geometry = geo
             try:
-                self._win.geometry(geo)
+                self._win.position(*geo)
             except Exception:
                 pass
         self._reposition_label()

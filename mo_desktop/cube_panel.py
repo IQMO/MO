@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mo_desktop.gui_loop import screen_size
+
 import time
 from typing import Any
 
@@ -48,12 +50,6 @@ class CubePanelMixin:
         self._label_value = self._running_heading.casefold() or "running apps"
         self._label_until = float("inf")
         self._label_active_design = self._label_design
-        if not getattr(self, "_running_bound", False):
-            self._label_win.bind("<ButtonRelease-1>", self._on_running_click)
-            self._label_win.bind("<Motion>", self._on_running_motion)
-            self._label_win.bind("<Enter>", lambda _event: self._cancel_running_hide())
-            self._label_win.bind("<Leave>", lambda _event: self.hide_running_apps())
-            self._running_bound = True
         if self._label.set_click_through(False):
             self._refresh_running_label()
 
@@ -61,14 +57,26 @@ class CubePanelMixin:
         """Show the compact Game Session HUD through the shared skinned row panel."""
         self.show_running_apps(specs, activate, heading="Game Session")
 
+    def _on_label_event(self, kind: str, event: Any) -> None:
+        if self._label_kind != "running":
+            return
+        if kind == "release" and event.num == 1:
+            self._on_running_click(event)
+        elif kind == "motion":
+            self._on_running_motion(event)
+        elif kind == "enter":
+            self._cancel_running_hide()
+        elif kind == "leave":
+            self.hide_running_apps()
+
     def hide_running_apps(self) -> None:
         if self._label_kind == "running" and getattr(self, "_running_hide_after", None) is None:
-            self._running_hide_after = self._label_win.after(300, self._hide_running_now)
+            self._running_hide_after = self._gui.schedule(300, self._hide_running_now)
 
     def _cancel_running_hide(self) -> None:
         timer = getattr(self, "_running_hide_after", None)
         if timer is not None:
-            self._label_win.after_cancel(timer)
+            self._gui.cancel(timer)
             self._running_hide_after = None
 
     def _hide_running_now(self) -> None:
@@ -112,8 +120,7 @@ class CubePanelMixin:
             return
         self._label_img = self._render_running_label()
         self._reposition_label()
-        self._label_win.deiconify()
-        self._label_win.attributes("-topmost", True)
+        self._label_win.show()
 
     def _render_running_label(self) -> Any:
         from PIL import Image, ImageDraw
@@ -345,8 +352,7 @@ class CubePanelMixin:
             self._label_img = self._render_label(text)
             if self._label_img is not None:
                 self._reposition_label()  # blit at the right spot WHILE hidden…
-                self._label_win.deiconify()  # …then show, so it never flashes at a stale pos
-                self._label_win.attributes("-topmost", True)
+                self._label_win.show()  # …then show, so it never flashes at a stale pos
         except Exception:
             pass
 
@@ -440,7 +446,7 @@ class CubePanelMixin:
         self._notice_action_until = 0.0
         self._pending_notice_action = None
         try:
-            self._label_win.withdraw()
+            self._label_win.hide()
         except Exception:
             pass
 
@@ -448,8 +454,8 @@ class CubePanelMixin:
         if not self._label_value or self._label_img is None:
             return
         try:
-            sw = int(self._label_win.winfo_screenwidth())
-            sh = int(self._label_win.winfo_screenheight())
+            sw = int(screen_size()[0])
+            sh = int(screen_size()[1])
         except Exception:
             return
         w, h = self._label_img.size
@@ -476,7 +482,7 @@ class CubePanelMixin:
         self._label_rect = (x, y, x + w, y + h)
         try:
             if getattr(self, "_label_painted_img", None) is self._label_img:
-                self._label_win.geometry(f"{w}x{h}+{x}+{y}")
+                self._label_win.position(x, y, w, h)
             elif self._label.blit(self._label_img, x, y, premultiplied=True):
                 self._label_painted_img = self._label_img
         except Exception:

@@ -18,10 +18,10 @@ pyautogui>=0.9.54
 uiautomation>=2.0.29; sys_platform == "win32"
 #
 # MO Desktop companion surface (set mo_desktop.enabled: true in ~/.mo/config.yaml):
-#   window                     -> tkinter (built into Python — no pip)
+#   optional Mologrthim/profile app host -> tkinter (built into Python — no pip)
 #   global hotkey (Win+Alt+M)  -> keyboard
 #   system tray icon + menu    -> pystray (icon uses Pillow, above)
-#   Windows tray/overlay glue  -> pywin32 (Windows only)
+#   native surfaces/file drop  -> pywin32 (Windows only)
 #   outbound MO Live Control   -> websocket-client
 keyboard>=0.13.5
 pystray>=0.19
@@ -30,8 +30,6 @@ pywin32>=306; sys_platform == "win32"
 # Companion extras (all optional; the surface degrades gracefully without them):
 #   volume: scroll the cube to change / hover to read Windows master volume -> pycaw
 #   Arabic / RTL replies rendered correctly (not reversed)                  -> arabic-reshaper + python-bidi
-#   drag-and-drop files onto the companion window                           -> tkinterdnd2
 pycaw>=20240210; sys_platform == "win32"
 arabic-reshaper>=3.0.0
 python-bidi>=0.4.2
-tkinterdnd2>=0.4.2

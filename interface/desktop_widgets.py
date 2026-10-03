@@ -942,7 +942,7 @@ def _monitor_work_area(anchor: Any) -> tuple[int, int, int, int] | None:
         user32.MonitorFromWindow.restype = wintypes.HANDLE
         user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
         user32.GetMonitorInfoW.restype = wintypes.BOOL
-        hwnd = anchor if isinstance(anchor, int) else anchor.winfo_id()
+        hwnd = anchor if isinstance(anchor, int) else (anchor.hwnd if hasattr(anchor, "hwnd") else anchor.winfo_id())
         monitor = user32.MonitorFromWindow(int(hwnd), 2)  # nearest monitor
         if not monitor:
             return None

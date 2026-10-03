@@ -14,7 +14,7 @@ def open_role_workspace(agent: Any, roles: Any) -> str:
         errors = []
         def show():
             try:
-                if companion._root is None or getattr(companion._active_skill_role, 'role', '') != 'project-architect':
+                if companion._gui is None or getattr(companion._active_skill_role, 'role', '') != 'project-architect':
                     raise RuntimeError('The Desktop role is no longer active')
                 companion._role_workspace_roles = tuple(roles)
                 companion._role_workspace_requested = True

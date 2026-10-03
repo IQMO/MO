@@ -46,7 +46,8 @@ class CompanionModes:
         self._mode = self.LOCK if str(default_mode or "").lower() == "lock" else self.FREE
         self._pending: Any = None
         self._cube.set_click_handlers(
-            left=self._on_left, right=self._on_right, left_double=self._on_left_double
+            left=self._on_left, right=self._on_right, left_double=self._on_left_double,
+            escape=lambda: self._c.hide(),
         )
         set_hover = getattr(self._cube, "set_hover_handler", None)
         if callable(set_hover):
@@ -64,7 +65,7 @@ class CompanionModes:
     # ---- click plumbing (single vs double) ----
     def _win_after(self, ms: int, fn: Any) -> Any:
         try:
-            return self._cube._win.after(ms, fn)
+            return self._cube._gui.schedule(ms, fn)
         except Exception:
             fn()
             return None
@@ -72,7 +73,7 @@ class CompanionModes:
     def _cancel_pending(self) -> None:
         if self._pending is not None:
             try:
-                self._cube._win.after_cancel(self._pending)
+                self._cube._gui.cancel(self._pending)
             except Exception:
                 pass
             self._pending = None

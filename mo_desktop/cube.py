@@ -1,16 +1,14 @@
 """MO Desktop companion: the cube renderer.
 
 Four independent cubes by default, one shade, painted to the shared
-``LayeredWindow`` per-pixel-alpha surface on Windows. The Tk ``Toplevel`` is only
-the lightweight host/event shell; the visible cube frame is a PIL RGBA image
-blitted through ``UpdateLayeredWindow`` so soft glow and anti-aliased edges blend
-with the desktop. A chroma-key canvas is the platform adapter where per-pixel
-alpha is unavailable; it renders the same Pillow sprites. Smoothness comes from
-a sprite cache: the cube shape + glow is rendered
+``NativeLayeredWindow`` per-pixel-alpha surface on Windows. The visible cube
+frame is a PIL RGBA image blitted through ``UpdateLayeredWindow`` so soft glow
+and anti-aliased edges blend with the desktop. Smoothness comes from a sprite
+cache: the cube shape + glow is rendered
 once per brightness level, then each frame only composites cached sprites onto a
 transparent frame -- no per-frame shape drawing or blur.
 
-Drop-in for the old ``DesktopOrb``: same public surface the companion calls
+Public surface used by the companion:
 (``tick`` / ``point_to`` / ``wake`` / ``set_listening`` / ``set_level`` /
 ``enable_follow`` / ``center`` / ``set_click_handlers`` / ``apply_visual_state`` /
 ``destroy`` and the ``_visible`` attr). Character look (size, glow,
@@ -20,8 +18,9 @@ colour) comes from ``mo_desktop/settings.py``. GUI-thread only, except
 
 from __future__ import annotations
 
+from mo_desktop.gui_loop import pointer_position, screen_size
+
 import math
-import sys
 import time
 from typing import Any, Callable
 
@@ -63,14 +62,13 @@ _FADE_EASE = 0.12  # how fast the cube dissolves in front of a full-screen windo
 _SUMMON_TRACE_SECONDS = 3.0  # keep tracing through a Ctrl-Ctrl summon (dash + chase), not just the dash
 
 
-def _skin_cube_rgb(visuals: DesktopVisualState | None = None) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    """Return the active skin's brand and chroma colors for the cube."""
+def _skin_cube_rgb(visuals: DesktopVisualState | None = None) -> tuple[int, int, int]:
+    """Return the active skin's brand color for the cube."""
     state = visuals or active_desktop_visual_state()
     if not isinstance(state, DesktopVisualState):
         raise TypeError("Desktop cube colors require DesktopVisualState")
     cube = state.token("_BRAND_RGB")
-    chroma = state.token("_CHROMA_RGB")
-    return tuple(int(c) for c in cube), tuple(int(c) for c in chroma)  # type: ignore[return-value]
+    return tuple(int(c) for c in cube)  # type: ignore[return-value]
 
 
 def _skin_label_text_rgb(visuals: DesktopVisualState | None = None) -> tuple[int, int, int]:
@@ -97,13 +95,14 @@ def _contrast_outline_rgb(rgb: tuple[int, int, int]) -> tuple[int, int, int]:
 
 
 class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
-    """A sprite-cached cube companion hosted on the companion's Tk root."""
+    """A native sprite-cached cube driven by the resident's existing GUI clock."""
 
     def __init__(
         self,
-        root: Any,
+        gui: Any,
         *,
         visuals: DesktopVisualState,
+        post: Callable[[Callable[[], None]], Any],
         character: Any = None,
         size: int | None = None,
         form: CubeFormSpec | dict | None = None,
@@ -112,7 +111,11 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         volume_controls: bool = True,
         label_side_provider: Callable[[], str | None] | None = None,
     ) -> None:
-        import tkinter as tk
+        from mo_desktop.layered import NativeLayeredWindow
+
+        self._gui = gui
+        self._post_gui = post
+        self._launcher_input: Any = None
 
         if not isinstance(visuals, DesktopVisualState):
             raise TypeError("DesktopCube requires DesktopVisualState")
@@ -137,7 +140,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._glow = float(character.glow)
         self._corner = float(character.corner_radius)
         color_mode = str(character.color_mode)
-        self._color_rgb, self._chroma_rgb = _skin_cube_rgb(visuals)
+        self._color_rgb = _skin_cube_rgb(visuals)
         self._charge_rgb = _skin_charge_rgb(visuals)
         self._label_text_rgb = _skin_label_text_rgb(visuals)
         if color_mode.startswith("#") and len(color_mode) == 7:
@@ -145,63 +148,21 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 self._color_rgb = (int(color_mode[1:3], 16), int(color_mode[3:5], 16), int(color_mode[5:7], 16))
             except Exception:
                 pass
-        self._chroma = "#%02x%02x%02x" % self._chroma_rgb
 
-        # --- window (frameless, topmost). Prefer a per-pixel-alpha LAYERED window
-        # (UpdateLayeredWindow / ULW_ALPHA): the cubes then float with smooth edges
-        # that blend into whatever is behind them — no dark backing plate, no
-        # chroma-key fringe (a binary colour key can't do soft edges). A colour-keyed
-        # canvas hosts the same sprite renderer where a layered window is unavailable. ---
-        self._win = tk.Toplevel(root)
-        self._win.withdraw()
-        self._win.overrideredirect(True)
-        self._win.attributes("-topmost", True)
-        self._ulw: dict[str, Any] | None = None  # cached layered-window GDI handles
-        self._canvas: Any = None
-        self._setup_layered()  # sets self._ulw on success
-        if self._ulw is None:
-            try:
-                self._win.configure(bg=self._chroma)
-                self._win.attributes("-transparentcolor", self._chroma)
-            except Exception:
-                pass
-            self._canvas = tk.Canvas(
-                self._win, width=self._size, height=self._size, bg=self._chroma, highlightthickness=0, bd=0
-            )
-            self._canvas.pack()
-        # Clicks (single/double drive the free/lock modes). A layered window catches
-        # clicks across its whole rect (no plate needed); in chroma mode the canvas
-        # needs its own bindings too.
-        for target in [self._win] if self._canvas is None else [self._win, self._canvas]:
-            self._bind_cube_events(target)
-
-        # --- label bubble (e.g. "what's up?") — a small LAYERED card near the cubes,
-        # same smooth/shadowed language as the reply bubble (no chroma-key tkinter). ---
-        from mo_desktop.layered import LayeredWindow
-
-        self._label_win = tk.Toplevel(root)
-        self._label_win.withdraw()
-        self._label_win.overrideredirect(True)
-        self._label_win.attributes("-topmost", True)
-        self._label = LayeredWindow(self._label_win, click_through=True)  # passive hint
+        # Label and reply reuse the same alpha-card renderer and visual state.
         self._label_img: Any = None
         self._label_variant = "glance"
         self._label_kind = "bubble"
         self._pending_glance: tuple[str, float, str | None, str, str] | None = None
         self._label_side_override: str | None = None
         self._label_side_provider = label_side_provider
-        self._trace_win = tk.Toplevel(root)
-        self._trace_win.withdraw()
-        self._trace_win.overrideredirect(True)
-        self._trace_win.attributes("-topmost", True)
-        self._trace = LayeredWindow(self._trace_win, click_through=True)  # passive glide footsteps
         self._trace_points: list[tuple[float, float, float]] = []
         self._trace_last_at = 0.0
         self._summon_trace_until = 0.0
 
         # --- position + animation state ---
-        self._x = float(root.winfo_screenwidth()) / 2.0
-        self._y = float(root.winfo_screenheight()) / 2.0
+        self._x = float(screen_size()[0]) / 2.0
+        self._y = float(screen_size()[1]) / 2.0
         self._from = self._to = (self._x, self._y)
         self._wander_until = 0.0
         self._wander_to = (self._x, self._y)
@@ -258,6 +219,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._left_click: Callable[[], None] | None = None
         self._right_click: Callable[[], None] | None = None
         self._left_double: Callable[[], None] | None = None
+        self._escape: Callable[[], None] | None = None
         self._cube_click: Callable[[int, str], bool | None] | None = None
         self._capture_hold: Callable[[], None] | None = None
         self._focus_hold: Callable[[], None] | None = None
@@ -269,7 +231,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._pressed_cube_index: int | None = None
         self._last_click = ("", 0.0)
         self._double_at = 0.0
-        self._photo: Any = None
         self._emote: Any = None  # active transient emote: (fn/spec, start, dur)
         self._formation = self._form.default_formation or "cluster"
 
@@ -282,11 +243,21 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._last_layered_frame_signature: tuple[Any, ...] | None = None
         self._passive_layered_frame_cache: dict[tuple[Any, ...], Any] = {}
         self._build_sprites()
+        try:
+            self._win = NativeLayeredWindow(title="MO cubes", on_event=self._on_native_event, post=post)
+            self._ulw = self._win
+            self._label_win = NativeLayeredWindow(on_event=self._on_label_event, post=post, activate=False)
+            self._label = self._label_win
+            self._label.set_click_through(True)
+            self._trace_win = NativeLayeredWindow()
+            self._trace = self._trace_win
+        except Exception:
+            self.destroy()
+            raise
 
     # ------------------------------------------------------------------ helpers
     def _plate_color(self) -> tuple[int, int, int]:
-        """The rounded backing 'body' colour — a dark tint of the cube shade. Distinct
-        from the chroma key so the plate is OPAQUE (clickable) and gives clean cube edges."""
+        """The label backing color, a dark tint of the current cube shade."""
         return tuple(max(8, int(c * 0.16)) for c in self._color_rgb)
 
     def _layout(self) -> None:
@@ -347,13 +318,12 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
 
     def _render_sprite_set(self, rgb: tuple[int, int, int], *, edge: int | None = None) -> list:
         try:
-            from PIL import Image, ImageDraw, ImageFilter, ImageTk
+            from PIL import Image, ImageDraw, ImageFilter
         except Exception as exc:
             raise DesktopVisualAdapterError("MO Desktop cube requires the Pillow renderer") from exc
         ss = 2
         e = int((self._cube_edge if edge is None else edge) * ss)
-        # Keep the glow tight so the sprite stays within the backing plate (a wide glow
-        # would feather onto the chroma key and read as a dark halo).
+        # Keep the glow inside each cached sprite's allocation.
         pad = int(e * (0.30 * self._glow + 0.12))
         box = e + pad * 2
         radius = max(1, int(e * self._corner))
@@ -385,7 +355,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             img = Image.alpha_composite(outline, img)
             small = img.resize((box // ss, box // ss), Image.LANCZOS)
             sprites.append(small)
-        self._ImageTk = ImageTk
         self._Image = Image
         return sprites
 
@@ -395,17 +364,9 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._visuals = visuals
         self._app_pulse_until = 0.0
         self._app_pulse_restore_rgb = None
-        self._color_rgb, self._chroma_rgb = _skin_cube_rgb(visuals)
+        self._color_rgb = _skin_cube_rgb(visuals)
         self._charge_rgb = _skin_charge_rgb(visuals)  # the LED re-themes with /skin too
         self._label_text_rgb = _skin_label_text_rgb(visuals)
-        self._chroma = "#%02x%02x%02x" % self._chroma_rgb
-        if self._ulw is None:
-            # Chroma-key path only — a layered window must NOT also set
-            # -transparentcolor (SetLayeredWindowAttributes conflicts with ULW).
-            self._win.configure(bg=self._chroma)
-            self._win.attributes("-transparentcolor", self._chroma)
-            if self._canvas is not None:
-                self._canvas.configure(bg=self._chroma)
         self._label_img = None  # re-render the label with the new colour on next show
         self._build_sprites()
         if getattr(self, "_label_value", ""):
@@ -424,10 +385,12 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         left: Callable[[], None] | None = None,
         right: Callable[[], None] | None = None,
         left_double: Callable[[], None] | None = None,
+        escape: Callable[[], None] | None = None,
     ) -> None:
         self._left_click = left
         self._right_click = right
         self._left_double = left_double
+        self._escape = escape
 
     def set_cube_click_handler(self, callback: Callable[[int, str], bool | None] | None) -> None:
         """Optionally handle a specific rendered cube before the shared click action.
@@ -461,7 +424,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
 
             area = _monitor_work_area(self._win)
             if not area:
-                area = (0, 0, int(self._win.winfo_screenwidth()), int(self._win.winfo_screenheight()))
+                area = (0, 0, int(screen_size()[0]), int(screen_size()[1]))
             left, top, right, bottom = area
             margin = max(10, round(self._size * .16))
             dock = (
@@ -597,10 +560,9 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 except Exception:
                     pass
             else:
-                color, chroma = _skin_cube_rgb()
-                if color != self._color_rgb or chroma != self._chroma_rgb:
-                    self._color_rgb, self._chroma_rgb = color, chroma
-                    self._chroma = "#%02x%02x%02x" % self._chroma_rgb
+                color = _skin_cube_rgb(self._visuals)
+                if color != self._color_rgb:
+                    self._color_rgb = color
                     changed = True
         if not changed:
             return
@@ -646,11 +608,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         if n == self._size:
             return
         self._size = n
-        if self._canvas is not None:  # chroma-key adapter: resize the canvas widget too
-            try:
-                self._canvas.config(width=n, height=n)
-            except Exception:
-                pass
         formation = getattr(self, "_formation", "cluster") or "cluster"
         self._layout()
         if formation != "cluster":
@@ -925,7 +882,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         now = time.monotonic()
         if x is None or y is None:
             try:
-                x, y = self._win.winfo_pointerxy()
+                x, y = pointer_position()
             except Exception:
                 return False
         self._from = (self._x, self._y)
@@ -944,6 +901,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
 
     def destroy(self) -> None:
         self._cancel_cube_hold()
+        self._cancel_running_hide()
         activity = getattr(self, "_computer_activity", None)
         if activity is not None:
             activity.destroy()
@@ -954,12 +912,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 except Exception:
                     pass
         self._ulw = None
-        for w in (getattr(self, "_trace_win", None), getattr(self, "_label_win", None), getattr(self, "_win", None)):
-            try:
-                if w is not None:
-                    w.destroy()
-            except Exception:
-                pass
 
     def _cube_count(self) -> int:
         return max(1, len(getattr(self, "_bases", ()) or ()))
@@ -1131,49 +1083,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         if self._launcher_active or getattr(self, "_app_launch_origin", None) is not None:
             return False
         self._ease_mouth(now)
-        if self._ulw is not None:
-            return self._paint_layered(now)
-        if not self._sprites:
-            raise DesktopVisualAdapterError("MO Desktop cube sprite cache is unavailable")
-        try:
-            W = self._size
-            bg = self._Image.new("RGB", (W, W), self._chroma_rgb)
-            # Subtle rounded backing plate = the companion's "body". It makes the whole
-            # cluster a reliable click target (transparent chroma areas are click-through,
-            # so bare cubes leave only tiny clickable pixels) and gives the cubes clean
-            # edges — they blend onto the plate, not feather to the black chroma key.
-            from PIL import ImageDraw
-
-            m = int(W * 0.08)
-            ImageDraw.Draw(bg).rounded_rectangle([m, m, W - m, W - m], radius=int(W * 0.28), fill=self._plate_color())
-            half = self._sprite_px / 2.0
-            for i in range(self._cube_count()):
-                cx, cy, b, _a = self._cube_state(i, now)  # chroma adapter cannot do partial alpha
-                idx = max(0, min(_LEVELS - 1, int(round(b * (_LEVELS - 1)))))
-                sprite = self._sprite_for(i, idx, now)
-                bg.paste(sprite, (int(cx - half), int(cy - half)), sprite)
-            self._photo = self._ImageTk.PhotoImage(bg)
-            self._canvas.delete("all")
-            self._canvas.create_image(W // 2, W // 2, image=self._photo)
-            return True
-        except Exception as exc:
-            raise DesktopVisualAdapterError("MO Desktop chroma renderer could not apply the active visual state") from exc
-
-    # --- per-pixel-alpha (shared layered window) ---
-    def _setup_layered(self) -> None:
-        """Host the cube window as a per-pixel-alpha layered surface (shared
-        ``LayeredWindow``). Leaves ``self._ulw`` None (→ chroma-key adapter) off Windows
-        or when the native layered surface is unavailable."""
-        if sys.platform != "win32":
-            return
-        try:
-            from mo_desktop.layered import LayeredWindow
-
-            surface = LayeredWindow(self._win)
-            if surface.available():
-                self._ulw = surface
-        except Exception:
-            self._ulw = None
+        return self._paint_layered(now)
 
     def _paint_layered(self, now: float) -> bool:
         """Composite the sprites (glow + cube, NO plate) onto a transparent frame and
@@ -1305,7 +1215,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         points = self._active_trace_points(now)
         if not points:
             try:
-                self._trace_win.withdraw()
+                self._trace_win.hide()
             except Exception:
                 pass
             return
@@ -1329,8 +1239,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             paint_cube_trace(draw, points, now=now, origin=(left, top), offsets=offsets,
                              edge=edge, color=self._color_rgb, alpha=base_alpha, sizes=sizes, corner=self._corner)
             if surface.blit(frame, left, top):
-                self._trace_win.deiconify()
-                self._trace_win.attributes("-topmost", True)
+                self._trace_win.show()
         except Exception:
             pass
 
@@ -1342,8 +1251,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             try:
                 self._reposition()
                 self._render(time.monotonic())
-                self._win.deiconify()
-                self._win.attributes("-topmost", True)
+                self._win.show()
             except Exception:
                 pass
 
@@ -1354,6 +1262,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._clear_trace()
         self._hide_label()
         try:
-            self._win.withdraw()
+            self._win.hide()
         except Exception:
             pass

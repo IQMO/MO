@@ -40,6 +40,9 @@ def fit_text(draw: Any, text: str, width: int, font: Any, marker: str = "…") -
 
 _SHADOW_CACHE: dict[tuple, Any] = {}
 _SHADOW_CACHE_MAX = 24
+_GRADIENT_CACHE: dict[tuple, Any] = {}
+_GRADIENT_CACHE_BYTES = 8 * 1024 * 1024
+_GRADIENT_CACHE_MAX = 8
 
 
 def _shadow_layer(size: tuple[int, int], box: Box, radius: int, alpha: int,
@@ -93,12 +96,35 @@ def draw_card(img: Any, box: Box, *, radius: int, fill: RGBA,
 
 def gradient_edge(img: Any, box: Box, *, radius: int, width: int,
                   colors: tuple[RGBA, ...]) -> None:
-    """A stationary, antialiased edge in the caller's existing card pass."""
+    """Composite the stationary edge, reusing geometry/palette artwork.
+
+    Bound retained pixels as well as entry count: supersampled panels can be
+    large. Content changes never rebuild this edge, and cached layers are never
+    exposed to callers or modified while compositing.
+    """
+    key = (img.size, tuple(box), radius, width, tuple(colors))
+    edge = _GRADIENT_CACHE.get(key)
+    if edge is None:
+        edge = _gradient_layer(img.size, box, radius, width, colors)
+        cost = edge.width * edge.height * 4
+        if cost <= _GRADIENT_CACHE_BYTES:
+            while _GRADIENT_CACHE and (
+                len(_GRADIENT_CACHE) >= _GRADIENT_CACHE_MAX
+                or sum(layer.width * layer.height * 4 for layer in _GRADIENT_CACHE.values()) + cost
+                > _GRADIENT_CACHE_BYTES
+            ):
+                del _GRADIENT_CACHE[next(iter(_GRADIENT_CACHE))]
+            _GRADIENT_CACHE[key] = edge
+    img.alpha_composite(edge)
+
+
+def _gradient_layer(size: tuple[int, int], box: Box, radius: int, width: int,
+                    colors: tuple[RGBA, ...]) -> Any:
     from PIL import Image, ImageDraw, ImageChops
-    mask = Image.new("L", img.size)
+    mask = Image.new("L", size)
     ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, outline=255, width=max(1, width))
     vertical = Image.linear_gradient("L")
-    ramp = ImageChops.add(vertical.resize(img.size), vertical.rotate(90).resize(img.size), scale=2)
+    ramp = ImageChops.add(vertical.resize(size), vertical.rotate(90).resize(size), scale=2)
     lookup = []
     for value in range(256):
         position = value*(len(colors)-1)/255
@@ -107,7 +133,7 @@ def gradient_edge(img: Any, box: Box, *, radius: int, width: int,
         lookup.append(tuple(round(a+(b-a)*amount) for a, b in zip(colors[index], colors[index+1])))
     edge = Image.merge("RGBA", tuple(ramp.point([color[channel] for color in lookup]) for channel in range(4)))
     edge.putalpha(ImageChops.multiply(edge.getchannel("A"), mask))
-    img.alpha_composite(edge)
+    return edge
 
 
 def finish(img: Any, ss: int = SS) -> Any:

@@ -78,6 +78,12 @@ def run(config: dict[str, Any] | None = None, *, host_status: str = "",
     window.events.minimized += lambda: bridge._set_visible(False)
     window.events.restored += lambda: bridge._set_visible(True)
     exiting = False
+    def idle_close() -> None:
+        nonlocal exiting
+        exiting = True
+        window.destroy()
+    bridge._on_idle_close = idle_close
+
     def closing() -> bool:
         if exiting:
             return True
