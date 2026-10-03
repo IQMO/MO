@@ -34,6 +34,7 @@ from ..utils.file_hash import file_sha256
 from ..utils.text_safety import redact_secret_values
 
 SCHEMA_VERSION = "1"
+INDEX_POLICY_VERSION = "2"
 PATCH_CHAR_LIMIT = 262144
 _RECORD_LOCK = threading.Lock()
 _BUILD_LOCK = threading.Lock()
@@ -173,6 +174,7 @@ def build_history_index(root: str | Path | None = None, *, progress: Callable[[d
     with file_byte_lock(database.with_suffix(".lock"), _BUILD_LOCK), closing(_connect(database, write=True)) as connection:
         head = _git(base, "rev-parse", "HEAD").decode().strip()
         commits = _commit_metadata(base, head)
+        reachable_oids = {row[0] for row in commits}
         stored_paths = {row[0] for row in connection.execute("SELECT path FROM changes UNION SELECT old_path FROM changes WHERE old_path<>''")}
         excluded_now = stored_paths - _allowed_paths(base, list(stored_paths))
         meta = dict(connection.execute("SELECT key, value FROM meta"))
@@ -190,7 +192,7 @@ def build_history_index(root: str | Path | None = None, *, progress: Callable[[d
                 connection.execute("DELETE FROM search WHERE key=? AND kind='commit'", (oid,))
                 connection.execute("DELETE FROM changes WHERE oid=?", (oid,))
                 connection.execute("DELETE FROM commits WHERE oid=?", (oid,))
-        known = {row[0] for row in connection.execute("SELECT oid FROM commits")}
+        known = {row[0] for row in connection.execute("SELECT oid FROM commits")} & reachable_oids
         indexed = 0
         with connection:
             connection.execute("INSERT OR REPLACE INTO meta VALUES ('building_head', ?)", (head,))
@@ -218,15 +220,33 @@ def build_history_index(root: str | Path | None = None, *, progress: Callable[[d
         with connection:
             connection.execute("UPDATE commits SET reachable=0")
             connection.executemany("UPDATE commits SET reachable=1 WHERE oid=?", ((row[0],) for row in commits))
+            pruned = connection.execute("SELECT count(*) FROM commits WHERE reachable=0").fetchone()[0]
+            # This index owns HEAD ancestry, not a path-keyed archive. Keeping
+            # abandoned lineages made their FTS rows compete with current
+            # commits and retained a replaced repository's history indefinitely.
+            connection.execute(
+                "DELETE FROM search WHERE kind='commit' "
+                "AND key IN (SELECT oid FROM commits WHERE reachable=0)"
+            )
+            connection.execute("DELETE FROM changes WHERE oid IN (SELECT oid FROM commits WHERE reachable=0)")
+            connection.execute("DELETE FROM commits WHERE reachable=0")
             connection.execute("DELETE FROM search WHERE kind='finding'")
             for path in sorted(records.glob("*.json")):
                 record = json.loads(path.read_text(encoding="utf-8"))
+                # Findings remain durable private records, but only findings
+                # checked on the current ancestry belong in its search
+                # projection. Switching back or merging that ancestry restores
+                # them on the next build without copying or deleting records.
+                if record.get("checked_head") not in reachable_oids:
+                    continue
                 _replace_search(connection, record["id"], "finding", _finding_text(record))
             connection.execute("INSERT OR REPLACE INTO meta VALUES ('indexed_head', ?)", (head,))
             connection.execute("INSERT OR REPLACE INTO meta VALUES ('source_policy_version', ?)", (SOURCE_PATH_POLICY_VERSION,))
+            connection.execute("INSERT OR REPLACE INTO meta VALUES ('index_policy_version', ?)", (INDEX_POLICY_VERSION,))
             connection.execute("DELETE FROM meta WHERE key='building_head'")
         result = history_status(base)
         result["newly_indexed"] = indexed
+        result["pruned_commits"] = pruned
         return result
 
 
@@ -252,7 +272,13 @@ def history_status(root: str | Path | None = None) -> dict[str, Any]:
         result.update(indexed_commits=counts[0], truncated_patches=counts[1], excluded_path_changes=counts[2])
         result["recorded_findings"] = connection.execute("SELECT count(*) FROM search WHERE kind='finding'").fetchone()[0]
         result["source_policy_changed"] = meta.get("source_policy_version") != SOURCE_PATH_POLICY_VERSION
-        result["stale"] = result["indexed_head"] != head or result["building"] or result["source_policy_changed"]
+        result["index_policy_changed"] = meta.get("index_policy_version") != INDEX_POLICY_VERSION
+        result["stale"] = (
+            result["indexed_head"] != head
+            or result["building"]
+            or result["source_policy_changed"]
+            or result["index_policy_changed"]
+        )
     return result
 
 
@@ -351,10 +377,12 @@ def record_finding(record: dict[str, Any], root: str | Path | None = None) -> di
             prior = json.loads(destination.read_text(encoding="utf-8"))
         owner = str(record.get("owner", prior.get("owner", "")) or "").strip()
         symbol = str(record.get("symbol", prior.get("symbol", "")) or "").strip()
+        current_ancestry = set(_git(base, "rev-list", "HEAD").decode().splitlines())
         prior_by_owner = [
             row for path in directory.glob("*.json")
             if (row := json.loads(path.read_text(encoding="utf-8"))).get("owner") == owner
             and row.get("symbol", "") == symbol
+            and row.get("checked_head") in current_ancestry
         ]
         existing_id = prior_by_owner[0]["id"] if prior_by_owner else ""
         identity = identity or existing_id
@@ -492,22 +520,29 @@ def search_history(query: str, root: str | Path | None = None, *, paths: list[st
     expression = " OR ".join('"' + term + '"' for term in terms)
     with closing(_connect(database)) as connection:
         # TEMP state scopes queries without rewriting the shared HEAD index.
-        # Filter before ranking/limits so later commits cannot crowd out ancestors.
-        ancestry_filter = ""
+        # Always filter against real Git ancestry before ranking/limits. This
+        # also keeps a stale cache from exposing an abandoned repository root
+        # while its replacement is waiting for the next build.
+        query_ancestry = ancestry or _git(base, "rev-list", "HEAD").decode().splitlines()
+        connection.execute("CREATE TEMP TABLE query_ancestry (oid TEXT PRIMARY KEY)")
+        connection.executemany("INSERT INTO query_ancestry VALUES (?)", ((oid,) for oid in query_ancestry))
+        ancestry_filter = " AND c.oid IN (SELECT oid FROM query_ancestry)"
         if ancestry is not None:
-            connection.execute("CREATE TEMP TABLE query_ancestry (oid TEXT PRIMARY KEY)")
-            connection.executemany("INSERT INTO query_ancestry VALUES (?)", ((oid,) for oid in ancestry))
-            ancestry_filter = " AND c.oid IN (SELECT oid FROM query_ancestry)"
             status["revision_indexed_commits"] = connection.execute(
                 "SELECT count(*) FROM commits c WHERE c.reachable=1" + ancestry_filter
             ).fetchone()[0]
         kinds = ("finding", "commit") if include_findings else ("commit",)
-        rows = [row for kind in kinds for row in connection.execute(
-            "SELECT key, kind, snippet(search,2,'[',']',' … ',24) AS excerpt FROM search "
-            "WHERE search MATCH ? AND kind=? "
-            + ("AND key IN (SELECT oid FROM query_ancestry) " if ancestry is not None and kind == "commit" else "")
-            + "ORDER BY bm25(search) LIMIT ?", (expression, kind, limit * 4),
-        )] if expression else []
+        rows = []
+        if expression:
+            for kind in kinds:
+                commit_scope = "AND key IN (SELECT oid FROM commits WHERE reachable=1) " if kind == "commit" else ""
+                revision_scope = "AND key IN (SELECT oid FROM query_ancestry) " if kind == "commit" else ""
+                rows.extend(connection.execute(
+                    "SELECT key, kind, snippet(search,2,'[',']',' … ',24) AS excerpt FROM search "
+                    "WHERE search MATCH ? AND kind=? " + commit_scope + revision_scope
+                    + "ORDER BY bm25(search) LIMIT ?", (expression, kind, limit * 4),
+                ))
+        finding_ancestry = set(query_ancestry) if include_findings else set()
         current_paths = _current_paths(base)
         requested_paths = list(dict.fromkeys(path for path in (paths or []) if path))
         graph_paths = requested_paths[:8]
@@ -531,7 +566,10 @@ def search_history(query: str, root: str | Path | None = None, *, paths: list[st
         for identity in dict.fromkeys(finding_ids):
             path = records / f"{identity}.json"
             if path.is_file():
-                result["findings"].append(_finding_result(json.loads(path.read_text(encoding="utf-8")), base, current_paths))
+                record = json.loads(path.read_text(encoding="utf-8"))
+                if record.get("checked_head") not in finding_ancestry:
+                    continue
+                result["findings"].append(_finding_result(record, base, current_paths))
             if len(result["findings"]) >= limit:
                 break
         text_ids = [row["key"] for row in rows if row["kind"] == "commit"]

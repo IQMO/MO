@@ -238,6 +238,12 @@ public/private-boundary invariants for changes under `core/`. The root
   Widening shared source admission bumps its policy version; history status
   reports older coverage as stale, and the existing builder revisits commits
   with excluded paths while retaining unaffected commits and durable findings.
+  A completed build removes commit/search rows outside current HEAD ancestry;
+  this cache is not a path-keyed archive, and abandoned or replaced repository
+  lineages must not compete in full-text ranking. Source-linked findings remain
+  durable private records, but the search projection admits only findings whose
+  checked HEAD is on current ancestry. Switching back to that ancestry, or
+  merging it, restores the finding on the next build without rewriting it.
   Current graph queries remain owned by `structural_graph.py`.
   Native code search, MCP search,
   and provider graph context may retrieve bounded history without rebuilding it.
