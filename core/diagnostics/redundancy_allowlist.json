@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "exact-text-block:4291772dfe232b04",
+      "members": [
+        "mo_everywhere/contracts/cube_v1/reject-sequence-overflow.json",
+        "mo_everywhere/contracts/cube_v1/reject-wrong-version.json"
+      ],
+      "reason": "Negative Cube v1 fixtures keep one valid envelope visible while changing exactly one rejected field.",
+      "behavior_owner": "mo_everywhere/contracts/cube_v1/manifest.json",
+      "removal": "intentional-permanent: explicit wire-level negative fixtures are clearer and safer than generated variants"
+    },
+    {
+      "id": "exact-text-block:7fcb051781eb08eb",
+      "members": [
+        "mo_everywhere/contracts/cube_v1/reject-boolean-version.json",
+        "mo_everywhere/contracts/cube_v1/reject-sequence-overflow.json"
+      ],
+      "reason": "Negative Cube v1 fixtures keep one valid envelope visible while changing exactly one rejected field.",
+      "behavior_owner": "mo_everywhere/contracts/cube_v1/manifest.json",
+      "removal": "intentional-permanent: explicit wire-level negative fixtures are clearer and safer than generated variants"
+    },
+    {
+      "id": "exact-text-block:9f3bb2ae0db31dfd",
+      "members": [
+        "mo_everywhere/contracts/cube_v1/reject-boolean-version.json",
+        "mo_everywhere/contracts/cube_v1/reject-wrong-version.json"
+      ],
+      "reason": "Negative Cube v1 fixtures keep one valid envelope visible while changing exactly one rejected field.",
+      "behavior_owner": "mo_everywhere/contracts/cube_v1/manifest.json",
+      "removal": "intentional-permanent: explicit wire-level negative fixtures are clearer and safer than generated variants"
+    },
+    {
+      "id": "exact-token-block:16d765c554fa0103",
+      "members": [
+        "core/design/service.py::token@440",
+        "core/design/service.py::token@690"
+      ],
+      "reason": "The public update entry point and its already-locked commit helper spell out the same keyword-only update fields; the entry point acquires the file lock and checks the expected revision before forwarding them.",
+      "behavior_owner": "core/design/service.py update_design and _commit_design_update",
+      "removal": "intentional-permanent: explicit typed signatures preserve the lock boundary without an untyped keyword bag or a second update representation"
+    },
+    {
+      "id": "python-function:6cf65f8cff152998",
+      "members": [
+        "mo_desktop/live_control.py::DesktopScreenLane._state",
+        "mo_desktop/phone/trackpad.py::TrackpadServer._state"
+      ],
+      "reason": "Desktop screen and phone trackpad lanes expose distinct independently guarded state machines.",
+      "behavior_owner": "MO Desktop Live Control screen and trackpad lanes",
+      "removal": "intentional-permanent: separate lane state prevents cross-capability authority coupling"
+    },
+    {
+      "id": "python-function:93133fdab64112ad",
+      "members": [
+        "core/imageedit.py::available",
+        "core/visualize/terminal_image.py::available"
+      ],
+      "reason": "Two optional image features probe different dependencies and keep feature-local error boundaries.",
+      "behavior_owner": "image editing and terminal visualization feature boundaries",
+      "removal": "intentional-permanent: tiny feature-local availability probes avoid a generic dependency abstraction"
+    },
+    {
+      "id": "renamed-token-block:08afd390a51a3d55",
+      "members": [
+        "interface/skins/cold.py",
+        "interface/skins/default.py"
+      ],
+      "reason": "Named skins intentionally expose the same complete semantic-token schema with independently chosen immutable values.",
+      "behavior_owner": "interface/skins Skin validation and BUILTIN_SKINS registry",
+      "removal": "intentional-permanent: explicit complete definitions keep every theme token reviewable and prevent inheritance from coupling named skins"
+    },
+    {
+      "id": "renamed-token-block:28246fa84c33a4dc",
+      "members": [
+        "interface/skins/default.py",
+        "interface/skins/dracula.py"
+      ],
+      "reason": "Named skins intentionally expose the same complete semantic-token schema with independently chosen immutable values.",
+      "behavior_owner": "interface/skins Skin validation and BUILTIN_SKINS registry",
+      "removal": "intentional-permanent: explicit complete definitions keep every theme token reviewable and prevent inheritance from coupling named skins"
+    },
+    {
+      "id": "renamed-token-block:4165d33da80579e7",
+      "members": [
+        "interface/skins/dracula.py",
+        "interface/skins/silver.py"
+      ],
+      "reason": "Named skins intentionally expose the same complete semantic-token schema with independently chosen immutable values.",
+      "behavior_owner": "interface/skins Skin validation and BUILTIN_SKINS registry",
+      "removal": "intentional-permanent: explicit complete definitions keep every theme token reviewable and prevent inheritance from coupling named skins"
+    },
+    {
+      "id": "renamed-token-block:db1e3faf51a57af3",
+      "members": [
+        "interface/skins/cold.py",
+        "interface/skins/dracula.py"
+      ],
+      "reason": "Named skins intentionally expose the same complete semantic-token schema with independently chosen immutable values.",
+      "behavior_owner": "interface/skins Skin validation and BUILTIN_SKINS registry",
+      "removal": "intentional-permanent: explicit complete definitions keep every theme token reviewable and prevent inheritance from coupling named skins"
+    },
+    {
+      "id": "renamed-token-block:a4662d3077104d82",
+      "members": [
+        "interface/skins/default.py",
+        "interface/skins/silver.py"
+      ],
+      "reason": "Named skins intentionally expose the same complete semantic-token schema with independently chosen immutable values.",
+      "behavior_owner": "interface/skins Skin validation and BUILTIN_SKINS registry",
+      "removal": "intentional-permanent: explicit complete definitions keep every theme token reviewable and prevent inheritance from coupling named skins"
+    },
+    {
+      "id": "renamed-token-block:0ecbca7c4e6fdffb",
+      "members": [
+        "interface/skins/cold.py",
+        "interface/skins/silver.py"
+      ],
+      "reason": "Named skins intentionally expose the same complete semantic-token schema with independently chosen immutable values.",
+      "behavior_owner": "interface/skins Skin validation and BUILTIN_SKINS registry",
+      "removal": "intentional-permanent: explicit complete definitions keep every theme token reviewable and prevent inheritance from coupling named skins"
+    },
+    {
+      "id": "renamed-token-block:5861b5bc321037e4",
+      "members": [
+        "core/dashboard/brain_index.py",
+        "mo_everywhere/overview.py"
+      ],
+      "reason": "Local brain index and remote overview intentionally project different safe subsets from a shared snapshot shape.",
+      "behavior_owner": "local brain index and remote Everywhere overview boundaries",
+      "removal": "intentional-permanent: distinct presentation surfaces retain separate safe-subset policies"
+    },
+    {
+      "id": "renamed-token-block:948a712d25534159",
+      "members": [
+        "mo_desktop/mo_renderer.py",
+        "mo_everywhere/overview.py"
+      ],
+      "reason": "Desktop theme validation and the remote counts-only projection independently unpack bounded dictionaries at different trust boundaries; they share no state or behavior.",
+      "behavior_owner": "MO Desktop theme renderer and Everywhere remote overview projection",
+      "removal": "intentional-permanent: a generic dictionary-unpacking helper would couple unrelated validation and privacy boundaries"
+    },
+    {
+      "id": "renamed-token-block:b768f76ce62513ad",
+      "members": [
+        "core/dashboard/brain_index.py",
+        "mo_desktop/mo_renderer.py"
+      ],
+      "reason": "The counts-only brain index and Desktop theme validation independently unpack bounded dictionaries with unrelated schemas and outputs.",
+      "behavior_owner": "Dashboard brain projection and MO Desktop theme renderer",
+      "removal": "intentional-permanent: retaining explicit schema-local reads is clearer than a cross-domain dictionary adapter"
+    }
+  ]
+}

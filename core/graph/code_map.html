@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MO Agent — Unified Map</title>
+<style id="skin">__CSS__</style>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+body{display:flex;flex-direction:column;padding:8px 12px;gap:6px}
+button,input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:var(--button-radius,4px);padding:max(2px,calc(var(--button-pad,6px) - 2px)) calc(var(--button-pad,6px) + 2px)}
+button{cursor:pointer}button:hover{border-color:var(--cyan)}button:disabled{opacity:.4;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button[aria-pressed=true]{color:var(--cyan);border-color:var(--cyan)}
+[hidden]{display:none!important}
+#toolbar,#trail,.panel-head,footer{display:flex;align-items:center;gap:8px;flex:none;min-width:0}
+#toolbar{flex-wrap:wrap}#search{flex:1;min-width:140px}#level{max-width:160px}
+#toolbar .chip,#search,#level{border-radius:var(--button-radius,4px);padding:max(2px,calc(var(--button-pad,6px) - 2px)) calc(var(--button-pad,6px) + 2px)}
+#trail{font-size:11px;min-height:25px}#trail button{background:transparent;border-color:transparent;padding:2px 4px}
+#trail button:hover{border-color:var(--line)}#scope{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--cyan)}
+#status{margin-left:auto;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+#stage{position:relative;flex:1;min-height:60px;overflow:hidden}
+#canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+#empty{position:absolute;inset:0;display:grid;place-content:center;color:var(--muted);text-align:center;pointer-events:none}
+#explorer,#inspector{flex:none;min-height:0;border-block:1px solid var(--line);background:var(--bg)}
+.panel-head{min-height:30px;padding:3px 0}.panel-head strong{font-size:12px;overflow-wrap:anywhere}.panel-head .close{margin-left:auto;background:transparent;border-color:transparent}
+#menu,#info{overflow:auto;max-height:clamp(80px,26vh,240px);padding:4px 2px 8px;overscroll-behavior:contain}
+#menu .package-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 10px}
+.grow,.witem,.qitem,.node-link{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;border:1px solid transparent;background:transparent;padding:4px 5px;min-width:0}
+.grow:hover,.witem:hover,.qitem:hover,.node-link:hover{background:var(--panel);border-color:var(--line)}
+.grow[aria-current=true]{color:var(--cyan)}.grow .n,.witem .n,.node-link .n{flex:1;min-width:0;overflow-wrap:anywhere}.grow .c,.witem .c{flex:none;color:var(--muted);font-size:10px}
+.dot{display:inline-block;align-self:center;width:8px;height:8px;flex:none;border:1px solid currentColor;transform:rotate(30deg)}
+.prefix{color:var(--muted)}.muted,.note{color:var(--muted)}.note{font-size:11px;line-height:1.45;margin:4px 0;overflow-wrap:anywhere}
+.section-title{font-size:11px;font-weight:600;color:var(--text);margin:6px 0 4px;text-transform:none;letter-spacing:.1px}
+.section-title small{font-size:10px;color:var(--muted);font-weight:400;margin-left:6px}
+.inspector-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:6px 20px}
+.section{min-width:0}.section p{margin:4px 0;overflow-wrap:anywhere}.row{font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.link{color:var(--cyan);border:0;background:transparent;padding:2px 0;text-align:left;overflow-wrap:anywhere}.link:hover{text-decoration:underline}
+.relationship{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;padding:4px 5px;overflow-wrap:anywhere}
+.relationship:hover{border-color:var(--line);background:var(--panel)}.relationship .relation{color:var(--muted);font-size:10px;margin-left:6px}
+.badge{display:inline-block;font-size:10px;line-height:1.4;padding:0 4px;background:transparent;border:0;color:var(--muted)}
+.badge.green{color:var(--green)}.badge.gold{color:var(--gold)}.badge.pink{color:var(--pink)}.badge.green,.badge.gold,.badge.pink{background:transparent}
+.more{margin:5px 0;background:transparent;font-size:11px;color:var(--cyan)}
+#stats{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--muted);font-size:11px;margin-bottom:6px}
+footer{font-size:10px;color:var(--muted);min-height:26px}footer .controls{display:flex;gap:5px;margin-left:auto}footer button{font-size:11px;background:transparent}
+#hint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#meta{cursor:help;white-space:nowrap}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}::-webkit-scrollbar-thumb:hover{background:var(--cyan)}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-button{display:none}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}}
+@media(max-width:700px){body{padding:6px 8px;gap:4px}#status{font-size:10px}#hint{display:none}.inspector-columns{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}}
+</style>
+</head>
+<body>
+<header id="toolbar">
+  <button id="explore" type="button" aria-expanded="false" aria-controls="explorer">Explore</button>
+  <input id="search" type="search" aria-label="Search graph" placeholder="Find a package, file or symbol…" autocomplete="off">
+  <select id="level" aria-label="Graph detail"><option value="packages">Packages</option><option value="files">Files</option><option value="symbols">Files &amp; symbols</option><option value="definitions">Symbols only</option></select>
+  <button id="touched" class="chip" type="button" aria-pressed="false">Touched only</button>
+</header>
+<nav id="trail" aria-label="Graph location">
+  <button id="back" type="button" aria-label="Back in graph" disabled>Back</button>
+  <button id="overview" type="button">All packages</button>
+  <span id="scope"></span><span id="status" role="status"></span>
+</nav>
+<section id="explorer" aria-label="Graph explorer" hidden>
+  <div class="panel-head">
+    <select id="menuKind" aria-label="Explore section"><option value="packages">Source</option><option value="work">Work</option><option value="evidence">Graph insights</option></select>
+    <span id="menuTitle" class="muted"></span>
+    <button id="closeMenu" class="close" type="button" aria-label="Close explorer">Close</button>
+  </div>
+  <div id="menu"></div>
+</section>
+<main id="stage"><canvas id="canvas" aria-label="Structural graph. Use Explore or search for keyboard navigation."></canvas><div id="empty" hidden></div></main>
+<section id="inspector" aria-label="Graph selection" hidden>
+  <div class="panel-head"><strong id="infoTitle"></strong><button id="closeInfo" class="close" type="button" aria-label="Close graph details">Close</button></div>
+  <div id="info"></div>
+</section>
+<footer>
+  <span id="meta">Orientation only</span><span id="hint">Drag to rotate · wheel to zoom · select a cube to explore</span>
+  <div class="controls"><button id="fit" type="button">Fit graph</button><button id="tSpin" type="button" aria-pressed="false">Drift</button><button id="tGrid" type="button" aria-pressed="false">Grid</button></div>
+</footer>
+<script id="graph-data" type="application/json">__GRAPH_JSON__</script>
+<script>__SCRIPT__</script>
+</body>
+</html>

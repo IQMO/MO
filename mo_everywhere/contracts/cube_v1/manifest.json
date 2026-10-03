@@ -1,0 +1,146 @@
+{
+  "schema": "mo.cube.fixture-manifest",
+  "version": 1,
+  "wire_schema": "schema.json",
+  "maximum_wire_bytes": 4096,
+  "projection": [
+    "formation",
+    "persistent_owner",
+    "phase",
+    "token",
+    "semantic_owner",
+    "capability",
+    "scopes",
+    "allowed_actions",
+    "job_status",
+    "transient_kind"
+  ],
+  "cases": [
+    {
+      "file": "valid-minimum.json",
+      "kind": "valid",
+      "description": "Smallest permitted scalar bounds and inert notify authority.",
+      "expected": {
+        "accepted": true,
+        "formation": "cluster",
+        "persistent_owner": "default",
+        "phase": "idle",
+        "token": "neutral",
+        "semantic_owner": "presence",
+        "capability": "notify",
+        "scopes": [],
+        "allowed_actions": ["self_revoke"],
+        "job_status": null,
+        "transient_kind": null
+      }
+    },
+    {
+      "file": "valid-maximum-fields.json",
+      "kind": "valid",
+      "description": "Maximum declared text, epoch, stale, priority, id, scope, action, and signed 64-bit sequence values.",
+      "expected": {
+        "accepted": true,
+        "formation": "face",
+        "persistent_owner": "role",
+        "phase": "working",
+        "token": "action",
+        "semantic_owner": "job",
+        "capability": "control",
+        "scopes": ["attachment_upload", "continuity_read", "continuity_sync", "conversation_read", "conversation_write", "file_browse", "file_manage", "file_transfer", "remote_control", "remote_host"],
+        "allowed_actions": ["upload_attachment", "file_transfer", "cancel_job", "conversation_read", "conversation_write", "continuity_bind", "continuity_read", "continuity_sync", "self_revoke", "view_overview"],
+        "job_status": "running",
+        "transient_kind": "notice"
+      }
+    },
+    {
+      "file": "fallback-unknown-enums.json",
+      "kind": "fallback",
+      "description": "Unknown optional fields are ignored; unknown presentation enums become inert defaults; unknown authority cannot enable an action.",
+      "expected": {
+        "accepted": true,
+        "formation": "cluster",
+        "persistent_owner": "default",
+        "phase": "idle",
+        "token": "neutral",
+        "semantic_owner": "default",
+        "capability": "notify",
+        "scopes": ["continuity_read"],
+        "allowed_actions": ["self_revoke"],
+        "job_status": null,
+        "transient_kind": null
+      }
+    },
+    {
+      "file": "canonical-order-and-alias.json",
+      "kind": "fallback",
+      "description": "Known scopes and actions are canonicalized to contract order, unauthorized actions are removed, and the legacy err token aliases to error.",
+      "expected": {
+        "accepted": true,
+        "formation": "row",
+        "persistent_owner": "mcp",
+        "phase": "active",
+        "token": "error",
+        "semantic_owner": "role",
+        "capability": "control",
+        "scopes": ["continuity_read", "continuity_sync"],
+        "allowed_actions": ["continuity_bind", "continuity_read", "continuity_sync", "send_text", "self_revoke", "view_overview"],
+        "job_status": null,
+        "transient_kind": null
+      }
+    },
+    {
+      "file": "fallback-invalid-job-id.json",
+      "kind": "fallback",
+      "description": "A non-ASCII job identifier is dropped and cannot suppress the otherwise authorized send action.",
+      "expected": {
+        "accepted": true,
+        "formation": "cluster",
+        "persistent_owner": "default",
+        "phase": "working",
+        "token": "brand",
+        "semantic_owner": "job",
+        "capability": "control",
+        "scopes": [],
+        "allowed_actions": ["send_text", "self_revoke", "view_overview"],
+        "job_status": null,
+        "transient_kind": null
+      }
+    },
+    {
+      "file": "reject-wrong-version.json",
+      "kind": "reject",
+      "description": "Unknown protocol versions fail closed.",
+      "expected": {"accepted": false}
+    },
+    {
+      "file": "reject-boolean-version.json",
+      "kind": "reject",
+      "description": "JSON booleans cannot exploit integer equality for the protocol version.",
+      "expected": {"accepted": false}
+    },
+    {
+      "file": "reject-control-text.json",
+      "kind": "reject",
+      "description": "Control and format characters are rejected from bounded user-visible text.",
+      "expected": {"accepted": false}
+    },
+    {
+      "file": "reject-non-string-enum.json",
+      "kind": "reject",
+      "description": "Wrong JSON scalar types are not string-coerced into presentation values.",
+      "expected": {"accepted": false}
+    },
+    {
+      "file": "reject-sequence-overflow.json",
+      "kind": "reject",
+      "description": "Sequence values outside the signed 64-bit mobile wire bound fail closed.",
+      "expected": {"accepted": false}
+    },
+    {
+      "file": "reject-transient-string-number.json",
+      "kind": "reject",
+      "description": "Nested transient numbers retain their JSON scalar types and are not parsed from strings.",
+      "expected": {"accepted": false}
+    }
+  ]
+}

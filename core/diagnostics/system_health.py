@@ -1,0 +1,416 @@
+"""Deterministic self-audit reporting for MO backend health.
+
+No provider calls, no writes, no external dependencies. The report only reads known
+runtime files, graph artifacts, the learning database, and environment variables.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sqlite3
+import sys
+from collections import Counter
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+
+@dataclass(frozen=True)
+class SystemHealth:
+    """Structured health snapshot for renderers and tests."""
+
+    files: dict[str, Any] = field(default_factory=dict)
+    graph: dict[str, Any] = field(default_factory=dict)
+    learning: dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def items(self):
+        return self.as_dict().items()
+
+    def keys(self):
+        return self.as_dict().keys()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.as_dict().get(key, default)
+
+
+_FILE_TARGETS: dict[str, dict[str, int]] = {
+    "logs/review_audit.jsonl": {"max_bytes": 1_000_000}, "logs/tool_audit.jsonl": {"max_bytes": 2_000_000},
+    "memory/profile/learning.md": {"max_entries": 200}, "memory/profile/behavior.md": {"max_entries": 100}, "memory/learning/workflows/candidates.jsonl": {"max_entries": 100},
+    "memory/learning/suggestions.jsonl": {"max_entries": 100}, "skills/": {"max_files": 200}, "memory/work/goals/": {"max_files": 50},
+}
+
+# MO_BACKEND_MONITOR is a DISABLE flag: unset behaves as enabled, "0" turns
+# the monitor off. The default below states the effective runtime truth.
+_CONFIG_DEFAULTS = dict(MO_BACKEND_MONITOR="1", MO_CODE_GRAPH="1", MO_CODE_GRAPH_MAX_FILES="0", MO_GOAL_RUNS_KEEP="50", MO_LEARNING_SUGGESTION_TTL_DAYS="7", MO_LEARNING_SUGGESTIONS_ENABLED="1", MO_LEARNING_SUGGESTIONS_MAX="100", MO_PROFILE_BEHAVIOR_MAX_ENTRIES="100", MO_PROFILE_LEARNING_MAX_ENTRIES="200", MO_PROVIDER_AUDIT_MAX_BYTES="1000000", MO_REVIEW_AUDIT_KEEP_LINES="2000", MO_REVIEW_AUDIT_MAX_BYTES="1000000", MO_STRUCTURAL_COMMUNITY_STRATEGY="path", MO_STRUCTURAL_GRAPH="mo", MO_STRUCTURAL_GRAPH_AUTO_UPDATE="1", MO_STRUCTURAL_GRAPH_AUTOBUILD="1", MO_STRUCTURAL_GRAPH_DELTA_LIMIT="24", MO_STRUCTURAL_GRAPH_UPDATE_CMD="", MO_TOKEN_AWARE_TRUNCATION="0", MO_TOOL_AUDIT_KEEP_LINES="5000", MO_TOOL_AUDIT_MAX_BYTES="2000000", MO_WORKFLOW_CANDIDATE_MAX="100", MO_WORKFLOW_CANDIDATE_TTL_DAYS="7")
+
+
+def check_file_health(root: str = ".") -> dict[str, Any]:
+    """Scan known append-only files for size, count, and cap status."""
+    out: dict[str, Any] = {}
+    for name, caps in _FILE_TARGETS.items():
+        path = Path(root) / name
+        if not path.exists():
+            out[name] = {"exists": False, "bytes": 0, "status": "missing"}
+            continue
+        if path.is_dir():
+            files = sorted(item for item in path.rglob("*") if item.is_file())
+            cap = caps.get("max_files")
+            count = len(files)
+            total = sum(_stat(item)["bytes"] for item in files)
+            out[name] = {"exists": True, "is_dir": True, "files": count, "bytes": total, "max_files": cap, "oldest_file": min((_stat(f)["modified"] for f in files), default=0), "newest_file": max((_stat(f)["modified"] for f in files), default=0), "status": "over_cap" if cap is not None and count > cap else "ok"}
+            continue
+        lines = _read_text(path).splitlines()
+        stat = _stat(path)
+        max_bytes = caps.get("max_bytes")
+        max_entries = caps.get("max_entries")
+        entries = _entry_count(name, lines)
+        over_bytes = max_bytes is not None and stat["bytes"] > max_bytes
+        over_entries = max_entries is not None and entries > max_entries
+        out[name] = {"exists": True, "is_dir": False, "bytes": stat["bytes"], "modified": stat["modified"], "lines": len(lines), "entries": entries, "max_bytes": max_bytes, "max_entries": max_entries, "rotation_applied": _has_recent_rotation_marker(lines), "status": "over_cap" if over_bytes or over_entries else "ok"}
+    return out
+
+
+def check_graph_health(root: str = ".") -> dict[str, Any]:
+    """Report the canonical MO graph's size, counts, and high-degree nodes."""
+    base = Path(root).expanduser().resolve(strict=False)
+    return _structural_graph_summary(base)
+
+
+def check_learning_health(root: str = ".") -> dict[str, Any]:
+    """Report learning files, cross-reference bridge state, and memory DB state."""
+    base = Path(root)
+    learning = _read_text(base / "memory/profile/learning.md")
+    behavior = _read_text(base / "memory/profile/behavior.md")
+    cats = Counter(re.findall(r"^- ([a-zA-Z_][\w-]*):", learning, re.M))
+    operator_terms = _terms_summary(base / "memory/profile/terms.md")
+    skills = _skills_summary(base / "skills")
+    from ..learning.status import build_learning_status
+
+    direct_status = build_learning_status(
+        SimpleNamespace(_path=str(base / "memory" / "mo.db"))
+    )
+    confirmed = direct_status.confirmed_suggestions
+    return {
+        "profile_learning": {"entries": direct_status.profile_learning_entries, "categories": dict(sorted(cats.items()))},
+        "behavior_rules": {"count": direct_status.behavior_rules, "categories": dict(Counter(re.findall(r"^- ([\w-]+):", behavior, re.M)))},
+        "workflow": {
+            "candidates": direct_status.workflow_candidates,
+            "promoted": direct_status.promoted_workflows,
+        },
+        "skills": skills,
+        "finding_patterns": (_fp := _patterns_summary(_load_json(base / "memory/work/reviews/patterns.json"))),
+        "operator_terms": operator_terms,
+        "memory": _memory_summary(base / "memory/learning/episodes.sqlite"),
+        # Live truth, not a hardcoded constant: the review→patterns bridge is
+        # active once any fixed/ignored feedback has actually been recorded.
+        "bridges": {
+            "feedback_to_finding_patterns": bool((_fp.get("fixed", 0) or 0) + (_fp.get("ignored", 0) or 0)),
+            "learning_to_skills": bool(confirmed > 0 or int(skills.get("generated") or 0) > 0),
+            "terms_to_provider": bool(operator_terms.get("count", 0)),
+        },
+    }
+
+
+def check_config_coverage() -> dict[str, Any]:
+    """Check proposal-defined MO_* environment variables against defaults."""
+    out = {}
+    for name, default in sorted(_CONFIG_DEFAULTS.items()):
+        value = os.environ.get(name)
+        out[name] = {"set": value is not None, "value": value if value is not None else f"(default: {default})", "default": default, "matches_default": value is None or value == default}
+    return out
+
+
+def build_health_report(root: str, *, project_root: str) -> SystemHealth:
+    """Assemble a full backend health report.
+
+    ``root`` is MO's private state home. ``project_root`` is the active source
+    checkout whose structural graph should be inspected. Keeping it separate
+    prevents either health lane from reading the other lane's state.
+    """
+    return SystemHealth(
+        files=check_file_health(root),
+        graph=check_graph_health(project_root),
+        learning=check_learning_health(root),
+        config=check_config_coverage(),
+    )
+
+
+def render_health_report(report: SystemHealth) -> str:
+    """Render a safe CLI summary without printing raw environment values."""
+    data = report.as_dict()
+    safe_config = {
+        key: {
+            "set": bool(value.get("set")),
+            "matches_default": bool(value.get("matches_default")),
+        }
+        for key, value in data.get("config", {}).items()
+        if isinstance(value, dict)
+    }
+    safe = {
+        "files": data.get("files", {}),
+        "graph": data.get("graph", {}),
+        "learning": data.get("learning", {}),
+        "config": safe_config,
+    }
+    return json.dumps(safe, indent=2, sort_keys=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI-compatible entry point for health probes."""
+    parser = argparse.ArgumentParser(description="Render MO backend health as safe JSON.")
+    parser.add_argument("state_root", nargs="?", help="MO private state root (defaults to configured MO home)")
+    parser.add_argument("--project-root", help="active project checkout (defaults to cwd)")
+    parser.add_argument("--json", action="store_true", help="JSON output (the default; accepted for scripting clarity)")
+    args = parser.parse_args(list(sys.argv[1:] if argv is None else argv))
+    if args.state_root:
+        state_root = args.state_root
+        project_root = args.project_root or args.state_root
+    else:
+        from core.state.paths import mo_home
+
+        state_root = str(mo_home())
+        project_root = args.project_root or os.getcwd()
+    print(render_health_report(build_health_report(state_root, project_root=project_root)))
+    return 0
+
+
+def _graph_summary(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"exists": False, "status": "missing"}
+    data = _load_json(path)
+    stat = _stat(path)
+    if not isinstance(data, dict):
+        return {"exists": True, "bytes": stat["bytes"], "error": "unreadable"}
+    nodes = data.get("nodes") or []
+    edges = data.get("edges") or data.get("links") or []
+    god_nodes = _god_nodes_from_analysis(path.parent / ".structural_analysis.json")
+    if god_nodes is None:
+        # External and incomplete graph inputs may not carry MO's analysis sidecar.
+        degree: Counter[str] = Counter()
+        for edge in edges:
+            if isinstance(edge, dict):
+                degree[str(edge.get("source") or "")] += 1
+                degree[str(edge.get("target") or edge.get("target_id") or "")] += 1
+        god_nodes = []
+        for node in nodes:
+            if isinstance(node, dict):
+                node_id = str(node.get("id") or "")
+                god_nodes.append({"id": node_id, "name": node.get("name") or node.get("label") or node_id, "degree": degree.get(node_id, 0)})
+    communities = {str(n.get("community")) for n in nodes if isinstance(n, dict) and n.get("community") is not None}
+    return {"exists": True, "path": str(path), "bytes": stat["bytes"], "modified": stat["modified"], "version": data.get("version", "unknown"), "built_at": data.get("built_at"), "nodes": len(nodes), "edges": len(edges), "communities": len(communities), "god_nodes": sorted(god_nodes, key=lambda n: (-n["degree"], n["id"]))[:5]}
+
+
+def _god_nodes_from_analysis(path: Path) -> list[dict[str, Any]] | None:
+    """God nodes from the graph's own co-located analysis artifact.
+
+    ``core/graph/structural_graph.py`` persists ``.structural_analysis.json``
+    (relation-filtered degree) beside ``graph.json``; it is the single
+    god-node authority, so this report consumes it instead of recomputing a
+    competing raw-edge ranking. Returns ``None`` only when the artifact is
+    absent or malformed, which selects the external-input raw computation. A valid
+    empty ``gods`` list remains authoritative. Read-only, like every other
+    check in this module."""
+    data = _load_json(path)
+    if not isinstance(data, dict):
+        return None
+    gods = data.get("gods")
+    if not isinstance(gods, list):
+        return None
+    out = []
+    for item in gods:
+        if isinstance(item, dict) and item.get("id"):
+            node_id = str(item["id"])
+            try:
+                degree = int(item.get("degree") or 0)
+            except (TypeError, ValueError):
+                continue
+            out.append({"id": node_id, "name": item.get("label") or node_id,
+                        "degree": degree})
+    return out
+
+
+def _structural_graph_summary(base: Path) -> dict[str, Any]:
+    try:
+        from core.graph.structural_graph import graph_status
+
+        status = graph_status(base)
+        path = Path(str(status.get("path") or ""))
+        if status.get("available") and path.is_file():
+            god_nodes = _god_nodes_from_analysis(path.parent / ".structural_analysis.json")
+            if god_nodes is None:
+                # Compatibility graphs may predate compact native sidecars.
+                summary = _graph_summary(path)
+            else:
+                stat = _stat(path)
+                summary = {
+                    "exists": True,
+                    "path": str(path),
+                    "bytes": stat["bytes"],
+                    "modified": stat["modified"],
+                    "version": status.get("version", "unknown"),
+                    "built_at": status.get("built_at"),
+                    "nodes": int(status.get("nodes") or 0),
+                    "edges": int(status.get("edges") or 0),
+                    "communities": int(status.get("communities") or 0),
+                    "god_nodes": sorted(god_nodes, key=lambda n: (-n["degree"], n["id"]))[:5],
+                }
+            summary["source_kind"] = status.get("source_kind")
+            summary["native_path"] = status.get("native_path")
+            summary["compatibility_path"] = status.get("compatibility_path")
+            summary["stale"] = bool(status.get("stale"))
+            return summary
+    except Exception:
+        pass
+    return _graph_summary(base / "memory" / "structural_graph" / "graph.json")
+
+
+def _patterns_summary(data: Any) -> dict[str, int]:
+    if not isinstance(data, dict):
+        return {"categories": 0, "fixed": 0, "ignored": 0, "preferences": 0}
+    # finding_patterns stores feedback under operator_preferences[category]
+    # = {"fixed": N, "ignored": M}; that is the authoritative source.
+    prefs = data.get("operator_preferences") or {}
+    fixed = ignored = 0
+    if isinstance(prefs, dict):
+        for stats in prefs.values():
+            if isinstance(stats, dict):
+                fixed += int(stats.get("fixed", 0) or 0)
+                ignored += int(stats.get("ignored", 0) or 0)
+    patterns = data.get("patterns")
+    cats = {item.get("category") for item in patterns if isinstance(item, dict)} if isinstance(patterns, list) else set()
+    return {"categories": len(cats), "fixed": fixed, "ignored": ignored, "preferences": len(prefs) if isinstance(prefs, dict) else 0}
+
+
+def _terms_summary(path: Path) -> dict[str, Any]:
+    text = _read_text(path)
+    plain = re.findall(r"^[-*]\s+`?([^`:*]+?)`?\s*:", text, re.M)
+    bold = re.findall(r"^[-*]\s+\*\*([^*]+)\*\*", text, re.M)
+    terms = {str(item).strip() for item in [*plain, *bold] if str(item).strip()}
+    return {"exists": path.exists(), "count": len(terms)}
+
+
+def _skills_summary(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"exists": False, "packs": 0, "generated": 0}
+    packs = [
+        item for item in path.glob("*/SKILL.md")
+        if not item.parent.name.casefold().endswith(".retired")
+    ]
+    generated = 0
+    for skill_path in packs:
+        text = _read_text(skill_path)
+        if "candidate_id:" in text or "provenance: \"confirmed-learning\"" in text:
+            generated += 1
+    return {"exists": True, "packs": len(packs), "generated": generated}
+
+
+def _memory_summary(path: Path) -> dict[str, Any]:
+    out = {
+        "exists": path.exists(),
+        "turns": 0,
+        "fts5": False,
+        "keyword_mode": "unavailable",
+        "keyword_reason": "database_missing" if not path.exists() else "unqueried",
+        "miss_terms": 0,
+    }
+    if not path.exists():
+        return out
+    try:
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        tables = {str(name): str(sql or "") for name, sql in conn.execute("SELECT name, sql FROM sqlite_master WHERE type='table'").fetchall()}
+        if "messages" in tables:
+            out["turns"] = _table_count(conn, "messages")
+        elif "turns" in tables:
+            out["turns"] = _table_count(conn, "turns")
+        out["fts5"] = any("fts5" in sql.lower() for sql in tables.values())
+        if "turns_fts" not in tables:
+            out["keyword_mode"] = "substring_fallback"
+            out["keyword_reason"] = "schema_missing"
+        else:
+            try:
+                conn.execute(
+                    "SELECT turn_id FROM turns_fts WHERE turns_fts MATCH ? LIMIT 1",
+                    ("__mo_health_nohit__",),
+                ).fetchone()
+                out["keyword_mode"] = "bm25"
+                out["keyword_reason"] = ""
+            except sqlite3.OperationalError as exc:
+                text = str(exc).casefold()
+                if "no such module" in text and "fts5" in text:
+                    reason = "module_unavailable"
+                elif "no such table" in text:
+                    reason = "schema_missing"
+                elif "no such function" in text and "bm25" in text:
+                    reason = "bm25_unavailable"
+                elif "malformed" in text or "database disk image" in text:
+                    reason = "database_error"
+                else:
+                    reason = "query_error"
+                out["keyword_mode"] = "substring_fallback"
+                out["keyword_reason"] = reason
+        if "recall_misses" in tables:
+            out["miss_terms"] = _table_count(conn, "recall_misses")
+        conn.close()
+    except Exception:
+        out["error"] = "unreadable"
+        out["keyword_mode"] = "unavailable"
+        out["keyword_reason"] = "database_unreadable"
+    return out
+
+
+def _table_count(conn: sqlite3.Connection, table: str) -> int:
+    safe = '"' + table.replace('"', '""') + '"'
+    row = conn.execute(f"SELECT COUNT(*) FROM {safe}").fetchone()
+    return int(row[0] if row else 0)
+
+
+def _jsonl_count(path: Path) -> int:
+    return len([line for line in _read_text(path).splitlines() if line.strip()])
+
+
+def _entry_count(name: str, lines: list[str]) -> int:
+    text = "\n".join(lines)
+    if name.endswith("learning.md"):
+        return len(re.findall(r"^## \S+T\S+Z\s+—\s+profile learning", text, re.M))
+    if name.endswith("behavior.md"):
+        return len([line for line in lines if line.startswith("- [")])
+    if name.endswith(".jsonl"):
+        return len([line for line in lines if line.strip()])
+    return len(lines)
+
+
+def _has_recent_rotation_marker(lines: list[str]) -> bool:
+    return any("# pruned" in line or "# rotated" in line or "truncated" in line for line in lines[-5:])
+
+
+def _load_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _stat(path: Path) -> dict[str, Any]:
+    try:
+        stat = path.stat()
+        return {"bytes": stat.st_size, "modified": stat.st_mtime}
+    except OSError:
+        return {"bytes": 0, "modified": 0}
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

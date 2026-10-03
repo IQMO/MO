@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "labels": {
+    "terminal": "MO Terminal",
+    "telegram": "Telegram",
+    "server": "Hub service",
+    "api": "Phone/Web",
+    "mo_desktop": "MO Desktop",
+    "companion": "MO Desktop",
+    "scheduler": "Scheduler",
+    "cron": "Scheduler",
+    "heartbeat": "Hub service",
+    "github": "GitHub",
+    "maintainer": "Maintainer",
+    "other": "Other MO surface"
+  }
+}

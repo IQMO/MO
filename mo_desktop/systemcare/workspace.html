@@ -1,0 +1,16 @@
+<main class="care-workspace">
+  <header class="mo-titlebar pywebview-drag-region">
+    <div class="mo-title-identity pywebview-drag-region">@@MARK@@<strong class="mo-title">MO SystemCare</strong></div>
+    <span class="preview-label" id="freshness">LAST RESULTS</span>
+    <div class="mo-title-actions"><div class="mo-title-tools"><button class="mo-window-button" data-do="search" aria-label="Find a maintenance tool" title="Find a tool">@@SEARCH@@</button><button class="mo-window-button" data-do="settings" aria-label="Settings" title="Settings">@@TOOLS@@</button></div><div class="mo-window-controls">@@WINDOW_CONTROLS@@</div></div>
+  </header>
+  <div class="contextbar"><div class="contexts" role="tablist" aria-label="Maintenance target"><button data-context="machine" class="active" role="tab" aria-selected="true">This machine</button><button data-context="mo" role="tab" aria-selected="false">MO runtime</button><button data-context="server" role="tab" aria-selected="false">MO servers</button><button data-context="projects" role="tab" aria-selected="false">Projects</button></div><span class="target-detail" id="target-detail">Windows · local</span></div>
+  <nav class="sectionbar" aria-label="SystemCare sections"><div id="sections"></div><button class="quiet scan-button" data-do="scan">@@REFRESH@@ <span class="scan-label">Scan</span></button></nav>
+  <section id="scan-monitor" class="scan-monitor" aria-label="Scan progress and coverage"></section>
+  <section class="content" id="content" aria-live="polite"></section>
+  <footer><span class="sample-dot"></span><span id="receipt-status">Loading saved results…</span><button class="quiet" data-view="history">Activity @@CHEVRON@@</button></footer>
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="drawer" id="drawer" hidden role="dialog" aria-modal="true" aria-label="Details"></aside>
+  <div class="toast" id="toast" role="status" hidden></div>
+<div class="resize-grip" id="resize-grip" aria-label="Resize window"></div>
+</main>

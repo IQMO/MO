@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  public-checks:
+    name: Public checkout checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (Test-Path requirements-dev.txt) {
+            python -m pip install -r requirements-dev.txt
+          }
+
+      - name: Public boundary preflight
+        shell: pwsh
+        run: python -m core.diagnostics.test_preflight --guards-only
+
+      - name: Validate public documentation links
+        shell: pwsh
+        run: python -m core.diagnostics.docs_check
+
+      - name: Validate prompt ownership and provider semantics
+        shell: pwsh
+        run: |
+          python -m core.diagnostics.prompt_check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m core.diagnostics.provider_contract
+
+      - name: Validate source redundancy and compatibility debt
+        shell: pwsh
+        run: |
+          python -m core.diagnostics.redundancy_check --tracked-only
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m core.diagnostics.compat_debt --tracked-only
+
+      - name: Validate headless container packaging
+        shell: pwsh
+        run: python -m core.diagnostics.packaging_check
+
+      - name: Lint public Python sources
+        shell: pwsh
+        run: python -m ruff check .
+
+      - name: Compile all public Python sources
+        shell: pwsh
+        run: |
+          $env:PYTHONPYCACHEPREFIX = Join-Path $env:RUNNER_TEMP "mo-ci-pycache"
+          python -m compileall -q core interface tools mo_desktop mo_shell mo_everywhere mo.py mo_service.py
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build MO Shell native host
+        shell: pwsh
+        run: dotnet build mo_shell/native/MoShell.Native.csproj --configuration Release
+
+      - name: Import runtime entrypoints
+        shell: pwsh
+        run: python -c "import core.agent.agent; import core.gateway; import tools; print('imports ok')"
+
+      - name: Optional maintainer test overlay
+        shell: pwsh
+        run: |
+          if (Test-Path tests) {
+            python -m core.diagnostics.test_preflight --collect
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            python -m pytest -q
+          } else {
+            Write-Host "No tests/ overlay in public checkout; maintainer tests are local-only."
+          }

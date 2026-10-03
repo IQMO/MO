@@ -1,0 +1,463 @@
+"""Display-only assistant response typography helpers."""
+from __future__ import annotations
+
+import re
+
+from prompt_toolkit.utils import get_cwidth
+
+from .transcript_grammar import GUTTERS
+
+
+DEFAULT_RESPONSE_COLUMNS = 100
+TABLE_GAP = 2
+TABLE_MIN_CELL_WIDTH = 4
+_SECTION_LABEL_RE = re.compile(r"^(\s*)(?:([-*•])\s+)?[*_`\s]*([A-Za-z][A-Za-z0-9 /&().-]{1,52})\s*:\s*(.*)$")
+_TOKEN_LINE_RE = re.compile(r"^\s*(?:tokens?|token usage|usage)\s*:", re.I)
+
+
+_INLINE_MD_RE = re.compile(r"\*\*(.+?)\*\*|`(.+?)`")
+
+
+def _clean_inline_emphasis(value: str) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"^(?:[*_`]+\s*)+", "", text)
+    text = re.sub(r"(?:\s*[*_`]+)+$", "", text)
+    return text.strip()
+
+
+def _strip_inline_markers(text: str) -> str:
+    """Drop **bold**/`code` markers, keeping the inner text (for detection)."""
+    out = re.sub(r"\*\*(.+?)\*\*", r"\1", str(text or ""))
+    return re.sub(r"`(.+?)`", r"\1", out)
+
+
+def _cell_cwidth(text: str) -> int:
+    """Display width of a table cell — measured with markdown markers stripped.
+
+    The renderer drops **bold**/`code` markers, so measuring the raw text
+    over-counts by the marker characters and shifts the right border left on
+    marked-up rows (ragged table). Measure what will actually be shown."""
+    return get_cwidth(_strip_inline_markers(str(text or "")))
+
+
+def _inline_fragments(text: str, base_style: str) -> list[tuple[str, str]]:
+    """Split a string into fragments, styling **bold** and `code` spans.
+
+    Bold -> the bright/bold response head style; code -> the inline-code style;
+    everything else keeps *base_style*. The markers themselves are dropped, so
+    the plain text matches the old marker-stripped output exactly.
+    """
+    value = str(text or "")
+    fragments: list[tuple[str, str]] = []
+    pos = 0
+    for match in _INLINE_MD_RE.finditer(value):
+        if match.start() > pos:
+            fragments.append((base_style, value[pos:match.start()]))
+        if match.group(1) is not None:
+            fragments.append(("class:response-bullet-head", match.group(1)))
+        else:
+            fragments.append(("class:response-code", match.group(2)))
+        pos = match.end()
+    if pos < len(value):
+        fragments.append((base_style, value[pos:]))
+    return fragments or [(base_style, value)]
+
+
+def _section_label_fragments(text: str) -> list[tuple[str, str]] | None:
+    match = _SECTION_LABEL_RE.match(str(text or ""))
+    if not match:
+        return None
+    indent, marker, label, rest = match.groups()
+    label = _clean_inline_emphasis(label)
+    rest = _clean_inline_emphasis(rest)
+    if not label:
+        return None
+    if len(label) == 1 and str(text).lstrip().startswith(f"{label}:"):
+        return None
+    fragments: list[tuple[str, str]] = [("class:mo-response", indent)] if indent else []
+    if marker and rest:
+        fragments.append(("class:response-bullet-marker", f"{marker} "))
+    fragments.append(("class:response-heading", f"{label}:"))
+    if rest:
+        fragments.append(("class:mo-response", f" {rest}"))
+    return fragments
+
+
+def response_line_fragments(line: str, *, inline_only: bool = False) -> list[tuple[str, str]]:
+    """Return one logical response line with the current lightweight typography.
+
+    Structure (headings, labels, bullets, code) is detected on a marker-stripped
+    copy so inline **bold**/`code` never disturbs detection; plain prose is then
+    rendered through ``_inline_fragments`` so emphasis shows as styled fragments.
+    """
+    text = str(line)
+    # Progress prose needs inline emphasis without final-report classification.
+    if inline_only:
+        return _inline_fragments(text, "class:mo-response")
+    detect = _strip_inline_markers(text)
+    stripped = detect.strip()
+    if not stripped:
+        return [("class:mo-response", text)]
+    code_like = text.startswith("      ") or text.startswith("\t")
+    section = _section_label_fragments(detect)
+    if section and (not code_like or stripped.startswith(("-", "*", "•"))):
+        return section
+    if _TOKEN_LINE_RE.match(detect):
+        return [("class:response-heading", detect)]
+    if stripped.endswith(":") and not stripped.startswith(("-", "*", "•")):
+        return [("class:response-heading", detect)]
+    # Code-like lines (4+ space indent or tab-indented). Existing response
+    # blocks pass rest lines through with a two-space prefix, so six spaces here
+    # preserves the prior effective threshold.
+    if code_like:
+        return [("class:response-code", text)]
+    if section:
+        return section
+    bullet = re.match(r"^(\s*)([-*•])\s+(.+)$", detect)
+    if bullet:
+        indent, marker, body = bullet.groups()
+        body = _clean_inline_emphasis(body)
+        words = body.split(maxsplit=2)
+        if len(words) >= 2:
+            lead = f"{words[0]} {words[1]}"
+            rest = f" {words[2]}" if len(words) > 2 else ""
+        else:
+            lead = body
+            rest = ""
+        return [
+            ("class:mo-response", indent),
+            ("class:response-bullet-marker", f"{marker} "),
+            ("class:response-bullet-head", lead),
+            ("class:response-bullet-rest", rest),
+        ]
+    return _inline_fragments(text, "class:mo-response")
+
+
+def _split_markdown_table_row(line: str) -> list[str]:
+    raw = str(line or "").strip()
+    if "|" not in raw:
+        return []
+    cells = [""]
+    fence = ""
+    index = 0
+    while index < len(raw):
+        char = raw[index]
+        if char == "\\" and index + 1 < len(raw) and raw[index + 1] in "\\|":
+            cells[-1] += raw[index + 1]
+            index += 2
+            continue
+        if char == "`":
+            end = index + 1
+            while end < len(raw) and raw[end] == "`":
+                end += 1
+            token = raw[index:end]
+            if token == fence:
+                fence = ""
+            elif not fence and raw.find(token, end) >= 0:
+                fence = token
+            cells[-1] += token
+            index = end
+            continue
+        if char == "|" and not fence:
+            cells.append("")
+        else:
+            cells[-1] += char
+        index += 1
+    if raw.startswith("|"):
+        cells.pop(0)
+    if cells and cells[-1] == "":
+        cells.pop()
+    cells = [re.sub(r"\s+", " ", cell.strip()) for cell in cells]
+    return cells if len(cells) >= 2 and any(cells) else []
+
+
+def _is_markdown_table_separator(cells: list[str]) -> bool:
+    if len(cells) < 2:
+        return False
+    return all(bool(re.fullmatch(r":?-{3,}:?", cell.replace(" ", ""))) for cell in cells)
+
+
+def _wrap_cell(text: str, width: int) -> list[str]:
+    clean = re.sub(r"\s+", " ", str(text or "").strip())
+    if not clean:
+        return [""]
+    words = clean.split(" ")
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        if _cell_cwidth(word) > width:
+            if current:
+                lines.append(current)
+                current = ""
+            chunk = ""
+            for char in word:
+                if _cell_cwidth(chunk + char) > width and chunk:
+                    lines.append(chunk)
+                    chunk = char
+                else:
+                    chunk += char
+            if chunk:
+                current = chunk
+            continue
+        candidate = word if not current else f"{current} {word}"
+        if _cell_cwidth(candidate) <= width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def _table_total_width(widths: list[int]) -> int:
+    # left/right borders + one separator per column + configured cell padding.
+    return sum(widths) + ((TABLE_GAP + 1) * len(widths)) + 1
+
+
+def _table_widths(header: list[str], rows: list[list[str]], max_width: int) -> list[int]:
+    count = len(header)
+    normalized = [row[:count] + [""] * max(0, count - len(row)) for row in rows]
+    natural = [max(TABLE_MIN_CELL_WIDTH, _cell_cwidth(header[index])) for index in range(count)]
+    for row in normalized:
+        for index, cell in enumerate(row):
+            natural[index] = max(natural[index], min(48, _cell_cwidth(cell)))
+    limit = int(max_width or DEFAULT_RESPONSE_COLUMNS)
+    border_overhead = ((TABLE_GAP + 1) * count) + 1
+    available = max(count * 2, limit - border_overhead)
+    minimum = min(TABLE_MIN_CELL_WIDTH, available // count)
+    if _table_total_width(natural) <= limit:
+        return natural
+    widths = natural[:]
+    while sum(widths) > available and max(widths) > minimum:
+        index = max(range(count), key=lambda i: widths[i])
+        widths[index] -= 1
+    return widths
+
+
+def _format_table_border(widths: list[int], left: str, mid: str, right: str, *, dash: str = "─") -> str:
+    return left + mid.join(dash * (width + 2) for width in widths) + right
+
+
+def _format_table_row(row: list[str], widths: list[int]) -> list[str]:
+    cells = [str(cell or "") for cell in row[:len(widths)]] + [""] * max(0, len(widths) - len(row))
+    wrapped = [_wrap_cell(cell, widths[index]) for index, cell in enumerate(cells)]
+    height = max(len(lines) for lines in wrapped)
+    rendered: list[str] = []
+    for line_index in range(height):
+        parts: list[str] = []
+        for col_index, lines in enumerate(wrapped):
+            value = lines[line_index] if line_index < len(lines) else ""
+            pad = max(0, widths[col_index] - _cell_cwidth(value))
+            parts.append(value + " " * pad)
+        rendered.append("│ " + " │ ".join(parts) + " │")
+    return rendered
+
+
+def _format_markdown_table(header: list[str], rows: list[list[str]], *, max_width: int = DEFAULT_RESPONSE_COLUMNS) -> list[str]:
+    width_count = max(len(header), *(len(row) for row in rows)) if rows else len(header)
+    header = header + [""] * (width_count - len(header))
+    normalized = [row[:width_count] + [""] * max(0, width_count - len(row)) for row in rows]
+    # Keep tables as tables when all columns cannot physically fit: repeat the
+    # identifying first column in consecutive column groups, preserving cells.
+    max_columns = max(1, (max_width - 1) // (TABLE_GAP + 3))
+    if width_count > max_columns:
+        rendered = []
+        step = max(1, max_columns - 1)
+        for start in range(1 if max_columns > 1 else 0, width_count, step):
+            indices = ([0] if max_columns > 1 else []) + list(range(start, min(width_count, start + step)))
+            rendered.extend(_format_markdown_table(
+                [header[i] for i in indices],
+                [[row[i] for i in indices] for row in normalized],
+                max_width=max_width,
+            ))
+        return rendered
+    widths = _table_widths(header, normalized, max_width)
+    # Skin box-draw borders (teal via class:desktop-frame in _table_row_fragments),
+    # matching MO's shared visual frame / show_viz treatment instead of a dim +---+ ASCII grid.
+    rendered = [_format_table_border(widths, "┌", "┬", "┐")]
+    rendered.extend(_format_table_row(header, widths))
+    rendered.append(_format_table_border(widths, "├", "┼", "┤"))
+    for row in normalized:
+        rendered.extend(_format_table_row(row, widths))
+    rendered.append(_format_table_border(widths, "└", "┴", "┘"))
+    return rendered
+
+
+def _normalize_markdown_table_lines(text: str, *, columns: int = DEFAULT_RESPONSE_COLUMNS) -> list[tuple[str, bool]]:
+    source = str(text or "")
+    lines = source.splitlines()
+    output: list[tuple[str, bool]] = []
+    in_code = False
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_code = not in_code
+            output.append((line, False))
+            index += 1
+            continue
+        if not in_code and re.fullmatch(r"[-_\u2500]{3,}", stripped):
+            output.append(("", False))
+            index += 1
+            continue
+        if not in_code and index + 1 < len(lines):
+            header = _split_markdown_table_row(line)
+            separator = _split_markdown_table_row(lines[index + 1])
+            if header and _is_markdown_table_separator(separator):
+                rows: list[list[str]] = []
+                index += 2
+                while index < len(lines):
+                    row = _split_markdown_table_row(lines[index])
+                    if not row or _is_markdown_table_separator(row):
+                        break
+                    rows.append(row)
+                    index += 1
+                formatted = _format_markdown_table(header, rows, max_width=max(1, int(columns or DEFAULT_RESPONSE_COLUMNS) - 4))
+                output.extend((formatted_line, True) for formatted_line in formatted)
+                continue
+        # Prose lines pass through unchanged; natural word-wrap (visual_rows)
+        # handles width without splitting multi-sentence paragraphs apart.
+        output.append((line, False))
+        index += 1
+    return output
+
+
+def normalize_markdown_tables(text: str, *, columns: int = DEFAULT_RESPONSE_COLUMNS) -> str:
+    """Convert simple Markdown tables into bordered, wrapped terminal rows."""
+    return "\n".join(line for line, _is_table in _normalize_markdown_table_lines(text, columns=columns))
+
+
+def _strip_response_markdown_lines(lines: list[tuple[str, bool]]) -> list[tuple[str, bool]]:
+    result: list[tuple[str, bool]] = []
+    in_code_block = False
+    for line, is_table in lines:
+        s = line.strip()
+        if not is_table and (s.startswith("```") or s.startswith("~~~")):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            result.append(("    " + line.rstrip(), False))
+            continue
+        if is_table:
+            # Keep inline markers; _table_row_fragments styles + strips them.
+            result.append((line.rstrip(), True))
+            continue
+        if line.startswith(("    ", "\t")):
+            result.append(("    " + line.rstrip(), False))
+            continue
+        h = re.match(r"^(#{1,4})\s+(.+)$", s)
+        if h:
+            result.append((f"  {h.group(2)}", False))
+            continue
+        if re.fullmatch(r"[-\u2500]{3,}", s):
+            result.append(("  " + "\u2500" * 40, False))
+            continue
+        if re.fullmatch(r"`{1,3}", s):
+            continue
+        if not s:
+            result.append(("", False))
+            continue
+        # Keep inline markers so response_line_fragments can style **bold**/`code`;
+        # bullets are stripped here since their lead/rest splitter renders plain.
+        if re.match(r"^[-*\u2022]\s", _strip_inline_markers(s)):
+            result.append((f"    {_strip_inline_markers(s)}", False))
+        else:
+            result.append((f"  {s}", False))
+    return result
+
+
+_TABLE_STATUS_GREEN = {"yes", "y", "clean", "active", "done", "ok", "pass", "passed", "\u2705", "\u2713"}
+_TABLE_STATUS_RED = {"no", "n", "stale", "fail", "failed", "missing", "error", "blocked", "\u274c", "\u2717"}
+
+
+def _cell_style(cell: str) -> str:
+    """Pick a status colour for a table data cell, conservatively.
+
+    Only obvious status tokens get coloured (green for healthy, red for
+    stale/failed); everything else stays the default response colour so we never
+    mis-paint ordinary content.
+    """
+    token = _strip_inline_markers(cell).strip().lower()
+    if not token:
+        return "class:mo-response"
+    if token in _TABLE_STATUS_GREEN or token.startswith(("\u2705", "\u2713")):
+        return "class:diff-add"
+    if token in _TABLE_STATUS_RED or token.startswith(("\u274c", "\u2717")) or "stale" in token:
+        return "class:diff-del"
+    return "class:mo-response"
+
+
+def _table_row_fragments(line: str, *, is_header: bool) -> list[tuple[str, str]]:
+    """Render one bordered-table line as styled fragments.
+
+    Borders and ``│`` separators in the skin frame colour (teal, class:desktop-frame,
+    matching MO's shared visual frame / show_viz treatment), the header row in the heading
+    colour, data cells coloured by status. Joined text keeps the cell widths, so
+    alignment is unchanged.
+    """
+    s = line.rstrip()
+    body = s.strip()
+    if body and set(body) <= set("─┌┬┐├┼┤└┴┘"):
+        return [("class:desktop-frame", f"  {s}")]
+    segments = s.split("│")
+    if len(segments) < 2:
+        return [("class:mo-response", f"  {s}")]
+    fragments: list[tuple[str, str]] = [("class:mo-response", "  ")]
+    last = len(segments) - 1
+    for index, segment in enumerate(segments):
+        if index == 0:
+            if segment:
+                fragments.append(("class:mo-response", segment))
+            continue
+        fragments.append(("class:desktop-frame", "│"))
+        if index == last:
+            if segment:
+                fragments.append(("class:mo-response", segment))
+            continue
+        if is_header:
+            fragments.append(("class:response-heading", segment))
+        else:
+            fragments.extend(_inline_fragments(segment, _cell_style(segment)))
+    return fragments
+
+
+def response_block_fragment_lines(text: str, *, columns: int = DEFAULT_RESPONSE_COLUMNS, hide_marker: bool = False) -> list[list[tuple[str, str]]]:
+    """Return logical transcript lines for an assistant response block."""
+    lines = _strip_response_markdown_lines(_normalize_markdown_table_lines(str(text or ""), columns=columns))
+    if not lines:
+        return []
+    # Prose is not sentence-split: natural word-wrap (visual_rows) controls line
+    # breaks so answers read as paragraphs, not one-sentence-per-line sprawl.
+    # The 2-col MO marker (grammar single source) aligns the answer's first line
+    # with its wrapped continuations (both at column 2).
+    marker = "  " if hide_marker else GUTTERS["mo"][1]
+    rendered: list[list[tuple[str, str]]] = []
+    table_border_count = 0  # borders seen in the current table block; header rows follow the 1st
+    for position, (line, is_table) in enumerate(lines):
+        if is_table:
+            body = line.strip()
+            is_border = bool(body) and set(body) <= set("─┌┬┐├┼┤└┴┘")
+            if is_border:
+                table_border_count = 1 if body.startswith("┌") else table_border_count + 1
+            if position == 0:
+                # Response opens with a table line (its top border): keep the MO
+                # marker but colour the border in the skin frame colour, not grey.
+                content_style = "class:desktop-frame" if is_border else "class:mo-response"
+                rendered.append([("class:mo-marker", marker), (content_style, line.lstrip())])
+            else:
+                rendered.append(_table_row_fragments(line, is_header=(not is_border and table_border_count == 1)))
+            continue
+        table_border_count = 0
+        if position == 0:
+            rendered.append([("class:mo-marker", marker)] + response_line_fragments(line.lstrip()))
+        elif line.startswith(("    ", "\t")):
+            stripped = line.lstrip()
+            if stripped.startswith(("- ", "* ", "• ")):
+                rendered.append(response_line_fragments(f"  {stripped}"))
+            else:
+                rendered.append(response_line_fragments(f"  {line}"))
+        else:
+            rendered.append(response_line_fragments(f"  {line.lstrip()}"))
+    return rendered

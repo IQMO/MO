@@ -1,0 +1,37 @@
+# MO Agent — consolidated tooling config.
+#
+# Lint (ruff) and test (pytest) config live here in one place instead of
+# separate ruff.toml + pytest.ini files. Runtime/dev/optional dependencies stay
+# in the requirements*.txt files (install with `pip install -r requirements.txt`);
+# they are not declared here because MO is run as an app (`python mo.py`), not
+# installed as a package.
+
+[tool.ruff]
+# MO Agent lint gate. Pyflakes (F) catches the real, runtime-relevant problems —
+# undefined names, unused imports, f-string placeholder mistakes — without
+# drowning in style noise. Enforce locally/CI with: `python -m ruff check .`
+line-length = 120
+target-version = "py310"
+cache-dir = "tmp/ruff-cache"
+extend-exclude = ["tmp", "logs", "memory", "docs", "personal"]
+
+[tool.ruff.lint]
+select = ["F", "E9"]  # pyflakes + syntax errors
+
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
+tmp_path_retention_policy = "none"
+tmp_path_retention_count = 0
+# Maintainer tests live in an ignored local tests/ overlay. Do not pin testpaths
+# in the public product config; local pytest discovery still finds tests/ when
+# the overlay exists.
+norecursedirs = ["tmp", ".git", "__pycache__", ".pytest_cache", ".ruff_cache", "logs", "memory", "operator", "docs", "personal"]
+markers = [
+    "smoke: curated fast repository and harness health checks",
+    "unit: isolated single-module or single-contract tests",
+    "integration: multi-module or runtime-boundary tests",
+    "subprocess: tests that create or supervise child processes",
+    "desktop: MO Desktop surface and companion tests",
+    "slow: intentionally longer-running tests excluded from the fast lane",
+    "serial: tests that must run outside xdist",
+]

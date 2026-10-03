@@ -1,0 +1,31 @@
+/* Shared native app control rules; theme values come from DesktopVisualState. */
+:root{--bg:var(--mo-bg);--surface:var(--mo-surface);--text:var(--mo-text);--muted:var(--mo-muted);--brand:var(--mo-brand);--input:var(--mo-input);--border:var(--mo-border);--ok:var(--mo-ok);--warn:var(--mo-warn);--error:var(--mo-error);--line:color-mix(in srgb,var(--border) 65%,transparent);--soft:color-mix(in srgb,var(--text) 3%,var(--surface));--ease:cubic-bezier(.2,.85,.22,1)}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{font-size:calc(var(--mo-font-body-size) * 1.1)}
+html,body,#content-root{margin:0;width:100%;height:100%;min-height:0}
+body{color:var(--text);font:1rem/1.5 var(--mo-font-body-family),sans-serif;background:var(--bg)}
+button,input,select{font:inherit}
+button{cursor:pointer;color:inherit;background:none;border:0}
+button:disabled{cursor:default;opacity:.45}
+button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-offset:3px}
+button,input{ -webkit-tap-highlight-color:transparent}
+button{transition:background .16s,color .16s,border-color .16s,transform .2s var(--ease)}
+
+.icon-button{width:30px;height:30px;display:grid;place-items:center;border-radius:var(--button-radius)}
+.icon-button:hover{background:var(--soft)}
+.glyph{width:15px;height:15px;object-fit:contain;vertical-align:middle}
+.quiet{color:var(--muted);font-size:0.833333rem;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.button{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:32px;padding:calc(var(--button-pad) + 1px) calc(var(--button-pad) + 7px);border:1px solid var(--line);border-radius:var(--button-radius);background:var(--soft);font-size:0.916667rem;white-space:nowrap}
+.button.primary{color:var(--brand);border-color:color-mix(in srgb,var(--brand) 55%,var(--border));background:color-mix(in srgb,var(--brand) 8%,var(--surface))}
+.button.primary:hover{background:color-mix(in srgb,var(--brand) 15%,var(--surface))}
+.button.small{min-height:26px;font-size:0.833333rem;padding:max(0px,calc(var(--button-pad) - 1px)) calc(var(--button-pad) + 4px)}
+.scrim{position:absolute;inset:0;background:#0006;z-index:4;animation:fade .18s}
+.toast{position:absolute;bottom:45px;left:50%;transform:translateX(-50%);max-width:80%;background:var(--surface);border:1px solid var(--border);border-radius:var(--panel-radius);padding:9px 15px;box-shadow:0 6px 30px #0007;font-size:0.916667rem;z-index:8;animation:toast-in .22s var(--ease)}
+
+.glyph{display:inline-block;background:currentColor;mask:var(--glyph) center/contain no-repeat;vertical-align:middle}
+
+.settings-switch{appearance:none;flex:none;width:34px!important;height:20px;border:1px solid var(--border);border-radius:12px;background:var(--input);position:relative;cursor:pointer;transition:background .18s,border-color .18s}
+.settings-switch:before{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--muted);transition:transform .18s var(--ease),background .18s}
+.settings-switch:checked{background:color-mix(in srgb,var(--brand) 16%,var(--surface));border-color:var(--brand)}
+.settings-switch:checked:before{background:var(--brand);transform:translateX(14px)}

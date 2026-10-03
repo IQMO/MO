@@ -1,0 +1,5 @@
+# Optional: on-device (offline, private) semantic memory recall.
+# Only needed when config `embeddings.backend: local`. The API backend
+# (embeddings.backend: api) needs nothing extra. Keyword recall (the default)
+# needs neither. Slim ONNX runtime — no torch.
+fastembed>=0.3,<1.0

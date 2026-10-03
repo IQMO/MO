@@ -1,0 +1,77 @@
+<div id="settings-app">
+  <header class="mo-titlebar pywebview-drag-region">
+    <div class="mo-title-identity pywebview-drag-region">@@MARK@@<strong class="mo-title">Settings</strong></div>
+    <div class="mo-title-actions">
+      <button class="mo-window-button" id="refresh" aria-label="Refresh settings" title="Refresh settings">@@REFRESH@@</button>
+      <div class="mo-window-controls">@@WINDOW_CONTROLS@@</div>
+    </div>
+  </header>
+  <div class="settings-layout">
+    <aside class="sidebar">
+      <label class="search-box">@@SEARCH@@<input id="search" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off"></label>
+      <nav aria-label="Settings sections" id="navigation">
+        <button data-page="general">General</button>
+        <button data-page="appearance">Appearance</button>
+        <button data-page="models">Models &amp; providers</button>
+        <button data-page="voice">Voice &amp; roles</button>
+        <div class="nav-divider"></div>
+        <button data-page="connections">Tools &amp; connections</button>
+        <button data-page="projects">Projects &amp; checks</button>
+        <button data-page="permissions">Permissions &amp; privacy</button>
+        <button data-page="memory">Memory &amp; learning</button>
+        <button data-page="automation">Automation</button>
+        <button data-page="devices">Devices</button>
+      </nav>
+      <div class="sidebar-footer"><span class="local-dot"></span> This device <button id="about" aria-label="About Settings">@@DETAILS@@</button></div>
+    </aside>
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><h1 id="page-title">Appearance</h1><p id="page-description">Make MO feel like yours.</p></div><span class="page-scope">MO Agent</span></div>
+      <div id="loading" role="status">Loading your preferences…</div>
+      <div id="content" hidden>
+        <section data-section="appearance" class="page-section">
+          <div class="appearance-hero"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Color. Shape. Space.</h2><p>Preview a skin here, then apply it across MO.</p></div><div class="hero-mark">@@MARK@@</div></div>
+          <section class="setting-group skin-group" data-search="appearance skin theme colors terminal custom">
+            <div class="group-heading"><h2>Skin</h2><span id="skin-state" class="muted"></span></div>
+            <div class="skin-toolbar"><div id="skin-picker"></div><button class="button primary" id="skin-apply">Apply skin</button></div>
+            <div id="skin-gallery" aria-label="Available skins"></div>
+            <div class="preview-pair"><div id="desktop-preview" class="desktop-sample" aria-label="Desktop skin and geometry preview">
+              <div class="sample-character">@@MARK@@</div>
+              <div class="sample-panel"><div class="sample-heading"><strong>MO Desktop</strong><span class="muted">Panel preview</span></div><p>A clear space for your next thought.</p><div class="sample-input">Type a message…<button class="button primary" data-color-role="accent">Send</button></div><div class="sample-footer"><span>Shared colors &amp; corners</span><input type="checkbox" checked class="settings-switch" aria-label="Preview switch" disabled></div></div>
+            </div>
+            <div id="terminal-preview" aria-label="Terminal skin preview">
+              <div class="preview-caption"><span>MO Terminal</span><span>Live color preview</span></div>
+              <button class="preview-user" data-color-role="user_message"><span>›</span> Help me find a clear next step.</button>
+              <button class="preview-response" data-color-role="mo_response"><span class="preview-accent">▐</span> We can start with what matters most.</button>
+              <div class="preview-events"><button data-color-role="ok">✓ Ready</button><button data-color-role="warn">● Working</button><button data-color-role="error">! Needs attention</button></div>
+              <button class="preview-composer" data-color-role="surface">Ask MO anything… <span>↵</span></button>
+            </div>
+            </div>
+            <div class="skin-actions"><button class="quiet" id="edit-colors">Edit colors</button><button class="quiet" id="save-skin">Save as new</button><button class="quiet" id="delete-skin">Delete custom skin</button></div>
+            <div id="color-editor" hidden></div>
+            <form id="skin-name-form" hidden><label for="skin-name">Skin name</label><input id="skin-name" maxlength="80" placeholder="My skin" required><button class="button primary">Save skin</button><button type="button" class="quiet" id="cancel-skin-name">Cancel</button></form>
+          </section>
+          <div class="page-action"><button class="quiet" data-action="show_cube">Show my cubes</button></div>
+        </section>
+        <section data-section="models" class="page-section">
+          <section class="setting-group"><div class="group-heading"><h2>Running MO</h2><button class="quiet" id="refresh-models">Refresh instances</button></div><div id="running-models"></div></section>
+          <section class="setting-group"><div class="group-heading"><h2>Model selection</h2></div><p class="group-description">Choose where this change applies. A Terminal default is separate from the model already running in each open Terminal.</p><div id="model-target"></div><div id="model-controls"></div><div class="group-actions"><button id="apply-model" class="button primary">Save model choice</button><button id="follow-model" class="quiet">Follow Terminal provider</button><span class="muted" id="model-note"></span></div></section>
+        </section>
+        <section data-section="projects" class="page-section"><section class="setting-group"><div class="group-heading"><h2>Language servers by project</h2></div><p class="group-description">Default follows the authored LSP policy. On and Off apply to the selected project only; diagnostics still require a configured server.</p><div id="lsp-controls"></div></section><section class="setting-group"><div class="group-heading"><h2>Project graph</h2></div><p class="group-description">These profile preferences apply to the next graph operation. Explicit environment switches take precedence.</p><div id="graph-controls"></div></section><section class="setting-group"><div class="group-heading"><h2>Language-server setup</h2></div><p class="group-description" id="lsp-servers"></p><details class="server-editor"><summary>Add or update a language server</summary><p class="scope-note">Choose an executable already installed on this machine. Updating a language preserves its other options. Existing command arguments stay private until you replace them here.</p><form id="lsp-server-form"><label>Language<input type="text" id="lsp-language" placeholder="python" maxlength="40" required></label><label>Executable<input type="text" id="lsp-command" placeholder="pylsp" maxlength="1000" required></label><label>Arguments · one per line<textarea id="lsp-args" rows="3" placeholder="--stdio"></textarea></label><button class="button primary">Save server configuration</button></form></details></section></section>
+        <section data-section="connections" class="page-section">
+          <section class="setting-group"><div class="group-heading"><h2>Connected Chrome</h2><span id="chrome-status" class="status-pill">Not checked</span></div><p class="group-description">MO keeps its native bridge ready automatically. Chrome’s extension connects the tab you select.</p><div class="group-actions"><button class="button" id="chrome-refresh">Check connection</button><button class="button" id="chrome-repair" data-action="chrome_repair">Repair bridge</button><button class="quiet" data-action="chrome_copy">Copy extension folder</button><button class="quiet" id="chrome-remove">Remove bridge</button></div></section>
+        </section>
+        <div id="generated-controls"></div>
+        <section data-section="general" class="page-section">
+          <section class="setting-group"><div class="group-heading"><h2>Startup</h2></div><div class="setting-row"><div><label for="startup">Run at Startup</label><p>Bring MO back when you sign in.</p></div><input id="startup" type="checkbox" class="settings-switch" aria-label="Run at Startup"></div></section>
+          <section class="setting-group"><div class="group-heading"><h2>Maintenance</h2></div><div class="group-actions"><button class="button" data-action="edit_config">Open configuration</button><button class="button" id="restart">Restart MO Desktop</button><button class="quiet" id="reset">Reset Desktop preferences</button></div></section>
+        </section>
+        <section data-section="appearance" class="page-section"><section class="setting-group"><div class="group-heading"><h2>Terminal display</h2><span class="muted">Applies on reload</span></div><div id="terminal-controls"></div></section></section>
+        <section data-section="voice" class="page-section"><div class="group-actions"><button class="button" data-action="voice_preview">Preview voice</button><button class="quiet" id="refresh-audio">Refresh audio devices</button></div></section>
+        <div id="owner-overviews"></div>
+        <p id="no-results" hidden>No matching settings. Try “corners”, “voice” or “model”.</p>
+      </div>
+    </main>
+  </div>
+  <footer class="save-status"><span id="save-status" role="status" aria-live="polite">Changes save when you finish adjusting.</span><span id="unsaved" hidden>Unsaved preview</span><button id="resize-grip" aria-label="Resize Settings">@@RESIZE@@</button></footer>
+  <dialog id="confirm"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-detail"></p><div class="group-actions"><button class="button" value="cancel">Cancel</button><button class="button primary" id="confirm-go" value="confirm">Continue</button></div></form></dialog>
+</div>

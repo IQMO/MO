@@ -1,0 +1,15 @@
+{
+  "name": "default",
+  "background": "#010101",
+  "surface": "#111722",
+  "input": "#0b1228",
+  "brand": "#00cccc",
+  "glow": "#3fe0e0",
+  "text": "#d7dee8",
+  "muted": "#7d8996",
+  "border": "#314253",
+  "ok": "#68d391",
+  "warn": "#ffae42",
+  "error": "#ff4444",
+  "action": "#f6ad55"
+}

@@ -1,0 +1,28 @@
+{
+  "schema": "mo.cube.presentation",
+  "version": 1,
+  "stream": {
+    "epoch": "e",
+    "sequence": 0
+  },
+  "generated_at": 0.0,
+  "stale_after_seconds": 5,
+  "persistent": {
+    "formation": "cluster",
+    "owner": "default"
+  },
+  "semantic": {
+    "phase": "idle",
+    "token": "neutral",
+    "label": "idle",
+    "detail": "",
+    "owner": "presence"
+  },
+  "transient": null,
+  "authority": {
+    "capability": "notify",
+    "scopes": [],
+    "allowed_actions": ["self_revoke"]
+  },
+  "job": null
+}

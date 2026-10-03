@@ -1,0 +1,39 @@
+{
+  "schema": "mo.cube.presentation",
+  "version": 1,
+  "stream": {
+    "epoch": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "sequence": 9223372036854775807
+  },
+  "generated_at": 1784390400.125,
+  "stale_after_seconds": 60,
+  "persistent": {
+    "formation": "face",
+    "owner": "role"
+  },
+  "semantic": {
+    "phase": "working",
+    "token": "action",
+    "label": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+    "detail": "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789",
+    "owner": "job"
+  },
+  "transient": {
+    "kind": "notice",
+    "priority": 3,
+    "expires_at": 1784390460.125,
+    "label": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+    "detail": "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij",
+    "owner": "system"
+  },
+  "authority": {
+    "capability": "control",
+    "scopes": ["attachment_upload", "continuity_read", "continuity_sync", "conversation_read", "conversation_write", "file_browse", "file_manage", "file_transfer", "remote_control", "remote_host"],
+    "allowed_actions": ["upload_attachment", "file_transfer", "cancel_job", "conversation_read", "conversation_write", "continuity_bind", "continuity_read", "continuity_sync", "self_revoke", "view_overview"]
+  },
+  "job": {
+    "job_id": "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+    "status": "running",
+    "cancellable": true
+  }
+}

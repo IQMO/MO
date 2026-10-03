@@ -1,0 +1,9 @@
+# Optional MO Desktop voice input/runtime foundation.
+#
+# The base agent does not install this file. Install voice separately with the
+# documented MO Desktop voice installer. All packages live in the selected
+# isolated voice environment and are exposed to MO only when voice is enabled.
+faster-whisper>=1.0.0
+sounddevice>=0.4.6
+numpy>=1.24
+piper-tts==1.4.2

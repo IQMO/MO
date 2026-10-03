@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "mo-graph": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "core/mcp/mo_graph_server.py"
+      ],
+      "env": {
+        "MO_MCP_PROJECT_ROOT": "."
+      }
+    }
+  }
+}

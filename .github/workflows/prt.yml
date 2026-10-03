@@ -1,0 +1,143 @@
+name: MO PRT
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: mo-prt-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name == 'issue_comment' && github.event.comment.id || 'review' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  review:
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@mo') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out trusted reviewer source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install trusted MO dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip setuptools
+          python -m pip install -r requirements.txt
+
+      - name: Create isolated canonical provider profile
+        env:
+          MO_CONFIG_YAML: ${{ secrets.MO_CONFIG_YAML }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          MO_PROVIDER_KEY: ${{ secrets.MO_PROVIDER_KEY }}
+        run: |
+          set -euo pipefail
+          state_home="$RUNNER_TEMP/mo-prt-state"
+          config="$state_home/config.yaml"
+          credential_file="$state_home/credentials/providers.env"
+          umask 077
+          mkdir -p "$(dirname "$credential_file")"
+          echo "MO_STATE_HOME=$state_home" >> "$GITHUB_ENV"
+          if [ -z "$MO_CONFIG_YAML" ]; then
+            echo "MO PRT: supply normal MO configuration through the MO_CONFIG_YAML Actions secret" >&2
+            exit 1
+          fi
+          printf '%s\n' "$MO_CONFIG_YAML" > "$config"
+          : > "$credential_file"
+          for name in DEEPSEEK_API_KEY OPENCODE_API_KEY ZAI_API_KEY MO_PROVIDER_KEY; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              printf '%s=%s\n' "$name" "$value" >> "$credential_file"
+            fi
+          done
+          echo "MO_CONFIG=$config" >> "$GITHUB_ENV"
+
+      - name: Prepare isolated PR review worktree
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          COMMENT_NUMBER: ${{ github.event.issue.number }}
+          IS_PR_COMMENT: ${{ github.event.issue.pull_request && '1' || '' }}
+        run: |
+          set -euo pipefail
+          review_root="$GITHUB_WORKSPACE"
+          pr_number=""
+          base_sha=""
+          head_sha=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            pr_number="$EVENT_PR_NUMBER"
+            base_sha="$EVENT_BASE_SHA"
+            head_sha="$EVENT_HEAD_SHA"
+          elif [ -n "$IS_PR_COMMENT" ]; then
+            pr_number="$COMMENT_NUMBER"
+            read -r base_sha head_sha <<< "$(gh pr view "$pr_number" --json baseRefOid,headRefOid --jq '[.baseRefOid, .headRefOid] | @tsv')"
+          fi
+          if [ -n "$pr_number" ]; then
+            if [ -z "$base_sha" ] || [ -z "$head_sha" ]; then
+              echo "MO PRT: PR target is missing an immutable base or head commit" >&2
+              exit 1
+            fi
+            review_root="$RUNNER_TEMP/mo-prt-worktree"
+            git fetch origin "$base_sha" "+refs/pull/${pr_number}/head:refs/remotes/origin/mo-prt-pr-${pr_number}"
+            git worktree add --detach "$review_root" "$head_sha"
+          fi
+          echo "MO_PROJECT_CWD=$review_root" >> "$GITHUB_ENV"
+          echo "MO_PRT_EXPECTED_BASE=$base_sha" >> "$GITHUB_ENV"
+          echo "MO_PRT_EXPECTED_HEAD=$head_sha" >> "$GITHUB_ENV"
+
+      - name: Review or answer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMENT_NUMBER: ${{ github.event.issue.number }}
+          IS_PR_COMMENT: ${{ github.event.issue.pull_request && '1' || '' }}
+          MO_COMMENT: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python -m core.review.github_delivery "$PR_NUMBER" --post
+          elif [ -n "$IS_PR_COMMENT" ]; then
+            python -m core.review.github_delivery "$COMMENT_NUMBER" --comment --post
+          elif printf '%s' "$MO_COMMENT" | grep -qiE '@mo[[:space:]]+/plan'; then
+            python -m core.review.github_delivery "$COMMENT_NUMBER" --plan-issue --post
+          else
+            echo "MO PRT: issue mention ignored; use @mo /plan."
+          fi
+
+      - name: Remove isolated credential profile
+        if: always()
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/mo-prt-state"
+          if [ -n "${MO_STATE_HOME:-}" ] && [ "$MO_STATE_HOME" = "$expected" ]; then
+            rm -rf -- "$expected"
+          fi

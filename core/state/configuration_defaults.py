@@ -1,0 +1,54 @@
+"""Shared scalar configuration defaults, consumed by runtime readers and Settings.
+
+Normalization, environment precedence and service availability stay with their
+domain owners. These values describe absent authored keys, not running services.
+"""
+from __future__ import annotations
+
+
+DEFAULT_PREFERENCES = {
+    "update.check": True,
+    "agent.temperature": 0.7,
+    "agent.max_tokens": 8192,
+    "agent.max_provider_requests_per_turn": 0,
+    "agent.context_budget_tokens": "auto",
+    "agent.context_reserve_tokens": 16384,
+    "agent.context_handoff_enabled": True,
+    "agent.background_workers_max": 3,
+    "agent.block_malicious_code": True,
+    "mo_desktop.voice.stt_engine": "whisper",
+    "mo_desktop.voice.stt_model": "tiny",
+    "mo_desktop.voice.stt_device": "cpu",
+    "mo_desktop.voice.stt_beam_size": 1,
+    "mo_desktop.voice.stt_idle_seconds": 180.0,
+    "mo_desktop.computer_use.pixel_policy": "configured_providers",
+    "mcp.enabled": True,
+    "local_extensions.enabled": False,
+    "image.backend": "auto",
+    "telegram.enabled": False,
+    "telegram.dm_policy": "pairing",
+    "lsp.enabled": True,
+    "lsp.timeout": 30.0,
+    "sandbox.enabled": True,
+    "sandbox.clean_env": True,
+    "sandbox.block_shell_escape": True,
+    "sandbox.block_write_secrets": True,
+    "sandbox.shell_network_enabled": True,
+    "sandbox.web_fetch_enabled": True,
+    "sandbox.screen_capture_enabled": True,
+    "learning.auto_promote": True,
+    "learning.materialize_packs": True,
+    "learning.capture_nudge": True,
+    "skills.enabled": True,
+    "skills.project_local": False,
+    "skills.semantic_match": False,
+    "skills.decay_days": 60,
+    "embeddings.enabled": False,
+    "embeddings.backend": "api",
+    "embeddings.local_shared_worker": True,
+    "scheduler.enabled": False,
+    "scheduler.tick_seconds": 30,
+    "heartbeat.enabled": True,
+    "heartbeat.interval_seconds": 60,
+    "file_manager.enabled": True,
+}

@@ -1,0 +1,52 @@
+<main class="phone-workspace" id="phone-app" aria-label="MO Phone">
+    <header class="mo-titlebar pywebview-drag-region">
+      <div class="mo-title-identity pywebview-drag-region">@@MARK@@<strong class="mo-title">MO Phone</strong></div>
+      <span class="appbar-note"><i class="status-dot"></i><span id="header-status">Looking for connected phones…</span></span>
+      <div class="mo-window-controls">@@WINDOW_CONTROLS@@</div>
+    </header>
+    <div class="devicebar">
+      <div class="device-select-wrap"><span class="device-symbol">@@PHONE@@</span><select id="device-select" aria-label="Selected phone"><option value="">Looking for connected phones…</option></select></div>
+      <span class="device-ready" id="device-ready"><i class="status-dot"></i><span id="device-ready-label">Looking for phones</span></span>
+      <div class="devicebar-tools"><button class="quiet" data-action="pair">Add phone @@CHEVRON_RIGHT@@</button><button class="quiet" data-action="refresh">@@REFRESH@@ Refresh</button><button class="quiet" data-action="wifi">Wi-Fi @@CHEVRON_RIGHT@@</button></div>
+    </div>
+    <section class="workspace-body">
+      <aside class="device-card" aria-label="Selected phone">
+        <div class="card-eyebrow"><span>YOUR DEVICE</span><span class="transport-pill" id="transport">No link</span></div>
+        <div class="device-art" id="device-art" aria-hidden="true">
+          <div class="device-orbit"></div><div class="device-shadow"></div>
+          <div class="phone-outline"><div class="phone-camera"></div><div class="phone-screen"><div class="screen-grid"></div><div class="screen-mark">@@MARK@@</div><span class="screen-caption" id="screen-caption">WAITING</span><div class="screen-stroke"></div></div><div class="phone-home"></div></div>
+          <div class="connection-route"><i></i><i></i><i></i></div>
+        </div>
+        <div class="device-copy"><h1 id="device-name">Connect your phone</h1><p id="device-description">Connect your phone, then authorize this computer on its screen.</p></div>
+        <button class="device-details quiet" data-action="connection">Connection details @@CHEVRON_RIGHT@@</button>
+      </aside>
+      <div class="action-space">
+        <div class="workspace-heading"><div><span class="eyebrow">PHONE WORKSPACE</span><h2>Screen &amp; input</h2></div><button class="workspace-caption quiet" data-action="access" id="phone-count">Phones &amp; connections</button></div>
+        <div class="actions-grid">
+          <article class="action-card mirror-card" id="mirror-card">
+            <div class="action-card-top"><span class="action-icon">@@SPLIT@@</span><span class="state-label" id="mirror-state">Waiting</span></div>
+            <div class="action-copy"><h3>Mirror your phone</h3><p>See and control your screen<br>in its own window.</p></div>
+            <div class="card-options"><label class="switch-option"><input id="fullscreen" disabled class="settings-switch" type="checkbox" role="switch"><span>Full screen</span></label></div>
+            <button class="button primary start-action" id="mirror-button" disabled data-action="mirror">@@SPLIT@@ <span>Start mirroring</span><span class="button-trailing">@@CHEVRON_RIGHT@@</span></button>
+          </article>
+          <article class="action-card trackpad-card" id="trackpad-card">
+            <div class="action-card-top"><span class="action-icon">@@MOVE@@</span><span class="state-label" id="trackpad-state">Waiting</span></div>
+            <div class="action-copy"><h3>Your phone, a trackpad</h3><p>Move your cursor. Scroll.<br>Write on the Board.</p></div>
+            <div class="card-options"><span class="quiet-detail">Controls this computer</span><span class="trackpad-touch" aria-hidden="true"></span></div>
+            <button class="button start-action" id="trackpad-button" disabled data-action="trackpad">@@MOVE@@ <span>Start trackpad</span><span class="button-trailing">@@CHEVRON_RIGHT@@</span></button>
+          </article>
+        </div>
+        <div class="quick-tools">
+          <button class="capture-tool" id="capture-button" disabled data-action="frame"><span class="tool-icon">@@COPY@@</span><span><strong>Keep a frame</strong><small>Save this screen to MO captures</small></span><span class="tool-arrow">@@CHEVRON_RIGHT@@</span></button>
+          <span class="tool-divider"></span>
+          <button class="capture-tool" data-action="files"><span class="tool-icon">@@FOLDER@@</span><span><strong>Files &amp; captures</strong><small id="capture-count">Open in MO Files</small></span><span class="tool-arrow">@@CHEVRON_RIGHT@@</span></button>
+        </div>
+        <div class="context-note" id="context-note"><span class="note-icon">@@DETAILS@@</span><span>Your screen stays on your phone until you start a session.</span><button class="quiet" data-action="diagnose">Diagnose</button></div>
+      </div>
+    </section>
+    <footer class="phone-footer"><span class="footer-connection"><i class="status-dot" id="footer-dot"></i><span id="footer-status">Looking for phones</span></span><span class="footer-separator"></span><span class="host-status" id="hub-status"><i class="host-dot"></i><span id="hub-label">Hub not checked</span></span><span class="host-status" id="host-status"><i class="host-dot"></i><span id="host-label">Host status pending</span></span><button class="quiet" data-action="access">Connection &amp; access @@CHEVRON_RIGHT@@</button></footer>
+    <div class="scrim" id="scrim" hidden></div>
+    <aside class="phone-drawer" id="drawer" hidden role="dialog" aria-modal="true" aria-label="Phone details"><div class="drawer-head"><div><span class="eyebrow" id="drawer-eyebrow">PHONE</span><h2 id="drawer-title"></h2></div><button class="icon-button" data-action="dismiss" aria-label="Close details">@@CLOSE@@</button></div><div class="drawer-body" id="drawer-content"></div></aside>
+    <div class="resize-grip" id="resize-grip" aria-hidden="true"></div>
+    <div class="toast" id="toast" role="status" hidden></div>
+  </main>

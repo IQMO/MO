@@ -1,0 +1,2 @@
+# Optional standalone MO Design renderer (Windows/macOS; Linux experimental).
+pywebview>=5.4,<7

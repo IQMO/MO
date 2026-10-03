@@ -1,0 +1,4 @@
+# Development/test dependencies (runtime deps live in requirements.txt)
+pytest>=8.0
+pytest-xdist>=3.5
+ruff>=0.13,<1

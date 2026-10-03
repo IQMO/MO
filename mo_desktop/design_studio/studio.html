@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>MO Design</title>
+  <style>/*__MO_THEME__*/</style>
+  <style>/*__MO_STUDIO_VISUAL__*/</style>
+</head>
+<body>
+  <div class="shell">
+    <header class="titlebar mo-titlebar pywebview-drag-region">
+      <div class="brand mo-title-identity pywebview-drag-region">
+        <!--__MO_BRAND_MARK__-->
+        <div class="brand-copy"><span class="mo-title">MO Design</span><span class="mo-title-context" id="top-title">Visual workspace</span></div>
+      </div>
+        <div class="view-tools">
+          <div class="surface-tabs" role="tablist" aria-label="Design surface">
+            <button class="active" role="tab" aria-selected="true" data-surface="preview">Preview</button>
+            <button role="tab" aria-selected="false" data-surface="board">Board</button>
+          </div>
+          <div class="segmented" id="device-tools" role="group" aria-label="Preview size">
+          <button class="active" data-device="desktop" aria-label="Desktop preview" aria-pressed="true" title="Desktop preview"><span class="device-icon desktop"></span></button>
+          <button data-device="tablet" aria-label="Tablet preview" aria-pressed="false" title="Tablet preview"><span class="device-icon tablet"></span></button>
+          <button data-device="mobile" aria-label="Mobile preview" aria-pressed="false" title="Mobile preview"><span class="device-icon mobile"></span></button>
+        </div>
+      </div>
+      <div class="title-actions">
+        <button class="file-button" id="file-label" title="Switch design session">Loading…</button>
+        <button class="icon-button title-new" id="design-new" aria-label="New design session" title="New design session">+</button>
+        <div class="mo-window-controls"><!--__MO_WINDOW_CONTROLS__--></div>
+      </div>
+    </header>
+
+    <main id="design-home" hidden>
+      <div class="home-intro">
+        <p class="home-eyebrow">An idea. A shared direction.</p>
+        <h1>Shape it together.</h1>
+        <p class="home-summary">Explore with MO, make the details your own, and agree on what comes next.</p>
+      </div>
+      <ol class="home-steps">
+        <li><span>01</span><h2>Explore an idea</h2><p>Describe a new concept or bring an existing project into view.</p></li>
+        <li><span>02</span><h2>Make it yours</h2><p>Move elements, change the details, and sketch together on the Board.</p></li>
+        <li><span>03</span><h2>Agree and hand off</h2><p>Save the agreed version, then hand it to MO to build.</p></li>
+      </ol>
+      <div class="home-actions"><button class="primary" id="home-start">Start a design</button><button class="secondary" id="home-library">Open saved designs</button></div>
+      <p id="home-status" role="status">Your open designs stay right where you left them.</p>
+    </main>
+    <div class="workspace">
+      <main class="preview-pane">
+        <div class="preview-toolbar">
+          <div class="preview-title"><strong id="preview-title">Visual concept</strong><button class="badge revision-button" id="revision" title="Open historical revisions">Historical</button><span class="badge resolved-badge" id="resolved-state" hidden>Resolved</span><span class="badge connection-badge" id="board-connection" hidden></span></div>
+          <div class="preview-toolbar-actions preview-tools" id="preview-tools">
+            <button class="secondary" id="preview-edit" aria-pressed="false">Edit design</button>
+            <span id="edit-tools" class="edit-tools" hidden><button class="text-button" id="edit-undo" aria-label="Undo edit">Undo</button><button class="text-button" id="edit-redo" aria-label="Redo edit">Redo</button><button class="secondary" id="edit-save">Save</button></span>
+            <button class="text-button" id="preview-download">Download</button>
+            <button class="toolbar-icon" id="preview-refresh" aria-label="Refresh preview" title="Refresh preview"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 7.2A7 7 0 1 0 17 11"></path><path d="M16.5 3.5v3.7h-3.7"></path></svg></button>
+            <button class="text-button" id="source-open">Source</button>
+          </div>
+          <div class="board-tools" id="board-tools" hidden aria-label="Board tools">
+            <button class="board-tool active" data-board-tool="select" title="Select and move (V)" aria-label="Select and move"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5 18.5 16l-6.2-.3 3.2 5.2-2.4 1.4-3.1-5.3-3.3 5.2Z"></path></svg></button>
+            <button class="board-tool" data-board-tool="pen" title="Pen (P)" aria-label="Pen"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 1.2-4.5L16.8 3.9a2.1 2.1 0 0 1 3 3L8.3 18.5Z"></path><path d="m14.8 5.9 3.3 3.3M4 20l4.3-1.5"></path></svg></button>
+            <button class="board-tool" data-board-tool="eraser" title="Eraser (E)" aria-label="Eraser"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8.2 19.5-3.1-3.1a2.4 2.4 0 0 1 0-3.4l7.9-7.9a2.4 2.4 0 0 1 3.4 0l3.1 3.1a2.4 2.4 0 0 1 0 3.4l-7.9 7.9a2.4 2.4 0 0 1-3.4 0Z"></path><path d="m8 12 4 4M5.5 19.5h13"></path></svg></button>
+            <button class="board-tool" data-board-tool="line" title="Line (L)" aria-label="Line"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 19 14-14"></path><path d="M5 15v4h4"></path></svg></button>
+            <button class="board-tool" data-board-tool="arrow" title="Arrow (A)" aria-label="Arrow"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M10 5h9v9"></path></svg></button>
+            <button class="board-tool" id="board-image" title="Insert image" aria-label="Insert image"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"></rect><circle cx="9" cy="9" r="1.5"></circle><path d="m5 17 4.5-4.5 3 3 2-2 4.5 4.5"></path></svg></button>
+            <button class="board-tool" data-board-tool="rect" title="Rectangle (R)" aria-label="Rectangle"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5"></rect></svg></button>
+            <button class="board-tool" data-board-tool="ellipse" title="Ellipse (O)" aria-label="Ellipse"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="8" ry="6.5"></ellipse></svg></button>
+            <button class="board-tool" data-board-tool="text" title="Text (T)" aria-label="Text"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M12 5v14M8.5 19h7"></path></svg></button>
+            <span class="board-separator"></span>
+            <button class="board-tool" id="board-undo" title="Undo" aria-label="Undo"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"></path><path d="M5 12h8a6 6 0 0 1 6 6"></path></svg></button>
+            <button class="board-tool" id="board-redo" title="Redo" aria-label="Redo"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5"></path><path d="M19 12h-8a6 6 0 0 0-6 6"></path></svg></button>
+            <button class="board-tool" id="board-color" title="Stroke color" aria-label="Stroke color"><svg class="board-icon board-icon-fill" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle></svg></button>
+            <button class="board-tool" id="board-width" title="Stroke width" aria-label="Stroke width"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"></path><circle cx="9" cy="7" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="11" cy="17" r="1.5"></circle></svg></button>
+            
+            <button class="board-tool" id="board-whiteboard" title="Whiteboard mode" aria-label="Whiteboard mode" aria-pressed="false"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5"></rect><path d="M8 19v2M16 19v2M7 9h10M7 13h6"></path></svg></button>
+            <button class="board-tool" id="board-shortcuts" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="2"></rect><path d="M6.5 10h1M10 10h1M13.5 10h1M17 10h1M6.5 14h8M17 14h1"></path></svg></button>
+            <button class="secondary" id="board-download">Download</button>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="viewport" id="viewport"><iframe id="preview-frame" title="MO Design preview" sandbox="allow-scripts"></iframe></div>
+          <aside id="preview-inspector" class="preview-inspector" hidden aria-label="Edit selected element">
+            <div class="inspector-head"><strong id="edit-element">Customize</strong><span id="edit-status" role="status">Saved</span></div>
+            <p id="edit-empty">Select an element in the preview. Drag to move; use its corner to resize.</p>
+            <div id="edit-fields" hidden>
+              <label>Element<select id="edit-layers" aria-label="Selected element"></select></label>
+              <label>Text<textarea id="edit-text" maxlength="8000" rows="3"></textarea></label>
+              <div class="inspector-grid">
+                <label>Position<input data-edit-property="translate" placeholder="0px 0px"></label>
+                <label>Width<input data-edit-property="width" placeholder="auto"></label>
+                <label>Height<input data-edit-property="height" placeholder="auto"></label>
+                <label>Padding<input data-edit-property="padding" placeholder="16px"></label>
+                <label>Margin<input data-edit-property="margin" placeholder="0px"></label>
+                <label>Gap<input data-edit-property="gap" placeholder="16px"></label>
+                <label>Corners<input data-edit-property="border-radius" placeholder="8px"></label>
+                <label>Font size<input data-edit-property="font-size" placeholder="16px"></label>
+                <label>Weight<input data-edit-property="font-weight" placeholder="400"></label>
+                <label>Text color<input data-edit-property="color"></label>
+                <label>Background<input data-edit-property="background-color"></label>
+                <label>Text align<input data-edit-property="text-align" placeholder="left"></label>
+                <label>Opacity<input data-edit-property="opacity" placeholder="1"></label>
+              </div>
+              <button class="secondary" id="edit-reset">Reset selected edits</button>
+            </div>
+            <p id="preview-edit-note" role="status"></p>
+            <p class="edit-help">Editing pauses this screen. Choose Done to try its interactions.</p>
+            <button class="text-button" id="edit-reload">Reload saved design</button>
+          </aside>
+          <div class="board-stage" id="board-stage" hidden tabindex="0" aria-label="Shared MO Board" aria-describedby="board-focus-help">
+            <span class="sr-only" id="board-focus-help">Use the Board toolbar or keyboard shortcuts. Press question mark for the full shortcut list.</span>
+            <canvas id="board-canvas" aria-hidden="true"></canvas><canvas id="board-draft" aria-hidden="true"></canvas>
+            <div class="board-review" id="board-review" hidden>
+              <div class="board-review-copy"><strong>MO draft</strong><span>Review the proposed marks before they become part of the Board.</span></div>
+              <div class="board-review-actions"><button class="secondary" id="board-reject">Reject</button><button class="primary" id="board-accept">Accept</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="activity-line" id="live" role="status" aria-live="polite">
+          <!--__MO_ACTIVITY_MARK__-->
+          <span class="activity-copy"><strong id="live-text">Ready</strong><span id="live-detail">Ask MO to load a current surface or refine the visual.</span></span>
+          <button class="secondary" id="activity-open" aria-label="Show request details">Details</button>
+          <button class="secondary" id="request-stop" hidden>Stop</button>
+        </div>
+      </main>
+
+      <aside class="conversation" aria-label="Design conversation">
+        <div class="conversation-head">
+          <div class="conversation-heading"><h1>Design with MO</h1><span class="badge" id="script-state">Static</span></div>
+          <p>Ask for ideas, compare options, or refine the visual. Project files stay read-only until Handoff.</p>
+          <div class="project-row">
+            <button class="project-button" id="project-choose" title="Choose or create a project folder">
+              <span class="folder-glyph" aria-hidden="true"></span>
+              <span class="project-copy"><strong id="project-title">No project</strong><span id="project-detail">Standalone visual concept</span></span>
+            </button>
+            <button class="icon-button project-clear" id="project-clear" aria-label="Remove project" title="Remove project">×</button>
+          </div>
+          <details class="review-brief" id="review-brief">
+            <summary><strong>Visual brief</strong><span id="review-count">Brief not started</span></summary>
+            <div class="review-brief-body">
+              <div class="review-line" id="review-objective-line"><span>Objective</span><p id="review-objective"></p></div>
+              <div class="review-line" id="review-decision-line"><span>Decision</span><p id="review-decision"></p></div>
+              <div class="review-line" id="review-evidence-line"><span>Evidence</span><p id="review-evidence"></p></div>
+            </div>
+          </details>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="composer">
+          <div class="composer-box">
+            <div class="attachment-strip" id="composer-attachments" hidden></div>
+            <textarea id="refinement" maxlength="4000" placeholder="Ask for suggestions, compare options, or describe a visual change…"></textarea>
+            <div class="composer-actions"><div class="composer-meta"><button class="attach-button" id="attachment-open" type="button" title="Attach files, images, or documents" aria-label="Attach files, images, or documents"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.2 10.8l5.1-5.1a3 3 0 014.2 4.2l-6.4 6.4a4.5 4.5 0 01-6.4-6.4l6.1-6.1"></path></svg></button><span class="hint">⌘/Ctrl + Enter</span></div><button class="send" id="refine-send">Send</button></div>
+          </div>
+          <div class="toast" id="toast">Design work stays in this session.</div>
+          <div class="handoff-bar">
+            <div class="readiness"><strong id="brief-state">Keep designing</strong><span id="brief-detail">Load the current surface first, then refine when you are ready.</span></div>
+            <button class="primary" id="finish">Handoff</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <dialog id="activity-dialog" aria-labelledby="activity-heading">
+    <form method="dialog" class="dialog-body">
+      <h2 id="activity-heading">Request details</h2>
+      <p id="activity-full" aria-live="polite"></p>
+      <div class="dialog-actions"><button class="secondary">Close</button></div>
+    </form>
+  </dialog>
+  <div class="boot" id="boot" role="status" aria-live="polite">
+    <div class="boot-inner"><!--__MO_BOOT_MARK__--><strong>Opening MO Design</strong><span>Loading your visual workspace…</span></div>
+  </div>
+  <div class="resize-grip" id="resize-grip" aria-hidden="true"></div>
+
+  <dialog id="handoff-dialog" aria-label="Handoff finished design">
+    <div class="dialog-head"><strong>Handoff</strong><button data-close-dialog="handoff-dialog" aria-label="Close">×</button></div>
+    <div class="dialog-body">
+      <h2 id="handoff-heading">Hand off finished concept</h2>
+      <p id="handoff-subtitle">Your Handoff approves this saved revision. The receiving MO implements it, verifies alignment, then marks it Resolved.</p>
+      <section class="handoff-concept">
+        <div class="handoff-concept-head"><strong id="handoff-concept-title">Visual concept</strong><span id="handoff-concept-state">r1 · Static concept</span></div>
+        <p id="handoff-concept-summary"></p>
+        <small id="handoff-project-context"></small>
+      </section>
+      <details class="handoff-details" id="handoff-details">
+        <summary>Implementation brief <span class="brief-count" id="brief-count"></span></summary>
+        <div class="brief-sections">
+          <section class="brief-section" id="handoff-acceptance"><span>Acceptance</span><ul class="brief-list" id="acceptance"></ul></section>
+          <section class="brief-section" id="handoff-decisions"><span>Visual decisions</span><ul class="brief-list" id="decisions"></ul></section>
+          <section class="brief-section" id="handoff-constraints"><span>Evidence and constraints</span><ul class="brief-list" id="constraints"></ul></section>
+          <section class="brief-section" id="handoff-project-map"><span>Project context</span><p id="graph-detail"></p></section>
+        </div>
+      </details>
+      <div class="route-label">Choose recipient</div>
+      <div class="route-menu" id="handoff-route">
+        <button class="route-row" data-handoff-route="current"><i class="route-dot"></i><span><strong>Connected terminal</strong>Continue in the MO terminal that opened this Design</span><em>Conversation</em></button>
+        <button class="route-row active" data-handoff-route="background"><i class="route-dot"></i><span><strong>Background</strong>Headless build with completion notice</span><em>Goal</em></button>
+        <button class="route-row" data-handoff-route="terminal"><i class="route-dot"></i><span><strong>New terminal</strong>Visible build in a new MO session</span><em>Goal</em></button>
+      </div>
+      <div class="toast" id="handoff-toast">Choose which MO receives the finished Design.</div>
+      <div class="dialog-actions"><button class="secondary" data-close-dialog="handoff-dialog">Back</button><button class="primary" id="handoff-send">Send handoff</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="library-dialog" aria-label="Design sessions">
+    <div class="dialog-head"><strong>Design sessions</strong><button data-close-dialog="library-dialog" aria-label="Close">×</button></div>
+    <div class="dialog-body"><div class="library" id="library"></div></div>
+  </dialog>
+
+  <dialog id="revision-dialog" aria-label="Revision history">
+    <div class="dialog-head"><strong>Revision history</strong><button data-close-dialog="revision-dialog" aria-label="Close">×</button></div>
+    <div class="dialog-body"><p>Select a saved visual to preview it without creating a revision. Download or hand off any version; older snapshots can be deleted.</p><div class="revision-list" id="revision-library"></div></div>
+  </dialog>
+
+  <dialog id="delete-revision-dialog" aria-label="Delete revision">
+    <div class="dialog-head"><strong>Delete revision?</strong><button data-close-dialog="delete-revision-dialog" aria-label="Close">×</button></div>
+    <div class="dialog-body">
+      <p class="confirm-copy" id="delete-revision-copy">This removes only the selected saved snapshot.</p>
+      <div class="dialog-actions"><button class="secondary" data-close-dialog="delete-revision-dialog">Cancel</button><button class="primary" id="delete-revision-confirm">Delete</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="source-dialog" aria-label="Design source">
+    <div class="dialog-head"><strong>MO Design source</strong><button data-close-dialog="source-dialog" aria-label="Close">×</button></div>
+    <div class="dialog-body"><pre class="source" id="source"></pre></div>
+  </dialog>
+
+  <dialog id="board-text-dialog" aria-labelledby="board-text-heading">
+    <form id="board-text-form" method="dialog">
+      <div class="dialog-head"><strong id="board-text-heading">Board text</strong><button type="button" data-close-dialog="board-text-dialog" aria-label="Close">×</button></div>
+      <div class="dialog-body">
+        <div class="model-field"><label for="board-text-input">Text</label><textarea id="board-text-input" maxlength="8000" rows="4" placeholder="Type text to place on the Board"></textarea></div>
+        <div class="dialog-actions"><button class="secondary" type="button" data-close-dialog="board-text-dialog">Cancel</button><button class="primary" type="submit" id="board-text-add">Add text</button></div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="board-properties-dialog" aria-labelledby="board-properties-heading">
+    <form id="board-properties-form" method="dialog">
+      <div class="dialog-head"><strong id="board-properties-heading">Selected element</strong><button type="button" data-close-dialog="board-properties-dialog" aria-label="Close">×</button></div>
+      <div class="dialog-body">
+        <p>Drag a corner to resize. Arrow endpoints and the middle handle also reshape the line.</p>
+        <button class="secondary" id="board-edit-text" type="button" hidden>Edit text</button>
+        <div class="model-field"><label for="board-properties-fill">Fill</label><select id="board-properties-fill"><option value="none">None</option><option value="surface">Surface</option><option value="text">Text</option><option value="muted">Muted</option><option value="brand">Brand</option><option value="ok">Success</option><option value="warn">Warning</option><option value="error">Error</option></select></div>
+        <div class="model-field"><label for="board-properties-opacity">Opacity</label><input id="board-properties-opacity" type="number" min="0.05" max="1" step="0.05" required></div>
+        <div class="model-field"><label for="board-properties-color">Color</label><select id="board-properties-color"><option value="text">Text</option><option value="muted">Muted</option><option value="brand">Brand</option><option value="ok">Success</option><option value="warn">Warning</option><option value="error">Error</option></select></div>
+        <div class="model-field"><label for="board-properties-width">Stroke width</label><input id="board-properties-width" type="number" min="0.5" max="32" step="0.5" required></div>
+        <div class="model-field"><label for="board-properties-dash">Line style</label><select id="board-properties-dash"><option value="solid">Solid</option><option value="dash">Dashed</option><option value="dot">Dotted</option></select></div>
+        <div class="model-field"><label for="board-properties-head">Arrowhead</label><select id="board-properties-head"><option value="triangle">Triangle</option><option value="open">Open</option><option value="none">None</option></select></div>
+        <div class="model-field"><label for="board-properties-size">Arrowhead size</label><input id="board-properties-size" type="number" min="0.5" max="2.5" step="0.25" required></div>
+        <div class="dialog-actions"><button class="secondary" type="button" data-close-dialog="board-properties-dialog">Cancel</button><button class="primary" type="submit">Apply</button></div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="board-shortcuts-dialog" aria-label="Board keyboard shortcuts">
+    <div class="dialog-head"><strong>Board keyboard shortcuts</strong><button type="button" data-close-dialog="board-shortcuts-dialog" aria-label="Close">×</button></div>
+    <div class="dialog-body">
+      <dl class="shortcut-list">
+        <div><dt>Select · Pen · Eraser</dt><dd><kbd>V</kbd> <kbd>P</kbd> <kbd>E</kbd></dd></div>
+        <div><dt>Line · Arrow</dt><dd><kbd>L</kbd> <kbd>A</kbd></dd></div>
+        <div><dt>Rectangle · Ellipse · Text</dt><dd><kbd>R</kbd> <kbd>O</kbd> <kbd>T</kbd></dd></div>
+        <div><dt>Undo · Redo</dt><dd><kbd>Ctrl Z</kbd> <kbd>Ctrl Y</kbd></dd></div>
+        <div><dt>Delete selected</dt><dd><kbd>Delete</kbd></dd></div>
+        <div><dt>Selected element properties</dt><dd>Double-click an element</dd></div>
+        <div><dt>Cancel selection or drawing</dt><dd><kbd>Esc</kbd></dd></div>
+        <div><dt>Reset Board view</dt><dd><kbd>0</kbd></dd></div>
+      </dl>
+    </div>
+  </dialog>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const state = { revision:'', payload:null, rendered:'', previewToken:'', handoffTarget:null, handoffRoute:'current', polling:false, diagnosticKey:'', lastInteraction:'', errors:0, working:false, lastGoodDesign:null, candidateDesign:null, candidateSignature:'', previewErrorSignature:'', attachments:[], pendingDeleteRevision:0, surface:'preview', standaloneBoard:false, board:null, boardTarget:null, boardDraft:null, boardTool:'select', boardColor:'text', boardWidth:2, boardZoom:1, boardPan:{x:0,y:0}, boardSelected:'', boardPointer:null, boardDirty:false, boardWhiteboard:false, boardImages:{}, boardGeneration:0, boardTimer:0, boardUndo:[], boardRedo:[], boardSave:Promise.resolve(), boardSaveError:'' };
+    /*__MO_PREVIEW__*/
+    const editor=createPreviewEditor();
+    let boardTextTarget=null,boardPropertiesTarget=null;
+    const cssVar = (name,value) => document.documentElement.style.setProperty(name,value);
+    const requiredNumber = (values,key) => { if(!Object.prototype.hasOwnProperty.call(values,key))throw new Error('MO Design theme metric is missing: '+key);const parsed=Number(values[key]);if(!Number.isFinite(parsed))throw new Error('MO Design theme metric is invalid: '+key);return parsed; };
+
+    function applyTheme(theme) {
+      const t=(theme||{}).tokens||{}, p=(theme||{}).panel||{}, c=(theme||{}).character||{};
+      const map={background:'bg',surface:'surface',input:'input',brand:'brand',glow:'glow',text:'text',muted:'muted',border:'border',ok:'ok',warn:'warn',error:'error',action:'action'};
+      for(const key of Object.keys(map)){const val=t[key];if(typeof val!=='string'||!/^#[0-9a-f]{6}$/i.test(val))throw new Error('MO Design theme token is invalid: '+key);cssVar('--mo-'+map[key],val);}
+      if(typeof c.color_mode!=='string'||!(c.color_mode==='skin'||/^#[0-9a-f]{6}$/i.test(c.color_mode)))throw new Error('MO Design character color_mode is invalid');
+      const cubeColor=c.color_mode==='skin'?t.brand:c.color_mode;
+      cssVar('--mo-cube',cubeColor);
+      const brightness=color=>parseInt(color.slice(1,3),16)*.2126+parseInt(color.slice(3,5),16)*.7152+parseInt(color.slice(5,7),16)*.0722;
+      const light=brightness(t.surface)>brightness(t.text);state.boardPaper=light?t.surface:t.text;state.boardInk=light?t.text:t.background;cssVar('--board-paper',state.boardPaper);cssVar('--board-ink',state.boardInk);
+      cssVar('--panel-pad',requiredNumber(p,'padding')+'px'); cssVar('--panel-radius',requiredNumber(p,'corner_radius')+'px');
+      cssVar('--button-pad',requiredNumber(p,'button_padding')+'px'); cssVar('--button-radius',requiredNumber(p,'button_corner_radius')+'px');
+      cssVar('--cube-radius',Math.max(0,Math.min(.5,requiredNumber(c,'corner_radius')))*100+'%');
+      cssVar('--cube-glow',String(Math.max(0,Math.min(1,requiredNumber(c,'glow')))));
+      const typography=(theme||{}).typography||{};
+      for(const role of ['small','body','title','mono']){
+        const font=typography[role]||{},size=requiredNumber(font,'size');
+        if(typeof font.family!=='string'||!/^[A-Za-z0-9 _.-]{1,80}$/.test(font.family)||size<=0)throw new Error('MO Desktop typography is invalid: '+role);
+        cssVar('--mo-font-'+role+'-family',JSON.stringify(font.family));
+        cssVar('--mo-font-'+role+'-size',(size*4/3).toFixed(4)+'px');
+      }
+      requiredNumber(c,'cube_count');
+      for(const mark of document.querySelectorAll('.mo-mark')) mark.classList.toggle('five',Number(c.cube_count)===5);
+    }
+
+    function projectName(path) { return String(path||'').replace(/[\\/]+$/,'').split(/[\\/]/).pop()||'Selected project'; }
+    function list(id, values) {
+      const root=$(id); root.replaceChildren();
+      const rows=Array.isArray(values)?values.filter(value=>String(value||'').trim()):[];
+      for(const value of rows){ const li=document.createElement('li'); li.textContent=value; root.appendChild(li); }
+      return rows.length;
+    }
+    function meaningfulObjective(h, payload=state.payload) {
+      const value=String((h&&h.objective)||'').trim(), title=String((payload&&payload.meta&&payload.meta.title)||'').trim();
+      const generic=['new design','untitled design','explore and implement this visual concept.','shape the visual concept together.'];
+      return value&&value.toLowerCase()!==title.toLowerCase()&&!generic.includes(value.toLowerCase())?value:'';
+    }
+    function renderReviewBrief(h, payload=state.payload) {
+      const objective=meaningfulObjective(h,payload), decisions=h.decisions||[], constraints=h.constraints||[], acceptance=h.acceptance||[];
+      const meaningful=!!(objective||decisions.length||constraints.length||acceptance.length), brief=$('review-brief');
+      brief.classList.toggle('empty',!meaningful);if(!meaningful)brief.open=false;
+      $('review-count').textContent=meaningful?`${acceptance.length} outcomes · ${decisions.length} decisions`:'Brief not started';
+      const rows=[['review-objective-line','review-objective',objective],['review-decision-line','review-decision',decisions[0]||''],['review-evidence-line','review-evidence',constraints[0]||'']];
+      for(const [lineId,valueId,value] of rows){$(lineId).hidden=!value;$(valueId).textContent=value;}
+    }
+    async function copyText(text) { try{await navigator.clipboard.writeText(text);return true;}catch(_error){const input=document.createElement('textarea');input.value=text;input.style.cssText='position:fixed;opacity:0';document.body.appendChild(input);input.select();let copied=false;try{copied=document.execCommand('copy');}catch(_fallbackError){}input.remove();return copied;} }
+    function renderConversation(conversation) {
+      const root=$('messages'), rows=(conversation&&conversation.messages)||[],signature=JSON.stringify(rows);if(state.chatSignature===signature)return;
+      const follow=root.scrollHeight-root.scrollTop-root.clientHeight<48||!state.chatSignature,scroll=root.scrollTop;state.chatSignature=signature;root.replaceChildren();
+      if(!rows.length){
+        const empty=document.createElement('div'); empty.className='empty-chat';
+        const inner=document.createElement('div'), mark=$('brand-mark').cloneNode(true); mark.removeAttribute('id'); inner.appendChild(mark);
+        const copy=document.createElement('div'); copy.textContent='Ask for suggestions, compare approaches, or describe the visual you want to explore. MO can answer without changing the preview.';
+        inner.appendChild(copy); empty.appendChild(inner); root.appendChild(empty); applyTheme(state.payload&&state.payload.theme); return;
+      }
+      for(const row of rows){
+        const item=document.createElement('div'); item.className='message '+(row.role==='user'?'user':'mo');
+        const label=document.createElement('span'); label.className='message-label'; label.textContent=row.role==='user'?'You':'MO Design';if(row.role==='user'&&String(row.text||'').trim()){const copy=document.createElement('button');copy.type='button';copy.className='message-copy';copy.textContent='Copy';copy.ariaLabel='Copy sent prompt';copy.addEventListener('click',async()=>{copy.textContent=await copyText(String(row.text||''))?'Copied':'Copy failed';});label.appendChild(copy);}
+        item.appendChild(label);if(String(row.text||'').trim()){const text=document.createElement('span');text.textContent=row.text;item.appendChild(text);}
+        const attachments=Array.isArray(row.attachments)?row.attachments:[];if(attachments.length){const chips=document.createElement('div');chips.className='message-attachments';for(const attachment of attachments){const chip=document.createElement('span');chip.className='attachment-chip';chip.textContent=attachment.name;chips.appendChild(chip);}item.appendChild(chips);}root.appendChild(item);
+      }
+      requestAnimationFrame(()=>{root.scrollTop=follow?root.scrollHeight:scroll});
+    }
+    function formatAttachmentBytes(value) { const bytes=Number(value||0);return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MiB`:bytes>=1024?`${Math.ceil(bytes/1024)} KiB`:`${bytes} B`; }
+    function renderAttachments(values=state.attachments) {
+      state.attachments=Array.isArray(values)?values:[];const root=$('composer-attachments');root.replaceChildren();root.hidden=!state.attachments.length;
+      for(const attachment of state.attachments){const chip=document.createElement('span');chip.className='attachment-chip';chip.title=`${attachment.category||'file'} · ${formatAttachmentBytes(attachment.bytes)}`;const name=document.createElement('span');name.textContent=attachment.name;const remove=document.createElement('button');remove.type='button';remove.ariaLabel=`Remove ${attachment.name}`;remove.textContent='×';remove.disabled=state.working;remove.addEventListener('click',async()=>{try{const result=await window.pywebview.api.remove_attachment(attachment.id);if(!result.ok)throw new Error(result.message||'Attachment could not be removed');renderAttachments(result.attachments);}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});chip.append(name,remove);root.appendChild(chip);}
+    }
+    const clone = value => value==null?value:JSON.parse(JSON.stringify(value));
+    const designSignature = design => JSON.stringify([design&&design.html,design&&design.css,design&&design.script,!!(design&&design.allow_scripts),design&&design.edits]);
+    function resetPreviewState() {
+      state.rendered='';
+      state.previewMissing=0;
+      state.lastGoodDesign=null; state.candidateDesign=null; state.candidateSignature=''; state.previewErrorSignature=''; state.diagnosticKey='';
+    }
+
+    const emptyBoard = () => ({version:'board/v1',revision:0,elements:[],decisions:[],questions:[]});
+    const boardToken = name => (state.payload&&state.payload.theme.tokens[name==='bg'?'background':name])||'';
+    const boardColor = name => state.boardWhiteboard&&['text','muted','surface'].includes(name)?(name==='surface'?state.boardPaper:state.boardInk):boardToken({text:'text',muted:'muted',surface:'surface',brand:'brand',ok:'ok',warn:'warn',error:'error'}[name]||'text');
+    let boardRenderFrame=0;
+    function scheduleBoardRender(){if(boardRenderFrame)return;boardRenderFrame=requestAnimationFrame(()=>{boardRenderFrame=0;renderBoard();});}
+    function publishBoardGeometry() {
+      if(!(window.pywebview&&window.pywebview.api))return;
+      const stage=$('board-stage'),active=state.surface==='board'&&!stage.hidden;
+      if(!active){window.pywebview.api.board_geometry().catch(()=>{});return;}
+      const rect=stage.getBoundingClientRect();
+      window.pywebview.api.board_geometry(rect.left,rect.top,rect.right,rect.bottom,innerWidth,innerHeight).catch(()=>{});
+    }
+    function setSurface(surface) {
+      state.surface=state.standaloneBoard?'board':surface==='board'?'board':'preview';
+      for(const button of document.querySelectorAll('[data-surface]')){const selected=button.dataset.surface===state.surface;button.classList.toggle('active',selected);button.setAttribute('aria-selected',String(selected));}
+      const board=state.surface==='board';$('viewport').hidden=board;$('board-stage').hidden=!board;$('board-tools').hidden=!board;$('preview-tools').hidden=board;$('device-tools').hidden=board;
+      if(board){if(state.rendered){$('preview-frame').srcdoc='';state.rendered='';}state.previewToken='';}else if(state.payload)renderArtifact(state.working?(state.lastGoodDesign||state.candidateDesign||state.payload.design):state.payload.design);
+      const boardInfo=state.payload&&state.payload.board;$('board-connection').hidden=!(boardInfo&&boardInfo.linked);
+      if(window.pywebview&&window.pywebview.api)window.pywebview.api.board_presence(board).then(()=>requestAnimationFrame(publishBoardGeometry)).catch(()=>{});
+      $('preview-title').textContent=board?'Shared Board':((state.payload&&state.payload.meta&&state.payload.meta.title)||'Visual concept');
+      $('script-state').textContent=board?`Board r${(state.board&&state.board.revision)||0}`:((state.payload&&state.payload.design&&state.payload.design.allow_scripts)?'Interactive':'Static');
+      $('refinement').placeholder=board?'Ask MO to explain, diagram, or propose a change to this Board…':'Ask for suggestions, compare options, or describe a visual change…';
+      if(board)scheduleBoardRender();
+    }
+    function syncBoard(payload) {
+      const value=(payload&&payload.board)||{},incoming=value.state||emptyBoard(),target=boardTargetValue(payload),changed=!sameBoardTarget(state.boardTarget,target);
+      if(changed){clearTimeout(state.boardTimer);state.boardTimer=0;state.boardGeneration++;state.boardTarget=target;state.board=clone(incoming);state.boardDirty=false;state.boardSaveError='';state.boardSelected='';state.boardPointer=null;state.boardUndo=[];state.boardRedo=[];state.boardImages={};}
+      else if(!state.boardDirty)state.board=clone(incoming);
+      state.boardDraft=value.draft||null;
+      $('board-review').hidden=!state.boardDraft;
+      $('board-connection').textContent=value.connection_label||'Connected · MO terminal';
+      $('board-connection').title=value.connection_label||'Connected to the exact originating MO terminal';
+      $('board-connection').hidden=!value.linked;
+      scheduleBoardRender();
+    }
+    function boardCanEdit() {
+      if(state.boardCheckpointing)return false;
+      const value=state.payload&&state.payload.board;
+      if(!value||!value.can_edit){$('toast').className='toast error';$('toast').textContent='Return to the current revision before editing the Board.';return false;}
+      if(!state.boardTarget||!sameBoardTarget(state.boardTarget,boardTargetValue())){$('toast').className='toast error';$('toast').textContent='The Board changed. Wait for the current Board to load before editing.';return false;}
+      if(state.boardDraft){$('toast').className='toast error';$('toast').textContent='Accept or reject MO’s draft before drawing again.';return false;}
+      return true;
+    }
+    function boardId() { return 'b-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9); }
+    function pushBoardHistory() { state.boardUndo.push(clone(state.board));while(state.boardUndo.length>40||JSON.stringify(state.boardUndo).length>4000000)state.boardUndo.shift();state.boardRedo=[]; }
+    function rebaseBoardHistory(board){board.revision=Number(state.board.revision||0)+1;const versions=new Map(state.board.elements.map(row=>[row.id,row.revision]));for(const row of board.elements)row.revision=Math.max(row.revision,versions.get(row.id)||0)+1;}
+    function selectBoardTool(tool) { const button=document.querySelector(`[data-board-tool="${tool}"]`);if(!button)return;state.boardTool=tool;document.querySelectorAll('[data-board-tool]').forEach(item=>{const selected=item===button;item.classList.toggle('active',selected);item.setAttribute('aria-pressed',String(selected));}); }
+    function boardBounds(a,b) { return {x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(b.x-a.x),height:Math.abs(b.y-a.y)}; }
+    function pointsBounds(points) { const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys);return {x,y,width:Math.min(16384-x,Math.max(1,Math.max(...xs)-x+1e-6)),height:Math.min(16384-y,Math.max(1,Math.max(...ys)-y+1e-6))}; }
+    function moveBoardElement(element,dx,dy) {
+      const moved=clone(element),bounds=element.bounds,nextX=Math.max(0,Math.min(16384-bounds.width,bounds.x+dx)),nextY=Math.max(0,Math.min(16384-bounds.height,bounds.y+dy)),appliedX=nextX-bounds.x,appliedY=nextY-bounds.y;
+      moved.bounds.x=nextX;moved.bounds.y=nextY;
+      if((moved.points||[]).length){moved.points=moved.points.map(point=>[point[0]+appliedX,point[1]+appliedY,...(point.length===3?[point[2]]:[])]);moved.bounds=pointsBounds(moved.points);}
+      return moved;
+    }
+    function arrowHandles(row) {
+      if(!row||row.kind!=='arrow')return [];
+      const points=row.points,start=points[0],end=points[points.length-1],control=points.length===3?points[1]:[(start[0]+end[0])/2,(start[1]+end[1])/2];
+      return [{kind:'start',point:start},{kind:'end',point:end},{kind:'bend',point:[(start[0]+2*control[0]+end[0])/4,(start[1]+2*control[1]+end[1])/4]}];
+    }
+    function reshapeArrow(element,handle,point) {
+      const next=clone(element),points=next.points,start=points[0],end=points[points.length-1];
+      if(handle==='bend'){
+        const control=[Math.max(0,Math.min(16384,2*point.x-(start[0]+end[0])/2)),Math.max(0,Math.min(16384,2*point.y-(start[1]+end[1])/2))];
+        next.points=[start,control,end];
+      }else points[handle==='start'?0:points.length-1]=[point.x,point.y];
+      next.bounds=pointsBounds(next.points);return next;
+    }
+    function boardElement(kind,a,b,points=[],text='') {
+      return {id:boardId(),kind,actor:'user',revision:1,z:state.board.elements.length,bounds:points.length?pointsBounds(points):boardBounds(a,b),style:{stroke:state.boardColor,fill:'none',width:state.boardWidth,opacity:1,dash:'solid',arrowhead:'triangle',arrow_size:1},points,text,attachment_id:''};
+    }
+    function commitBoardElements(elements) { state.board.elements=elements;state.board.revision=Number(state.board.revision||0)+1;state.boardDirty=true;scheduleBoardRender();persistBoard(); }
+    function deleteBoardSelection() { if(!state.boardSelected||!boardCanEdit())return;const exists=state.board.elements.some(row=>row.id===state.boardSelected);if(!exists)return;pushBoardHistory();const selected=state.boardSelected;state.boardSelected='';commitBoardElements(state.board.elements.filter(row=>row.id!==selected)); }
+    function persistBoard() {
+      if(!state.boardTarget)return;
+      const generation=++state.boardGeneration;
+      clearTimeout(state.boardTimer);const target={...state.boardTarget},snapshot={design_id:target.id,design_revision:target.revision,board:clone(state.board)};
+      state.boardSave=state.boardSave.then(async()=>{try{const result=await window.pywebview.api.board_working(snapshot);if(result.stale){await recoverStaleBoard(target,generation,result.message);return;}if(!result.ok)throw new Error(result.message||'Board could not be saved');if(currentBoardSave(target,generation))state.boardSaveError='';}catch(error){if(currentBoardSave(target,generation)){state.boardSaveError=error.message||String(error);$('toast').className='toast error';$('toast').textContent=state.boardSaveError;}}});
+      state.boardTimer=setTimeout(()=>checkpointBoard(target),1200);
+    }
+    function currentBoardSave(target,generation) { return state.boardGeneration===generation&&sameBoardTarget(state.boardTarget,target); }
+    async function recoverStaleBoard(target,generation,message) {
+      if(!currentBoardSave(target,generation))return;
+      const resetGeneration=++state.boardGeneration;state.boardTarget=null;state.boardDirty=false;state.boardSaveError='';state.revision='';
+      const current=await window.pywebview.api.snapshot('');
+      if(state.boardGeneration!==resetGeneration||state.boardTarget!==null)return;
+      if(current){state.revision=current.revision;update(current);}
+      $('toast').className='toast error';$('toast').textContent=message||'The Board changed before this edit could be saved.';
+    }
+    async function checkpointBoard(requestedTarget=state.boardTarget) {
+      if(state.boardCheckpointing)return state.boardCheckpointing;
+      if(state.boardPointer){clearTimeout(state.boardTimer);state.boardTimer=setTimeout(()=>checkpointBoard(),1200);return {ok:false,message:'Finish the current Board gesture before continuing.'};}
+      state.boardCheckpointing=commitBoardCheckpoint(requestedTarget);
+      try{return await state.boardCheckpointing;}finally{state.boardCheckpointing=null;}
+    }
+    async function commitBoardCheckpoint(requestedTarget) {
+      const target=requestedTarget?{...requestedTarget}:null;
+      clearTimeout(state.boardTimer);state.boardTimer=0;
+      while(true){const pending=state.boardSave;await pending;if(pending===state.boardSave)break;}
+      if(!target||!sameBoardTarget(state.boardTarget,target))return {ok:true,unchanged:true,stale:true};
+      if(state.boardSaveError)return {ok:false,message:state.boardSaveError};
+      if(!state.boardDirty)return {ok:true,unchanged:true};
+      const generation=state.boardGeneration;
+      try{const result=await window.pywebview.api.board_checkpoint(target.id,target.revision);if(result.stale){await recoverStaleBoard(target,generation,result.message);return result;}if(!result.ok)throw new Error(result.message||'Board checkpoint failed');if(currentBoardSave(target,generation)){state.boardDirty=false;if(result.meta){const next=boardTargetValue(result);for(const dialogTarget of [boardTextTarget,boardPropertiesTarget])if(dialogTarget?.identity===boardTargetIdentity(target))dialogTarget.identity=boardTargetIdentity(next);state.boardTarget=next;}}if(result.meta){state.revision=result.revision;update(result);}return result;}
+      catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);return {ok:false,message:error.message||String(error)};}
+    }
+    function boardPoint(event) { const rect=$('board-stage').getBoundingClientRect();return {x:Math.max(0,Math.min(16384,(event.clientX-rect.left-state.boardPan.x)/state.boardZoom)),y:Math.max(0,Math.min(16384,(event.clientY-rect.top-state.boardPan.y)/state.boardZoom)),pressure:event.pressure>0?event.pressure:.5}; }
+    function hitBoard(point) { const rows=[...(state.board&&state.board.elements||[])].sort((a,b)=>Number(b.z)-Number(a.z));return rows.find(row=>{const b=row.bounds,pad=Math.max(7,Number(row.style.width||2)*2);return point.x>=b.x-pad&&point.x<=b.x+b.width+pad&&point.y>=b.y-pad&&point.y<=b.y+b.height+pad;}); }
+    function prepareCanvas(canvas) { const rect=$('board-stage').getBoundingClientRect(),dpr=devicePixelRatio||1,w=Math.max(1,Math.round(rect.width*dpr)),h=Math.max(1,Math.round(rect.height*dpr));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}const ctx=canvas.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,w,h);ctx.setTransform(dpr*state.boardZoom,0,0,dpr*state.boardZoom,dpr*state.boardPan.x,dpr*state.boardPan.y);ctx.lineCap='round';ctx.lineJoin='round';return ctx; }
+    function drawArrowHead(ctx,a,b,style) { const width=Number(style.width||2),angle=Math.atan2(b[1]-a[1],b[0]-a[0]),size=Math.max(9,width*4)*Number(style.arrow_size||1);if(style.arrowhead==='none')return;ctx.beginPath();if(style.arrowhead==='open'){ctx.moveTo(b[0]-size*Math.cos(angle-.48),b[1]-size*Math.sin(angle-.48));ctx.lineTo(b[0],b[1]);ctx.lineTo(b[0]-size*Math.cos(angle+.48),b[1]-size*Math.sin(angle+.48));}else{ctx.moveTo(b[0],b[1]);ctx.lineTo(b[0]-size*Math.cos(angle-.48),b[1]-size*Math.sin(angle-.48));ctx.lineTo(b[0]-size*Math.cos(angle+.48),b[1]-size*Math.sin(angle+.48));ctx.closePath();ctx.fillStyle=ctx.strokeStyle;ctx.fill();}ctx.stroke(); }
+    function ensureBoardImage(attachmentId) {
+      const id=String(attachmentId||'');if(!id)return Promise.resolve(null);if(state.boardImages[id])return state.boardImages[id].promise;
+      const cached={loading:true,created:performance.now()};state.boardImages[id]=cached;
+      cached.promise=(state.boardImageQueue||Promise.resolve()).then(()=>{
+        if(state.boardImages[id]!==cached)throw new Error('Image no longer needed');
+        return window.pywebview.api.board_attachment_preview(id);
+      }).then(result=>{
+        if(!result.ok)throw new Error(result.message||'Image unavailable');
+        return new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>{const count=Math.max(1,state.board.elements.filter(row=>row.kind==='image').length),edge=Math.min(1536,Math.floor(Math.sqrt(16777216/count))),scale=Math.min(1,edge/image.naturalWidth,edge/image.naturalHeight),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));canvas.naturalWidth=image.naturalWidth;canvas.naturalHeight=image.naturalHeight;canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);resolve(canvas);};image.onerror=()=>reject(new Error('Image could not be decoded'));image.src=result.src;});
+      }).then(image=>{if(state.boardImages[id]!==cached)return null;cached.image=image;cached.loading=false;scheduleBoardRender();return image;}).catch(()=>{cached.error=true;cached.loading=false;scheduleBoardRender();return null;});
+      state.boardImageQueue=cached.promise;
+      return cached.promise;
+    }
+    function pruneBoardImages(){
+      const ids=new Set([...(state.board?.elements||[]),...(state.boardDraft?.board?.elements||[])].filter(row=>row.kind==='image').map(row=>row.attachment_id)),budget=33554432/Math.max(1,ids.size);
+      for(const [id,cached] of Object.entries(state.boardImages))if((!ids.has(id)&&performance.now()-cached.created>5000)||(cached.image&&cached.image.width*cached.image.height>budget))delete state.boardImages[id];
+    }
+     function drawBoardElement(ctx,row,draft=false) {
+      const style=row.style||{},b=row.bounds||{},points=row.points||[],width=Number(style.width||2),review=!!draft,removing=draft==='delete';ctx.save();ctx.globalAlpha=Number(style.opacity??1)*(review ? .72 : 1);ctx.strokeStyle=removing?boardToken('error'):review?boardToken('brand'):boardColor(style.stroke);ctx.fillStyle=style.fill&&style.fill!=='none'?boardColor(style.fill):'transparent';ctx.lineWidth=width;if(review||style.dash==='dash')ctx.setLineDash([8,6]);else if(style.dash==='dot')ctx.setLineDash([2,5]);
+      if(row.kind==='stroke'&&points.length){for(let i=1;i<points.length;i++){ctx.lineWidth=width*(.45+Number(points[i][2]??.5));ctx.beginPath();ctx.moveTo(points[i-1][0],points[i-1][1]);ctx.lineTo(points[i][0],points[i][1]);ctx.stroke();}}
+      else if((row.kind==='line'||row.kind==='arrow')&&points.length>=2){const end=points[points.length-1];ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);if(row.kind==='arrow'&&points.length===3)ctx.quadraticCurveTo(points[1][0],points[1][1],end[0],end[1]);else ctx.lineTo(end[0],end[1]);ctx.stroke();if(row.kind==='arrow')drawArrowHead(ctx,points[points.length-2],end,style);}
+      else if(row.kind==='image'){const cached=state.boardImages[row.attachment_id];if(cached&&cached.image)ctx.drawImage(cached.image,b.x,b.y,b.width,b.height);else{ensureBoardImage(row.attachment_id);ctx.fillStyle=boardToken('muted');ctx.fillRect(b.x,b.y,b.width,b.height);ctx.strokeStyle=boardColor(style.stroke);ctx.strokeRect(b.x,b.y,b.width,b.height);ctx.fillStyle=boardColor(style.stroke);ctx.font='600 14px -apple-system,Segoe UI,sans-serif';ctx.fillText(cached&&cached.error?'Image unavailable':'Loading image…',b.x+12,b.y+22);}}
+       else if(row.kind==='rect'){if(style.fill&&style.fill!=='none')ctx.fillRect(b.x,b.y,b.width,b.height);ctx.strokeRect(b.x,b.y,b.width,b.height);}
+      else if(row.kind==='ellipse'){ctx.beginPath();ctx.ellipse(b.x+b.width/2,b.y+b.height/2,Math.max(.5,b.width/2),Math.max(.5,b.height/2),0,0,Math.PI*2);if(style.fill&&style.fill!=='none')ctx.fill();ctx.stroke();}
+      else if(row.kind==='text'){ctx.fillStyle=removing?boardToken('error'):review?boardToken('brand'):boardColor(style.stroke);ctx.font=`${Math.max(14,width*8)}px -apple-system,Segoe UI,sans-serif`;ctx.textBaseline='top';for(const [index,line] of String(row.text||'').split('\n').entries())ctx.fillText(line,b.x,b.y+index*Math.max(18,width*10));}
+      ctx.restore();
+    }
+    function renderBoard() {
+      if(!state.board||$('board-stage').hidden||document.hidden)return;pruneBoardImages();const ctx=prepareCanvas($('board-canvas')),draftCtx=prepareCanvas($('board-draft')),view=$('board-stage').getBoundingClientRect(),left=-state.boardPan.x/state.boardZoom,top=-state.boardPan.y/state.boardZoom;
+      for(const row of [...state.board.elements].sort((a,b)=>Number(a.z)-Number(b.z))){const b=row.bounds;if(b.x+b.width+64<left||b.y+b.height+64<top||b.x>left+view.width/state.boardZoom+64||b.y>top+view.height/state.boardZoom+64)continue;drawBoardElement(ctx,row,false);}
+      const selected=state.board.elements.find(row=>row.id===state.boardSelected);if(selected){const b=selected.bounds;ctx.save();ctx.strokeStyle=boardToken('brand');ctx.lineWidth=1/state.boardZoom;ctx.setLineDash([5/state.boardZoom,4/state.boardZoom]);ctx.strokeRect(b.x-4,b.y-4,b.width+8,b.height+8);ctx.setLineDash([]);ctx.fillStyle=boardToken('surface');if(state.boardTool==='select'&&!state.boardDraft)for(const handle of boardHandles(selected)){ctx.beginPath();ctx.arc(handle.point[0],handle.point[1],6/state.boardZoom,0,Math.PI*2);ctx.fill();ctx.stroke();}ctx.restore();}
+      if(state.boardPointer&&state.boardPointer.preview)drawBoardElement(draftCtx,state.boardPointer.preview,false);
+      if(state.boardDraft){const proposed=new Map((state.boardDraft.board&&state.boardDraft.board.elements||[]).map(row=>[row.id,row])),base=new Map(state.board.elements.map(row=>[row.id,row]));for(const op of state.boardDraft.operations||[]){const id=op.op==='add'&&op.element?op.element.id:op.id,row=op.op==='delete'?base.get(id):proposed.get(id);if(row)drawBoardElement(draftCtx,row,op.op==='delete'?'delete':true);}}
+      $('board-undo').disabled=!state.boardUndo.length;$('board-redo').disabled=!state.boardRedo.length;$('board-width').title=`Stroke width · ${state.boardWidth}px`;$('script-state').textContent=`Board r${state.board.revision||0}`;
+    }
+    function updateWork(conversation, streaming) {
+      const pending=!!(conversation&&conversation.pending), working=pending||streaming;
+      const kind=pending?String(conversation.pending.request_kind||'auto'):'auto', activity=(conversation&&conversation.activity)||{};
+      const activePhase=!['','ready','answered','delivered','attention'].includes(String(activity.phase||''));
+      const started=pending&&Date.parse(conversation.pending.started_at||''), elapsed=started?Math.max(0,Date.now()-started):0;
+      const longRunning=elapsed>90000, minutes=Math.max(1,Math.floor(elapsed/60000));
+      state.working=working;
+      if(working){$('finish').disabled=true;$('finish').title='Wait for the current Design request to finish';}
+      $('refine-send').disabled=pending;
+      if(activity.phase==='stop_failed')state.stoppingRequest='';
+      $('request-stop').hidden=!pending||state.standaloneBoard;
+      $('request-stop').disabled=state.stoppingRequest===conversation?.pending?.command_id||activity.phase==='stopping';
+      $('request-stop').textContent=activity.phase==='stopping'?'Stopping…':'Stop';
+      $('attachment-open').disabled=pending;
+      $('refinement').disabled=pending; $('live').classList.toggle('streaming',working);
+      $('live').classList.toggle('error',!working&&!!(conversation&&conversation.last_attention));
+      if(working){const preserved=conversation&&Number(conversation.last_completed_revision)>0?`accepted preview r${conversation.last_completed_revision} remains visible`:'no completed preview exists yet';$('live-text').textContent=activePhase&&activity.label?activity.label:(kind==='repair'?'Repairing preview…':'Preparing request…');$('live-detail').textContent=(activePhase&&activity.detail?activity.detail:'Reading your message and the selected visual context.')+(longRunning?` · ${minutes} min · ${preserved}.`:'');}
+      else if(conversation&&conversation.last_attention){$('live-text').textContent='Needs attention';$('live-detail').textContent=conversation.last_attention;}
+      else{$('live-text').textContent=activity.label||'Ready';$('live-detail').textContent=activity.detail||'Ask for suggestions, compare options, load a surface, or request a visual change.';}
+      const issue=state.previewIssue;
+      if(state.terminalSynced&&issue?.id===state.payload?.meta.id&&issue.revision===state.payload?.meta.revision){$('live').classList.add('error');$('live-text').textContent='Preview issue';$('live-detail').textContent=issue.detail+' · Continue in the connected MO terminal to review it.';}
+      else if(state.terminalSynced&&!working&&!conversation?.last_attention){$('live-detail').textContent='Edit and save here; continue the conversation in your MO terminal.';}
+      if(pending&&kind==='repair'){$('toast').className='toast';$('toast').textContent='MO is repairing this preview inside Design.';}
+      else if(pending){const preserved=conversation&&Number(conversation.last_completed_revision)>0?`Accepted preview r${conversation.last_completed_revision} stays visible while MO works.`:'No completed preview exists yet; the visible draft is not accepted.';$('toast').className='toast';$('toast').textContent=preserved;}
+      else if(conversation&&conversation.last_attention){$('toast').className='toast error';$('toast').textContent=conversation.last_attention;}
+      else if(state.previewMissing){$('toast').className='toast error';$('toast').textContent=`${state.previewMissing} saved edits are not present on this screen.`;}
+      else if(!$('toast').classList.contains('ok')){$('toast').className='toast';$('toast').textContent='Design work stays in this session.';}
+      updateActivityDetails();
+    }
+
+    function updateActivityDetails() {
+      const text=$('live-text').textContent+'\n\n'+$('live-detail').textContent;
+      if($('activity-full').textContent!==text)$('activity-full').textContent=text;
+    }
+
+    function boardTargetValue(payload=state.payload) {
+      const meta=(payload&&payload.meta)||{};return {id:String(meta.id||''),revision:Number(meta.revision||0)};
+    }
+    function sameBoardTarget(first,second) { return !!first&&!!second&&first.id===second.id&&first.revision===second.revision; }
+    function boardTargetIdentity(target) { return target?`${target.id}:${target.revision}`:''; }
+    function boardTextIdentity(payload=state.payload) { return boardTargetIdentity(boardTargetValue(payload)); }
+    function sameBoardTextTarget(target,payload=state.payload) { return !!target&&target.identity===boardTextIdentity(payload); }
+    function closeStaleBoardTextDialog(payload) {
+      const dialog=$('board-text-dialog');
+      if(!dialog.open||sameBoardTextTarget(boardTextTarget,payload))return;
+      boardTextTarget=null;dialog.close();$('toast').className='toast error';$('toast').textContent='The Board changed before text was added. Try again on the current Board.';
+    }
+    function update(payload) {
+      closeStaleBoardTextDialog(payload);
+      if(payload.presentation?.home){state.payload=payload;applyTheme(payload.theme);document.body.classList.add('design-home');$('design-home').hidden=false;$('top-title').textContent='Welcome';$('boot').classList.add('hidden');return;}
+      const first=!state.payload||!!state.payload.presentation?.home;
+      document.body.classList.remove('design-home');$('design-home').hidden=true;
+      state.payload=payload; state.errors=0; applyTheme(payload.theme);
+      const history=payload.history||{selected_revision:payload.meta.revision,current_revision:payload.meta.revision,is_current:true};
+      const lifecycle=(payload.conversation&&payload.conversation.lifecycle)||{},resolvedRevision=Number(lifecycle.revision||0),selectedRevision=Number(history.selected_revision||history.current_revision||payload.meta.revision||0),resolved=resolvedRevision>0&&resolvedRevision===selectedRevision;
+      $('resolved-state').hidden=!resolved;
+      $('resolved-state').textContent=resolved?`Resolved · r${resolvedRevision}`:'Resolved';
+      $('resolved-state').title=resolved?`Implementation aligned and verified for r${resolvedRevision}.`:'';
+      if(lifecycle.state==='completed'){
+        if(!state.lifecycleClosing){state.lifecycleClosing=true;$('live-text').textContent='Resolved';$('live-detail').textContent=`Implementation aligned and verified from r${resolvedRevision}; closing MO Design.`;setTimeout(()=>window.pywebview.api.window_control('close'),900);}
+        return;
+      }
+      renderAttachments(payload.composer_attachments||[]);
+      state.standaloneBoard=!!(payload.presentation&&payload.presentation.standalone_board);
+      state.terminalSynced=!!payload.presentation?.terminal_synced;
+      document.body.classList.toggle('standalone-board',state.standaloneBoard);
+      document.body.classList.toggle('terminal-synced',state.terminalSynced);
+      if(state.terminalSynced)for(const id of ['handoff-dialog','library-dialog'])if($(id).open)$(id).close();
+      document.querySelector('.brand-copy span:first-child').textContent=state.standaloneBoard?'MO Board':'MO Design';
+      $('top-title').textContent=payload.meta.title; $('preview-title').textContent=payload.meta.title;
+      $('file-label').textContent=payload.filename||payload.meta.id;
+      $('revision').textContent='Historical';
+      $('revision').classList.toggle('viewing-history',!history.is_current);
+      $('revision').title=history.is_current?`Open historical revisions · current r${history.current_revision}`:`Viewing r${history.selected_revision} · current r${history.current_revision}`;
+      $('revision').setAttribute('aria-label',history.is_current?`Historical revisions; current r${history.current_revision}`:`Historical revisions; viewing r${history.selected_revision}; current r${history.current_revision}`);
+      const interactive=!!(payload.design.allow_scripts&&String(payload.design.script||'').trim());
+      $('script-state').textContent=interactive?'Interactive prototype':'Static concept';
+      syncBoard(payload);
+      const h=payload.handoff||{}, root=h.project_root||'', files=h.files||[], symbols=h.symbols||[], mapped=files.length+symbols.length>0;
+      const projectState=(payload.routes||{}).project_state||'missing';
+      $('project-title').textContent=root?projectName(root):'No project';
+      $('project-detail').textContent=root?(projectState==='empty'?'New project folder · ready for the concept':mapped?`${files.length} file${files.length===1?'':'s'} · ${symbols.length} symbol${symbols.length===1?'':'s'} mapped`:'Attached read-only · refine to map it'):'Standalone visual concept';
+      $('project-clear').hidden=!root;
+      renderReviewBrief(h,payload);
+      $('handoff-concept-title').textContent=payload.meta.title;
+      $('handoff-concept-state').textContent=`r${history.selected_revision} · ${interactive?'Interactive prototype':'Static concept'}`;
+      $('handoff-concept-summary').textContent=String(payload.meta.summary||'').trim()||'The saved visual revision shown in Preview.';
+      $('handoff-project-context').textContent=root?`Implementation target · ${projectName(root)}`:'No target project was selected; the receiving interactive MO will confirm it before writing.';
+      const acceptanceCount=list('acceptance',h.acceptance||[]), decisionCount=list('decisions',h.decisions||[]), constraintCount=list('constraints',h.constraints||[]);
+      $('handoff-acceptance').hidden=!acceptanceCount;$('handoff-decisions').hidden=!decisionCount;$('handoff-constraints').hidden=!constraintCount;
+      $('handoff-project-map').hidden=!root;
+      $('graph-detail').textContent=root?(projectState==='empty'?'Selected new project folder; there is no existing source to map.':mapped?'Verified orientation: '+[...files,...symbols].slice(0,8).join(' · '):'Selected existing project; the receiving MO must verify its current source before editing.') : '';
+      const briefParts=[];if(acceptanceCount)briefParts.push(`${acceptanceCount} outcome${acceptanceCount===1?'':'s'}`);if(decisionCount)briefParts.push(`${decisionCount} decision${decisionCount===1?'':'s'}`);if(constraintCount)briefParts.push(`${constraintCount} constraint${constraintCount===1?'':'s'}`);
+      $('brief-count').textContent=briefParts.join(' · ');$('handoff-details').hidden=!briefParts.length&&!root;
+      $('brief-state').textContent=`Concept saved · r${history.selected_revision}`;$('brief-detail').textContent=`${interactive?'Interactive prototype':'Static concept'} · keep refining or hand off when finished`;
+      $('resize-grip').hidden=!payload.window.resizable; renderConversation(payload.conversation); updateWork(payload.conversation,!!payload.streaming);
+      const pending=!!(payload.conversation&&payload.conversation.pending), working=pending||!!payload.streaming;
+      if(!working){state.candidateDesign=clone(payload.design);state.candidateSignature=designSignature(payload.design);state.previewErrorSignature='';}
+      const safeDesign=working?(state.lastGoodDesign||state.candidateDesign||payload.design):payload.design;
+      editor.sync(payload);renderArtifact(safeDesign); syncRoutes(payload.routes||{});if(first&&state.surface==='preview')setSurface('preview');else setSurface(state.surface);$('boot').classList.add('hidden');
+    }
+
+    function sanitizeMarkup(value) {
+      const parsed=new DOMParser().parseFromString(String(value||''),'text/html');
+      parsed.querySelectorAll('script,iframe,object,embed,link,meta,base').forEach(node=>node.remove());
+      for(const node of parsed.querySelectorAll('*')) for(const attr of [...node.attributes]) if(attr.name.toLowerCase().startsWith('on')||attr.name.toLowerCase()==='srcdoc'||(['href','src','action','formaction','xlink:href'].includes(attr.name.toLowerCase())&&/^\s*(javascript|vbscript):/i.test(attr.value.replace(/[\u0000-\u0020]/g,'')))) node.removeAttribute(attr.name);
+      return parsed.body.innerHTML;
+    }
+    function previewThemeCss(theme) {
+      const t=(theme||{}).tokens||{}, c=(theme||{}).character||{};
+      const requiredColor=(values,key)=>{const value=String(values[key]||'');if(!/^#[0-9a-f]{6}$/i.test(value))throw new Error('MO Design preview theme token is invalid: '+key);return value;};
+      const brand=requiredColor(t,'brand');
+      if(typeof c.color_mode!=='string'||!(c.color_mode==='skin'||/^#[0-9a-f]{6}$/i.test(c.color_mode)))throw new Error('MO Design preview character color_mode is invalid');
+      const cube=c.color_mode==='skin'?brand:c.color_mode;
+      const values={bg:requiredColor(t,'background'),surface:requiredColor(t,'surface'),text:requiredColor(t,'text'),muted:requiredColor(t,'muted'),brand,cube};
+      const radius=Math.max(0,Math.min(.5,requiredNumber(c,'corner_radius')))*100+'%';
+      const glow=Math.max(0,Math.min(1,requiredNumber(c,'glow')));
+      const resolved=getComputedStyle(document.documentElement);
+      const shared=[...resolved].filter(name=>/^--(?:mo-|panel-|button-|cube-)/.test(name)).map(name=>`${name}:${resolved.getPropertyValue(name).trim()}`).join(';');
+      return `:root{${shared};--mo-preview-bg:${values.bg};--mo-preview-surface:${values.surface};--mo-preview-text:${values.text};--mo-preview-muted:${values.muted};--mo-preview-brand:${values.brand};--mo-preview-cube:${values.cube};--mo-preview-cube-radius:${radius};--mo-preview-cube-glow:${glow}}`;
+    }
+    function frameDocument(design, runScript, theme) {
+      const data=JSON.stringify({html:sanitizeMarkup(design.html),css:previewThemeCss(theme)+String(design.css||''),script:runScript&&design.allow_scripts?String(design.script||''):'',edits:design.edits||[],editing:editor.active(),token:state.previewToken,properties:editor.properties,brand:theme.tokens.brand,surface:theme.tokens.surface}).replace(/</g,'\\u003c');
+      return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; font-src 'none'; media-src data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'"><style id="design-style"></style></head><body><div id="design-root"></div><script>(${previewRuntime.toString()})(${data});<\/script></body></html>`;
+    }
+    function renderArtifact(design) {
+      if(state.surface==='board'||document.hidden||state.standaloneBoard)return;
+      if(editor.active()&&state.rendered)return;
+      design=editor.content(design);
+      const signature=JSON.stringify([design,editor.active(),state.payload&&state.payload.theme]); if(signature===state.rendered)return;
+      state.rendered=signature;state.previewToken=Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');$('preview-frame').style.pointerEvents='none';$('preview-frame').srcdoc=frameDocument(design,true,state.payload.theme);
+    }
+
+    function refreshPreview() {
+      const button=$('preview-refresh'), design=state.working||state.previewErrorSignature===state.candidateSignature?(state.lastGoodDesign||state.candidateDesign||state.payload?.design):state.payload?.design;
+      if(!design)return;
+      button.classList.remove('refreshing'); void button.offsetWidth; button.classList.add('refreshing');
+      if(editor.active())return;
+      state.rendered=''; renderArtifact(design);
+      $('toast').className='toast '+(state.working?'':'ok');
+      const completed=state.payload&&state.payload.conversation&&Number(state.payload.conversation.last_completed_revision)>0;
+      $('toast').textContent=state.working?(completed?'MO is still working. Refreshed the accepted preview safely.':'MO is still working. Refreshed the unaccepted draft; no completed preview exists yet.'):'Preview refreshed.';
+    }
+
+    function syncRoutes(routes) {
+      const ready=!!routes.ready, issues=Array.isArray(routes.issues)?routes.issues:[];
+      $('finish').disabled=!ready;
+      $('finish').title=ready?'Open final implementation Handoff':(issues[0]||'Finish and review this Design before Handoff');
+      for(const button of document.querySelectorAll('[data-handoff-route]')) button.disabled=!routes[button.dataset.handoffRoute];
+      if(!routes[state.handoffRoute]) state.handoffRoute=routes.current?'current':routes.terminal?'terminal':routes.background?'background':'';
+      selectHandoffRoute(state.handoffRoute);
+    }
+    function selectHandoffRoute(route) {
+      state.handoffRoute=route;
+      for(const button of document.querySelectorAll('[data-handoff-route]')){const selected=button.dataset.handoffRoute===route;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));}
+      const root=state.payload&&state.payload.handoff&&state.payload.handoff.project_root;
+      const routes=(state.payload&&state.payload.routes)||{};
+      const available=!!route&&!!routes[route]; $('handoff-send').disabled=!available;
+      $('handoff-send').textContent=!available?'Choose recipient':route==='background'?'Start background goal':route==='current'?'Continue in connected terminal':'Open goal in new terminal';
+      $('handoff-toast').className='toast';
+      $('handoff-toast').textContent=!available?(route==='background'&&!root?'Background needs a selected project; choose a connected or new terminal instead.':'That MO recipient is not currently available.'):route==='background'?'Runs as a headless MO goal. Completion uses MO’s current notification system.':route==='current'?(routes.current_label?`Continues as a normal turn in connected terminal ${routes.current_label}; it does not start /goal.`:'No matching live MO terminal is available.'):(root?'Opens a visible MO terminal in the selected project and starts the final goal.':'Opens a visible MO goal that will confirm the target before writing.');
+    }
+
+    const revisionIcon = kind => kind==='download'
+      ? '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9"></path><path d="m6.5 8.5 3.5 3.5 3.5-3.5"></path><path d="M4 16h12"></path></svg>'
+      : kind==='handoff'
+        ? '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11"></path><path d="m11 6 4 4-4 4"></path></svg>'
+        : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 6h11"></path><path d="M8 3.5h4"></path><path d="m6 6 .7 10h6.6L14 6"></path></svg>';
+    function revisionAction(kind, label, handler) {
+      const button=document.createElement('button');button.type='button';button.className='revision-action '+kind;button.title=label;button.setAttribute('aria-label',label);button.innerHTML=revisionIcon(kind);button.addEventListener('click',handler);return button;
+    }
+    async function selectRevision(revision, closeDialog=true) {
+      if(!await editor.leave())throw new Error('Save your edits before opening history.');
+      if(state.boardDirty){const saved=await checkpointBoard();if(!saved.ok)throw new Error(saved.message||'Save the Board before opening history');}
+      const payload=await window.pywebview.api.select_revision(revision);
+      if(!payload.ok)throw new Error(payload.message||'Revision could not be loaded');
+      state.revision=payload.revision;resetPreviewState();update(payload);
+      if(closeDialog)$('revision-dialog').close();
+      $('toast').className='toast ok';$('toast').textContent=`Viewing r${revision}. No new revision was created.`;
+      return payload;
+    }
+    async function downloadRevision(revision) {
+      const result=await window.pywebview.api.download_revision(revision);
+      if(result.cancelled)return;
+      if(!result.ok)throw new Error(result.message||'Revision could not be downloaded');
+      $('toast').className='toast ok';$('toast').textContent=`Downloaded r${revision} as ${result.filename}.`;
+    }
+    async function handoffRevision(revision) {
+      const payload=await selectRevision(revision,false);$('revision-dialog').close();
+      $('finish').click();
+    }
+    function requestDeleteRevision(revision) {
+      state.pendingDeleteRevision=Number(revision);$('delete-revision-copy').textContent=`Delete r${revision}? The current revision and every other saved version remain unchanged.`;$('delete-revision-dialog').showModal();
+    }
+    async function loadRevisionHistory() {
+      if(!await editor.leave())return;
+      if(state.boardDirty&&!(await checkpointBoard()).ok)return;
+      const result=await window.pywebview.api.revisions(),root=$('revision-library');root.replaceChildren();
+      for(const row of result.revisions||[]){
+        const item=document.createElement('div');item.className='revision-row'+(row.selected?' selected':'');
+        const main=document.createElement('button');main.type='button';main.className='revision-main';
+        const title=document.createElement('strong');title.textContent=`r${row.revision}${row.current?' · current':''}${row.selected&&!row.current?' · viewing':''}`;
+        const detail=document.createElement('span'),stamp=row.updated_at?new Date(row.updated_at).toLocaleString():'';detail.textContent=[row.title,stamp].filter(Boolean).join(' · ');main.append(title,detail);
+        main.addEventListener('click',()=>selectRevision(row.revision).catch(showRevisionError));
+        const actions=document.createElement('div');actions.className='revision-actions';
+        actions.append(revisionAction('download',`Download r${row.revision}`,()=>downloadRevision(row.revision).catch(showRevisionError)));
+        if(!state.terminalSynced&&!state.standaloneBoard)actions.append(revisionAction('handoff',`Handoff r${row.revision}`,()=>handoffRevision(row.revision).catch(showRevisionError)));
+        if(!row.current)actions.append(revisionAction('delete',`Delete r${row.revision}`,()=>requestDeleteRevision(row.revision)));
+        item.append(main,actions);root.appendChild(item);
+      }
+      if(!$('revision-dialog').open)$('revision-dialog').showModal();
+    }
+    function showRevisionError(error) {$('toast').className='toast error';$('toast').textContent=error.message||String(error);}
+
+    async function poll() {
+      if(state.polling)return; state.polling=true;
+      try{if(document.hidden)return;const payload=await window.pywebview.api.snapshot(state.revision);if(payload?.connection_only&&state.payload){Object.assign(state.payload.board,payload.board);$('board-connection').textContent=payload.board.connection_label;$('board-connection').title=payload.board.connection_label;$('board-connection').hidden=!payload.board.linked;}else if(payload){state.revision=payload.revision;update(payload);}else if(state.payload&&!state.payload.presentation?.home){updateWork(state.payload.conversation,!!state.payload.streaming);}}
+      catch(error){state.errors++;$('live').classList.add('error');$('live-text').textContent=state.errors>2?'Preview disconnected':'Reconnecting…';$('live-detail').textContent='MO Design is restoring the local preview connection.';}
+      finally{state.polling=false;setTimeout(poll,document.hidden?3000:state.payload?.presentation?.home?1800:state.payload?.conversation?.pending?260:850);}
+    }
+    document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('window-hidden',document.hidden);if(state.payload?.presentation?.home)return;if(document.hidden&&!editor.active()){$('preview-frame').srcdoc='';state.rendered='';}else if(!document.hidden&&state.payload){setSurface(state.surface);}});
+
+    function openBoardTextDialog(point,row=null) {
+      boardTextTarget={point,identity:boardTargetIdentity(state.boardTarget),id:row?.id};$('board-text-input').value=row?.text||'';$('board-text-add').textContent=row?'Save text':'Add text';$('board-text-dialog').showModal();$('board-text-input').focus({preventScroll:true});
+    }
+    function submitBoardText(event) {
+      event.preventDefault();
+      const target=boardTextTarget,text=$('board-text-input').value.trim().slice(0,8000);
+      if(sameBoardTextTarget(target)&&text&&boardCanEdit()){
+        const point=target.point;pushBoardHistory();
+        if(target.id){commitBoardElements(state.board.elements.map(row=>row.id===target.id?{...row,text,revision:row.revision+1}:row));}
+        else{const element=boardElement('text',point,{x:Math.min(16384,point.x+Math.max(80,text.length*9)),y:Math.min(16384,point.y+28)},[],text);commitBoardElements([...state.board.elements,element]);}
+      }
+      $('board-text-dialog').close();
+    }
+
+    function boardPointerDown(event) {
+      const nativePen=event.pointerType==='pen',nativeEraser=nativePen&&(event.button===5||(event.buttons&32)===32||(event.buttons&2)===2);
+      if((!nativePen&&event.button!==0)||!boardCanEdit())return;const point=boardPoint(event),tool=nativePen?(nativeEraser?'eraser':'pen'):state.boardTool,hit=hitBoard(point);$('board-stage').setPointerCapture(event.pointerId);event.preventDefault();
+      if(tool==='select'){
+        const selected=state.board.elements.find(row=>row.id===state.boardSelected),handle=boardHandles(selected).find(item=>Math.hypot(point.x-item.point[0],point.y-item.point[1])<=10/state.boardZoom);
+        if(handle){state.boardPointer={mode:handle.kind==='resize'?'resize':'reshape',handle:handle.kind,start:point,element:clone(selected),history:false};return;}
+        state.boardSelected=hit?hit.id:'';
+        state.boardPointer=hit?{mode:'move',start:point,element:clone(hit),history:false}:{mode:'pan',start:{x:event.clientX,y:event.clientY},pan:clone(state.boardPan)};scheduleBoardRender();return;
+      }
+      if(tool==='eraser'){
+        if(hit){pushBoardHistory();state.boardSelected='';commitBoardElements(state.board.elements.filter(row=>row.id!==hit.id));}return;
+      }
+      if(tool==='text'){
+        $('board-stage').releasePointerCapture(event.pointerId);openBoardTextDialog(point);return;
+      }
+      pushBoardHistory();const points=[[point.x,point.y,point.pressure]],preview=tool==='pen'?boardElement('stroke',point,point,points):boardElement(tool,point,point,tool==='line'||tool==='arrow'?[[point.x,point.y],[point.x,point.y]]:[]);
+      state.boardPointer={mode:'draw',tool,start:point,preview};scheduleBoardRender();
+    }
+    function boardPointerMove(event) {
+      const active=state.boardPointer;if(!active)return;event.preventDefault();
+      if(active.mode==='pan'){state.boardPan={x:active.pan.x+event.clientX-active.start.x,y:active.pan.y+event.clientY-active.start.y};scheduleBoardRender();return;}
+      const point=boardPoint(event);
+      if(['move','reshape','resize'].includes(active.mode)){
+        if(point.x===active.start.x&&point.y===active.start.y&&!active.history)return;
+        if(!active.history){pushBoardHistory();active.history=true;}
+        const moved=active.mode==='reshape'?reshapeArrow(active.element,active.handle,point):active.mode==='resize'?resizeBoardElement(active.element,point):moveBoardElement(active.element,point.x-active.start.x,point.y-active.start.y);state.board.elements=state.board.elements.map(row=>row.id===moved.id?moved:row);scheduleBoardRender();return;
+      }
+      const preview=active.preview;
+      if(active.tool==='pen'){
+        const events=typeof event.getCoalescedEvents==='function'?event.getCoalescedEvents():[event];for(const sample of events){const p=boardPoint(sample),last=preview.points[preview.points.length-1];if(!last||Math.hypot(p.x-last[0],p.y-last[1])>=.8)preview.points.push([p.x,p.y,p.pressure]);}if(preview.points.length>4096)preview.points=preview.points.slice(-4096);preview.bounds=pointsBounds(preview.points);
+      }else{preview.bounds=boardBounds(active.start,point);if(active.tool==='line'||active.tool==='arrow')preview.points=[[active.start.x,active.start.y],[point.x,point.y]];}
+      scheduleBoardRender();
+    }
+    function boardPointerUp(event) {
+      const active=state.boardPointer;if(!active)return;event.preventDefault();
+      if(active.mode==='draw'){commitBoardElements([...state.board.elements,active.preview]);}
+      else if(['move','reshape','resize'].includes(active.mode)&&active.history){state.board.elements=state.board.elements.map(row=>row.id===active.element.id?{...row,revision:Number(active.element.revision||1)+1}:row);state.board.revision=Number(state.board.revision||0)+1;state.boardDirty=true;persistBoard();}
+      state.boardPointer=null;scheduleBoardRender();
+    }
+    function boardPointerCancel() { const active=state.boardPointer;if(active&&['move','reshape','resize'].includes(active.mode)&&active.history&&state.boardUndo.length){state.board=state.boardUndo.pop();state.boardRedo=[];}else if(active&&active.mode==='draw'&&state.boardUndo.length)state.boardUndo.pop();state.boardPointer=null;scheduleBoardRender(); }
+
+    function boardHandles(row){if(!row)return [];return row.kind==='arrow'?arrowHandles(row):[{kind:'resize',point:[row.bounds.x+row.bounds.width,row.bounds.y+row.bounds.height]}];}
+    function resizeBoardElement(row,point){
+      const next=clone(row),b=row.bounds,w=Math.max(1,Math.min(16384-b.x,point.x-b.x)),h=Math.max(1,Math.min(16384-b.y,point.y-b.y));
+      next.bounds={...b,width:w,height:h};
+      if(next.points.length){next.points=next.points.map(p=>[b.x+(p[0]-b.x)*w/Math.max(1,b.width),b.y+(p[1]-b.y)*h/Math.max(1,b.height),...p.slice(2)]);next.bounds=pointsBounds(next.points);}
+      if(row.kind==='text')next.style.width=Math.max(.5,Math.min(32,row.style.width*h/Math.max(1,b.height)));
+      return next;
+    }
+
+    async function insertBoardImage(){
+      if(!boardCanEdit())return;const target={...state.boardTarget};$('board-image').disabled=true;
+      try{
+        const picked=await window.pywebview.api.choose_attachments(target);if(picked.cancelled)return;if(!picked.ok)throw new Error(picked.message||'Image could not be added to the Board.');
+        const attachment=picked.attachment,image=await ensureBoardImage(attachment.id);if(!image)throw new Error('The selected image could not be displayed.');
+        if(!sameBoardTarget(target,state.boardTarget)||!boardCanEdit())throw new Error('The Board changed before the image was inserted. Try again on the current Board.');
+        pushBoardHistory();const scale=Math.min(1,480/image.naturalWidth,320/image.naturalHeight),point={x:96,y:96};
+        const element=boardElement('image',point,{x:point.x+image.naturalWidth*scale,y:point.y+image.naturalHeight*scale},[],'');element.attachment_id=attachment.id;state.boardSelected=element.id;
+        commitBoardElements([...state.board.elements,element]);$('toast').className='toast ok';$('toast').textContent='Image added to the Board.';
+      }catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}finally{$('board-image').disabled=false;}
+    }
+    function openBoardProperties(event){
+      if(state.boardTool!=='select'||!boardCanEdit())return;const row=hitBoard(boardPoint(event));if(!row)return;
+      event.preventDefault();state.boardSelected=row.id;boardPropertiesTarget={identity:boardTargetIdentity(state.boardTarget),id:row.id,revision:row.revision};
+      $('board-edit-text').hidden=row.kind!=='text';$('board-properties-fill').value=row.style.fill||'none';$('board-properties-opacity').value=row.style.opacity??1;for(const id of ['board-properties-head','board-properties-size'])$(id).closest('.model-field').hidden=row.kind!=='arrow';
+      $('board-properties-fill').closest('.model-field').hidden=!['rect','ellipse'].includes(row.kind);
+      for(const id of ['board-properties-color','board-properties-width','board-properties-dash'])$(id).closest('.model-field').hidden=row.kind==='image'||(id==='board-properties-dash'&&row.kind==='text');
+      $('board-properties-color').value=row.style.stroke||'text';$('board-properties-width').value=row.style.width||2;$('board-properties-dash').value=row.style.dash||'solid';$('board-properties-head').value=row.style.arrowhead||'triangle';$('board-properties-size').value=row.style.arrow_size||1;
+      $('board-properties-dialog').showModal();scheduleBoardRender();
+    }
+    function submitBoardProperties(event){
+      event.preventDefault();const target=boardPropertiesTarget,row=state.board&&state.board.elements.find(item=>target&&item.id===target.id);
+      if(!sameBoardTextTarget(target)||!row||row.revision!==target.revision||!boardCanEdit()){$('board-properties-dialog').close();return;}
+      const style={...row.style,fill:$('board-properties-fill').value,opacity:Number($('board-properties-opacity').value),stroke:$('board-properties-color').value,width:Number($('board-properties-width').value),dash:$('board-properties-dash').value,arrowhead:$('board-properties-head').value,arrow_size:Number($('board-properties-size').value)};
+      if(JSON.stringify(style)!==JSON.stringify(row.style)){pushBoardHistory();commitBoardElements(state.board.elements.map(item=>item.id===row.id?{...row,revision:Number(row.revision||1)+1,style}:item));}
+      $('board-properties-dialog').close();
+    }
+    document.querySelectorAll('[data-surface]').forEach(button=>button.addEventListener('click',async()=>{if(!await editor.leave())return;if(state.boardDirty&&!(await checkpointBoard()).ok)return;setSurface(button.dataset.surface);}));
+    document.querySelectorAll('[data-board-tool]').forEach(button=>button.addEventListener('click',()=>selectBoardTool(button.dataset.boardTool)));
+    $('board-stage').addEventListener('pointerdown',boardPointerDown);$('board-stage').addEventListener('pointermove',boardPointerMove);$('board-stage').addEventListener('pointerup',boardPointerUp);$('board-stage').addEventListener('pointercancel',boardPointerCancel);
+    $('board-stage').addEventListener('wheel',event=>{event.preventDefault();const rect=$('board-stage').getBoundingClientRect(),before={x:(event.clientX-rect.left-state.boardPan.x)/state.boardZoom,y:(event.clientY-rect.top-state.boardPan.y)/state.boardZoom},next=Math.max(.45,Math.min(3,state.boardZoom*(event.deltaY<0?1.1:.9)));state.boardPan={x:event.clientX-rect.left-before.x*next,y:event.clientY-rect.top-before.y*next};state.boardZoom=next;scheduleBoardRender();},{passive:false});
+    $('board-undo').addEventListener('click',()=>{if(!state.boardUndo.length||!boardCanEdit())return;state.boardRedo.push(clone(state.board));const previous=state.boardUndo.pop();rebaseBoardHistory(previous);state.board=previous;state.boardDirty=true;scheduleBoardRender();persistBoard();});
+    $('board-redo').addEventListener('click',()=>{if(!state.boardRedo.length||!boardCanEdit())return;state.boardUndo.push(clone(state.board));const next=state.boardRedo.pop();rebaseBoardHistory(next);state.board=next;state.boardDirty=true;scheduleBoardRender();persistBoard();});
+    $('board-color').addEventListener('click',()=>{const colors=['text','brand','ok','warn','error'],index=colors.indexOf(state.boardColor);state.boardColor=colors[(index+1)%colors.length];$('board-color').style.color=boardColor(state.boardColor);$('board-color').title='Stroke color · '+state.boardColor;});
+    $('board-width').addEventListener('click',()=>{const widths=[1,2,4,7],index=widths.indexOf(state.boardWidth);state.boardWidth=widths[(index+1)%widths.length];$('board-width').title=`Stroke width · ${state.boardWidth}px`;scheduleBoardRender();});
+     
+    $('board-image').addEventListener('click',insertBoardImage);
+    $('board-stage').addEventListener('dblclick',openBoardProperties);
+    $('board-properties-form').addEventListener('submit',submitBoardProperties);
+    $('board-edit-text').addEventListener('click',()=>{const row=state.board.elements.find(item=>item.id===boardPropertiesTarget?.id);$('board-properties-dialog').close();if(row)openBoardTextDialog(row.bounds,row);});
+    $('board-properties-dialog').addEventListener('close',()=>{boardPropertiesTarget=null;if(state.surface==='board')$('board-stage').focus({preventScroll:true});});
+     $('board-whiteboard').addEventListener('click',()=>{state.boardWhiteboard=!state.boardWhiteboard;$('board-stage').classList.toggle('whiteboard',state.boardWhiteboard);$('board-whiteboard').setAttribute('aria-pressed',String(state.boardWhiteboard));$('board-whiteboard').title=state.boardWhiteboard?'MO surface mode':'Whiteboard mode';scheduleBoardRender();});
+    $('board-shortcuts').addEventListener('click',()=>$('board-shortcuts-dialog').showModal());
+    $('board-text-form').addEventListener('submit',submitBoardText);
+    $('board-text-dialog').addEventListener('close',()=>{boardTextTarget=null;$('board-text-input').value='';if(state.surface==='board')$('board-stage').focus({preventScroll:true});});
+     $('board-shortcuts-dialog').addEventListener('close',()=>{if(state.surface==='board')$('board-stage').focus({preventScroll:true});});
+    $('board-accept').addEventListener('click',async()=>{if(!state.boardDraft)return;try{const result=await window.pywebview.api.board_accept_draft(state.boardDraft.id);if(!result.ok)throw new Error(result.message||'Draft could not be accepted');state.boardDirty=false;state.revision=result.revision;update(result);$('toast').className='toast ok';$('toast').textContent=result.terminal_notified?'MO Board draft accepted; the originating terminal was notified.':'MO Board draft accepted; the originating terminal is no longer available.';}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});
+    $('board-reject').addEventListener('click',async()=>{if(!state.boardDraft)return;try{const result=await window.pywebview.api.board_reject_draft(state.boardDraft.id);if(!result.ok)throw new Error(result.message||'Draft could not be rejected');state.boardDraft=null;$('board-review').hidden=true;scheduleBoardRender();$('toast').className='toast ok';$('toast').textContent=result.terminal_notified?'MO Board draft rejected; the originating terminal was notified.':'MO Board draft rejected; the originating terminal is no longer available.';}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});
+    $('board-download').addEventListener('click',async()=>{try{const saved=await checkpointBoard();if(!saved.ok)return;const revision=(state.payload&&state.payload.meta&&state.payload.meta.revision)||saved.revision;await downloadRevision(revision);}catch(error){showRevisionError(error);}});
+    new ResizeObserver(()=>{scheduleBoardRender();requestAnimationFrame(publishBoardGeometry);}).observe($('board-stage'));
+
+    $('refine-send').addEventListener('click',async()=>{
+      if(!await editor.leave())return;
+      const input=$('refinement'), message=input.value.trim(), attachmentIds=state.attachments.map(row=>row.id); if(!message&&!attachmentIds.length){$('toast').className='toast error';$('toast').textContent='Tell MO what you want or attach evidence for MO to inspect.';input.focus();return;}
+      $('refine-send').disabled=true; $('toast').className='toast'; $('toast').textContent='MO is reading your Design request…';
+      try{const result=await window.pywebview.api.design(message,attachmentIds);if(!result.ok)throw new Error(result.message||'Design request unavailable');input.value='';renderAttachments(result.composer_attachments||[]);renderConversation(result.conversation);updateWork(result.conversation,false);}
+      catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);$('refine-send').disabled=false;}
+    });
+    $('refinement').addEventListener('keydown',event=>{if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();$('refine-send').click();}});
+    document.addEventListener('keydown',event=>{
+      const target=event.target,typing=target&&(target.matches('input,textarea,select')||target.isContentEditable),dialogOpen=!!document.querySelector('dialog[open]');
+      if(typing||dialogOpen||state.surface!=='board')return;
+      const key=String(event.key||'').toLowerCase(),modified=event.ctrlKey||event.metaKey;
+      if(modified&&key==='z'){event.preventDefault();(event.shiftKey?$('board-redo'):$('board-undo')).click();return;}
+      if(modified&&key==='y'){event.preventDefault();$('board-redo').click();return;}
+      if(key==='delete'||key==='backspace'){event.preventDefault();deleteBoardSelection();return;}
+      if(key==='escape'){event.preventDefault();boardPointerCancel();state.boardSelected='';scheduleBoardRender();return;}
+      if(key==='0'){event.preventDefault();state.boardZoom=1;state.boardPan={x:0,y:0};scheduleBoardRender();return;}
+      if(key==='?'){event.preventDefault();$('board-shortcuts-dialog').showModal();return;}
+      const tools={v:'select',p:'pen',e:'eraser',l:'line',a:'arrow',r:'rect',o:'ellipse',t:'text'};
+      if(tools[key]){event.preventDefault();selectBoardTool(tools[key]);}
+    });
+    $('activity-open').addEventListener('click',()=>{updateActivityDetails();$('activity-dialog').showModal();});
+    $('request-stop').addEventListener('click',async()=>{
+      const pending=state.payload?.conversation?.pending;if(!pending)return;
+      state.stoppingRequest=pending.command_id;$('request-stop').disabled=true;
+      try{const result=await window.pywebview.api.stop_request(state.payload.meta.id,pending.command_id);if(!result.ok)throw new Error(result.message||'The request could not be stopped.');state.revision=result.revision;update(result);}
+      catch(error){state.stoppingRequest='';$('request-stop').disabled=false;$('live-text').textContent='Stop failed';$('live-detail').textContent=error.message||String(error);updateActivityDetails();$('activity-dialog').showModal();}
+    });
+    $('attachment-open').addEventListener('click',async()=>{try{const result=await window.pywebview.api.choose_attachments();if(!result.ok)throw new Error(result.message||'Attachments unavailable');if(!result.cancelled){renderAttachments(result.attachments);$('toast').className='toast ok';$('toast').textContent=`${state.attachments.length} attachment${state.attachments.length===1?'':'s'} ready for this message.`;}}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});
+    $('finish').addEventListener('click',async()=>{
+      if($('finish').disabled||state.terminalSynced||state.standaloneBoard)return;
+      if(!await editor.leave())return;
+      if(state.boardDraft){$('toast').className='toast error';$('toast').textContent='Accept or reject MO’s Board draft before final Handoff.';return;}
+      if(state.boardDirty){const saved=await checkpointBoard();if(!saved.ok)return;}
+      try{const routes=await window.pywebview.api.handoff_routes();state.payload.routes=routes;syncRoutes(routes);}catch(_error){}
+      const selected=(state.payload&&state.payload.history&&state.payload.history.selected_revision)||(state.payload&&state.payload.meta&&state.payload.meta.revision)||'', title=String((state.payload&&state.payload.meta&&state.payload.meta.title)||'finished concept');
+      $('handoff-heading').textContent=selected?`Hand off ${title} · r${selected}`:`Hand off ${title}`;
+      $('handoff-subtitle').textContent='Your Handoff approves this saved revision. The receiving MO implements it, verifies alignment, then marks it Resolved.';
+      syncRoutes((state.payload&&state.payload.routes)||{});
+      $('handoff-dialog').showModal();
+      state.handoffTarget=boardTargetValue();
+    });
+    $('handoff-send').addEventListener('click',async()=>{
+      if(!state.handoffRoute)return;
+      const button=$('handoff-send');button.disabled=true;$('handoff-toast').className='toast';$('handoff-toast').textContent='Sending the finished Design…';
+      try{const result=await window.pywebview.api.handoff(state.handoffRoute,state.handoffTarget.id,state.handoffTarget.revision);if(!result.ok)throw new Error(result.message||'Handoff unavailable');renderConversation(result.conversation);$('handoff-dialog').close();$('toast').className='toast ok';$('toast').textContent=result.route==='background'?'Implementation is running in background. MO will notify you when it finishes.':result.route==='current'?'The finished Design was sent to the connected MO terminal conversation.':'The finished Design opened as a goal in a new MO terminal.';}
+      catch(error){$('handoff-toast').className='toast error';$('handoff-toast').textContent=error.message||String(error);}finally{button.disabled=false;selectHandoffRoute(state.handoffRoute);}
+    });
+    document.querySelectorAll('[data-handoff-route]').forEach(button=>button.addEventListener('click',()=>{if(!button.disabled)selectHandoffRoute(button.dataset.handoffRoute);}));
+    document.querySelectorAll('[data-device]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-device]').forEach(item=>{const selected=item===button;item.classList.toggle('active',selected);item.setAttribute('aria-pressed',String(selected));});$('viewport').className='viewport '+(button.dataset.device==='desktop'?'':button.dataset.device);}));
+    document.querySelectorAll('[data-close-dialog]').forEach(button=>button.addEventListener('click',()=>$(button.dataset.closeDialog).close()));
+
+    $('project-choose').addEventListener('click',async()=>{try{if(!await editor.leave())return;if(state.boardDirty&&!(await checkpointBoard()).ok)return;const result=await window.pywebview.api.choose_project();if(result.cancelled)return;if(!result.ok)throw new Error(result.message||'Project unavailable');state.revision=result.revision;update(result);$('toast').className='toast ok';$('toast').textContent='Project attached read-only. Ask MO to load its current surface or refine one.';}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});
+    $('project-clear').addEventListener('click',async()=>{try{if(!await editor.leave())return;if(state.boardDirty&&!(await checkpointBoard()).ok)return;const result=await window.pywebview.api.clear_project();if(!result.ok)throw new Error(result.message||'Project unavailable');state.revision=result.revision;update(result);}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});
+    async function openDesignLibrary(){
+      try{
+        const home=!!state.payload?.presentation?.home;
+        if(!home&&!await editor.leave())return;
+        if(state.boardDirty&&!(await checkpointBoard()).ok)return;
+        const result=await window.pywebview.api.designs(),root=$('library');root.replaceChildren();
+        if(!result.designs?.length)root.textContent='Your saved designs will appear here.';
+        for(const row of result.designs||[]){
+          const button=document.createElement('button');button.classList.toggle('active',row.id===result.current);
+          const title=document.createElement('strong');title.textContent=row.title;
+          const detail=document.createElement('span');detail.textContent=`${row.id} · r${row.revision}`;button.append(title,detail);
+          button.addEventListener('click',async()=>{
+            try{
+              const payload=home?await window.pywebview.api.open_design(row.id):await window.pywebview.api.switch_design(row.id);
+              if(payload.ok===false)throw new Error(payload.message||'Design unavailable');
+              state.boardDirty=false;state.revision=payload.revision;resetPreviewState();update(payload);
+              $('library-dialog').close();
+            }catch(error){root.textContent=error.message||String(error);}
+          });root.appendChild(button);
+        }
+        $('library-dialog').showModal();
+      }catch(error){const target=state.payload?.presentation?.home?$('home-status'):$('toast');target.textContent=error.message||String(error);}
+    }
+    $('file-label').addEventListener('click',openDesignLibrary);
+    $('home-library').addEventListener('click',openDesignLibrary);
+    $('home-start').addEventListener('click',async()=>{const button=$('home-start');button.disabled=true;try{const payload=await window.pywebview.api.open_design();if(!payload.ok)throw new Error(payload.message);state.boardDirty=false;state.revision=payload.revision;resetPreviewState();update(payload);}catch(error){$('home-status').textContent=error.message||String(error);}finally{button.disabled=false;}});
+    $('design-new').addEventListener('click',async()=>{try{if(!await editor.leave())return;if(state.boardDirty&&!(await checkpointBoard()).ok)return;const payload=await window.pywebview.api.new_design();if(!payload.ok)throw new Error(payload.message||'New Design session unavailable');state.boardDirty=false;state.revision=payload.revision;resetPreviewState();update(payload);$('toast').className='toast ok';$('toast').textContent=payload.project_preserved?'New Design session started with the project kept read-only.':'New Design session started.';}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});
+    $('revision').addEventListener('click',()=>loadRevisionHistory().catch(showRevisionError));
+    $('delete-revision-confirm').addEventListener('click',async()=>{const revision=state.pendingDeleteRevision;if(!revision)return;const button=$('delete-revision-confirm');button.disabled=true;try{const payload=await window.pywebview.api.delete_revision(revision);if(!payload.ok)throw new Error(payload.message||'Revision could not be deleted');state.pendingDeleteRevision=0;state.revision=payload.revision;resetPreviewState();update(payload);$('delete-revision-dialog').close();if($('revision-dialog').open)await loadRevisionHistory();$('toast').className='toast ok';$('toast').textContent=`Deleted r${revision}.`;}catch(error){showRevisionError(error);}finally{button.disabled=false;}});
+    $('preview-refresh').addEventListener('click',refreshPreview);
+    $('preview-download').addEventListener('click',async()=>{if(!await editor.leave())return;downloadRevision(state.payload.meta.revision).catch(showRevisionError);});
+    $('source-open').addEventListener('click',async()=>{try{if(!await editor.save())return;$('source').textContent=await window.pywebview.api.source();$('source-dialog').showModal();}catch(error){$('toast').className='toast error';$('toast').textContent=error.message||String(error);}});
+    document.querySelectorAll('[data-window-control]').forEach(button=>button.addEventListener('click',async()=>{if(button.dataset.windowControl==='close'&&!await editor.leave())return;if(button.dataset.windowControl==='close'&&state.boardDirty){const saved=await checkpointBoard();if(!saved.ok)return;}const result=await window.pywebview.api.window_control(button.dataset.windowControl);if(button.dataset.windowControl==='toggle_pin'&&result.ok)button.setAttribute('aria-pressed',String(result.pinned));}));
+    $('preview-frame').addEventListener('load',()=>{$('preview-frame').style.pointerEvents='';const signature=state.candidateSignature;setTimeout(()=>{if(!editor.active()&&state.surface==='preview'&&!state.working&&signature&&signature===state.candidateSignature&&signature!==state.previewErrorSignature&&state.candidateDesign)state.lastGoodDesign=clone(state.candidateDesign);},650);});
+
+    addEventListener('message',async event=>{
+      if(event.source!==$('preview-frame').contentWindow||event.data?.token!==state.previewToken||event.data.type!=='mo-preview-error'||!state.payload)return;
+      const key=`${state.payload.meta.id}:${state.payload.meta.revision}:${String(event.data.detail||'').slice(0,160)}`;if(key===state.diagnosticKey)return;state.diagnosticKey=key;
+      state.previewErrorSignature=state.candidateSignature;
+      if(state.terminalSynced){state.previewIssue={id:state.payload.meta.id,revision:state.payload.meta.revision,detail:String(event.data.detail||'').slice(0,600)};updateWork(state.payload.conversation,!!state.payload.streaming);$('activity-dialog').showModal();return;}
+      if(state.lastGoodDesign&&designSignature(state.lastGoodDesign)!==state.candidateSignature){state.rendered='';renderArtifact(state.lastGoodDesign);$('toast').className='toast error';$('toast').textContent='The new preview failed, so MO Design restored the last working visual.';}
+      try{const result=await window.pywebview.api.diagnose_preview(String(event.data.detail||''),String(event.data.interaction||''),state.payload.meta.id,state.payload.meta.revision);if(result&&result.conversation){renderConversation(result.conversation);updateWork(result.conversation,false);}}catch(_error){}
+    });
+    let resizing=false,startX=0,startY=0,startW=0,startH=0;
+    $('resize-grip').addEventListener('pointerdown',event=>{resizing=true;startX=event.screenX;startY=event.screenY;startW=innerWidth;startH=innerHeight;$('resize-grip').setPointerCapture(event.pointerId);});
+    $('resize-grip').addEventListener('pointermove',event=>{if(resizing)window.pywebview.api.window_control('resize',startW+event.screenX-startX,startH+event.screenY-startY);});
+    $('resize-grip').addEventListener('pointerup',()=>{resizing=false;});
+    window.addEventListener('pywebviewready',poll); setTimeout(()=>{if(!state.payload)poll();},500);
+  </script>
+</body>
+</html>

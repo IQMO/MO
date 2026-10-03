@@ -1,0 +1,22 @@
+{
+  "schema": "mo.cube.presentation",
+  "version": 1,
+  "stream": {"epoch": "canonical", "sequence": 4},
+  "generated_at": 1784390400.0,
+  "stale_after_seconds": 15,
+  "persistent": {"formation": "row", "owner": "mcp"},
+  "semantic": {
+    "phase": "active",
+    "token": "err",
+    "label": "canonical",
+    "detail": "ordered authority",
+    "owner": "role"
+  },
+  "transient": null,
+  "authority": {
+    "capability": "control",
+    "scopes": ["continuity_sync", "continuity_read"],
+    "allowed_actions": ["view_overview", "self_revoke", "cancel_job", "send_text", "continuity_sync", "continuity_read", "continuity_bind"]
+  },
+  "job": null
+}

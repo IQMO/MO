@@ -1,0 +1,37 @@
+# Optional: computer-use — MO sees the screen, drives a browser, controls the
+# desktop, and (optionally) runs the on-screen Companion surface. Voice has its
+# own standalone installer and is intentionally not pulled in by this file.
+# None are needed for the core agent: every tool degrades to a clear error when
+# its package is absent, and a headless server (no display) should not install these.
+#
+# Install all:  pip install -r requirements-computer-use.txt
+#
+# Tools:
+#   computer_observe kind=screen              -> Pillow + pywin32 on Windows
+#                                                  (owned-window render without activation)
+#   computer_observe/act kind=browser         -> MO Connected Tab + Python stdlib
+#   computer_act raw desktop pointer/keyboard -> pyautogui (local display only)
+#   computer_observe/act kind=desktop         -> uiautomation (Windows semantic UI tree)
+Pillow>=10.0
+websocket-client>=1.6
+pyautogui>=0.9.54
+uiautomation>=2.0.29; sys_platform == "win32"
+#
+# MO Desktop companion surface (set mo_desktop.enabled: true in ~/.mo/config.yaml):
+#   window                     -> tkinter (built into Python — no pip)
+#   global hotkey (Win+Alt+M)  -> keyboard
+#   system tray icon + menu    -> pystray (icon uses Pillow, above)
+#   Windows tray/overlay glue  -> pywin32 (Windows only)
+#   outbound MO Live Control   -> websocket-client
+keyboard>=0.13.5
+pystray>=0.19
+pywin32>=306; sys_platform == "win32"
+#
+# Companion extras (all optional; the surface degrades gracefully without them):
+#   volume: scroll the cube to change / hover to read Windows master volume -> pycaw
+#   Arabic / RTL replies rendered correctly (not reversed)                  -> arabic-reshaper + python-bidi
+#   drag-and-drop files onto the companion window                           -> tkinterdnd2
+pycaw>=20240210; sys_platform == "win32"
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
+tkinterdnd2>=0.4.2

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mo-agent:schema:cube-presentation:v1",
+  "title": "MO CubePresentationV1",
+  "description": "Renderer-neutral, principal-aware MO cube presentation. Unknown optional fields are ignored by clients.",
+  "type": "object",
+  "required": ["schema", "version", "stream", "generated_at", "stale_after_seconds", "persistent", "semantic", "transient", "authority", "job"],
+  "properties": {
+    "schema": {"const": "mo.cube.presentation"},
+    "version": {"const": 1},
+    "stream": {
+      "type": "object",
+      "required": ["epoch", "sequence"],
+      "properties": {
+        "epoch": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[!-~]+$"},
+        "sequence": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}
+      },
+      "additionalProperties": true
+    },
+    "generated_at": {"type": "number", "minimum": 0},
+    "stale_after_seconds": {"type": "integer", "minimum": 5, "maximum": 60},
+    "persistent": {
+      "type": "object",
+      "required": ["formation", "owner"],
+      "properties": {
+        "formation": {"enum": ["cluster", "row", "face"]},
+        "owner": {"$ref": "#/$defs/owner"}
+      },
+      "additionalProperties": true
+    },
+    "semantic": {
+      "type": "object",
+      "required": ["phase", "token", "label", "detail", "owner"],
+      "properties": {
+        "phase": {"enum": ["idle", "active", "working", "success", "warning", "error"]},
+        "token": {"enum": ["neutral", "brand", "ok", "warn", "error", "action"]},
+        "label": {"type": "string", "maxLength": 80},
+        "detail": {"type": "string", "maxLength": 240},
+        "owner": {"$ref": "#/$defs/owner"}
+      },
+      "additionalProperties": true
+    },
+    "transient": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["kind", "priority", "expires_at", "label", "detail", "owner"],
+          "properties": {
+            "kind": {"enum": ["activity", "notice"]},
+            "priority": {"type": "integer", "minimum": 0, "maximum": 3},
+            "expires_at": {"type": "number", "minimum": 0},
+            "label": {"type": "string", "maxLength": 80},
+            "detail": {"type": "string", "maxLength": 240},
+            "owner": {"$ref": "#/$defs/owner"}
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "authority": {
+      "type": "object",
+      "required": ["capability", "scopes", "allowed_actions"],
+      "properties": {
+        "capability": {"enum": ["notify", "view", "control"]},
+        "scopes": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {"enum": ["attachment_upload", "continuity_read", "continuity_sync", "conversation_read", "conversation_write", "file_browse", "file_manage", "file_transfer", "remote_control", "remote_host"]}
+        },
+        "allowed_actions": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"enum": ["upload_attachment", "file_transfer", "cancel_job", "conversation_read", "conversation_write", "continuity_bind", "continuity_read", "continuity_sync", "send_text", "self_revoke", "view_overview"]}
+        }
+      },
+      "additionalProperties": true
+    },
+    "job": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["job_id", "status", "cancellable"],
+          "properties": {
+            "job_id": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_.-]+$"},
+            "status": {"enum": ["queued", "running", "cancelling", "completed", "cancelled", "failed", "interrupted"]},
+            "cancellable": {"type": "boolean"}
+          },
+          "additionalProperties": true
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "owner": {"enum": ["default", "presence", "job", "mcp", "role", "system"]}
+  },
+  "additionalProperties": true
+}

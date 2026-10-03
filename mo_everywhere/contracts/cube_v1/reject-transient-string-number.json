@@ -1,0 +1,19 @@
+{
+  "schema": "mo.cube.presentation",
+  "version": 1,
+  "stream": {"epoch": "transient-type", "sequence": 0},
+  "generated_at": 0.0,
+  "stale_after_seconds": 5,
+  "persistent": {"formation": "cluster", "owner": "default"},
+  "semantic": {"phase": "active", "token": "brand", "label": "active", "detail": "", "owner": "presence"},
+  "transient": {
+    "kind": "notice",
+    "priority": 1,
+    "expires_at": "2.0",
+    "label": "notice",
+    "detail": "wrong scalar type",
+    "owner": "system"
+  },
+  "authority": {"capability": "view", "scopes": [], "allowed_actions": ["self_revoke", "view_overview"]},
+  "job": null
+}

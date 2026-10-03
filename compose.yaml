@@ -1,0 +1,34 @@
+name: mo-agent
+
+services:
+  mo:
+    build:
+      context: .
+      args:
+        MO_UID: ${MO_UID:-10001}
+        MO_GID: ${MO_GID:-10001}
+    image: mo-agent:local
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      MO_HOME: /home/user/.mo
+      MO_STATE_HOME: /home/user/.mo
+      MO_CONFIG: /home/user/.mo/config.yaml
+      MO_PROJECT_CWD: /workspace
+      PYTHONUNBUFFERED: "1"
+      PYTHONIOENCODING: utf-8
+    volumes:
+      - type: bind
+        source: ${MO_STATE_DIR:?Set MO_STATE_DIR to a private directory outside the checkout}
+        target: /home/user/.mo
+      - type: bind
+        source: ${MO_WORKSPACE:-.}
+        target: /workspace
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m
+    stop_grace_period: 20s
+    command: ["--surface", "server"]

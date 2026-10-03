@@ -1,0 +1,612 @@
+# MO Agent Configuration Template
+# Copy to ~/.mo/config.yaml and fill your provider details.
+# Checkout-local config.yaml is gitignored and only active when explicitly selected with MO_CONFIG or --config.
+
+# Credentials are device-local and resolved per service. These canonical files
+# need no configuration:
+#   providers/image/embeddings -> ~/.mo/credentials/providers.env
+#   Telegram                  -> ~/.mo/credentials/telegram.env
+
+providers:
+  # Required remote-provider keys: name, type, base_url, api_key_env
+  # `api_key_env` is the logical name read only from credentials/providers.env;
+  # it is not permission to read the process environment.
+  # Optional keys: model, headers, timeout, auth_path (codex only)
+  #   reasoning_effort — provider-specific value sent ONLY if set. Leave unset
+  #   for providers whose API may reject it; enable for o-series/GLM-5.2/etc.
+  #   vision: true — declare this chat_completions provider/model can SEE images.
+  #     Off by default; codex_responses is always vision-capable. For Desktop
+  #     capture with a text-only home model, the home model keeps the turn while
+  #     one policy-eligible vision provider returns bounded facts only.
+  #   capabilities — optional live provider metadata. `image_input` explicitly
+  #     overrides `vision`; omitted means inherit it. Optional Desktop pixel-
+  #     observer metadata in the same map: pixel_eligible (bool), locality
+  #     (local|cloud), latency_class and cost_class (low|medium|high).
+  #
+  # Official DeepSeek API — the default MO provider. Needs a funded DEEPSEEK_API_KEY
+  # (https://platform.deepseek.com). OpenAI-compatible. When this provider is active,
+  # MO shows the live account balance in the TUI footer (GET /user/balance).
+  - name: deepseek
+    type: chat_completions
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    model: deepseek-v4-pro
+    # Desktop follows this variant unless Settings saves its own model choice.
+    mo_desktop_model: deepseek-flash
+
+  - name: deepseek-flash
+    type: chat_completions
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    model: deepseek-flash
+
+  # Official Z.ai API (GLM). OpenAI-compatible at /api/paas/v4/.
+  # Set ZAI_API_KEY in ~/.mo/credentials/providers.env; do not hardcode it here.
+  - name: zai
+    type: chat_completions
+    base_url: https://api.z.ai/api/paas/v4/
+    api_key_env: ZAI_API_KEY
+    model: glm-5.2
+    reasoning_effort: max
+
+  - name: zai-turbo
+    type: chat_completions
+    base_url: https://api.z.ai/api/paas/v4/
+    api_key_env: ZAI_API_KEY
+    model: glm-5-turbo
+
+  - name: zai-flash
+    type: chat_completions
+    base_url: https://api.z.ai/api/paas/v4/
+    api_key_env: ZAI_API_KEY
+    model: glm-4.7-flash
+    thinking_disabled: true
+
+  # OpenCode Go relay (alternative / fallback) — one OpenCode catalog branch
+  # used for fallback plus DeepSeek/GLM/Kimi/Qwen/MiniMax-style models.
+  - name: opencode
+    type: chat_completions
+    base_url: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_API_KEY
+    model: deepseek-v4-pro
+
+  - name: opencode-flash
+    type: chat_completions
+    base_url: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_API_KEY
+    model: deepseek-v4-flash
+
+  - name: opencode-pro
+    type: chat_completions
+    base_url: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_API_KEY
+    model: deepseek-v4-pro
+
+  # OpenCode broad catalog template. Keep one provider on /zen/v1 so `/model`
+  # can offer broad OpenCode models (Claude/GPT/GLM/etc.) without hardcoding a
+  # separate provider per model; MO clones this template for the selected model.
+  - name: opencode-bigpickle
+    type: chat_completions
+    base_url: https://opencode.ai/zen/v1
+    api_key_env: OPENCODE_API_KEY
+    model: big-pickle
+    capabilities:
+      reasoning_content_required: true
+
+  # OpenAI/Codex OAuth provider source. Uses the local Codex auth file and is
+  # shown under `/model` as OpenAI OAuth when configured.
+  - name: openai-codex
+    type: codex_responses
+    base_url: https://chatgpt.com/backend-api/codex
+    auth_path: ~/.codex/auth.json
+    model: gpt-5.5
+
+  # --- Local models via Ollama (fully offline, OpenAI-compatible) -------------
+  # Ollama exposes an OpenAI-compatible endpoint at http://localhost:11434/v1,
+  # so it is just another `chat_completions` provider — no extra dependency.
+  # Notes:
+  #   * No key is required; MO supplies a non-secret SDK placeholder internally.
+  #   * Local CPU is slow, so `timeout` is raised well above the 60s default.
+  #   * Pull first:  ollama pull qwen2.5-coder:3b
+  #   * CONTEXT: if your Ollama window is capped (OLLAMA_CONTEXT_LENGTH / num_ctx),
+  #     also set agent.context_budget_tokens to roughly that value minus the
+  #     reserve, or MO will overstuff the prompt and the local model will truncate.
+  #   * To make one the active engine, set model.default below to its name.
+  - name: local-qwen            # fast local coder (~15 tok/s CPU), tool-calling
+    type: chat_completions
+    base_url: http://localhost:11434/v1
+    model: qwen2.5-coder:3b
+    timeout: 600
+
+model:
+  # Main MO uses the official DeepSeek API. Cross-provider fallback is opt-in:
+  # set `fallback` to a configured provider name or model id only after verifying
+  # that account's availability, billing, region/hosting consent, and data route.
+  # An empty value keeps a failed configured default from automatically chaining
+  # into a second external provider. A manual `/model` selection remains
+  # available and may reactively use the configured default for that turn.
+  # MO Design applies the same explicit route boundary to its selected model;
+  # it never treats every model visible in the chooser as an automatic fallback.
+  # To use official Z.ai as the main lane, set `default: zai` after adding ZAI_API_KEY.
+  # The terminal `/model` selector drills source -> model -> thinking level and
+  # saves that Terminal default in private `~/.mo/preferences.json`; MO Desktop
+  # follows that provider's optional `mo_desktop_model`, unless Settings saves
+  # an independent Desktop choice. Neither changes the running Terminal model.
+  default: deepseek
+  fallback: ""
+
+runtime:
+  # Private MO home for profile, memory, sessions, logs, scheduler, Telegram DB, and caches.
+  # Project folders are read/edited only when the operator asks; MO should not create project-local state by default.
+  home: ~/.mo
+  state: private
+  # Multiple terminal MO processes are allowed. Each process gets its own
+  # `main-<instance>` session slot so they do not overwrite one another.
+  # Use `/heartbeat instances` to inspect other recent terminal slots on demand.
+  # Styled transcript lines use the terminal's native scrollback by default, so
+  # the whole session supports mouse-wheel scroll, Shift+PageUp/Shift+PageDown,
+  # drag selection, and copy. Set false only for the managed-viewport
+  # compatibility mode (Up/Down/PageUp/PageDown scroll MO's bounded viewport).
+  scrollback_transcript: true
+
+# Optional cross-device continuity. Off by default. Conversation continuity is
+# a bounded event lane over the hub API; it is never put in Git. A separate
+# private Git-over-SSH lane replicates the state layout's curated profile,
+# skills, skin, and saved Terminal-preference entries only.
+# Mutable databases, credentials, sessions, Telegram authorization,
+# scheduler state, profile extensions, caches, and device runtime files stay local.
+consistent_everywhere:
+  enabled: false
+  device_role: workstation         # workstation | server | mobile
+  device_id: ""                    # optional stable override; otherwise ~/.mo/device.json is generated
+  device_label: ""                 # optional human label used only in private sync commit messages
+  continuity:
+    enabled: true
+    auto_sync: false                # one resident coordinator per machine; terminal turns only journal locally
+    credentials_file: ""           # optional override; default ~/.mo/credentials/everywhere.json
+    interval_seconds: 5
+    max_age_seconds: 604800         # bounded event TTL: 7 days
+    max_local_rows: 2000
+    max_rows: 2000                  # hub-wide event ceiling
+    max_rows_per_thread: 100
+    max_threads_per_device: 50
+  sync:
+    enabled: true
+    auto_sync: false                # independent slower curated-profile lane
+    git_remote: ""                 # private Git-over-SSH remote owned by this MO user
+    branch: state
+    interval_seconds: 30
+    max_file_bytes: 2000000
+    reconcile_peer_path: ""         # trusted first-attach snapshot; conflicts are never auto-merged
+  # Optional native-client API attached to the existing Gateway. Only a
+  # machine explicitly configured as device_role: server may own this API and
+  # its single registry. Bind loopback behind your own TLS reverse proxy.
+  # Android pairing uses `/everywhere pair android` on that hub; lower-level
+  # administration remains available through the CLI. Every device token is
+  # revocable. The serving hub also needs one Uvicorn WebSocket backend
+  # (websockets or wsproto).
+  api:
+    enabled: false
+    host: 127.0.0.1
+    port: 8765
+    public_url: ""                  # verified HTTPS origin of the reverse proxy, never the raw uvicorn port
+    heartbeat_active_seconds: 150
+    websocket_interval_seconds: 5
+    cube_stale_after_seconds: 15
+    refresh_rotation_grace_seconds: 30
+    job_ttl_seconds: 86400
+    max_jobs_per_device: 50
+  # Native, account-free MO Live Control over the paired Everywhere HTTPS/WSS
+  # hub. The hub relays memory-only bounded events/frames and never opens an
+  # inbound workstation port. Pair controllers with exact `remote_control` and
+  # each terminal/Desktop host separately with exact `remote_host`. A host also
+  # requires `host.enabled`; Desktop capture is primary-display only.
+  live_control:
+    enabled: false
+    phone_semantic_enabled: false    # separate signed-sideload-only phone AccessibilityService gate
+    session_seconds: 600            # hard lease, clamped to 60–900 seconds
+    idle_seconds: 120               # controller heartbeat keeps an attended lease alive
+    host:
+      enabled: false
+    screen:
+      fps: 4                        # adaptive changed frames, clamped to 1–8 fps
+
+# Optional resumable file cargo shared by terminal, Desktop, Telegram, and
+# Android. Disabled by default. The sender keeps its source
+# until hub acceptance; the authenticated hub keeps verified chunks until the
+# target records receipt. Ordinary chat attachments remain bounded turn context.
+file_transfer:
+  enabled: false
+  credentials_file: credentials/everywhere-transfer.json  # separate non-hub cargo identity
+  max_bytes: 2147483648             # 2 GiB per file
+  chunk_bytes: 8388608              # 8 MiB resumable chunks
+  auto_accept: true                 # receive catalog cargo; turn attachments still complete
+  auto_accept_named_paths: false    # explicit policy; still confined to receiver access roots
+  hub_spool_quota_bytes: 10737418240
+  hub_spool_ttl_seconds: 86400
+  concurrent_per_device: 3
+
+# Bounded file organization shared by Android, Desktop, and terminal hosts.
+# Each live machine publishes its own opaque locations through
+# the authenticated files_v1 lane. `access.mode: full` replaces guarded project
+# roots with that machine's available drive roots; hidden/private state remains
+# excluded and public requests still use opaque IDs plus relative paths.
+file_manager:
+  enabled: true
+  max_entries: 500
+  max_text_bytes: 1048576
+  personal_roots: []                 # explicit operator-approved folders only
+
+image:
+  # Image GENERATION (the generate_image tool) — MO creating a new picture, the
+  # opposite direction from perception (reading one). The tool is exposed ONLY
+  # when a backend below resolves; with none configured it is absent, never a
+  # dead tool. Each generation spends quota or money, so MO generates on request.
+  backend: auto            # auto | codex | openai_compatible | off
+  #   auto  — prefer the no-key Codex bridge, then an API key (default)
+  #   codex — OpenAI gpt-image-2 through the local Codex CLI login; uses the
+  #           ChatGPT subscription quota, no API key. Needs `codex` on PATH and
+  #           ~/.codex/auth.json. Slow (the agent reasons before painting).
+  #   openai_compatible — POST {base_url}/images/generations with an API key;
+  #           works for OpenAI, Azure, or any compatible endpoint.
+  #   off   — disable generation entirely.
+  model: gpt-image-2       # gpt-image-2 | gpt-image-1.5 | gpt-image-1-mini | ...
+  # For backend: openai_compatible (or auto with a key), set an API key source:
+  # base_url: https://api.openai.com/v1
+  # api_key_env: OPENAI_API_KEY
+
+update:
+  # Live self-update notice. A throttled background `git fetch` surfaces
+  # "N updates behind" in the TUI footer with no user action; `/update` (or
+  # `mo --update`) fast-forwards the checkout. Best-effort — offline or non-git
+  # (zip) installs simply show nothing, and it never blocks the interface.
+  check: true   # set false to disable the background check entirely (no network)
+
+agent:
+  # Fresh unbounded results retain their beginning, selected error lines, and
+  # ending with an explicit omission marker. Self-bounded read/search tools are
+  # exempt; older resolved tool chains are compacted separately and recoverably.
+  tool_result_max_chars: 6000
+  # Read/search tools (read_file, grep, find_files) are exempt from the fallback
+  # cap above so a file's tail is never silently severed, but still bounded by
+  # this separate, higher ceiling so one huge read cannot re-inflate context.
+  # 0 disables it.
+  tool_result_read_max_chars: 200000
+  context_summary_enabled: true
+  context_budget_tokens: auto
+  context_reserve_tokens: 16384
+  context_handoff_enabled: true
+  context_handoff_threshold: 0.70
+  # Wall-clock floor between critical context-pressure handoffs within one turn.
+  # Prevents the "handoff storm" where a looping turn re-triggers a fresh session
+  # every few seconds. The first critical recovery still fires immediately.
+  turn_health_critical_handoff_min_interval_seconds: 60.0
+  # Defensive message-retention ceiling, separate from provider context pressure.
+  # The actual model context budget above drives normal handoff; this only prevents
+  # unbounded tiny-message histories. Increase for unusually tool-dense sessions.
+  session_max_messages: 500
+  # Provider tool-schema economy. Resolution order is provider name, API mode,
+  # then default. capability_routed is the product default and exposes the
+  # task-sized request catalog; deferred keeps discovered tools active for the
+  # turn; full_static remains an explicit compatibility/debugging override.
+  tool_catalog_modes:
+    default: capability_routed
+    providers: {}
+    api_modes: {}
+  # Deterministic, provider-free compaction of old completed tool chains before handoff.
+  # In a long active turn, pressure can archive older bulk observations as excerpts;
+  # exact calls, user instructions, findings, edits, failures and test receipts stay.
+  # Provider context-overflow errors force an aggressive one-time compact/handoff retry.
+  context_momentum_compact_enabled: true
+  context_momentum_compact_threshold: 0.45
+  context_momentum_keep_recent: 18
+  context_momentum_max_chains: 4
+  # Tool-result aging: consider old chains once their tool-result footprint
+  # exceeds this many chars even when pressure is low (0 disables), then compact
+  # only when the recoverable savings also meet this bar. Full outputs are
+  # archived under logs/compacted_chains/ before the summary replaces them, so
+  # exact results stay recoverable with read_file. Old archives are pruned only
+  # after session retention when no saved session references them.
+  context_momentum_tool_chars_threshold: 40000
+  # When the model resolves a work unit (completes a task), the next compaction
+  # may trigger at this fraction of the tool-chars threshold above — freeing
+  # resolved chains proactively. Still requires meaningful old content so the
+  # freed bytes justify the single prefix-cache miss. 1.0 disables the effect.
+  context_momentum_resolved_threshold_factor: 0.5
+  reasoning: high
+  # Refuse clearly-malicious code generation (malware/attack tooling) before any
+  # provider call. Conservative + dual-use-aware: authorized pentest/CTF/own-system/
+  # defensive/detection work passes. Set false to disable for dedicated offensive
+  # security research on your own trusted setup.
+  block_malicious_code: true
+  temperature: 0.7
+  # Shared requested output budget. Chat-completions adapters send it as
+  # max_tokens; the private Codex Responses lane currently sends no output-limit
+  # field, so /settings and monitor telemetry distinguish configured vs sent.
+  max_tokens: 8192
+  # Optional hard cap on provider request attempts for one user turn, including
+  # auxiliary/worker calls, transport retries, and internal continuation.
+  # 0 leaves turns unlimited. A number written only in the prompt is not enforced.
+  # Set this in your config, then /reload and inspect /settings; one-shot runs
+  # can select that config with mo --config path/to/config.yaml --prompt-file task.txt.
+  max_provider_requests_per_turn: 0
+  background_workers_max: 3
+
+prt:
+  enabled: true
+  # PRT uses the model currently selected by the operator in the interface. Its
+  # Standard/deep treatment controls review depth and escalation only; it never
+  # substitutes a separate hardcoded or PRT-specific provider/model chain.
+  # Review calls request up to agent.max_tokens so capable adapters are not
+  # held to a stale 4k budget. Provider enforcement remains route-dependent;
+  # the private Codex Responses lane currently sends no output-limit field.
+  score_target: 4.5
+  # Local affected tests run serially in one bounded subprocess. The default
+  # leaves scheduling margin for legitimate ~3-minute integration slices;
+  # timeout/error is an explicit incomplete-review finding, never a silent 5/5.
+  # The GitHub review workflow overrides this to false so untrusted PR test code
+  # never executes while review credentials are present.
+  run_affected_tests: true
+  test_timeout_s: 240
+  # Trusted GitHub post-work review remains review-only and never executes PR
+  # code while review credentials are present. Local `/prt .` reports captured
+  # uncommitted evidence; local committed targets delegate confirmed violations
+  # to the normal Agent execution owner for focused correction and verification.
+  # Neither path commits, pushes, or deploys.
+  maintainer_github: true        # GitHub workflow review/post integration (needs gh auth)
+
+heartbeat:
+  enabled: true
+  interval_seconds: 60
+
+scheduler:
+  # Persistent automations managed by natural requests or /schedule. The same
+  # service runs MO turn/goal/role tasks and no-model scripts already installed
+  # under ~/.mo/memory/scheduler/scripts. Times accept 30m, every 2h, daily at
+  # 09:00, or ISO.
+  enabled: false
+  tick_seconds: 30
+  jobs_path: memory/scheduler/jobs.json
+  runs_path: memory/scheduler/runs.jsonl
+  lock_path: memory/scheduler/tick.lock
+
+mo_control:
+  # Optional external operator-policy bridge. Operator data normally lives in
+  # the six canonical ~/.mo/memory/profile Markdown files; leave empty to use
+  # the profile only.
+  workspace_path: ""
+  # Operator project/codename vocabulary that should trigger control context
+  # (e.g. your repo or product names). Private data — set in your own config.
+  trigger_terms: []
+
+# Optional MO Desktop — a small MO-branded desktop window summoned with
+# Win+Alt+M (+ system tray). OFF by default: it needs a desktop session plus the
+# desktop extras from requirements-computer-use.txt. On Windows, the optional
+# uiautomation extra enables semantic desktop refs through `computer_observe`
+# and `computer_act` so MO Desktop can prefer accessible UI
+# patterns before pixel clicking. Voice stays off unless enabled below; mic
+# capture is separate from transcription. Replies are visual-only.
+# The full tunable schema + defaults live in mo_desktop/settings.py.
+# Private Desktop apps are supplied through the profile extension seam and do not
+# add product-owned settings here.
+mo_desktop:
+  enabled: false
+  tray_enabled: true               # when enabled, show the resident tray icon; set false to hide it
+  action_receipt_seconds: 300       # successful same-session action may ground a compatible "again" continuation for this many seconds (30-1800)
+  computer_use:
+    pixel_policy: configured_providers  # local_only | configured_providers | confirm_cloud
+    pixel_providers: []             # optional exact provider/model allowlist; empty uses eligible vision providers
+  character:                        # the cube companion's look (see settings.py for the full schema)
+    size: 84                        # cube-cluster edge in px — the main size knob
+    cube_count: 4                   # default balanced form; 5 adds a center cube
+    glow: 0.5                       # 0..1 shine/bloom intensity
+    color_mode: skin                # follow the active MO skin, or a "#rrggbb"
+    corner_radius: 0.22             # cube rounding as a fraction of the cube edge (0 = square, 0.5 = round)
+  behavior:
+    default_mode: free              # free = wander; lock = chase the cursor
+    follow_distance: 64             # lock mode: trailing gap behind the cursor in px
+    follow_ease: 0.16               # lock mode: chase spring 0..1 (lower = more lag/delay)
+  panel:                          # reply/input/history panel; all controls apply live
+    padding: 16
+    corner_radius: 15
+    button_padding: 8
+    button_corner_radius: 9
+    window_effect: hybrid         # none | shadow | glow | hybrid
+    window_effect_intensity: 55   # 0..100
+  systemcare:                     # Windows-only; inert until opened or explicitly requested
+    scan_mode_default: safe       # safe | advanced; both modes are read-only
+    retention_days: 30            # bounded 1..365
+    history_limit: 40             # bounded 4..200
+    plan_ttl_minutes: 15          # exact reviewed plans expire after 5..60 minutes
+    categories: {}                # optional domain booleans; omitted domains remain enabled
+    advanced_scan:
+      deep_storage: true
+      component_store: true
+      system_integrity: true
+      service_advisory: true
+      registry_advisory: false    # advisory scan only; never generic registry cleaning
+  voice:
+    stt_enabled: false              # Alt, Alt+hold records; release sends; reply is spoken
+    stt_engine: whisper             # whisper = faster-whisper; windows = Windows default SAPI recognizer
+    stt_model: tiny                 # whisper model size; tiny keeps the desktop hotkey path light
+    stt_device: cpu
+    stt_compute_type: int8
+    stt_beam_size: 1
+    stt_timeout_seconds: 15         # windows engine only: max SAPI recognition wait per recording
+    stt_idle_seconds: 180           # whisper worker lease after the most recent transcription
+    stt_worker_timeout_seconds: 180 # bounded whisper load/transcription request wait
+    tts_enabled: false              # also speak typed replies through the local Piper worker
+    chat_enabled: false             # continuous listen -> reply -> listen; manual double-Alt stays separate
+    speech_rate: 1.0                # Piper pace multiplier from 0.5 to 2.0; 1.0 keeps the model default
+    output_device: default          # system default, or an exact output-device name from Settings
+    role: ""                        # Default/empty, a discovered profile role, or bounded custom text
+    role_active: false              # pause/resume the selected conversation role
+
+telegram:
+  enabled: false
+  bot_token_env: TELEGRAM_BOT_TOKEN
+  bot_username: ""
+  dm_policy: pairing
+  db_path: memory/surfaces/telegram.sqlite
+  # The only user-facing token source is ~/.mo/credentials/telegram.env.
+  worker_count: 2
+  allow_from: []
+  groups:
+    require_mention: true
+    allow_from: []
+
+# Optional local Gmail connection. Put the Desktop OAuth client ID and secret
+# in private ~/.mo/credentials/gmail.env; tokens are encrypted on this device.
+mail:
+  enabled: false
+  poll_seconds: 120
+
+# Optional profile-owned behavior extensions. Empty profiles remain neutral.
+# This config flag is the only admission source.
+local_extensions:
+  enabled: false
+
+mcp:
+  # Model Context Protocol — connect MO to operator-configured local tool servers.
+  # Enabled, but INERT until you list at least one server below — with servers: []
+  # nothing is spawned. Listed servers start lazily when MO prepares the provider
+  # tool catalog for a turn, then expose tools as `mcp__<name>__<tool>`, gated by
+  # the sandbox like any native tool. No marketplace, no model-side install — you
+  # list servers here.
+  enabled: true
+  servers: []
+    # - name: local-tools
+    #   command: /absolute/path/to/your-mcp-server
+    #   args: []
+    #   enabled: true
+    #   timeout: 30
+    #   allow_tools: [read_status, query_items]
+    #   # Resolve only named logical secrets and inject them into this child.
+    #   # Keep ordinary non-secret child settings under `env` instead.
+    #   secret_service: local-tools  # -> credentials/mcp/local-tools.env
+    #   secret_env: {CHILD_API_KEY: LOCAL_TOOLS_API_KEY}
+
+lsp:
+  # Language Server Protocol — live, multi-language diagnostics for MO's edits.
+  # INERT until you list a server per language under `servers` (a map keyed by
+  # language). Each is a local subprocess (the same engine behind your editor's
+  # error squiggles), read-only analysis: MO never applies server edits. The
+  # `lsp_diagnostics` gate blocks a "fixed/clean" claim while the server reports
+  # errors. Disabled and unsupported languages are no-ops; a configured missing,
+  # crashed, timed-out, or unreadable diagnostic path is reported as unavailable
+  # evidence, never as clean and never retried in a loop. Off by default.
+  # Settings → Projects & checks saves On/Off/Default per project in private
+  # preferences; /dashboard checks shows configuration and recorded evidence.
+  # /reload applies server config changes. Servers are never auto-installed.
+  servers: {}
+    # python:     {command: pylsp,                       args: []}
+    # typescript: {command: typescript-language-server,  args: ["--stdio"]}
+    # go:         {command: gopls,                        args: []}
+
+taskboard:
+  # Default on: Gateway chooses the board policy for each turn. Procedure-shaped
+  # work can receive a small scaffold; ordinary multi-step work starts empty for
+  # model-owned set_plan; rows advance only with complete_task evidence. MO
+  # Desktop never seeds terminal rows.
+  model_owned: true
+
+learning:
+  # Eligible answered turns mine recurring direct-operator guidance. Only the
+  # evidence-first / clean-finish / concise-reply classes can auto-confirm, with
+  # at least 3 recent matches and the confidence threshold met. Other suggestions
+  # remain inactive until explicit approval. False stops new automatic promotion;
+  # it does not undo accepted learning. See FAQ.md for the review controls.
+  # /learning > Active learning offers Undo; More actions holds optional scans,
+  # consolidation and imports. /profile mine shares the effective review view.
+  auto_promote: true
+  # Automatically accepted learning normally materializes as a browsable,
+  # evidence-grounded skill pack under the configured skill root (~/.mo/skills)
+  # (a "## Grounded in" block cites the turns that justified it), and is surfaced
+  # through the single skill path — the equivalent virtual adapter is suppressed
+  # so it never double-surfaces. Set false to keep auto-promoted learnings as
+  # virtual adapters (no pack written by automatic promotion). Explicit approval
+  # and consolidation retain their existing pack-writing behavior.
+  materialize_packs: true
+  # An enforced runtime nudge (like the verify-before-claiming gate) fires ONCE per turn when
+  # the operator shares durable personal/environment knowledge (server, repo, deploy method,
+  # project path, credential LOCATION — never values) or a code convention and MO recorded
+  # nothing — reminding it to record_profile_fact / record_convention. High-precision so
+  # ordinary chat never fires; set false to disable.
+  capture_nudge: true
+  # Episodic recall horizon (verbatim turn store). Env-tunable, not a config key:
+  # set MO_MEMORY_MAX_TURNS to change it (default 1000). bm25 is indexed and semantic
+  # cosine over this many small vectors is cheap, so a larger store costs almost nothing.
+
+skills:
+  # Local best-practice packs MO reads before acting on a matching task.
+  # Profile packs live under ~/.mo/skills. Shipped seed packs are reconciled there
+  # while product-owned, preserving mastery; user-owned replacements are untouched.
+  # Project-local skills/ roots are opt-in only.
+  # The most relevant packs are injected per turn. Exact-trigger packs are
+  # validated before save/load; file-glob conventions only surface for matching
+  # code locations. There is no marketplace or automatic install flow; explicit
+  # `/learning inspect`, `use`, and `promote` own reviewed external imports.
+  enabled: true
+  project_local: false
+  decay_days: 60
+  # Optional semantic fallback for a pack whose authored triggers do not match.
+  # Off by default so enabling semantic MEMORY recall below never cold-starts an
+  # embedding model (or makes API calls) merely to classify an ordinary turn.
+  semantic_match: false
+
+embeddings:
+  # Semantic memory recall — recall past turns by MEANING instead of keyword overlap
+  # (it does NOT touch the internet; it only searches your own past conversations).
+  # Off by default → keyword (bm25) recall. Falls back to keyword recall if the chosen
+  # backend is unconfigured/unavailable.
+  enabled: false
+  backend: api        # "api" (OpenAI-compatible endpoint, stdlib HTTP, no dependency)
+                      # or "local" (on-device ONNX, fully offline/private; needs
+                      # `pip install fastembed` — see requirements-embeddings.txt)
+  base_url: ""        # api backend: e.g. https://api.openai.com/v1
+  api_key_env: ""     # api backend: logical key in credentials/providers.env
+  model: ""           # api model (e.g. text-embedding-3-small) OR local model
+                      # (default BAAI/bge-small-en-v1.5 when backend: local)
+  # Local FastEmbed runs in one authenticated loopback helper shared by every MO
+  # terminal/Desktop process. One ONNX thread avoids machine-wide CPU spikes; the
+  # helper exits after idle so its native model memory is returned to the OS.
+  local_shared_worker: true
+  local_threads: 1
+  local_idle_seconds: 60
+
+sandbox:
+  enabled: true
+  clean_env: true
+  block_shell_escape: true
+  # Network posture below is LOCAL-TRUST (convenient on your own machine), not
+  # hardened. To lock down: set shell_network_enabled/web_fetch_enabled to false,
+  # or restrict web_fetch with an explicit allowlist.
+  shell_network_enabled: true   # allow shell commands to reach the network
+  web_fetch_enabled: true       # allow the web_fetch/web_search tools
+  web_fetch_allowed_hosts: []   # EMPTY = unrestricted. Add hosts to restrict, e.g. ["api.github.com"]
+  # web_search: real ranked results REQUIRE an operator-set key — set
+  # MO_WEB_SEARCH_PROVIDER=brave|serper and put MO_WEB_SEARCH_API_KEY in
+  # credentials/providers.env. Without a key it falls back to DuckDuckGo's
+  # limited keyless Instant Answer, which returns nothing for most queries.
+  # (free tiers exist). No Python dependency — uses stdlib HTTP.
+  # Relative runtime-state paths resolve under ~/.mo by default, not the checkout.
+  audit_log: logs/tool_audit.jsonl
+  max_output_chars: 50000
+  write_file_existing_max_lines: 250
+  # Block write_file/edit_file when the new content embeds an unambiguous hardcoded
+  # secret literal (API key/token/private key). Precise detector — env refs,
+  # placeholders, and expression RHS are never blocked. Operator approval bypasses.
+  block_write_secrets: true
+
+access:
+  # Default install mode: tools operate inside the project cwd where MO was called.
+  # Use `full` only for a trusted private operator setup. It widens filesystem
+  # roots; it does not bypass role/lane gates, raw-secret protections, or the
+  # exact current-request authority required for destructive actions.
+  mode: project
+  default_roots:
+    - .
+
+paths:
+  memory_file: memory/mo.db
+  critique_file: answer_rules.md

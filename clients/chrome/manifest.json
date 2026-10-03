@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "MO Connected Tab",
+  "version": "1.0.3",
+  "description": "Let MO Agent discover Chrome tabs and connect to the tab you ask it to use.",
+  "minimum_chrome_version": "118",
+  "incognito": "not_allowed",
+  "permissions": [
+    "debugger",
+    "nativeMessaging",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "icons": {
+    "16": "icons/mo-16.png",
+    "32": "icons/mo-32.png",
+    "48": "icons/mo-48.png",
+    "128": "icons/mo-128.png"
+  },
+  "action": {
+    "default_title": "MO connects when you ask it to use this tab",
+    "default_icon": {
+      "16": "icons/mo-16.png",
+      "32": "icons/mo-32.png",
+      "48": "icons/mo-48.png",
+      "128": "icons/mo-128.png"
+    }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7EZtj7VEiWalEzHR//wG9mJkItO+7N1QrfMjw0iQp3M5MrF/zqI/bEvwwXEEeIOGwV+UbmEZE2HYi+ejG3GWWGIsVHd7OtvTCvde+oQ+6Z7P+Hux/9NcmZHHTSaLOgzcMQuZ6Kw83kqxMmVwEGItHL3GdjyaKLlKwgRWUEkJk2iEwawalyfnPxweAcDoe5SKtQZbbBlZoYohpy8vqTa+mvLj98S3oV1Nu3iScjZnaghpybXuRhEUf9eRRXn6IdbPpU646AC9rkypasx6psQAkFWh2o8c2yDwz3Ic3PwoduAr6xG5eT5nufFDv1Kolt2FeqLT0RPW7QMnWiD3TsvZewIDAQAB"
+}

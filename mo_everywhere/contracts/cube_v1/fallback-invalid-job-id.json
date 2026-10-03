@@ -1,0 +1,22 @@
+{
+  "schema": "mo.cube.presentation",
+  "version": 1,
+  "stream": {"epoch": "invalid-job", "sequence": 1},
+  "generated_at": 1784390400.0,
+  "stale_after_seconds": 15,
+  "persistent": {"formation": "cluster", "owner": "default"},
+  "semantic": {
+    "phase": "working",
+    "token": "brand",
+    "label": "working",
+    "detail": "invalid job is inert",
+    "owner": "job"
+  },
+  "transient": null,
+  "authority": {
+    "capability": "control",
+    "scopes": [],
+    "allowed_actions": ["cancel_job", "send_text", "self_revoke", "view_overview"]
+  },
+  "job": {"job_id": "jób", "status": "running", "cancellable": true}
+}

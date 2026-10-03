@@ -1,0 +1,73 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.hprof
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+credentials.json
+google-services.json
+keystore.properties
+local.properties
+operator.token
+service-account.json
+.mo/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+tests/
+logs/
+memory/
+# Local automation transcripts can contain commands or machine context.
+/@AutomationLog.txt
+config.yaml
+/credentials/
+*.bat
+!mo.bat
+.tmp/
+tmp/
+nul
+personal/
+captures/
+device-output/
+signing/
+.claude/
+.agents/
+.codex/
+# Leak-prevention safety net ONLY — private profile-extension/state files do NOT live
+# here. They resolve from ~/.mo/operator (or MO_OPERATOR_PACK) under the user's
+# MO profile; this checkout is the one public product repo and never a submodule
+# host. The resolver never reads a repo-local copy; local maintainer tests cover
+# that boundary from the ignored tests/ overlay. This line only guarantees a stray
+# hand-copied operator/ can never be committed.
+operator/
+# Ignored local docs are not product authority; track product-safe guidance or
+# keep private/local records under ~/.mo/memory.
+docs/
+
+# Ollama local model store must live under ~/.mo (OLLAMA_MODELS), never the checkout
+.models/
+
+# Owner-only MO Desktop character studio — a gitignored, in-checkout dev engine.
+# Product runs fully without it; it imports product code, never the reverse. Never tracked.
+desktop_studio/
+
+# MO Shell native host build outputs; the C# source and project remain tracked.
+mo_shell/native/bin/
+mo_shell/native/obj/
+
+# The Android client, its tests, build/release automation, signing inputs, and
+# device evidence remain private local custody. The public product keeps only
+# the shared Hub protocol and ANDROID.md user guidance.
+/clients/android/
+/.github/workflows/android-release.yml
+/core/diagnostics/android_release_manifest.py
+/core/diagnostics/android_release_preflight.py

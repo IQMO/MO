@@ -1,0 +1,28 @@
+<div id="board-root" class="files-board">
+  <div class="board-grid" aria-hidden="true"></div>
+  <header class="board-hud mo-titlebar">
+    <div class="mo-title-identity pywebview-drag-region">{{MO_MARK}}<strong class="mo-title">MO Files</strong><span class="mo-title-context" id="header-status">Opening connected places…</span></div>
+    <div class="window-drag-zone pywebview-drag-region" aria-hidden="true"></div>
+    <div class="hud-actions">
+      <button class="mo-window-button" id="refresh" title="Refresh board" aria-label="Refresh board"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2-5.5M20 4v6h-6"/></svg></button>
+      <button class="mo-window-button" id="view" title="Switch to list view" aria-label="Switch to list view"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></button>
+      <button class="mo-window-button" id="split" title="Compare two locations" aria-label="Compare two locations"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg></button>
+      <button class="mo-window-button" id="transfers" title="Transfers" aria-label="Transfers"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h16m-4-4 4 4-4 4M21 17H5m4-4-4 4 4 4"/></svg></button>
+      <button class="mo-window-button" id="quick-share" title="Quick transfer by QR" aria-label="Quick transfer by QR"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3m4 0v3m-7 4h7m-4-4v4"/></svg></button>
+      <button class="mo-window-button" id="trash" title="Recover files from Trash" aria-label="Trash"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v6m4-6v6"/></svg></button>
+    </div>
+    <div class="mo-window-controls">{{WINDOW_CONTROLS}}</div>
+  </header>
+  <div class="workspace">
+    <aside id="source-menu" class="place-menu" hidden><div class="rail-heading">CONNECTED PLACES</div><div id="sources"></div><button id="location-switch" class="location-switch" title="Choose a location">CURRENT LOCATION ▾</button><div id="locations" class="locations" hidden></div><p id="source-notice" class="source-notice"></p></aside>
+    <main class="board-area">
+      <div id="transfer-routes" class="transfer-routes" hidden></div>
+      <div id="boards" class="boards"></div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="popover" class="popover" hidden></div>
+  <div id="dialog" class="dialog-layer" hidden></div>
+  <div id="drag-ghost" class="drag-ghost" hidden></div>
+  <div id="resize-grip" class="resize-grip" aria-label="Resize window" title="Drag to resize"></div>
+</div>

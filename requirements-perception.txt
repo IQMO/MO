@@ -1,0 +1,7 @@
+# MO Perception — optional embedded-PDF text engine.
+#
+# The base install does not depend on pypdf. ``perceive`` imports it lazily only
+# for a local .pdf request. Local images use the existing provider image
+# transport; source='screen' delegates to computer_observe.
+
+pypdf>=4.0

@@ -1,0 +1,62 @@
+name: Product defect
+description: Report one reproducible defect or documentation error in the published product
+title: "[Defect] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is owner-maintained and is not a community development project. Use this form only for a reproducible product defect or documentation error.
+  - type: checkboxes
+    id: public-report-safety
+    attributes:
+      label: Public-report safety
+      options:
+        - label: I removed credentials, tokens, private URLs, personal details, local absolute paths, conversations, and unsanitized logs.
+          required: true
+        - label: I am reporting one problem against the current published source.
+          required: true
+        - label: This is not a suspected security vulnerability; those must use the repository's private Security reporting form.
+          required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - MO Terminal
+        - MO Desktop
+        - MO Everywhere / Hub
+        - Android app
+        - Connected Tab
+        - Headless service / container
+        - Documentation
+        - Other public product surface
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Give the smallest safe sequence that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and observed result
+      description: State what you expected and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Published revision
+      description: A release tag or commit identifier, with no local path or branch containing private data.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Optional minimal traceback or diagnostic excerpt. Do not attach state homes, config files, credential files, memory databases, conversations, or raw diagnostic archives.
+    validations:
+      required: false

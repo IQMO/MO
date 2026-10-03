@@ -1,0 +1,32 @@
+{
+  "schema": "mo.cube.presentation",
+  "version": 1,
+  "stream": {
+    "epoch": "fallback-case",
+    "sequence": 9,
+    "future_stream_field": true
+  },
+  "generated_at": 1784390400.0,
+  "stale_after_seconds": 15,
+  "persistent": {
+    "formation": "spiral",
+    "owner": "vendor"
+  },
+  "semantic": {
+    "phase": "thinking",
+    "token": "magenta",
+    "label": "safe fallback",
+    "detail": "unknown values must not select an action",
+    "owner": "vendor"
+  },
+  "transient": null,
+  "authority": {
+    "capability": "admin",
+    "scopes": ["continuity_read", "future_scope"],
+    "allowed_actions": ["send_text", "self_revoke", "future_action"]
+  },
+  "job": null,
+  "future_top_level_field": {
+    "ignored": true
+  }
+}

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MO Dashboard</title>
+<style>
+__MO_SKIN__
+__MO_STYLE__
+</style>
+</head>
+<body>
+<div id="entrance" aria-hidden="true">__MO_MARK__</div>
+<div id="resize-grip" hidden aria-hidden="true">
+</div>
+<header class="mo-titlebar">
+<div class="mo-title-identity pywebview-drag-region">__MO_MARK__<span class="mo-title">Dashboard</span>
+</div>
+<nav aria-label="Dashboard">
+<button data-view="now" aria-selected="true">Workspace</button>
+<button data-view="email" aria-selected="false">Email</button>
+<button data-view="life" aria-selected="false">Life</button>
+<button data-view="learning" aria-selected="false">Learning</button>
+<button data-view="system" aria-selected="false">System</button>
+</nav>
+<div id="header-drag" class="pywebview-drag-region" aria-hidden="true">
+</div>
+<label class="header-project"><span>Workspace</span><select id="project" aria-label="Project"></select></label>
+<span id="connection">Connecting</span>
+<div id="window-controls" class="mo-window-controls" hidden>
+__MO_WINDOW_CONTROLS__
+</div>
+</header>
+<main>
+<div id="terminal-choices" class="actions" aria-label="Choose project terminal">
+</div>
+<section id="view-now" class="view">
+<div class="ribbon">
+<div>
+<span class="eyebrow" id="work-label">Current terminal</span>
+<h1 id="work-title">Connecting to MO</h1>
+<p id="work-detail">
+</p>
+</div>
+<div class="actions">
+<button class="primary" data-action="terminal">Open terminal ↗</button>
+<button data-action="stop">Stop</button>
+</div>
+</div>
+<div id="attention-summary" class="attention-summary" role="group" aria-label="Needs attention" hidden></div>
+<div id="current-work" class="rows">
+</div>
+<div id="live-work" class="rows" aria-label="MO terminals and work">
+</div>
+<div class="recent-heading">
+<h2>Recent · all sessions</h2>
+<div id="work-history">
+</div>
+</div>
+<div class="workbench">
+<button data-view="work">Inspect work</button>
+<button data-view="rules">Project rules</button>
+<button data-view="knowledge">Project knowledge</button>
+<button data-view="checks">Checks &amp; LSP</button>
+<button data-view="learning" id="learning-state">Learning &amp; skills</button>
+<button data-view="controls">Other commands</button>
+<span id="lsp-state">LSP · checking source</span>
+</div>
+<div class="map-heading">
+<h2>Structural map</h2>
+<div class="actions">
+<span id="map-state">
+</span>
+<button id="expand-map">Expand graph</button>
+<button id="refresh-map">Refresh map</button>
+</div>
+</div>
+<iframe id="map" title="MO structural cube graph" sandbox="allow-scripts" hidden>
+</iframe>
+<div id="map-empty"><p>Loading structural orientation</p>
+</div>
+</section>
+<section id="view-email" class="view" hidden>
+<div class="section-head email-heading"><h1>Email</h1><span id="mail-glance-status" class="muted"></span></div>
+<p class="muted">Dashboard reading stays local. Agent chat sends requested mail to your configured model for its reply.</p>
+<div class="email-toolbar actions"><button id="mail-gmail" class="mail-account" data-provider="gmail" aria-label="Gmail inbox" title="Gmail" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M2 7.1v11.2c0 1 .8 1.7 1.7 1.7H5V8.9z"/><path fill="#34a853" d="M19 8.9V20h1.3c.9 0 1.7-.7 1.7-1.7V7.1z"/><path fill="#ea4335" d="M5 8.9 12 14l7-5.1V4.7L12 9.8 5 4.7z"/><path fill="#c5221f" d="M2 5.8v1.3L5 9V4.7l-.6-.4C3.4 3.6 2 4.3 2 5.8z"/><path fill="#fbbc04" d="M19 4.7V9l3-1.9V5.8c0-1.5-1.4-2.2-2.4-1.5z"/></svg></button><button id="mail-outlook" class="mail-account" data-provider="outlook" aria-label="Outlook.com inbox" title="Outlook.com" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0078d4" d="M9 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H9z"/><path fill="#28a8ea" d="M10 11h11v8a2 2 0 0 1-2 2h-9z"/><path fill="#50d9ff" d="m10 11 5.5 4L21 11z"/><path fill="#0364b8" d="M3 6.5 13 5v14L3 17.5z"/><path fill="#fff" d="M8 9c-1.7 0-2.8 1.3-2.8 3s1.1 3 2.8 3 2.8-1.3 2.8-3S9.7 9 8 9zm0 1.4c.8 0 1.3.7 1.3 1.6s-.5 1.6-1.3 1.6-1.3-.7-1.3-1.6.5-1.6 1.3-1.6z"/></svg></button><form id="mail-search-form" class="actions"><input id="mail-search" aria-label="Search email" placeholder="Search mail" maxlength="300"><button>Search</button><button type="button" id="mail-inbox">Inbox</button></form><select id="mail-group-filter" aria-label="Show email group"><option value="all">All visible mail</option><option value="payment">Payment wording</option><option value="subscription">Subscription wording</option><option value="appointment">Appointment wording</option><option value="issue">Problem wording</option><option value="case">Case or paperwork wording</option><option value="other">Other</option></select><button id="mail-compose">New email</button><button id="mail-refresh">Refresh</button><span id="mail-notification-setting"></span></div>
+<section id="mail-setup" class="life-form" aria-label="Email connection" hidden><h2 id="mail-setup-title">Connect email</h2><p id="mail-setup-detail" class="muted"></p><div id="mail-setup-actions" class="actions"></div><form id="mail-client-form" hidden><div class="life-fields"><label>Google Desktop OAuth client ID<input id="mail-client-id" autocomplete="off" maxlength="300" required></label><label>Google Desktop OAuth client secret<input id="mail-client-secret" type="password" autocomplete="off" maxlength="300" required></label></div><div class="actions"><button type="submit" class="primary">Save in MO profile</button></div></form><p id="mail-setup-note" class="muted"></p></section>
+<div class="mail-candidates"><span id="mail-candidate-summary" class="muted"></span></div>
+<form id="mail-move-form" class="actions" hidden><label id="mail-move-label" for="mail-move-folder">Move to existing folder</label><select id="mail-move-folder" required><option value="">Choose destination</option></select><button type="submit">Move</button><button type="button" id="mail-move-cancel">Cancel</button></form>
+<p id="mail-last-action" class="muted" aria-live="polite"></p>
+<div class="email-layout"><section aria-label="Messages"><div id="mail-glance-rows" class="rows"></div></section><section id="mail-detail" aria-label="Selected message"><p class="muted">Select a message to read it here.</p></section></div>
+</section>
+<section id="view-life" class="view" hidden>
+<div class="life-overview"><div class="life-overview-intro"><h1>Life</h1><p class="muted">Confirmed matters and recorded money. Mail hints need your review.</p><div id="life-summary" class="life-stats"></div></div><section class="money-timeline" aria-label="Recorded money timeline"><div class="money-timeline-heading"><h2>Money over time</h2><span id="money-timeline-range" class="muted">Six months · recorded entries</span></div><div id="life-money-timeline"></div></section></div>
+<form id="life-form" class="life-form" hidden>
+<h2 id="life-form-heading">Track an item</h2><p id="life-source" class="muted"></p>
+<div class="life-fields"><label>Title<input id="life-title" maxlength="180" required></label><label>Group<select id="life-category"><option value="payment">Payment or plan</option><option value="subscription">Subscription</option><option value="appointment">Appointment</option><option value="issue">Problem to resolve</option><option value="case">Case or paperwork</option><option value="other">Other</option></select></label><label>Due date, if confirmed<input id="life-due" type="date"></label></div>
+<div class="life-fields life-case-fields"><label>Case area<input id="life-case-area" maxlength="80" list="life-case-area-suggestions" placeholder="Medical, municipality, work…"></label><label>Reference, if any<input id="life-reference" maxlength="180" placeholder="Case or document number"></label></div><datalist id="life-case-area-suggestions"><option value="Medical"><option value="Municipality"><option value="Work"><option value="Paperwork"><option value="Housing"><option value="Other"></datalist>
+<div class="life-fields life-plan-fields"><label>Expected amount per payment<input id="life-expected-amount" inputmode="decimal" placeholder="Optional"></label><label>Currency<input id="life-currency" maxlength="3" pattern="[A-Za-z]{3}" placeholder="With amount"></label><label>Repeat<select id="life-frequency"><option value="once">Once or unspecified</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select></label><label>Total installments<input id="life-installments" type="number" min="1" max="240" placeholder="Optional"></label></div>
+<p id="life-plan-note" class="muted">Plan details describe what you confirmed. They do not record a payment, advance a due date, or schedule a reminder.</p>
+<label class="life-notes">Notes you confirm<textarea id="life-notes" maxlength="500" rows="2"></textarea></label>
+<div class="actions"><button type="submit" class="primary">Save item</button><button type="button" id="life-cancel">Cancel</button></div>
+</form>
+<form id="life-update-form" class="life-form" hidden><h2 id="life-update-heading">Add case update</h2><div class="life-fields"><label>Date<input id="life-update-date" type="date" required></label><label>Kind<select id="life-update-kind"><option value="conversation">Conversation</option><option value="paperwork">Paperwork</option><option value="step">Step or progress</option><option value="note">Note</option></select></label><label>Reference, if any<input id="life-update-reference" maxlength="180"></label></div><label class="life-notes">What happened, as you confirm it<textarea id="life-update-summary" maxlength="500" rows="2" required></textarea></label><div class="actions"><button type="submit" class="primary">Save update</button><button type="button" id="life-update-cancel">Cancel</button></div></form>
+<div class="life-commitments-head"><h2>Matters to follow</h2><div class="actions"><button id="life-new">New item</button><button id="life-refresh">Refresh</button></div></div>
+<div id="life-items"></div>
+<section id="life-money" aria-label="Recorded money">
+<div class="section-head"><div class="money-heading"><h2>Money</h2><details class="money-scope"><summary>Recorded entries only</summary><p class="muted">Income and outgoings you record. Totals are by currency and are not a bank balance.</p></details></div><div class="actions"><label class="money-month">Month <input id="life-money-month" type="month" aria-label="Money month"></label><button id="life-money-new">Record entry</button></div></div>
+<div id="life-money-summary" class="money-summary"></div>
+<div id="life-money-categories" class="money-categories"></div>
+<form id="life-money-form" class="life-form" hidden>
+<h2 id="life-money-form-heading">Record money</h2>
+<div class="money-fields"><label>Title<input id="money-title" maxlength="180" required></label><label>Direction<select id="money-kind"><option value="expense">Outgoing</option><option value="income">Income</option></select></label><label>Amount<input id="money-amount" inputmode="decimal" placeholder="12.50" required></label><label>Currency<input id="money-currency" maxlength="3" pattern="[A-Za-z]{3}" placeholder="EUR" required></label><label>Date<input id="money-date" type="date" required></label><label>Category<input id="money-category" maxlength="48" list="money-category-suggestions" required></label></div>
+<label>For tracked payment or subscription (optional)<select id="money-life-item"><option value="">No linked commitment</option></select></label>
+<datalist id="money-category-suggestions"><option value="Housing"><option value="Utilities"><option value="Groceries"><option value="Transport"><option value="Health"><option value="Subscriptions"><option value="Debt"><option value="Salary"><option value="Benefits"><option value="Refund"><option value="Other"></datalist>
+<label class="life-notes">Notes you confirm<textarea id="money-notes" maxlength="500" rows="2"></textarea></label>
+<div class="actions"><button type="submit" class="primary">Save entry</button><button type="button" id="life-money-cancel">Cancel</button></div>
+</form>
+<div id="life-money-entries" class="rows"></div>
+</section>
+<section id="life-review" aria-label="Recent email to review"><div class="section-head"><div><h2>Email to review</h2><p class="muted">Recent visible mail grouped by wording. Review and confirm an item before MO tracks it.</p></div></div><div id="life-review-rows" class="rows"></div></section>
+<section id="life-scheduled" aria-label="Scheduled tasks"><div class="life-schedule-head"><h2>Scheduled tasks</h2><button id="life-schedule-new">Add task</button></div><form id="life-schedule-form" class="life-form" hidden><h2 id="life-schedule-heading">Add scheduled task</h2><div class="life-fields"><label>Name<input id="life-schedule-name" maxlength="80" required></label><label>Type<select id="life-schedule-kind"><option value="reminder">Reminder · local notice</option><option value="turn">Agent task · uses model</option></select></label><label>When<input id="life-schedule-when" maxlength="80" placeholder="30m, daily at 09:00, or date and time" required></label></div><label class="life-notes">Reminder text or Agent instruction<textarea id="life-schedule-prompt" maxlength="1000" rows="2" required></textarea></label><p class="muted">Examples: 30m, every 2h, daily at 09:00, 2026-09-30T09:00. Gmail new-mail notices already run through Email settings; an Agent mail check uses your model and Outlook needs a signed-in Connected Tab.</p><div class="actions"><button type="submit" class="primary">Save task</button><button type="button" id="life-schedule-cancel">Cancel</button></div></form><div id="life-scheduled-rows" class="rows"></div></section>
+</section>
+<section id="view-work" class="view" hidden>
+<div class="section-head">
+<div>
+<h1>Work record</h1>
+<p class="muted">Recorded taskboards across sessions. Expand a record for its tasks, blockers and session identity. Saved work is not a running terminal.</p>
+</div>
+<button data-view="now">Back to workspace</button>
+</div>
+<section id="usage" class="activity" aria-label="Recorded MO usage">
+<div class="activity-landscape">
+<div class="activity-head"><span class="eyebrow">Recorded activity · all sessions</span><span id="usage-range"></span></div>
+<div class="activity-calendar">
+<div class="activity-weekdays" aria-hidden="true"><span>M</span><span>W</span><span>F</span></div>
+<div id="usage-grid" class="activity-grid"></div>
+</div>
+<p id="usage-scope" class="activity-caption">Loading recorded usage · not active working time</p>
+</div>
+<div id="usage-totals" class="activity-totals"></div>
+</section>
+<div id="work-records"></div>
+</section>
+<section id="view-rules" class="view" hidden>
+<div class="section-head">
+<div>
+<h1>Project rules</h1>
+<p class="muted">Applicable AGENTS.md sources, parent before child. No copied policy store.</p>
+</div>
+<button data-view="now">Back to workspace</button>
+</div>
+<form id="scope-form" class="actions">
+<input id="rules-scope" aria-label="Project-relative rule scope" placeholder="Project-relative folder (optional)">
+<button>Inspect scope</button>
+</form>
+<div id="rules-list" class="rows">
+</div>
+<p class="detail muted">Learned conventions stay in private skills. <button data-view="learning">Inspect learning &amp; conventions</button></p>
+<div id="rule-editor" hidden>
+<p id="source-name">
+</p>
+<textarea id="rule-text" aria-label="Authoritative project rule">
+</textarea>
+<div class="actions">
+<button id="save-rule" class="primary">Save source</button>
+<button id="close-rule">Close editor</button>
+<small id="rule-result">
+</small>
+</div>
+</div>
+</section>
+<section id="view-knowledge" class="view" hidden>
+<div class="section-head">
+<div>
+<h1>Project knowledge</h1>
+<p class="muted">Source-linked orientation from MO’s knowledge index, not generated documentation or behavior proof.</p>
+</div>
+<button data-view="now">Back to workspace</button>
+</div>
+<p id="knowledge-status" class="detail muted">
+</p>
+<form id="knowledge-form" class="actions">
+<input id="knowledge-query" class="control-filter" aria-label="Knowledge query" placeholder="Find a capability, document heading or source…" maxlength="500" required>
+<button class="primary">Search</button>
+</form>
+<pre id="knowledge-result" style="white-space:pre-wrap;font:inherit">
+</pre>
+</section>
+<section id="view-learning" class="view" hidden>
+<div class="section-head">
+<div>
+<h1>Learning</h1>
+<p class="muted">Saved knowledge, reusable skills and review decisions. Project-bound conventions stay with their project.</p>
+</div>
+</div>
+<div id="learning-overview" class="source-strip"></div>
+<div class="actions detail"><button data-view="rules">Edit project rules</button><button data-action="dashboard.open.profile.notes">Edit saved notes in MO</button></div>
+<div id="learning-summary"></div>
+<section id="learning-detail" hidden><pre id="learning-text"></pre><div id="learning-actions" class="actions"></div></section>
+<div class="section-head"><h2>Skills &amp; conventions</h2><span id="skills-count" class="muted"></span></div>
+<form id="skills-form" class="actions"><input id="skills-query" class="control-filter" aria-label="Find skills and conventions" placeholder="Find by name, purpose or file scope…" maxlength="200"><button>Find / reload</button></form>
+<section id="skill-detail" hidden><pre id="skill-text"></pre><button id="close-skill">Close source</button></section>
+<div id="skills-list"></div>
+<p class="muted detail">Available is not the same as used. Inspect a source for its activation scope and recorded feedback. Mining runs after eligible turns; an empty review queue does not mean nothing was learned.</p>
+</section>
+<section id="view-checks" class="view" hidden>
+<div class="section-head"><div><h1>Project checks &amp; LSP</h1><p class="muted">Selected project policy and recorded checks. Configured servers are not passing tests.</p></div><button data-view="now">Back to workspace</button></div>
+<div class="actions"><span class="muted">Change language-server preferences in Settings → Projects &amp; checks.</span><button id="reload-checks">Reload sources</button></div>
+<p id="lsp-detail" class="muted detail"></p><div id="checks-summary" class="rows"></div>
+</section>
+<section id="view-system" class="view" hidden>
+<div class="section-head">
+<div>
+<h1>System</h1>
+<p class="muted">Hosting runtime and live machine usage. Project checks remain separate.</p>
+</div>
+<button data-action="command:/doctor">Inspect in MO ↗</button>
+</div>
+<div class="system-strip"><div class="system-runtime"><span class="eyebrow">Selected provider</span><p id="system-runtime"></p></div><label>CPU <b id="system-cpu"></b><meter id="cpu-meter" min="0" max="100" aria-label="Machine CPU utilization"></meter></label><label>Memory <b id="system-memory"></b><meter id="memory-meter" min="0" max="100" aria-label="Machine memory utilization"></meter></label></div>
+<div id="system-notices" class="rows"></div>
+<details class="detail" id="system-diagnostics"><summary>Runtime diagnostics</summary><div id="system-summary" class="rows"></div></details>
+<div class="actions detail">
+<button data-view="checks">Project evidence</button>
+<button data-action="dashboard.open.connections">Connections ↗</button>
+<button data-action="dashboard.open.schedules">Schedules ↗</button>
+<button id="replay">Replay entrance</button>
+</div>
+<details class="detail" id="source-details">
+<summary>Source details · hosting MO instance</summary>
+<div id="source-evidence"></div>
+</details>
+</section>
+<section id="view-controls" class="view" hidden>
+<div class="section-head">
+<div>
+<h1>Other MO commands</h1>
+<p class="muted">Agent commands open in your normal MO terminal. Rules, learning review, work records and project checks are available directly in this dashboard.</p>
+</div>
+</div>
+<input id="control-search" class="control-filter" type="search" aria-label="Find a control" placeholder="Find work, sessions, learning, files, devices…">
+<div id="controls-list">
+</div>
+</section>
+<footer class="foot">
+<span>MO runtime <b id="runtime-state">not observed</b>
+</span>
+<span>Machine <b id="machine-state">not measured</b>
+</span>
+<span>Project verification <b>open exact evidence</b>
+</span>
+<span id="updated">
+</span>
+</footer>
+</main>
+<div id="notice" role="status" hidden>
+</div>
+<script>
+'use strict';
+const initial=__MO_DATA__;
+__MO_SCRIPT__
+</script></body></html>

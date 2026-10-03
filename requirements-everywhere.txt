@@ -1,0 +1,8 @@
+# Optional MO Everywhere API surface. Normal terminal/Desktop imports do not
+# load these packages. Install only on the explicit hub owner that serves it
+# (a local machine or VPS, with the API bound to loopback behind HTTPS/WSS).
+fastapi>=0.115.0,<1.0
+uvicorn>=0.24.0,<1.0
+websockets>=13.0,<16.0
+# Pure-Python BSD-3-Clause encoder; imported only by the trusted `pair --qr` command.
+segno==1.6.6
