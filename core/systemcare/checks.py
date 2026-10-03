@@ -9,21 +9,33 @@ from .actions import ps_query
 from .inspection import resource_snapshot
 
 
-def windows_updates(adapter: Any, *, drivers: bool = False) -> dict[str, Any]:
-    kind = "Driver" if drivers else "Software"
-    result = ps_query(adapter, "$s=New-Object -ComObject Microsoft.Update.Session;$s.ClientApplicationID='MO SystemCare';"
-        f"$r=$s.CreateUpdateSearcher().Search(\"IsInstalled=0 and IsHidden=0 and Type='{kind}'\");"
-        "$rows=@();for($i=0;$i -lt [Math]::Min($r.Updates.Count,100);$i++){$u=$r.Updates.Item($i);"
+def update_inventory(adapter: Any) -> dict[str, Any]:
+    """One Windows Update search supplies both software and driver evidence."""
+    return ps_query(adapter, "$s=New-Object -ComObject Microsoft.Update.Session;$s.ClientApplicationID='MO SystemCare';"
+        "$r=$s.CreateUpdateSearcher().Search('IsInstalled=0 and IsHidden=0');"
+        "$rows=@();$counts=@{Software=0;Driver=0};for($i=0;$i -lt $r.Updates.Count;$i++){$u=$r.Updates.Item($i);"
+        "$kind=if([int]$u.Type -eq 1){'Software'}elseif([int]$u.Type -eq 2){'Driver'}else{throw 'Unknown Windows update type'};"
+        "$counts[$kind]++;if($counts[$kind] -gt 100){continue};"
         "$rows+=[pscustomobject]@{name=$u.Title;update_id=$u.Identity.UpdateID;revision=$u.Identity.RevisionNumber;"
-        "type=$u.Type;eula_accepted=$u.EulaAccepted;downloaded=$u.IsDownloaded;state='available';detail=($u.KBArticleIDs -join ',')}};"
-        "@{result_code=[int]$r.ResultCode;count=$r.Updates.Count;rows=$rows}|ConvertTo-Json -Compress -Depth 5", timeout=180)
+        "type=$kind;eula_accepted=$u.EulaAccepted;downloaded=$u.IsDownloaded;state='available';detail=($u.KBArticleIDs -join ',')}};"
+        "@{result_code=[int]$r.ResultCode;counts=$counts;rows=$rows}|ConvertTo-Json -Compress -Depth 5", timeout=180)
+
+
+def windows_updates(adapter: Any, *, drivers: bool = False, inventory: dict[str, Any] | None = None) -> dict[str, Any]:
+    kind = "Driver" if drivers else "Software"
+    result = inventory if inventory is not None else update_inventory(adapter)
+    if result.get("error"):
+        return {"state": "failed", "at": time.time(), "rows": [], "detail": result["error"]}
     complete = result.get("result_code") == 2
-    return {"state": "measured" if complete and result["count"] <= 100 else "partial", "at": time.time(),
-            "rows": result["rows"] if complete else [], "bounded": result["count"] > 100,
+    count = int(result["counts"][kind])
+    rows = [row for row in result.get("rows", []) if row.get("type") == kind]
+    return {"state": "measured" if complete and count <= 100 else "partial", "at": time.time(),
+            "rows": rows if complete else [], "bounded": count > 100,
             "detail": "Windows Update Agent offered updates; current managed source policy is retained. New license acceptance remains with Windows Update. No install or reboot performed."}
 
 
-def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], target: str = "") -> dict[str, Any]:
+def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], target: str = "",
+                 update_result: dict[str, Any] | None = None) -> dict[str, Any]:
     if cancelled():
         from .windows import ScanCancelled
         raise ScanCancelled("check cancelled")
@@ -67,7 +79,7 @@ def native_check(adapter: Any, section: str, *, cancelled: Callable[[], bool], t
         rows = ps_query(adapter, "@(Get-Service -Name wuauserv,bits,TrustedInstaller|Select-Object Name,@{n='State';e={$_.Status.ToString()}})|ConvertTo-Json -Compress")
         readiness = ([{"name": r["Name"], "state": r["State"], "detail": "Servicing owner state"} for r in rows] +
                 [{"name": "Pending restart", "state": "attention" if signals else "not observed", "detail": ", ".join(signals) or "Known restart signals not observed"}])
-        available = windows_updates(adapter)
+        available = windows_updates(adapter, inventory=update_result)
         available["readiness"] = readiness
         return available
     if section == "environment":

@@ -47,17 +47,9 @@ class SystemCareService:
         self.state = state or SystemCareState(self.config)
         self.adapter = adapter or WindowsSystemCareAdapter(self.config)
 
-    def status(self) -> dict[str, Any]:
-        calibration = self.state.latest_calibration()
-        scan = self.state.latest_scan()
-        receipt = self.state.latest_receipt()
+    def status(self, *, progress_only: bool = False) -> dict[str, Any]:
         active = self.state.active_operation()
-        # Status is a cached projection. The next explicit calibration, scan, or
-        # apply performs the lightweight live fingerprint check.
-        needs_calibration, reason = self.calibration_needed(calibration, verify_machine=False)
-        return {
-            "available": bool(getattr(self.adapter, "supported", False)),
-            "state": str(active.get("kind") or (scan.state.value if scan else "not_scanned")),
+        activity = {
             "active": bool(active and not active.get("stale")),
             "active_operation": {
                 "operation_id": str(active.get("operation_id") or "")[:80],
@@ -66,6 +58,19 @@ class SystemCareService:
                 "context": str(active.get("context") or ""),
                 "section": str(active.get("section") or ""),
             } if active and not active.get("stale") else {},
+        }
+        if progress_only:
+            return activity
+        calibration = self.state.latest_calibration()
+        scan = self.state.latest_scan()
+        receipt = self.state.latest_receipt()
+        # Status is a cached projection. The next explicit calibration, scan, or
+        # apply performs the lightweight live fingerprint check.
+        needs_calibration, reason = self.calibration_needed(calibration, verify_machine=False)
+        return {
+            "available": bool(getattr(self.adapter, "supported", False)),
+            "state": str(active.get("kind") or (scan.state.value if scan else "not_scanned")),
+            **activity,
             "calibration": calibration.public_summary() if calibration else None,
             "calibration_needed": needs_calibration,
             "calibration_reason": reason,
@@ -123,7 +128,8 @@ class SystemCareService:
         with self._operation(operation_id, "inspecting", context=context, section=section):
             return self._inspect(context, section, target, cancelled=cancelled)
 
-    def _inspect(self, context: str, section: str, target: str, *, cancelled: Callable[[], bool]) -> dict[str, Any]:
+    def _inspect(self, context: str, section: str, target: str, *, cancelled: Callable[[], bool],
+                 update_result: dict[str, Any] | None = None) -> dict[str, Any]:
         """Existing inspection dispatch/publication, inside the caller's operation lock."""
         if context == "machine":
             from .inspection import resource_snapshot, windows_inventory
@@ -134,7 +140,7 @@ class SystemCareService:
                 result = software_updates(self.adapter)
             elif section == "driver_updates":
                 from .checks import windows_updates
-                result = windows_updates(self.adapter, drivers=True)
+                result = windows_updates(self.adapter, drivers=True, inventory=update_result)
             elif section == "registry":
                 from .registry import inspect_registry
                 result = inspect_registry(self.adapter, cancelled=cancelled)
@@ -149,7 +155,8 @@ class SystemCareService:
                 result = inspect_app_leftovers(self.adapter, self.state, cancelled=cancelled)
             elif section in {"integrity", "component_store", "updates", "environment", "desktop", "protection", "network", "filesystem"}:
                 from .checks import native_check
-                result = native_check(self.adapter, section, cancelled=cancelled, target=target)
+                result = native_check(self.adapter, section, cancelled=cancelled, target=target,
+                                      **({"update_result": update_result} if section == "updates" else {}))
             elif section in {"large", "duplicates", "empty"}:
                 from .storage import inspect_storage
                 result = inspect_storage(target, self.config, section, cancelled=cancelled)
@@ -180,7 +187,8 @@ class SystemCareService:
         return result
 
     def build_action_plan(self, action: str, section: str = "", indices: Iterable[int] = (), *,
-                          context: str = "machine", target: str = "", observed_at: float | None = None) -> Plan:
+                          context: str = "machine", target: str = "", observed_at: float | None = None,
+                          finding_ids: Iterable[str] = (), scan_id: str = "") -> Plan:
         """Plan only persisted selected evidence or a fixed explicit quick action."""
         self._validate_context(context)
         if context != "machine":
@@ -271,13 +279,18 @@ class SystemCareService:
                         elif action == "windows_update" and section in {"updates", "driver_updates"} and row.get("eula_accepted") is True:
                             subject = {"kind": "update", "name": row["name"], "identity": row["update_id"], "revision": row["revision"]}
                         else:
-                            raise SystemCareError("Selected item does not belong to this action")
+                            raise SystemCareError(f"Inspection row {i} is not eligible for {action}; use indices from the full {section} inspection")
                         subjects.append(subject)
             now = time.time()
             steps = tuple(PlanStep(new_id("step"), "", rule.rule_id, rule.title, rule.action, rule.risk,
                                    rule.undo, 0, rule.requires_elevation or subject.get("hive") == "HKLM" or subject.get("root_key") == "startup_all", rule.requires_restart, (),
-                                   {**subject, "original": capture(self.adapter, subject, state=self.state)}) for subject in subjects)
-            plan = Plan(new_id("plan"), "", calibration.calibration_id, now,
+                                    {**subject, "original": capture(self.adapter, subject, state=self.state)}) for subject in subjects)
+            if scan_id:
+                scan = self.state.latest_scan()
+                if scan is None or scan.scan_id != scan_id or scan.calibration_id != calibration.calibration_id:
+                    raise SystemCareError("Scan changed since selection; scan and review again")
+                steps = (*self._finding_steps(scan, finding_ids), *steps)
+            plan = Plan(new_id("plan"), scan_id, calibration.calibration_id, now,
                         now + self.preference_summary()["plan_ttl_minutes"] * 60, steps).with_digest()
             self.state.save_plan(plan)
             return plan
@@ -368,6 +381,7 @@ class SystemCareService:
         domains = {rule.domain.value: "pending" for rule in rules}
         total_weight = max(1, sum(max(1, rule.weight) for rule in rules))
         completed_weight = 0
+        update_result = None
 
         def cancelled() -> bool:
             return bool(
@@ -404,14 +418,23 @@ class SystemCareService:
                     if cancelled():
                         raise ScanCancelled("scan cancelled")
                     current_check = checks[index]
-                    current_check["state"] = "active"
+                    current_check.update(state="active", started_at=time.time())
                     check_started = time.monotonic()
                     domains[rule.domain.value] = "active"
                     emit(rule, rule.title, state="active", domain_fraction=0.0, before=True)
                     section = current_check["section"]
                     if section:
                         try:
-                            observed = self._inspect("machine", section, "", cancelled=cancelled)
+                            if section in {"updates", "driver_updates"} and update_result is None:
+                                from .checks import update_inventory
+                                try:
+                                    update_result = update_inventory(self.adapter)
+                                except ScanCancelled:
+                                    raise
+                                except Exception as exc:
+                                    update_result = {"error": f"{type(exc).__name__}: {exc}"[:280]}
+                            observed = self._inspect("machine", section, "", cancelled=cancelled,
+                                                     **({"update_result": update_result} if section in {"updates", "driver_updates"} else {}))
                         except ScanCancelled:
                             raise
                         except Exception as exc:
@@ -516,6 +539,21 @@ class SystemCareService:
         scan = self.state.scan(scan_id) if scan_id else self.state.latest_scan(complete_only=True)
         if scan is None or scan.state not in {OperationState.READY, OperationState.COMPLETED}:
             raise SystemCareError("A completed SystemCare scan is required before planning")
+        steps = self._finding_steps(scan, selected_ids)
+        now = time.time()
+        ttl = int(self.preference_summary()["plan_ttl_minutes"])
+        plan = Plan(
+            plan_id=new_id("plan"), scan_id=scan.scan_id, calibration_id=scan.calibration_id,
+            created_at=now, expires_at=now + ttl * 60, steps=steps,
+        ).with_digest()
+        self.state.save_plan(plan)
+        self.state.append_log("plan_created", plan_id=plan.plan_id, scan_id=scan.scan_id, steps=len(steps))
+        return plan
+
+    def _finding_steps(self, scan: ScanResult, selected_ids: Iterable[str]) -> tuple[PlanStep, ...]:
+        if scan.state not in {OperationState.READY, OperationState.COMPLETED}:
+            raise SystemCareError("A completed SystemCare scan is required before planning")
+        selected_ids = tuple(dict.fromkeys(selected_ids))
         by_id = {item.finding_id: item for item in scan.findings}
         unknown = [item for item in selected_ids if item not in by_id]
         if unknown:
@@ -544,19 +582,25 @@ class SystemCareService:
                 requires_restart=rule.requires_restart,
                 candidates=finding.candidates,
             ))
-        now = time.time()
-        ttl = int(self.preference_summary()["plan_ttl_minutes"])
-        plan = Plan(
-            plan_id=new_id("plan"),
-            scan_id=scan.scan_id,
-            calibration_id=scan.calibration_id,
-            created_at=now,
-            expires_at=now + ttl * 60,
-            steps=tuple(steps),
-        ).with_digest()
-        self.state.save_plan(plan)
-        self.state.append_log("plan_created", plan_id=plan.plan_id, scan_id=scan.scan_id, steps=len(steps))
-        return plan
+        return tuple(steps)
+
+    def build_repair_plan(self, scan_id: str, *, registry_observed_at: float | None = None) -> Plan:
+        """Review all actionable scan findings through the existing exact plan owners."""
+        scan = self.state.latest_scan()
+        if scan is None or scan.scan_id != scan_id or scan.state not in {OperationState.READY, OperationState.COMPLETED}:
+            raise SystemCareError("Complete a current scan before reviewing all repairs")
+        selected = [f.finding_id for f in scan.findings if f.selectable and f.candidates and f.action != "review"]
+        registry = self.state.observations("machine").get("registry", {})
+        if registry_observed_at is not None:
+            if registry.get("observed_at") != registry_observed_at or registry.get("stale"):
+                raise SystemCareError("Registry inspection changed or expired; inspect and review again")
+            indices = [i for i, row in enumerate(registry.get("rows") or []) if row.get("eligible")]
+            if len(indices) > 100:
+                raise SystemCareError("Review registry selections in batches of at most 100 exact values")
+            if indices:
+                return self.build_action_plan("registry_remove", "registry", indices, observed_at=registry_observed_at,
+                                              finding_ids=selected, scan_id=scan_id)
+        return self.build_plan(selected, scan_id=scan_id)
 
     def _validate_apply(self, plan_id: str, plan_digest: str, acknowledge_non_undo: bool) -> tuple[Plan, Calibration]:
         plan = self.state.plan(plan_id)
@@ -615,10 +659,15 @@ class SystemCareService:
             # as mutation; another process can finish work before we acquire it.
             plan, calibration = self._validate_apply(plan_id, plan_digest, acknowledge_non_undo)
             total = max(1, len(plan.steps))
+            checks = [{"rule_id": step.rule_id, "step_id": step.step_id, "title": step.title,
+                       "finding_id": step.finding_id,
+                       "domain": rule_for_id(step.rule_id).domain.value, "state": "pending", "at": 0}
+                      for step in plan.steps]
             try:
                 for index, step in enumerate(plan.steps):
                     if cancelled():
                         raise ScanCancelled("apply cancelled at a safe boundary")
+                    checks[index].update(state="active", started_at=time.time())
                     self._emit(progress, ProgressEvent(
                         operation_id=operation_id,
                         phase="apply",
@@ -629,6 +678,7 @@ class SystemCareService:
                         domain_fraction=0.0,
                         state="active",
                         sequence=index * 2 + 1,
+                        checks=tuple(dict(check) for check in checks),
                     ))
                     from core.runtime.backend_monitor import monitor_context
                     step_started, step_error = time.monotonic(), ""
@@ -658,22 +708,30 @@ class SystemCareService:
                         applied.append(step.step_id)
                     else:
                         skipped.append(step.step_id)
+                    checks[index].update(state="complete" if step_verified else "failed", at=time.time(),
+                                         detail="Applied and verified" if step.step_id in applied else
+                                                "No change needed; post-check passed" if step_verified else "Post-check failed",
+                                         elapsed_ms=round((time.monotonic() - step_started) * 1000))
                     self._emit(progress, ProgressEvent(
                         operation_id=operation_id,
                         phase="verify",
                         domain=rule_for_id(step.rule_id).domain,
-                        label=f"Verified {step.title}",
+                        label=f"{'Verified' if step_verified else 'Verification failed:'} {step.title}",
                         completed_weight=index + 1,
                         total_weight=total,
                         domain_fraction=1.0,
                         state="complete" if step_verified else "failed",
                         sequence=index * 2 + 2,
+                        checks=tuple(dict(check) for check in checks),
                     ))
                 state = OperationState.COMPLETED if not failed else OperationState.FAILED
                 detail = "Every applied step passed its post-check." if not failed else "One or more steps failed verification; see the exact receipt."
             except ScanCancelled as exc:
                 state = OperationState.CANCELLED
                 detail = str(exc)
+                for check in checks:
+                    if check["state"] == "active":
+                        check.update(state="cancelled", at=time.time(), detail=detail)
             except Exception as exc:
                 state = OperationState.FAILED
                 from core.runtime.backend_monitor import redact_monitor_text
@@ -683,6 +741,9 @@ class SystemCareService:
                     current = next((step.step_id for step in plan.steps if step.step_id not in attempted), "")
                     if current:
                         failed.append(current)
+                for check in checks:
+                    if check["state"] == "active":
+                        check.update(state="failed", at=time.time(), detail=detail)
             receipt = Receipt(
                 receipt_id=new_id("receipt"),
                 plan_id=plan.plan_id,
@@ -697,6 +758,7 @@ class SystemCareService:
                 rollback_available=any(step.step_id in (*applied, *failed) and step.undo in {UndoQuality.FULL, UndoQuality.PARTIAL}
                                        and self.state.backup(step.step_id) is not None for step in plan.steps),
                 detail=detail,
+                checks=tuple(checks),
             )
             self.state.save_receipt(receipt)
             self.state.append_log(

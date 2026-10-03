@@ -110,7 +110,7 @@ class SystemCareViewModel:
         if any(step.requires_elevation for step in plan.steps) and not self.service.adapter._is_admin():
             from core.systemcare.elevated import run_elevated
             return run_elevated(self.config, "apply", {"plan_id": plan.plan_id, "plan_digest": plan.digest,
-                                "acknowledge_non_undo": acknowledge}, cancel_event=self._cancel_event)
+                                "acknowledge_non_undo": acknowledge}, cancel_event=self._cancel_event, progress=progress)
         return self.service.apply(plan.plan_id, plan.digest, acknowledge_non_undo=acknowledge,
                                   progress=progress, cancel_event=self._cancel_event)
 
@@ -181,10 +181,10 @@ class SystemCareViewModel:
             self._cancel_event = threading.Event()
             self._resource_started_at = time.monotonic()
 
-            def report(event: ProgressEvent) -> None:
-                self._operation_id = event.operation_id
+            def report(event: ProgressEvent | dict[str, Any]) -> None:
+                payload = event.to_dict() if isinstance(event, ProgressEvent) else dict(event)
+                self._operation_id = str(payload.get("operation_id") or "")
                 if on_progress is not None:
-                    payload = event.to_dict()
                     self._post(lambda payload=payload: on_progress(payload))
 
             def run() -> None:

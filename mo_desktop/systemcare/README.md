@@ -56,8 +56,16 @@ its own shows saved evidence. Section navigation resets the content scroll;
 refreshing the current section retains it. The Scan control shows Cancel during
 work while retaining its icon.
 The persistent scan panel shows the current check, recorded/queued counts,
-grouped coverage, timestamps and links to individual results. Completed,
-limited, unavailable, failed, stopped and unrun checks remain distinct;
+grouped coverage, a progress track, elapsed time, timestamps and links to
+individual results. The same primary control becomes **Repair all · N findings**
+only after a completed scan has actionable findings. It opens one exact plan
+review for available cleanup findings and fresh eligible registry values;
+advisory findings, updates and other individually selected native actions keep
+their own reviews. Permanent changes still require acknowledgment. During scan
+or apply this control becomes Cancel; the panel displays the current check or
+reviewed repair step and retains the outcome after completion. A verified
+repair outcome requires a fresh scan before another bulk repair review.
+Completed, limited, unavailable, failed, stopped and unrun checks remain distinct;
 "checked" describes an inspection, not a repair or a machine-health verdict.
 Saved checks survive navigation and reopening through the existing scan history
 and section observations. Older evidence uses the observation owner's existing
@@ -77,9 +85,12 @@ tool exposes the same optional `all_checks` argument.
 
 Each progress event retains the bounded per-check ledger, so fast completed
 steps are not lost between UI polls. Results use the same ledger in persisted
-scan records, and per-check timing/outcome rows use the existing SystemCare
-audit monitor. The panel reuses active-operation polling and native visibility
-pause/resume; it adds no background scan, model call or refresh timer.
+scan records and apply receipts. Per-check timing/outcome rows use the existing
+SystemCare audit monitor. The panel reuses active-operation polling and native visibility
+pause/resume. Active polls read only operation state and the current progress
+ledger; saved scans, observations and history are read once at completion or
+explicit navigation. Database transactions close their connections on exit.
+There is no additional background scan, model call or refresh timer.
 Non-machine Overview displays its saved health inspection, including incomplete,
 unavailable and stale evidence; a completed request does not imply full health.
 
@@ -158,6 +169,9 @@ Safe and Advanced scans remain read-only. Selected actions are separate:
   checked; inaccessible references remain protected. Application-command
   traversal includes the declared command depth. Installers, services and
   uncertain ownership keep their separate owners.
+  Agent inspection output supplies each row's full-list index and observation
+  revision. Filtering rows does not renumber them. Eligibility permits exact
+  plan review; it does not establish application disuse or a performance benefit.
 - PATH repair removes only the selected literal duplicate in the exact User or
   Machine value, preserving its type and all other entries. The complete original
   is retained for restoration and later external changes block undo. Windows is
@@ -201,12 +215,19 @@ Safe and Advanced scans remain read-only. Selected actions are separate:
   policy. Installation targets one exact identity/revision with already accepted
   licensing and noninteractive ownership. Restart requirements are recorded;
   SystemCare does not restart the machine.
+  A batch scan shares one update search across software and driver checks,
+  retaining separate results and limits. A failed search is recorded for both
+  checks rather than repeated within that scan. Later explicit scans query again.
 
 Apply requires an immutable unexpired catalog plan/digest, current calibration
 and item revalidation. Permanent actions require non-undo acknowledgment.
 Desktop requests Windows permission for a selected protected operation through
 a one-shot worker using the same service. Agent tools retain normal confirmation
 gates and require an elevated process when applicable.
+The permission worker forwards sequenced apply progress through its existing
+request boundary. Presentation failures do not abandon the worker; its response
+and persisted receipt remain authoritative. Cancellation is limited to the
+requested worker's active operation.
 
 Receipts retain applied/skipped/failed steps, real before/after state and output.
 Partial failures retain originals and uncertain post-state without verified

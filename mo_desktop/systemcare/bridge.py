@@ -50,10 +50,16 @@ class SystemCareBridge:
             self.on_ui_ready()
         self._emit({"kind": "workspace_ready"})
 
-    def snapshot(self, context: str = "machine", target: str = "") -> dict[str, Any]:
+    def snapshot(self, context: str = "machine", target: str = "", progress_only: bool = False) -> dict[str, Any]:
         with self._lock:
-            return {**self.model.service.workspace(context, target), "busy": self.model.busy,
-                    "progress": dict(self._progress), "error": self._error}
+            data = ({"status": self.model.service.status(progress_only=True)} if progress_only
+                    else self.model.service.workspace(context, target))
+            progress = dict(self._progress)
+            operation_id = data["status"]["active_operation"].get("operation_id")
+            if operation_id and progress.get("operation_id") != operation_id:
+                progress = {}
+            return {**data, "busy": self.model.busy,
+                    "progress": progress, "error": self._error}
 
     def targets(self, context: str = "") -> dict[str, Any]:
         from core.systemcare.targets import project_targets, server_targets
@@ -207,6 +213,9 @@ class SystemCareBridge:
         if not isinstance(finding_ids, list) or len(finding_ids) > 256:
             raise ValueError("Select exact current findings")
         return self.model.build_plan(finding_ids, scan_id=scan_id).to_dict(include_private=True)
+
+    def repair_plan(self, scan_id: str, registry_observed_at: float | None = None) -> dict[str, Any]:
+        return self.model.service.build_repair_plan(scan_id, registry_observed_at=registry_observed_at).to_dict(include_private=True)
 
     def apply(self, plan_id: str, digest: str, acknowledge_non_undo: bool = False) -> dict[str, bool]:
         plan = self.model.service.state.plan(plan_id)

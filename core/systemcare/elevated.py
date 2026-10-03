@@ -13,7 +13,8 @@ import uuid
 from typing import Any
 
 
-def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, Any], *, cancel_event: Any = None) -> Any:
+def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, Any], *, cancel_event: Any = None,
+                 progress: Any = None) -> Any:
     if os.name != "nt" or operation not in {"apply", "inspect", "restore"}:
         raise ValueError("Unknown Windows permission request")
     from core.state.paths import mo_home, repo_root, runtime_config_path, resolve_state_path
@@ -22,6 +23,7 @@ def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, An
     root = Path(resolve_state_path("run/systemcare", config))
     root.mkdir(parents=True, exist_ok=True)
     request, response = root / (request_id + ".request.json"), root / (request_id + ".response.json")
+    progress_path = root / (request_id + ".progress.json")
     atomic_write_json(request, {"operation": operation, "arguments": arguments,
                               "config_path": str(runtime_config_path(config, fallback_to_default=True) or "")})
     class ExecuteInfo(ctypes.Structure):
@@ -41,15 +43,29 @@ def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, An
     shell.ShellExecuteExW.restype = ctypes.c_bool
     kernel.WaitForSingleObject.argtypes = (ctypes.c_void_p, ctypes.c_ulong)
     kernel.WaitForSingleObject.restype = ctypes.c_ulong
+    kernel.GetProcessId.argtypes = (ctypes.c_void_p,)
+    kernel.GetProcessId.restype = ctypes.c_ulong
     kernel.CloseHandle.argtypes = (ctypes.c_void_p,)
     finished = False
+    last_sequence = 0
     try:
         if not shell.ShellExecuteExW(ctypes.byref(info)) or not info.process:
             finished = True
             raise RuntimeError("Windows permission was declined or the protected operation could not start")
+        worker_pid = kernel.GetProcessId(info.process)
         deadline = time.monotonic() + 3600
         while True:
             wait = kernel.WaitForSingleObject(info.process, 250)
+            if progress is not None and progress_path.is_file():
+                try:
+                    payload = json.loads(progress_path.read_text(encoding="utf-8"))
+                    if int(payload.get("sequence") or 0) > last_sequence:
+                        last_sequence = int(payload["sequence"])
+                        progress(payload)
+                except Exception:
+                    # Presentation failures cannot abandon the protected worker.
+                    # Its response and persisted receipt remain authoritative.
+                    pass
             if wait == 0:
                 finished = True
                 break
@@ -57,7 +73,10 @@ def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, An
                 raise RuntimeError("Protected operation status is unavailable; inspect its active state")
             if cancel_event is not None and cancel_event.is_set():
                 from .state import SystemCareState
-                SystemCareState(config).request_cancel()
+                state = SystemCareState(config)
+                active = state.active_operation()
+                if worker_pid and active.get("pid") == worker_pid:
+                    state.request_cancel(str(active.get("operation_id") or ""))
             if time.monotonic() >= deadline:
                 raise RuntimeError("Protected operation is still running; its journal and active state are retained")
         if not response.is_file():
@@ -72,6 +91,7 @@ def run_elevated(config: dict[str, Any], operation: str, arguments: dict[str, An
         if finished:
             request.unlink(missing_ok=True)
             response.unlink(missing_ok=True)
+            progress_path.unlink(missing_ok=True)
 
 
 def main() -> int:
@@ -104,7 +124,8 @@ def main() -> int:
         arguments = payload["arguments"]
         operation = payload["operation"]
         if operation == "apply":
-            result = service.apply(**arguments).to_dict()
+            result = service.apply(**arguments, progress=lambda event: atomic_write_json(
+                root / (options.request + ".progress.json"), event.to_dict())).to_dict()
         elif operation == "inspect" and arguments.get("context") == "machine" and arguments.get("section") in {"integrity", "component_store", "driver_packages", "updates", "filesystem"}:
             result = service.inspect(**arguments)
         elif operation == "restore":

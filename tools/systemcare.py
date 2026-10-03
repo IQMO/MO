@@ -40,8 +40,10 @@ def execute_systemcare_inspect(arguments: dict[str, Any]) -> str:
         result = SystemCareService(config).inspect(str(runtime.get("context") or "machine"),
                     str(runtime.get("section") or "services"), str(runtime.get("target") or ""))
         # Originals belong to the private action/restore owner, never provider prose.
-        public = {**result, "rows": [{k: v for k, v in row.items() if k not in {"original", "subject"}}
-                                    for row in result.get("rows", [])]}
+        public = {**result, "observed_at": result.get("at"),
+                  "selection": "Use each row's index from this full inspection, plus observed_at; do not renumber filtered rows. Eligible means eligible for exact plan review, not a performance benefit or permission to apply.",
+                  "rows": [{**{k: v for k, v in row.items() if k not in {"original", "subject"}}, "index": index}
+                           for index, row in enumerate(result.get("rows", []))]}
         return _render(public)
     except (RuntimeError, ValueError, OSError) as exc:
         return f"SystemCare inspection error: {exc}"

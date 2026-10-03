@@ -566,6 +566,7 @@ class Receipt:
     verified: bool
     rollback_available: bool
     detail: str = ""
+    checks: tuple[Mapping[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -581,6 +582,7 @@ class Receipt:
             "verified": bool(self.verified),
             "rollback_available": bool(self.rollback_available),
             "detail": _text(self.detail, 300),
+            "checks": [_bounded_evidence(check) for check in self.checks[:MAX_FINDINGS_PER_SCAN]],
         }
 
     @classmethod
@@ -599,6 +601,8 @@ class Receipt:
             verified=bool(row.get("verified")),
             rollback_available=bool(row.get("rollback_available")),
             detail=_text(row.get("detail"), 300),
+            checks=tuple(_bounded_evidence(check) for check in list(row.get("checks") or [])[:MAX_FINDINGS_PER_SCAN]
+                         if isinstance(check, Mapping)),
         )
 
 

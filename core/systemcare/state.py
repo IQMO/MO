@@ -39,8 +39,14 @@ class SystemCareState:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
+    @contextmanager
     def _connect(self):
-        return connect_state_db(self.db_path)
+        connection = connect_state_db(self.db_path)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _init_db(self) -> None:
         with self._connect() as db:
