@@ -97,7 +97,7 @@ unavailable and stale evidence; a completed request does not imply full health.
 | Context | Current inspection boundary |
 | --- | --- |
 | This machine | Windows resources, storage, startup registrations/tasks, services, apps, WinGet updates, drivers/packages, Windows-offered updates, registry references and fixed native checks |
-| MO runtime | Existing offline doctor, retention/index diagnostics and trace declarations; loaded-process and task evidence remain separate |
+| MO runtime | Existing offline doctor and canonical personalization audit, retention/index diagnostics and trace declarations; loaded-process and task evidence remain separate |
 | MO servers | Selected configured SSH alias: host resources, matching loaded and installed system/user MO systemd units, startup enablement and dependency properties, journal evidence and retention readiness; custom deployments are not inferred |
 | Projects | Existing profile project declarations or an explicit selected root: folder/graph health, separate manifest evidence, generated-state inventory and bounded storage discovery; installed dependencies and build/test health are not inferred |
 
@@ -110,6 +110,18 @@ same handoff and asks for dependency/usage evidence rather than name-based safet
 Recommendations prepare a reviewable plan; maintenance waits for approval of that
 exact plan. SystemCare adds no second agent, provider connection, project catalog,
 index or server mutation owner.
+
+MO Health composes the same public personalization report as `/doctor
+personalization` and `system_health(scope="personalization")`. Saved results show
+profile structure, accepted-learning duplication, learning authorities and pending
+reviews, episodic recall, session/closeout retention and project recurrence.
+Staged product intents remain separate from learning reviews. Recurrence is a
+review signal; file age does not prove semantic profile freshness. Proposed
+maintenance, operator decisions and evidence review use the existing Ask MO
+handoff and never become machine repair steps. These checks run on explicit
+inspection, not on opening or resource refresh. Exact active-turn usage, Goal,
+worker and taskboard evidence still belongs to `system_health` in the active
+Agent; a separate SystemCare host cannot infer that conversational identity.
 
 Projects and MO servers show the latest saved inspections for their selected
 target in History. Machine receipts and restore controls remain in This machine.

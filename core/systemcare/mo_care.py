@@ -13,9 +13,46 @@ def inspect_mo(config: dict[str, Any], section: str, *, cancelled: Callable[[], 
         raise ScanCancelled("MO inspection cancelled")
     if section == "health":
         from core.diagnostics.doctor import build_doctor_report
+        from core.diagnostics.personalization import build_personalization_report
+        from core.state.paths import repo_root
         report = build_doctor_report(home=home, project_path=None, config=config)
         rows = [{"name": row.name, "state": row.status, "detail": row.detail} for row in report.checks]
-        detail = "Offline owner checks; no live provider/tool request performed"
+        if cancelled():
+            from .windows import ScanCancelled
+            raise ScanCancelled("MO inspection cancelled")
+        personalization = build_personalization_report(state_root=home, project_root=repo_root())
+        profile = personalization["profile"]
+        learning = personalization["learning"]
+        sessions = personalization["sessions"]
+        recurrence = personalization["recurrence"]
+        rows.extend([
+            {"name": "Personalization maintenance", "state": personalization["verdict"],
+             "detail": personalization["summary"]},
+            {"name": "Profile structure", "state": profile["status"],
+             "detail": f"{len(profile['missing'])} missing documents · {len(profile['unreadable'])} unreadable · "
+                       f"{profile['learning_duplicate_entries'] + profile['behavior_duplicate_rules']} duplicate accepted entries; "
+                       "semantic freshness is not inferred"},
+            {"name": "Learning authorities", "state": learning["status"],
+             "detail": f"{learning['pending_review']} pending learning reviews · "
+                       f"{learning['pending_product_intents']} staged product intents · "
+                       f"authorities {'aligned' if learning['authority_alignment'] else 'misaligned'}"},
+            {"name": "Episodic recall", "state": "observed" if learning["memory_inspection"] == "ready" else "unavailable",
+             "detail": f"{learning['memory_turns']} stored turns · {learning['recall_mode']} · {learning['memory_inspection']}"},
+            {"name": "Session retention", "state": sessions["status"],
+             "detail": f"{sessions['cleanup_candidates']} cleanup candidates · {sessions['unreadable_json']} unreadable metadata · "
+                       f"latest closeout {sessions['latest_closeout']['status']}; named sessions stay with their owner"},
+            {"name": "Project recurrence", "state": "Review" if recurrence["status"] == "detected" else recurrence["status"],
+             "detail": f"{len(recurrence['repeated'])} repeated paths / {recurrence['window_commits']} commits; "
+                       "signal only, not evidence of a defect or cause"},
+        ])
+        for name, key in (("Mechanical maintenance", "deterministic_maintenance"),
+                          ("Operator decisions", "operator_decisions"), ("Evidence review", "evidence_review")):
+            actions = personalization["next_actions"][key]
+            if actions:
+                rows.append({"name": name, "state": "Review", "detail": "; ".join(actions)})
+        return {"state": "partial", "at": time.time(), "rows": rows, "report": personalization,
+                "detail": "Offline doctor and canonical personalization evidence; no live provider/tool request, "
+                          "semantic-health verdict or maintenance performed. Review uses the existing MO conversation."}
     elif section == "caches":
         from core.diagnostics.system_health import check_file_health
         report = check_file_health(str(home))
@@ -64,4 +101,3 @@ def inspect_mo(config: dict[str, Any], section: str, *, cancelled: Callable[[], 
                 "detail": "Canonical trace declaration owner; task truth and loaded-source evidence require runtime observations"}
     else:
         raise ValueError("Unknown MO diagnostic owner")
-    return {"state": "partial", "at": time.time(), "rows": rows, "detail": detail}
