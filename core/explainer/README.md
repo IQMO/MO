@@ -5,11 +5,30 @@
 ## Authoring
 
 Show recognizable subjects and their action when the brief depends on objects;
-typography can suit other briefs. Reuse authorized media, create local artwork,
-or use `generate_image` for needed assets within cost/method limits. Generation
-is optional; avoid speculative alternatives. Ingest with `add-media --origin
-mo-generated`. Accepts PNG/JPEG/WebP and muted MP4/MOV/MKV/WebM, not SVG; export
-vector art to a supported image with an available renderer.
+typography can suit other briefs. Reuse authorized media or create a coherent
+set of local artwork. For composited product motion, prefer isolated transparent
+elements in one visual system; use `edit_image` to crop, resize, rotate, or
+convert them, then let the explainer own composition, depth, and movement. If the
+chosen method explicitly uses `generate_image`, generate only the needed reusable
+assets or element sheet rather than a pre-composited environment. Ingest with
+`add-media --origin mo-generated`. Accepts PNG/JPEG/WebP and muted
+MP4/MOV/MKV/WebM, not SVG; export vector art to a supported image with an
+available renderer.
+
+Inspect a generated kit against its brief before cropping or ingesting it.
+Dimensions, transparency, and file custody prove only that an image arrived;
+they do not prove the requested subjects, count, layout, or visual language.
+Reject prompt drift instead of salvaging unrelated assets with geometric edits.
+
+Build one visual hierarchy rather than a wall of cards: background atmosphere,
+world/subject, action/evidence, then trusted title/caption overlays. Reserve
+brand color for meaning, focus, or a decision; vary displacement and blur across
+the first three layers for deliberate parallax. Reuse the canonical product
+mark as media instead of redrawing it. The native `prism` supplies generic
+projected volume for product objects and depth accents, not a replacement logo.
+Keep data displays bounded and let position/length carry magnitude before adding
+more colors. Static grids, light pools, and contact shadows should be composed
+once and moved as layers; do not spend every frame rebuilding visual noise.
 
 ```text
 mo --explainer init --title "<title>" --layout process
@@ -47,16 +66,24 @@ Use JSON numbers. Keep the saved subtitle lane clear.
 
 | Element | Fields |
 | --- | --- |
-| All | `x`, `y`, `color` (theme name or #rrggbb), optional `start`/`end` in scene seconds, `animation`. |
+| All | `x`, `y`, `color` (theme name or #rrggbb), optional `start`/`end` in scene seconds, `animation`, `opacity`, `scale`, `rotation`, `blur`, `anchor` top_left/center, and `keyframes`. |
 | text | `text`, `width`, `size` (8-300; rendered min 12), `align` left/center/right, `weight` regular/bold. |
-| box | `width`, `height`, `radius`, `stroke`, `fill`, `fill_color`, `fill_opacity` (0-1, default 52/255). |
-| circle | `radius` around x/y; same fill/stroke fields. |
-| line/arrow | `x2`, `y2`, `stroke`. |
-| bar | `width`, `height`, `value` (0-1). |
-| image/video | `asset_id`, `width`, `height`, `fit` contain/cover, `opacity` (0-1). |
+| box | `width`, `height`, `radius`, `stroke`, `fill`, `fill_color`, `fill_opacity` (0-1, default 52/255), optional `gradient`. |
+| circle | `radius` around x/y; same fill/stroke and optional gradient fields. |
+| prism | `width`, `height`, `depth`; optional `fill_color`, `top_color`, `side_color`, `fill_opacity`. A projected three-face volume. |
+| line/arrow | `x2`, `y2`, `stroke`, optional `curve`; arrows also support `head` triangle/chevron/none and `head_size`. |
+| bar | `width`, `height`, `value` (0-1), optional `gradient`. |
+| image/video | `asset_id`, `width`, `height`, `fit` contain/cover, `radius`, `border_width`, `border_color`. |
 | media motion | `move` below; `zoom`/`zoom_to` (1-4), `pan_x`/`pan_to_x`, `pan_y`/`pan_to_y` (-1 to 1). |
 | video playback | `trim_start`, `trim_end`, `loop`; `muted:true`. Max 30s. |
-| callout | `text`, `width`, `height`, `target_x`, `target_y`, `size` (12-72). |
+| callout | `text`, `width`, `height`, `target_x`, `target_y`, `size` (12-72), optional `curve` and `gradient`. |
+
+`shadow` and `glow` are optional effect objects with `color`, `blur`, and
+`opacity`; shadow also accepts `x`/`y` offsets. `keyframes` contain at least two
+absolute scene-time rows. Rows may animate `x`, `y`, `scale`, `opacity`, or
+`rotation`; line, arrow, and bar rows may also animate `draw`. A row's `ease`
+controls the segment arriving at that row: `linear`, `ease_in`, `ease_out`,
+`ease_in_out`, or `ease_out_back`. Sparse properties hold their prior value.
 
 Example after ingesting `subject` (retain its asset entry):
 ```json
@@ -67,10 +94,18 @@ Example after ingesting `subject` (retain its asset entry):
 `move` owns image/video position, easing to x/y then holding. Supply either
 axis; omitted axes stay unchanged. start/end use scene seconds, default to the
 element window and must fit inside it with start < end. Pan/zoom spans visibility.
-`animation:none` disables entrance/exit presets, not explicit media motion;
-fade/rise/slide_left/slide_right/scale/draw remain presets. `fill_opacity:1` is
-opaque; `fill:false` is outline only. No arbitrary paths, grouped keyframes,
-gradients, shadows or custom fonts (only `system-sans`); use media for these.
+`move` and `keyframes` are mutually exclusive. `animation:none` disables
+entrance/exit presets, not explicit motion; fade/rise/slide_left/slide_right/
+scale/draw remain presets. `fill_opacity:1` is opaque; `fill:false` is outline
+only. There are no arbitrary paths, grouped transforms, or custom fonts (only
+`system-sans`); use an ingested element when those are essential.
+
+Optional `style.motion.blur_samples` (1-8) and `shutter_angle` (0-360) provide
+deterministic encoded-frame motion blur. Optional `style.render` controls
+`supersampling` (1-4), `bloom`, `bloom_radius`, `vignette`, and restrained
+`grain`. High supersampling and multiple blur samples multiply render cost. For
+diagnosis, shorten the scene or reduce only output dimensions while retaining
+the intended quality controls; restore delivery dimensions for the final render.
 
 ### Verification and delivery
 
@@ -78,11 +113,15 @@ After `narrate`, compare speech_duration and duration in `timings.json`. Total
 time is 0.2s lead plus sum(max(scene duration, speech_duration + 0.65s)). Optional
 project `voice.speed` (0.5-2, default 1) slows speech below 1, speeds it above 1.
 Shortening text may not slow speech. Adjust pace deliberately from measured
-timings; warnings are advisory, not a target for repeated regeneration. Changing
+timings; warnings are advisory, not a target for repeated regeneration. `check`
+also warns when raster media will be enlarged beyond its recorded source pixels;
+replace or reduce that element when edge quality matters. Changing
 text, durations or speed needs `narrate` to rebind audio. `check` covers schema,
 assets, layout and pacing, not artistry. Reuse unchanged checks; skip `validate`.
 Inspect `sheet` with `perceive`. For work over one minute, render a short preview
-first (`--preview-seconds 20`). Sample final MP4 action/scene changes into a
+first (`--preview-seconds 20`). Add `--preview-width 480` for a faster
+screen-size-only diagnostic; it preserves the project's supersampling, shutter
+samples, and optical finish and cannot replace the final render. Sample final MP4 action/scene changes into a
 task-owned scratch directory; remove internal samples after inspection, retaining
 requested deliverables. Quote paths:
 ```text

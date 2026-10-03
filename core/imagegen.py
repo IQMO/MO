@@ -30,6 +30,102 @@ from pathlib import Path
 DEFAULT_MODEL = "gpt-image-2"
 
 
+def _requested_dimensions(size: str) -> tuple[int, int] | None:
+    parts = str(size or "").lower().split("x", 1)
+    try:
+        dimensions = (int(parts[0]), int(parts[1])) if len(parts) == 2 else None
+    except ValueError:
+        return None
+    if dimensions and dimensions[0] > 0 and dimensions[1] > 0:
+        return dimensions
+    return None
+
+
+def _png_artifact_issue(path: Path, expected_size: str) -> str | None:
+    """Return why ``path`` is not the requested complete PNG, or ``None``.
+
+    Image generation remains available without Pillow, so this boundary check
+    uses the fixed PNG signature/IHDR/IEND structure instead of importing an
+    optional renderer.  It catches the important custody failures (including a
+    zero-byte placeholder) before a backend can report success.
+    """
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(24)
+            if (
+                len(header) != 24
+                or header[:8] != b"\x89PNG\r\n\x1a\n"
+                or header[12:16] != b"IHDR"
+            ):
+                return "an unreadable or incomplete PNG"
+            width = int.from_bytes(header[16:20], "big")
+            height = int.from_bytes(header[20:24], "big")
+            if width <= 0 or height <= 0:
+                return "a PNG with invalid dimensions"
+            handle.seek(-12, 2)
+            if handle.read(12) != b"\x00\x00\x00\x00IEND\xaeB`\x82":
+                return "an incomplete PNG"
+    except (OSError, ValueError):
+        return "an unreadable or incomplete PNG"
+
+    requested = _requested_dimensions(expected_size)
+    if requested and requested != (width, height):
+        return f"a {width}x{height} PNG instead of the requested {requested[0]}x{requested[1]}"
+    return None
+
+
+def _normalize_png_artifact(path: Path, expected_size: str) -> str | None:
+    """Validate a generated PNG and normalize a backend size mismatch.
+
+    Backends occasionally return a nearby supported resolution despite an exact
+    request.  Keep that transport result only after the existing image-edit
+    owner has resized it through a staged file and the staged PNG passes the
+    same custody check.  Pillow remains optional: without it, the mismatch is
+    reported honestly instead of weakening the requested-size contract.
+    """
+    structural_issue = _png_artifact_issue(path, "")
+    if structural_issue:
+        return structural_issue
+
+    requested = _requested_dimensions(expected_size)
+    mismatch = _png_artifact_issue(path, expected_size)
+    if not mismatch or requested is None:
+        return mismatch
+
+    try:
+        from . import imageedit
+
+        if not imageedit.available():
+            return f"{mismatch}; image resizing is unavailable"
+        import os
+        import tempfile
+
+        requested_width, requested_height = requested
+        descriptor, staged_name = tempfile.mkstemp(
+            prefix=f".{path.stem}-normalized-",
+            suffix=".png",
+            dir=str(path.parent),
+        )
+        os.close(descriptor)
+        staged = Path(staged_name)
+        try:
+            imageedit.resize(
+                str(path),
+                width=requested_width,
+                height=requested_height,
+                out=str(staged),
+            )
+            normalized_issue = _png_artifact_issue(staged, expected_size)
+            if normalized_issue:
+                return f"{mismatch}; resized output was {normalized_issue}"
+            staged.replace(path)
+        finally:
+            staged.unlink(missing_ok=True)
+    except Exception as exc:
+        return f"{mismatch}; resize failed: {exc}"
+    return None
+
+
 def _is_cancelled(cancel_event) -> bool:
     try:
         return bool(cancel_event is not None and cancel_event.is_set())
@@ -39,6 +135,42 @@ def _is_cancelled(cancel_event) -> bool:
 
 def _cancelled_result(backend: str) -> dict:
     return {"ok": False, "error": "image generation cancelled", "backend": backend}
+
+
+def _codex_generated_images(stdout: str) -> list[Path]:
+    """Return PNGs owned by the JSONL Codex thread in ``stdout``.
+
+    Codex stores image-tool results under its own thread-specific cache.  The
+    thread ID makes retrieval concurrency-safe: images from another terminal or
+    Codex session are never candidates.
+    """
+    import json
+    import os
+    import re
+
+    thread_id = ""
+    for line in str(stdout or "").splitlines():
+        if "thread.started" not in line:
+            continue
+        try:
+            event = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if event.get("type") != "thread.started":
+            continue
+        thread = event.get("thread") if isinstance(event.get("thread"), dict) else {}
+        thread_id = str(event.get("thread_id") or thread.get("id") or "").strip()
+        break
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", thread_id):
+        return []
+
+    configured = str(os.environ.get("CODEX_HOME") or "").strip()
+    codex_home = Path(configured).expanduser() if configured else Path.home() / ".codex"
+    owned = codex_home / "generated_images" / thread_id
+    try:
+        return sorted(path for path in owned.glob("*.png") if path.is_file())
+    except OSError:
+        return []
 
 
 def _image_cfg(config: dict | None) -> dict:
@@ -182,6 +314,10 @@ def _generate_openai(
         if _is_cancelled(cancel_event):
             out.unlink(missing_ok=True)
             return _cancelled_result("openai_compatible")
+        issue = _normalize_png_artifact(out, size)
+        if issue:
+            out.unlink(missing_ok=True)
+            return {"ok": False, "error": f"image API produced {issue}", "backend": "openai_compatible"}
         return {"ok": True, "path": str(out), "backend": "openai_compatible"}
 
     img_url = data.get("url")
@@ -197,6 +333,10 @@ def _generate_openai(
         if _is_cancelled(cancel_event):
             out.unlink(missing_ok=True)
             return _cancelled_result("openai_compatible")
+        issue = _normalize_png_artifact(out, size)
+        if issue:
+            out.unlink(missing_ok=True)
+            return {"ok": False, "error": f"image API produced {issue}", "backend": "openai_compatible"}
         return {"ok": True, "path": str(out), "backend": "openai_compatible"}
 
     return {"ok": False, "error": "image API returned no image data", "backend": "openai_compatible"}
@@ -217,9 +357,13 @@ def _generate_codex(
     if _is_cancelled(cancel_event):
         return _cancelled_result("codex")
     instruction = (
-        f"Generate an image and save it as '{out.name}' in the current working "
-        f"directory using the image generation tool ($imagegen). Target size "
-        f"{size}. Do not ask any questions. Image description: {prompt}"
+        f"Call the image generation tool ($imagegen) exactly once to generate one "
+        f"brand-new PNG. Do not retry, create variants, ask questions, reuse an "
+        f"earlier image, reinterpret the image description, or use shell/Python "
+        f"commands to copy or re-encode the result; the caller retrieves the image "
+        f"artifact directly from this Codex thread. Pass the image description below "
+        f"verbatim to $imagegen. Target size {size}. Image description (pass "
+        f"verbatim): {prompt}"
     )
     pre_mtime = out.stat().st_mtime_ns if out.is_file() else -1
     proc = None
@@ -239,7 +383,7 @@ def _generate_codex(
         apply_windows_hidden_process_flags(run_kwargs)
         proc = subprocess.Popen(
             [
-                exe, "exec", "--ephemeral", "--skip-git-repo-check",
+                exe, "exec", "--json", "--ephemeral", "--skip-git-repo-check",
                 "--sandbox", "workspace-write", instruction,
             ],
             **run_kwargs,
@@ -267,6 +411,8 @@ def _generate_codex(
                     except subprocess.TimeoutExpired:
                         proc.kill()
                         proc.communicate()
+                    if out.is_file() and out.stat().st_mtime_ns > pre_mtime:
+                        out.unlink(missing_ok=True)
                     return {"ok": False, "error": "codex image generation timed out (>10m)", "backend": "codex"}
     except Exception as exc:
         if proc is not None and proc.poll() is None:
@@ -274,13 +420,38 @@ def _generate_codex(
                 proc.kill()
             except Exception:
                 pass
+        if out.is_file() and out.stat().st_mtime_ns > pre_mtime:
+            out.unlink(missing_ok=True)
         return {"ok": False, "error": f"codex invocation failed: {exc}", "backend": "codex"}
-
     if _is_cancelled(cancel_event):
         if out.is_file() and out.stat().st_mtime_ns > pre_mtime:
             out.unlink(missing_ok=True)
         return _cancelled_result("codex")
+
+    generated = _codex_generated_images(stdout)
+    if len(generated) > 1:
+        if out.is_file() and out.stat().st_mtime_ns > pre_mtime:
+            out.unlink(missing_ok=True)
+        return {
+            "ok": False,
+            "error": f"codex generated {len(generated)} images in one thread; expected exactly one",
+            "backend": "codex",
+        }
+    if len(generated) == 1:
+        try:
+            shutil.copyfile(generated[0], out)
+        except OSError as exc:
+            try:
+                out.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return {"ok": False, "error": f"codex image custody failed: {exc}", "backend": "codex"}
+
     if out.is_file() and out.stat().st_mtime_ns > pre_mtime:
+        issue = _normalize_png_artifact(out, size)
+        if issue:
+            out.unlink(missing_ok=True)
+            return {"ok": False, "error": f"codex produced {issue}", "backend": "codex"}
         return {"ok": True, "path": str(out), "backend": "codex"}
 
     tail = ((stderr or "") + (stdout or "")).strip()[-300:]

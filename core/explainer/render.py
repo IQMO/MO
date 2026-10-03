@@ -1,6 +1,7 @@
 """Deterministic Pillow-to-FFmpeg renderer for MO explainer projects."""
 from __future__ import annotations
 
+from copy import deepcopy
 from functools import lru_cache
 import json
 import math
@@ -79,11 +80,15 @@ def render_video(
     *,
     output: str | Path | None = None,
     preview_seconds: float | None = None,
+    preview_width: int | None = None,
     cancel_event: object = None,
     progress: Callable[[int, int], None] | None = None,
 ) -> Path:
     """Validate staged media, then publish video and matching receipt in sequence."""
     _require_pillow()
+    output_width, output_height = _preview_dimensions(
+        project, preview_seconds=preview_seconds, preview_width=preview_width,
+    )
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")
     if not ffmpeg:
@@ -105,6 +110,18 @@ def render_video(
         requested_duration = min(timeline_end, max(1.0, float(preview_seconds)))
     frames = max(1, math.ceil(requested_duration * project.fps))
     expected_duration = frames / project.fps
+    render_factor = _supersampling(project)
+    native_scale = output_width / project.width * render_factor
+    native_size = (output_width * render_factor, output_height * render_factor)
+    needs_scaled_project = (
+        not math.isclose(native_scale, 1.0)
+        or native_size != (project.width, project.height)
+    )
+    render_project = (
+        _scaled_project(project, native_scale, width=native_size[0], height=native_size[1])
+        if needs_scaled_project else project
+    )
+    render_timeline = _timeline_for_project(timeline, render_project) if needs_scaled_project else timeline
     audio = project.directory / "audio.wav"
     has_audio = audio.is_file()
     audio_details: dict[str, Any] | None = None
@@ -120,7 +137,7 @@ def render_video(
     command = [
         ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
         "-f", "rawvideo", "-pix_fmt", "rgb24",
-        "-s", f"{project.width}x{project.height}", "-r", str(project.fps), "-i", "-",
+        "-s", f"{output_width}x{output_height}", "-r", str(project.fps), "-i", "-",
     ]
     if has_audio:
         command.extend(["-i", str(audio)])
@@ -133,7 +150,7 @@ def render_video(
 
     if _cancel_requested(cancel_event):
         raise RuntimeError("explainer render cancelled")
-    with _PreparedMedia(project, ffmpeg=ffmpeg) as prepared_media, tempfile.TemporaryFile(mode="w+b") as stderr_file:
+    with _PreparedMedia(render_project, ffmpeg=ffmpeg) as prepared_media, tempfile.TemporaryFile(mode="w+b") as stderr_file:
         kwargs: dict[str, Any] = {
             "stdin": subprocess.PIPE,
             "stdout": subprocess.DEVNULL,
@@ -151,9 +168,15 @@ def render_video(
             for frame_index in range(frames):
                 if _cancel_requested(cancel_event):
                     raise RuntimeError("explainer render cancelled")
-                image = render_frame(
-                    project, frame_index / project.fps, timeline=timeline, _media=prepared_media,
+                image = _render_video_frame(
+                    render_project,
+                    frame_index / project.fps,
+                    timeline=render_timeline,
+                    media=prepared_media,
+                    maximum_seconds=max(0.0, expected_duration - 1.0 / project.fps),
                 )
+                if image.size != (output_width, output_height):
+                    image = _resize_rgba(image, (output_width, output_height))
                 process.stdin.write(image.convert("RGB").tobytes())
                 completed = frame_index + 1
                 if progress is not None and (completed == frames or completed % cadence == 0):
@@ -172,8 +195,8 @@ def render_video(
                 ffprobe=ffprobe,
                 expected_duration=expected_duration,
                 expected_frames=frames,
-                expected_width=project.width,
-                expected_height=project.height,
+                expected_width=output_width,
+                expected_height=output_height,
                 expected_fps=project.fps,
                 expect_audio=has_audio,
             )
@@ -184,6 +207,11 @@ def render_video(
                     str((_timing_payload(project) or {}).get("caption_timing") or "scene-duration-linear-approximate")
                     if has_audio else "scene-duration-linear-approximate"
                 ),
+            }
+            motion = project.data.get("style", {}).get("motion", {})
+            inspection["motion_blur"] = {
+                "samples": int(motion.get("blur_samples", 1)),
+                "shutter_angle": float(motion.get("shutter_angle", 180.0)),
             }
             inspection["path"] = str(target)
             inspection["sha256"] = file_sha256(stage)
@@ -198,6 +226,63 @@ def render_video(
             staged_report.unlink(missing_ok=True)
             raise
     return target
+
+
+def _preview_dimensions(
+    project: ExplainerProject,
+    *,
+    preview_seconds: float | None,
+    preview_width: int | None,
+) -> tuple[int, int]:
+    if preview_width is None:
+        return project.width, project.height
+    if preview_seconds is None:
+        raise ValueError("preview_width requires preview_seconds so it cannot replace the final render")
+    if isinstance(preview_width, bool) or preview_width != int(preview_width):
+        raise ValueError("preview_width must be an even integer")
+    width = int(preview_width)
+    if width % 2 or not 160 <= width <= project.width:
+        raise ValueError(f"preview_width must be an even integer between 160 and {project.width}")
+    height = round(project.height * width / project.width / 2.0) * 2
+    if height < 90:
+        raise ValueError("preview_width produces a preview shorter than 90 pixels")
+    return width, height
+
+
+def _render_video_frame(
+    project: ExplainerProject,
+    seconds: float,
+    *,
+    timeline: list[dict[str, Any]],
+    media: "_PreparedMedia",
+    maximum_seconds: float,
+):
+    """Render one native-sized frame, then apply one shared optical finish."""
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    motion = project.data.get("style", {}).get("motion", {})
+    samples = int(motion.get("blur_samples", 1)) if isinstance(motion, dict) else 1
+    if samples <= 1:
+        return _finish_frame(
+            _render_frame_native(project, seconds, timeline=timeline, _media=media),
+            project,
+        )
+    shutter = float(motion.get("shutter_angle", 180.0))
+    exposure = shutter / 360.0 / project.fps
+    start = seconds - exposure / 2.0
+    step = exposure / max(1, samples - 1)
+    frames = [
+        _render_frame_native(
+            project,
+            min(maximum_seconds, max(0.0, start + index * step)),
+            timeline=timeline,
+            _media=media,
+        ).convert("RGBA")
+        for index in range(samples)
+    ]
+    averaged = frames[0]
+    for index, frame in enumerate(frames[1:], start=2):
+        averaged = Image.blend(averaged, frame, 1.0 / index)
+    return _finish_frame(averaged, project)
 
 
 def _publish_video_pair(stage: Path, staged_report: Path, target: Path, *, cancel_event: object = None) -> None:
@@ -492,17 +577,21 @@ def render_contact_sheet(
 ) -> Path:
     """Render one representative still per scene for provider/operator QC."""
     Image, ImageDraw, _ImageFont = _require_pillow()
-    timeline = project_timeline(project)
-    with _PreparedMedia(project) as prepared_media:
-        stills = [
-            render_frame(
-                project,
+    factor = _supersampling(project)
+    render_project = _scaled_project(project, factor) if factor > 1 else project
+    timeline = project_timeline(render_project)
+    with _PreparedMedia(render_project) as prepared_media:
+        stills = []
+        for row in timeline:
+            still = render_frame(
+                render_project,
                 float(row["start"]) + float(row["duration"]) * 0.58,
                 timeline=timeline,
                 _media=prepared_media,
             )
-            for row in timeline
-        ]
+            if factor > 1:
+                still = _resize_rgba(still, (project.width, project.height))
+            stills.append(still)
     thumb_width = 480
     thumb_height = round(thumb_width * project.height / project.width)
     columns = max(1, min(5, int(columns)))
@@ -528,10 +617,33 @@ def render_frame(
     timeline: list[dict[str, Any]] | None = None,
     _media: _PreparedMedia | None = None,
 ):
+    """Render one output-sized frame with optional high-resolution sampling."""
+    factor = _supersampling(project)
+    if factor <= 1:
+        return _finish_frame(
+            _render_frame_native(project, seconds, timeline=timeline, _media=_media), project,
+        )
+    scaled = _scaled_project(project, factor)
+    scaled_timeline = _timeline_for_project(timeline or project_timeline(project), scaled)
+    high_resolution = _render_frame_native(
+        scaled, seconds, timeline=scaled_timeline, _media=_media,
+    )
+    finished = _finish_frame(high_resolution, scaled)
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    return _resize_rgba(finished, (project.width, project.height))
+
+
+def _render_frame_native(
+    project: ExplainerProject,
+    seconds: float,
+    *,
+    timeline: list[dict[str, Any]] | None = None,
+    _media: _PreparedMedia | None = None,
+):
     Image, ImageDraw, _ImageFont = _require_pillow()
     if _media is None and project.assets:
         with _PreparedMedia(project) as prepared_media:
-            return render_frame(project, seconds, timeline=timeline, _media=prepared_media)
+            return _render_frame_native(project, seconds, timeline=timeline, _media=prepared_media)
     rows = timeline or project_timeline(project)
     total = max(float(item["start"]) + float(item["duration"]) for item in rows)
     row_index = len(rows) - 1
@@ -561,15 +673,162 @@ def render_frame(
             fade_out=False,
         )
         image = Image.blend(previous_image, image, _ease(local / transition_seconds))
-    image = image.convert("RGB")
     decorations = (project.data.get("style") or {}).get("decorations", {})
     if decorations.get("timeline", True):
+        image = image.convert("RGB")
         draw = ImageDraw.Draw(image, "RGBA")
         theme = dict(project.data["theme"])
+        coordinate_scale = _coordinate_scale(project.data.get("style") or {})
+        timeline_height = max(1, round(8 * coordinate_scale))
         progress = 0.0 if total <= 0 else min(1.0, max(0.0, seconds / total))
-        draw.rectangle((0, project.height - 8, project.width, project.height), fill=_rgba(theme["muted"], 90))
-        draw.rectangle((0, project.height - 8, round(project.width * progress), project.height), fill=_rgba(theme["accent"], 255))
-    return image.convert("RGBA")
+        draw.rectangle((0, project.height - timeline_height, project.width, project.height), fill=_rgba(theme["muted"], 90))
+        draw.rectangle((0, project.height - timeline_height, round(project.width * progress), project.height), fill=_rgba(theme["accent"], 255))
+        return image.convert("RGBA")
+    return image if image.mode == "RGBA" else image.convert("RGBA")
+
+
+def _supersampling(project: ExplainerProject) -> int:
+    style = project.data.get("style") if isinstance(project.data.get("style"), dict) else {}
+    render_style = style.get("render") if isinstance(style.get("render"), dict) else {}
+    return max(1, int(render_style.get("supersampling", 1)))
+
+
+def _coordinate_scale(style: dict[str, Any]) -> float:
+    render_style = style.get("render") if isinstance(style.get("render"), dict) else {}
+    return max(0.01, float(render_style.get("coordinate_scale", 1.0)))
+
+
+def _scaled_project(
+    project: ExplainerProject,
+    factor: float,
+    *,
+    width: int | None = None,
+    height: int | None = None,
+) -> ExplainerProject:
+    """Create one in-memory high-resolution view; source asset metadata stays factual."""
+    data = deepcopy(project.data)
+    data["width"] = int(width if width is not None else round(project.width * factor))
+    data["height"] = int(height if height is not None else round(project.height * factor))
+    style = data.setdefault("style", {})
+    render_style = style.setdefault("render", {})
+    render_style["supersampling"] = 1
+    render_style["coordinate_scale"] = factor
+    if "bloom_radius" in render_style:
+        render_style["bloom_radius"] = float(render_style["bloom_radius"]) * factor
+    for section, keys in (
+        ("typography", ("caption_size",)),
+        ("spacing", ("margin",)),
+    ):
+        values = style.get(section)
+        if not isinstance(values, dict):
+            continue
+        for key in keys:
+            if key in values:
+                values[key] = float(values[key]) * factor
+    spatial = {
+        "x", "y", "x2", "y2", "width", "height", "radius", "stroke", "size",
+        "target_x", "target_y", "curve", "head_size", "border_width", "blur", "depth",
+    }
+    for scene in data.get("scenes", []):
+        for element in scene.get("elements", []):
+            for key in spatial:
+                if key in element:
+                    element[key] = float(element[key]) * factor
+            move = element.get("move")
+            if isinstance(move, dict):
+                for key in ("x", "y"):
+                    if key in move:
+                        move[key] = float(move[key]) * factor
+            for row in element.get("keyframes", []):
+                if not isinstance(row, dict):
+                    continue
+                for key in ("x", "y"):
+                    if key in row:
+                        row[key] = float(row[key]) * factor
+            for effect_name in ("shadow", "glow"):
+                effect = element.get(effect_name)
+                if not isinstance(effect, dict):
+                    continue
+                for key in ("blur", "x", "y"):
+                    if key in effect:
+                        effect[key] = float(effect[key]) * factor
+    return ExplainerProject(project.path, data)
+
+
+def _timeline_for_project(
+    timeline: list[dict[str, Any]], project: ExplainerProject,
+) -> list[dict[str, Any]]:
+    scenes = {str(scene["id"]): scene for scene in project.scenes}
+    return [{**row, "scene": scenes[str(row["scene"]["id"])]} for row in timeline]
+
+
+def _finish_frame(image, project: ExplainerProject):
+    """Apply one restrained scene-wide optical pass so elements share a world."""
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    from PIL import ImageFilter
+
+    style = project.data.get("style") if isinstance(project.data.get("style"), dict) else {}
+    render_style = style.get("render") if isinstance(style.get("render"), dict) else {}
+    bloom = float(render_style.get("bloom", 0.0))
+    vignette = float(render_style.get("vignette", 0.0))
+    grain = float(render_style.get("grain", 0.0))
+    result = image.convert("RGBA")
+    if bloom > 0:
+        luminance = result.convert("RGB").convert("L")
+        highlights = luminance.point(lambda value: max(0, min(255, (value - 148) * 3)))
+        radius = float(render_style.get("bloom_radius", 12.0))
+        if radius > 0:
+            highlights = highlights.filter(ImageFilter.GaussianBlur(radius))
+        highlights = highlights.point(lambda value: round(value * bloom))
+        glow = result.copy()
+        glow.putalpha(highlights)
+        result = Image.alpha_composite(result, glow)
+    if vignette > 0:
+        mask = _vignette_mask(result.width, result.height).point(
+            lambda value: round(value * vignette),
+        )
+        shade = Image.new("RGBA", result.size, (0, 0, 0, 0))
+        shade.putalpha(mask)
+        result = Image.alpha_composite(result, shade)
+    if grain > 0:
+        result = Image.alpha_composite(result, _grain_overlay(result.width, result.height, round(grain, 4)))
+    return result
+
+
+@lru_cache(maxsize=16)
+def _vignette_mask(width: int, height: int):
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    size = 256
+    center = (size - 1) / 2.0
+    maximum = math.hypot(center, center)
+    values = bytearray(size * size)
+    offset = 0
+    for y in range(size):
+        for x in range(size):
+            radius = math.hypot(x - center, y - center) / maximum
+            values[offset] = round(255 * max(0.0, min(1.0, (radius - 0.34) / 0.66)) ** 1.8)
+            offset += 1
+    return Image.frombytes("L", (size, size), bytes(values)).resize((width, height), Image.Resampling.BICUBIC)
+
+
+@lru_cache(maxsize=16)
+def _grain_overlay(width: int, height: int, strength: float):
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    tile_size = 128
+    pixels = bytearray(tile_size * tile_size * 4)
+    state = 0x5A17C9E3
+    for offset in range(0, len(pixels), 4):
+        state = (1664525 * state + 1013904223) & 0xFFFFFFFF
+        noise = ((state >> 24) & 0xFF) - 128
+        value = 255 if noise >= 0 else 0
+        alpha = round(abs(noise) / 128.0 * 255 * strength)
+        pixels[offset:offset + 4] = bytes((value, value, value, alpha))
+    tile = Image.frombytes("RGBA", (tile_size, tile_size), bytes(pixels))
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    for y in range(0, height, tile_size):
+        for x in range(0, width, tile_size):
+            overlay.paste(tile, (x, y))
+    return overlay
 
 
 def _render_scene_frame(
@@ -587,44 +846,75 @@ def _render_scene_frame(
     style = dict(project.data.get("style") or {})
     theme = dict(project.data["theme"])
     decorations = style.get("decorations", {})
+    coordinate_scale = _coordinate_scale(style)
     image = _background(
-        project.width, project.height, theme["background"], grid=decorations.get("grid", True),
+        project.width,
+        project.height,
+        theme["background"],
+        grid=decorations.get("grid", True),
+        coordinate_scale=coordinate_scale,
     ).copy()
     for element in scene.get("elements", []):
         _draw_element(image, element, local, duration, theme, style, media=media, fade_in=fade_in, fade_out=fade_out)
+    evidence = scene_source_ids(scene)
+    brand = style.get("brand") if isinstance(style.get("brand"), dict) else {}
+    needs_header = (
+        brand.get("enabled", False) is True
+        or decorations.get("title", True)
+        or decorations.get("scene_badge", True)
+    )
+    narration = str(scene.get("narration") or "")
+    if not needs_header and not narration.strip() and not evidence:
+        return image
     # Pillow blends translucent drawing onto RGB; on RGBA it replaces alpha.
     image = image.convert("RGB")
     draw = ImageDraw.Draw(image, "RGBA")
     _draw_header(draw, project, scene, theme, style)
     _draw_caption(
         draw,
-        str(scene.get("narration") or ""),
+        narration,
         local,
         min(duration, float(row.get("speech_duration", duration))),
         project,
         theme,
         style,
     )
-    evidence = scene_source_ids(scene)
     if evidence:
         source_domains = {
             str(source["id"]): str(source.get("url") or "").split("//", 1)[-1].split("/", 1)[0]
             for source in project.data.get("sources", [])
         }
         label = "Sources: " + ", ".join(f"[{item}] {source_domains.get(item, '')}".rstrip() for item in evidence)
-        draw.text((project.width - 28, 79), label, font=_font(18), fill=_rgba(theme["muted"], 230), anchor="ra")
+        draw.text(
+            (project.width - 28 * coordinate_scale, 79 * coordinate_scale),
+            label,
+            font=_font(max(1, round(18 * coordinate_scale))),
+            fill=_rgba(theme["muted"], 230),
+            anchor="ra",
+        )
     return image.convert("RGBA")
 
 
-@lru_cache(maxsize=8)
-def _background(width: int, height: int, color: str, *, grid: bool = True):
+@lru_cache(maxsize=16)
+def _background(
+    width: int,
+    height: int,
+    color: str,
+    *,
+    grid: bool = True,
+    coordinate_scale: float = 1.0,
+):
     Image, ImageDraw, _ImageFont = _require_pillow()
     image = Image.new("RGB", (width, height), color)
     if grid:
         draw = ImageDraw.Draw(image, "RGBA")
-        for y in range(32, height, 48):
-            for x in range(32 + (y // 48 % 2) * 24, width, 48):
-                draw.ellipse((x - 1, y - 1, x + 1, y + 1), fill=(255, 255, 255, 22))
+        inset = max(1, round(32 * coordinate_scale))
+        spacing = max(2, round(48 * coordinate_scale))
+        stagger = max(1, round(24 * coordinate_scale))
+        dot = max(1, round(coordinate_scale))
+        for y in range(inset, height, spacing):
+            for x in range(inset + (y // spacing % 2) * stagger, width, spacing):
+                draw.ellipse((x - dot, y - dot, x + dot, y + dot), fill=(255, 255, 255, 22))
     return image.convert("RGBA")
 
 
@@ -646,7 +936,7 @@ def _draw_element(
     if local < start or local > end:
         return
     motion = style.get("motion") if isinstance(style.get("motion"), dict) else {}
-    alpha, dx, dy, scale, draw_progress = _motion(
+    preset_alpha, dx, dy, preset_scale, preset_draw = _motion(
         str(element.get("animation") or "fade"),
         local - start,
         max(0.01, end - start),
@@ -657,53 +947,115 @@ def _draw_element(
         fade_in=fade_in or start > 0,
         fade_out=fade_out or end < duration,
     )
+    state, controlled = _keyframe_state(element, local, start)
+    if "move" in element:
+        move = element["move"]
+        move_start = float(move.get("start", start))
+        move_end = float(move.get("end", end))
+        progress = min(1.0, max(0.0, (local - move_start) / (move_end - move_start)))
+        state["x"] = _lerp(float(element.get("x", 0)), float(move.get("x", element.get("x", 0))), _ease(progress))
+        state["y"] = _lerp(float(element.get("y", 0)), float(move.get("y", element.get("y", 0))), _ease(progress))
+        controlled.update({"x", "y"})
+    x = state["x"] + (0.0 if "x" in controlled else dx)
+    y = state["y"] + (0.0 if "y" in controlled else dy)
+    scale = state["scale"] if "scale" in controlled else state["scale"] * preset_scale
+    draw_progress = state["draw"] if "draw" in controlled else preset_draw
+    overall_alpha = preset_alpha * state["opacity"]
+    if overall_alpha <= 0.001:
+        return
     layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer, "RGBA")
-    x = float(element.get("x", 0)) + dx
-    y = float(element.get("y", 0)) + dy
-    color = _rgba(_color(element.get("color"), theme), round(255 * alpha))
-    fill_alpha = 255 * float(element.get("fill_opacity", 52 / 255))
-    fill_color = _rgba(_color(element.get("fill_color") or element.get("color"), theme), round(fill_alpha * alpha))
+    rotation = state["rotation"]
+    color = _rgba(_color(element.get("color"), theme), 255)
+    kind = str(element.get("type"))
+    default_fill_opacity = 0.92 if kind == "prism" else 52 / 255
+    fill_alpha = 255 * float(element.get("fill_opacity", default_fill_opacity))
+    fill_color = _rgba(_color(element.get("fill_color") or element.get("color"), theme), round(fill_alpha))
+    base_width = float(element.get("width", 0))
+    base_height = float(element.get("height", 0))
     width = float(element.get("width", 0)) * scale
     height = float(element.get("height", 0)) * scale
-    kind = str(element.get("type"))
-    stroke = max(1, int(element.get("stroke", 4)))
+    prism_depth = 0.0
+    prism_rise = 0.0
+    if str(element.get("anchor") or "top_left") == "center":
+        if kind == "prism":
+            x, y, width, height, prism_depth, prism_rise = _prism_metrics(element, x, y, scale)
+        elif kind in {"box", "bar", "image", "video", "callout"}:
+            x -= (width - base_width) / 2.0
+            y -= (height - base_height) / 2.0
+    elif kind == "prism":
+        x, y, width, height, prism_depth, prism_rise = _prism_metrics(element, x, y, scale)
+    stroke = max(1, round(float(element.get("stroke", 4)) * scale))
     if kind == "text":
         draw.multiline_text(**text_layout(element, x, y, scale), fill=color)
     elif kind == "box":
         box = (x, y, x + width, y + height)
-        fill = fill_color if element.get("fill", True) else None
-        draw.rounded_rectangle(box, radius=int(element.get("radius", 24)), fill=fill, outline=color, width=stroke)
+        radius = float(element.get("radius", 24)) * scale
+        if element.get("fill", True):
+            _fill_shape(layer, box, radius, fill_color, element.get("gradient"), theme)
+        draw.rounded_rectangle(box, radius=radius, outline=color, width=stroke)
     elif kind == "circle":
         radius = float(element.get("radius", 40)) * scale
         box = (x - radius, y - radius, x + radius, y + radius)
-        fill = fill_color if element.get("fill", True) else None
-        draw.ellipse(box, fill=fill, outline=color, width=stroke)
+        if element.get("fill", True):
+            _fill_shape(layer, box, radius, fill_color, element.get("gradient"), theme, ellipse=True)
+        draw.ellipse(box, outline=color, width=stroke)
+    elif kind == "prism":
+        front = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
+        top = [
+            (x, y),
+            (x + prism_depth, y - prism_rise),
+            (x + width + prism_depth, y - prism_rise),
+            (x + width, y),
+        ]
+        side = [
+            (x + width, y),
+            (x + width + prism_depth, y - prism_rise),
+            (x + width + prism_depth, y + height - prism_rise),
+            (x + width, y + height),
+        ]
+        base = _color(element.get("fill_color") or element.get("color"), theme)
+        face_alpha = round(fill_alpha)
+        top_fill = _rgba(
+            _color(element.get("top_color"), theme)
+            if element.get("top_color") else _mix_color(base, theme["foreground"], 0.24),
+            face_alpha,
+        )
+        side_fill = _rgba(
+            _color(element.get("side_color"), theme)
+            if element.get("side_color") else _mix_color(base, theme["background"], 0.34),
+            face_alpha,
+        )
+        if element.get("fill", True):
+            draw.polygon(top, fill=top_fill)
+            draw.polygon(side, fill=side_fill)
+            draw.polygon(front, fill=fill_color)
+        for face in (top, side, front):
+            draw.line(face + [face[0]], fill=color, width=stroke, joint="curve")
     elif kind in {"line", "arrow"}:
-        x2 = x + (float(element.get("x2", x)) - float(element.get("x", 0))) * draw_progress
-        y2 = y + (float(element.get("y2", y)) - float(element.get("y", 0))) * draw_progress
-        draw.line((x, y, x2, y2), fill=color, width=stroke)
-        if kind == "arrow" and draw_progress > 0.92:
-            angle = math.atan2(y2 - y, x2 - x)
-            head = max(12, stroke * 4)
-            points = [(x2, y2)]
-            for offset in (2.55, -2.55):
-                points.append((x2 + math.cos(angle + offset) * head, y2 + math.sin(angle + offset) * head))
-            draw.polygon(points, fill=color)
+        x2 = x + (float(element.get("x2", x)) - float(element.get("x", 0))) * scale
+        y2 = y + (float(element.get("y2", y)) - float(element.get("y", 0))) * scale
+        _draw_connector(
+            draw,
+            (x, y),
+            (x2, y2),
+            color=color,
+            width=stroke,
+            curve=float(element.get("curve", 0.0)) * scale,
+            progress=draw_progress,
+            head=str(element.get("head") or ("triangle" if kind == "arrow" else "none")),
+            head_size=float(
+                element.get("head_size", max(12.0, float(element.get("stroke", 4.0)) * 4.0))
+            ) * scale,
+        )
     elif kind == "bar":
         value = min(1.0, max(0.0, float(element.get("value", 0.5))))
-        draw.rounded_rectangle((x, y, x + width, y + height), radius=height / 2, fill=_rgba(theme["muted"], 70))
-        draw.rounded_rectangle((x, y, x + width * value * draw_progress, y + height), radius=height / 2, fill=color)
+        track = (x, y, x + width, y + height)
+        fill = (x, y, x + width * value * draw_progress, y + height)
+        _fill_shape(layer, track, height / 2, _rgba(theme["muted"], 70), None, theme)
+        if fill[2] > fill[0]:
+            _fill_shape(layer, fill, min(height / 2, (fill[2] - fill[0]) / 2), color, element.get("gradient"), theme)
     elif kind in {"image", "video"} and media is not None:
-        if "move" in element:
-            move = element["move"]
-            move_start = float(move.get("start", start))
-            move_end = float(move.get("end", end))
-            progress = min(1.0, max(0.0, (local - move_start) / (move_end - move_start)))
-            # Explicit placement owns translation, including the destination
-            # hold; preset drift/entrance offsets must not move it again.
-            x = _lerp(float(element.get("x", 0)), float(move.get("x", element.get("x", 0))), _ease(progress))
-            y = _lerp(float(element.get("y", 0)), float(move.get("y", element.get("y", 0))), _ease(progress))
         asset_id = str(element.get("asset_id") or "")
         source_seconds = 0.0
         if kind == "video":
@@ -723,23 +1075,405 @@ def _draw_element(
             pan_x = _lerp(float(element.get("pan_x", 0.0)), float(element.get("pan_to_x", element.get("pan_x", 0.0))), _ease(progress))
             pan_y = _lerp(float(element.get("pan_y", 0.0)), float(element.get("pan_to_y", element.get("pan_y", 0.0))), _ease(progress))
             fitted = _fit_media(source, max(1, round(width)), max(1, round(height)), str(element.get("fit") or "cover"), zoom, pan_x, pan_y)
-            opacity = min(1.0, max(0.0, float(element.get("opacity", 1.0)))) * alpha
-            if opacity < 1.0:
-                fitted.putalpha(fitted.getchannel("A").point(lambda value: round(value * opacity)))
+            radius = max(0, round(float(element.get("radius", 0.0)) * scale))
+            if radius:
+                fitted = _rounded_media(fitted, radius)
             layer.alpha_composite(fitted, (round(x), round(y)))
+            border = round(float(element.get("border_width", 0.0)) * scale)
+            if border > 0:
+                border_color = _rgba(_color(element.get("border_color") or element.get("color"), theme), 255)
+                draw.rounded_rectangle(
+                    (x, y, x + width, y + height), radius=radius, outline=border_color, width=border,
+                )
     elif kind == "callout":
         box = (x, y, x + width, y + height)
-        draw.rounded_rectangle(box, radius=18, fill=_rgba(theme["background"], round(225 * alpha)), outline=color, width=stroke)
+        radius = float(element.get("radius", 18)) * scale
+        callout_fill = _rgba(
+            _color(element.get("fill_color") or "background", theme),
+            round(255 * float(element.get("fill_opacity", 225 / 255))),
+        )
+        _fill_shape(layer, box, radius, callout_fill, element.get("gradient"), theme)
+        draw.rounded_rectangle(box, radius=radius, outline=color, width=stroke)
         target_x = float(element.get("target_x", x))
         target_y = float(element.get("target_y", y))
         anchor_x = x if target_x < x else x + width
         anchor_y = min(y + height, max(y, target_y))
-        draw.line((anchor_x, anchor_y, target_x, target_y), fill=color, width=stroke)
-        draw.ellipse((target_x - 6, target_y - 6, target_x + 6, target_y + 6), fill=color)
-        font = _font(int(element.get("size", 28)), bold=True)
+        _draw_connector(
+            draw,
+            (anchor_x, anchor_y),
+            (target_x, target_y),
+            color=color,
+            width=stroke,
+            curve=float(element.get("curve", 0.0)) * scale,
+        )
+        marker = max(4, 6 * scale)
+        draw.ellipse((target_x - marker, target_y - marker, target_x + marker, target_y + marker), fill=color)
+        font = _font(max(12, round(float(element.get("size", 28)) * scale)), bold=True)
         text = _wrap_text(str(element.get("text") or ""), font, max(40, round(width - 32)))
-        draw.multiline_text((x + 16, y + 14), text, font=font, fill=_rgba(theme["foreground"], round(255 * alpha)), spacing=5)
-    image.alpha_composite(layer)
+        draw.multiline_text((x + 16 * scale, y + 14 * scale), text, font=font, fill=_rgba(theme["foreground"], 255), spacing=max(5, round(5 * scale)))
+    if overall_alpha < 1.0:
+        layer.putalpha(layer.getchannel("A").point(lambda value: round(value * max(0.0, overall_alpha))))
+    prepared = _prepare_element_layer(
+        layer,
+        pivot=_element_pivot(element, x, y, width, height, scale),
+        rotation=rotation,
+        padding=_effect_padding(element),
+    )
+    if prepared is None:
+        return
+    layer, offset = prepared
+    blur = float(element.get("blur", 0.0))
+    if blur > 0:
+        from PIL import ImageFilter
+
+        layer = layer.filter(ImageFilter.GaussianBlur(blur))
+    _composite_effects(image, layer, element, theme, offset=offset)
+
+
+def _keyframe_state(
+    element: dict[str, Any],
+    local: float,
+    start: float,
+) -> tuple[dict[str, float], set[str]]:
+    """Interpolate sparse absolute keyframes while preserving stable holds."""
+    state = {
+        "x": float(element.get("x", 0.0)),
+        "y": float(element.get("y", 0.0)),
+        "scale": float(element.get("scale", 1.0)),
+        "opacity": float(element.get("opacity", 1.0)),
+        "rotation": float(element.get("rotation", 0.0)),
+        "draw": 1.0,
+    }
+    rows = element.get("keyframes")
+    if not isinstance(rows, list) or not rows:
+        return state, set()
+    controlled = {key for row in rows if isinstance(row, dict) for key in state if key in row}
+    anchors: list[tuple[float, dict[str, float], str]] = [(start, state.copy(), "linear")]
+    current = state.copy()
+    for row in rows:
+        at = float(row["at"])
+        for key in state:
+            if key in row:
+                current[key] = float(row[key])
+        anchor = (at, current.copy(), str(row.get("ease") or "ease_in_out"))
+        if abs(at - anchors[-1][0]) < 1e-9:
+            anchors[-1] = anchor
+        else:
+            anchors.append(anchor)
+    if local <= anchors[0][0]:
+        return anchors[0][1], controlled
+    for index in range(1, len(anchors)):
+        right_at, right_state, easing = anchors[index]
+        left_at, left_state, _left_easing = anchors[index - 1]
+        if local <= right_at:
+            progress = (local - left_at) / max(0.000001, right_at - left_at)
+            eased = _keyframe_ease(progress, easing)
+            return {
+                key: _mix(left_state[key], right_state[key], eased)
+                for key in state
+            }, controlled
+    return anchors[-1][1], controlled
+
+
+def _keyframe_ease(value: float, name: str) -> float:
+    progress = min(1.0, max(0.0, value))
+    if name == "linear":
+        return progress
+    if name == "ease_in":
+        return progress ** 3
+    if name == "ease_out":
+        return 1.0 - (1.0 - progress) ** 3
+    if name == "ease_out_back":
+        overshoot = 1.70158
+        shifted = progress - 1.0
+        return 1.0 + (overshoot + 1.0) * shifted ** 3 + overshoot * shifted ** 2
+    return progress * progress * (3.0 - 2.0 * progress)
+
+
+def _draw_connector(
+    draw,
+    start: tuple[float, float],
+    end: tuple[float, float],
+    *,
+    color: tuple[int, int, int, int],
+    width: int,
+    curve: float = 0.0,
+    progress: float = 1.0,
+    head: str = "none",
+    head_size: float = 16.0,
+) -> None:
+    progress = min(1.0, max(0.0, progress))
+    if progress <= 0:
+        return
+    x1, y1 = start
+    x2, y2 = end
+    distance = math.hypot(x2 - x1, y2 - y1)
+    if distance < 0.01:
+        return
+    normal_x = -(y2 - y1) / distance
+    normal_y = (x2 - x1) / distance
+    control = ((x1 + x2) / 2.0 + normal_x * curve, (y1 + y2) / 2.0 + normal_y * curve)
+    steps = max(8, min(240, math.ceil((distance + abs(curve)) / 8.0)))
+    points: list[tuple[float, float]] = []
+    visible_steps = max(1, math.ceil(steps * progress))
+    for index in range(visible_steps + 1):
+        t = min(progress, index / steps)
+        inverse = 1.0 - t
+        points.append((
+            inverse * inverse * x1 + 2.0 * inverse * t * control[0] + t * t * x2,
+            inverse * inverse * y1 + 2.0 * inverse * t * control[1] + t * t * y2,
+        ))
+    if len(points) < 2:
+        return
+    draw.line(points, fill=color, width=width, joint="curve")
+    radius = max(0.5, width / 2.0)
+    draw.ellipse((x1 - radius, y1 - radius, x1 + radius, y1 + radius), fill=color)
+    tip_x, tip_y = points[-1]
+    prior_x, prior_y = points[-2]
+    tangent_length = max(0.001, math.hypot(tip_x - prior_x, tip_y - prior_y))
+    unit_x = (tip_x - prior_x) / tangent_length
+    unit_y = (tip_y - prior_y) / tangent_length
+    if head == "none":
+        draw.ellipse((tip_x - radius, tip_y - radius, tip_x + radius, tip_y + radius), fill=color)
+        return
+    size = max(4.0, head_size)
+    base_x = tip_x - unit_x * size
+    base_y = tip_y - unit_y * size
+    wing = size * 0.48
+    left = (base_x - unit_y * wing, base_y + unit_x * wing)
+    right = (base_x + unit_y * wing, base_y - unit_x * wing)
+    if head == "chevron":
+        draw.line((left, (tip_x, tip_y), right), fill=color, width=width, joint="curve")
+    else:
+        draw.polygon(((tip_x, tip_y), left, right), fill=color)
+
+
+def _fill_shape(
+    layer,
+    bounds: tuple[float, float, float, float],
+    radius: float,
+    fill: tuple[int, int, int, int],
+    gradient: Any,
+    theme: dict[str, str],
+    *,
+    ellipse: bool = False,
+) -> None:
+    Image, ImageDraw, _ImageFont = _require_pillow()
+    left, top, right, bottom = bounds
+    width = max(1, round(right - left))
+    height = max(1, round(bottom - top))
+    mask = Image.new("L", (width, height), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    local_bounds = (0, 0, width - 1, height - 1)
+    opacity = fill[3]
+    if ellipse:
+        mask_draw.ellipse(local_bounds, fill=opacity)
+    else:
+        mask_draw.rounded_rectangle(
+            local_bounds,
+            radius=max(0, min(float(radius), width / 2.0, height / 2.0)),
+            fill=opacity,
+        )
+    if isinstance(gradient, dict):
+        fill_layer = _gradient_image(
+            width,
+            height,
+            _color(gradient.get("from"), theme),
+            _color(gradient.get("to"), theme),
+            round(float(gradient.get("angle", 0.0)), 3),
+        ).copy()
+    else:
+        fill_layer = Image.new("RGBA", (width, height), fill[:3] + (255,))
+    fill_layer.putalpha(mask)
+    layer.alpha_composite(fill_layer, (round(left), round(top)))
+
+
+@lru_cache(maxsize=128)
+def _gradient_image(width: int, height: int, start: str, end: str, angle: float):
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    from PIL import ImageOps
+
+    start_rgb = _rgba(start, 255)[:3]
+    end_rgb = _rgba(end, 255)[:3]
+    radians = math.radians(angle)
+    vector_x = math.cos(radians)
+    vector_y = math.sin(radians)
+    projections = (
+        0.0,
+        (width - 1) * vector_x,
+        (height - 1) * vector_y,
+        (width - 1) * vector_x + (height - 1) * vector_y,
+    )
+    minimum = min(projections)
+    span = max(0.000001, max(projections) - minimum)
+    ramp = Image.linear_gradient("L").rotate(90)
+    mask = ramp.transform(
+        (width, height),
+        Image.Transform.AFFINE,
+        (
+            vector_x * 255.0 / span,
+            vector_y * 255.0 / span,
+            -minimum * 255.0 / span,
+            0.0,
+            0.0,
+            128.0,
+        ),
+        resample=Image.Resampling.BILINEAR,
+    )
+    return ImageOps.colorize(mask, start_rgb, end_rgb).convert("RGBA")
+
+
+def _rounded_media(image, radius: int):
+    Image, ImageDraw, _ImageFont = _require_pillow()
+    from PIL import ImageChops
+
+    result = image.copy()
+    mask = Image.new("L", result.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (0, 0, result.width - 1, result.height - 1),
+        radius=min(radius, result.width // 2, result.height // 2),
+        fill=255,
+    )
+    result.putalpha(ImageChops.multiply(result.getchannel("A"), mask))
+    return result
+
+
+def _element_pivot(
+    element: dict[str, Any],
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    scale: float,
+) -> tuple[float, float]:
+    kind = str(element.get("type") or "")
+    if kind == "circle":
+        return x, y
+    if kind in {"line", "arrow"}:
+        x2 = x + (float(element.get("x2", x)) - float(element.get("x", 0))) * scale
+        y2 = y + (float(element.get("y2", y)) - float(element.get("y", 0))) * scale
+        return (x + x2) / 2.0, (y + y2) / 2.0
+    if kind == "text":
+        return (
+            x + float(element.get("width", 800)) * scale / 2.0,
+            y + float(element.get("size", 44)) * scale / 2.0,
+        )
+    if kind == "prism":
+        depth = float(element.get("depth", 0.0)) * scale
+        rise = depth * 0.65
+        return x + (width + depth) / 2.0, y + (height - rise) / 2.0
+    return x + width / 2.0, y + height / 2.0
+
+
+def _prism_metrics(
+    element: dict[str, Any],
+    x: float,
+    y: float,
+    scale: float,
+) -> tuple[float, float, float, float, float, float]:
+    """Return anchor-adjusted projected prism metrics for render and QC."""
+    base_width = float(element.get("width", 0.0))
+    base_height = float(element.get("height", 0.0))
+    base_depth = float(element.get("depth", 0.0))
+    width = base_width * scale
+    height = base_height * scale
+    depth = base_depth * scale
+    base_rise = base_depth * 0.65
+    rise = depth * 0.65
+    if str(element.get("anchor") or "top_left") == "center":
+        center_x = x + (base_width + base_depth) / 2.0
+        center_y = y + (base_height - base_rise) / 2.0
+        x = center_x - (width + depth) / 2.0
+        y = center_y - (height - rise) / 2.0
+    return x, y, width, height, depth, rise
+
+
+def _effect_padding(element: dict[str, Any]) -> int:
+    """Bound local optical work without clipping Gaussian effect tails."""
+    padding = float(element.get("blur", 0.0)) * 3.0
+    for name in ("shadow", "glow"):
+        spec = element.get(name)
+        if not isinstance(spec, dict) or float(spec.get("opacity", 0.35)) <= 0:
+            continue
+        extent = float(spec.get("blur", 18.0)) * 3.0
+        if name == "shadow":
+            extent += max(abs(float(spec.get("x", 0.0))), abs(float(spec.get("y", 10.0))))
+        padding = max(padding, extent)
+    return max(2, math.ceil(padding))
+
+
+def _prepare_element_layer(
+    layer,
+    *,
+    pivot: tuple[float, float],
+    rotation: float,
+    padding: int,
+):
+    """Crop one sparse frame layer before transforms and optical effects."""
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    bounds = layer.getbbox()
+    if bounds is None:
+        return None
+    if rotation:
+        pivot_x, pivot_y = round(pivot[0]), round(pivot[1])
+        half_width = max(pivot_x - bounds[0], bounds[2] - pivot_x, 1) + 2
+        half_height = max(pivot_y - bounds[1], bounds[3] - pivot_y, 1) + 2
+        crop_box = (
+            pivot_x - half_width,
+            pivot_y - half_height,
+            pivot_x + half_width,
+            pivot_y + half_height,
+        )
+        local = layer.crop(crop_box).rotate(
+            rotation,
+            resample=Image.Resampling.BICUBIC,
+            expand=True,
+        )
+        offset = (
+            round(pivot_x - local.width / 2.0),
+            round(pivot_y - local.height / 2.0),
+        )
+    else:
+        local = layer.crop(bounds)
+        offset = (bounds[0], bounds[1])
+    if padding > 0:
+        padded = Image.new("RGBA", (local.width + padding * 2, local.height + padding * 2), (0, 0, 0, 0))
+        padded.alpha_composite(local, (padding, padding))
+        local = padded
+        offset = (offset[0] - padding, offset[1] - padding)
+    return local, offset
+
+
+def _composite_effects(
+    image,
+    layer,
+    element: dict[str, Any],
+    theme: dict[str, str],
+    *,
+    offset: tuple[int, int] = (0, 0),
+) -> None:
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    from PIL import ImageFilter
+
+    for name in ("shadow", "glow"):
+        spec = element.get(name)
+        if not isinstance(spec, dict) or float(spec.get("opacity", 0.35)) <= 0:
+            continue
+        mask = layer.getchannel("A")
+        blur = float(spec.get("blur", 18.0))
+        if blur > 0:
+            mask = mask.filter(ImageFilter.GaussianBlur(blur))
+        opacity = float(spec.get("opacity", 0.35))
+        mask = mask.point(lambda value: round(value * opacity))
+        default_color = "#000000" if name == "shadow" else element.get("color") or "accent"
+        effect = Image.new("RGBA", layer.size, _rgba(_color(spec.get("color") or default_color, theme), 255))
+        effect.putalpha(mask)
+        effect_offset = (
+            round(float(spec.get("x", 0.0))) if name == "shadow" else 0,
+            round(float(spec.get("y", 10.0))) if name == "shadow" else 0,
+        )
+        image.alpha_composite(effect, (offset[0] + effect_offset[0], offset[1] + effect_offset[1]))
+    image.alpha_composite(layer, offset)
 
 
 def _fit_media(source, width: int, height: int, fit: str, zoom: float, pan_x: float, pan_y: float):
@@ -747,9 +1481,9 @@ def _fit_media(source, width: int, height: int, fit: str, zoom: float, pan_x: fl
     source = source.convert("RGBA")
     base = min(width / source.width, height / source.height) if fit == "contain" else max(width / source.width, height / source.height)
     scale = base * zoom
-    resized = source.resize(
+    resized = _resize_rgba(
+        source,
         (max(1, round(source.width * scale)), max(1, round(source.height * scale))),
-        Image.Resampling.LANCZOS,
     )
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     overflow_x = max(0, resized.width - width)
@@ -760,8 +1494,19 @@ def _fit_media(source, width: int, height: int, fit: str, zoom: float, pan_x: fl
     return canvas
 
 
+def _resize_rgba(image, size: tuple[int, int]):
+    """LANCZOS-resize RGBA at one shared alpha-aware boundary."""
+    Image, _ImageDraw, _ImageFont = _require_pillow()
+    rgba = image if image.mode == "RGBA" else image.convert("RGBA")
+    return rgba.resize(size, Image.Resampling.LANCZOS)
+
+
 def _lerp(start: float, end: float, progress: float) -> float:
     return start + (end - start) * min(1.0, max(0.0, progress))
+
+
+def _mix(start: float, end: float, progress: float) -> float:
+    return start + (end - start) * progress
 
 
 def text_layout(element: dict[str, Any], x: float, y: float, scale: float = 1.0) -> dict[str, Any]:
@@ -816,33 +1561,50 @@ def _draw_header(
     theme: dict[str, str],
     style: dict[str, Any],
 ) -> None:
+    coordinate_scale = _coordinate_scale(style)
     spacing = style.get("spacing") if isinstance(style.get("spacing"), dict) else {}
-    margin = int(spacing.get("margin", 32))
-    brand = style.get("brand") if isinstance(style.get("brand"), dict) else {}
+    margin = int(spacing.get("margin", 32 * coordinate_scale))
+    brand =style.get("brand") if isinstance(style.get("brand"), dict) else {}
     brand_enabled = brand.get("enabled", False) is True
     title_x = margin
     if brand_enabled and str(brand.get("mark") or "four-cube") == "four-cube":
         draw_four_cube_mark(
             draw,
             margin,
-            20,
-            cube_size=9,
-            gap=3,
-            radius=2,
+            20 * coordinate_scale,
+            cube_size=max(1, round(9 * coordinate_scale)),
+            gap=max(1, round(3 * coordinate_scale)),
+            radius=max(1, round(2 * coordinate_scale)),
             fill=_rgba(theme["accent"], 255),
             shade=_rgba(theme["background"], 170),
         )
-        title_x += 34
+        title_x += 34 * coordinate_scale
     brand_name = str(brand.get("name") or "").strip() if brand_enabled else ""
     decorations = style.get("decorations", {})
     title = project.title if decorations.get("title", True) else ""
     label = " · ".join(value for value in (brand_name, title) if value)
     if label:
-        draw.text((title_x, 25), label, font=_font(22, bold=True), fill=_rgba(theme["foreground"], 220))
+        draw.text(
+            (title_x, 25 * coordinate_scale),
+            label,
+            font=_font(max(1, round(22 * coordinate_scale)), bold=True),
+            fill=_rgba(theme["foreground"], 220),
+        )
     if decorations.get("scene_badge", True):
         kind = str(scene.get("kind") or "concept").upper()
-        draw.rounded_rectangle((margin, 62, margin + max(110, len(kind) * 14), 96), radius=17, fill=_rgba(theme["accent"], 45))
-        draw.text((margin + 16, 79), kind, font=_font(16, bold=True), fill=_rgba(theme["accent"], 255), anchor="lm")
+        badge_width = max(110, len(kind) * 14) * coordinate_scale
+        draw.rounded_rectangle(
+            (margin, 62 * coordinate_scale, margin + badge_width, 96 * coordinate_scale),
+            radius=17 * coordinate_scale,
+            fill=_rgba(theme["accent"], 45),
+        )
+        draw.text(
+            (margin + 16 * coordinate_scale, 79 * coordinate_scale),
+            kind,
+            font=_font(max(1, round(16 * coordinate_scale)), bold=True),
+            fill=_rgba(theme["accent"], 255),
+            anchor="lm",
+        )
 
 
 def _draw_caption(
@@ -859,8 +1621,17 @@ def _draw_caption(
         return
     index = min(len(chunks) - 1, int((local / max(0.01, speech_duration)) * len(chunks)))
     caption, font, background, position = caption_layout(draw, chunks[index], project, style)
-    draw.rounded_rectangle(background, radius=20, fill=(4, 9, 13, 205))
-    draw.multiline_text(position, caption, font=font, fill=_rgba(theme["foreground"], 255), spacing=6, align="center", anchor="ma")
+    coordinate_scale = _coordinate_scale(style)
+    draw.rounded_rectangle(background, radius=20 * coordinate_scale, fill=(4, 9, 13, 205))
+    draw.multiline_text(
+        position,
+        caption,
+        font=font,
+        fill=_rgba(theme["foreground"], 255),
+        spacing=max(1, round(6 * coordinate_scale)),
+        align="center",
+        anchor="ma",
+    )
 
 
 def caption_chunks(narration: str) -> list[str]:
@@ -872,14 +1643,21 @@ def caption_layout(draw, caption: str, project: ExplainerProject, style: dict[st
     """Measure the exact caption placement shared by drawing and quality checks."""
     typography = style.get("typography") if isinstance(style.get("typography"), dict) else {}
     spacing = style.get("spacing") if isinstance(style.get("spacing"), dict) else {}
-    margin = max(24, int(spacing.get("margin", 32)))
-    font = _font(int(typography.get("caption_size", 28)), bold=True)
+    coordinate_scale = _coordinate_scale(style)
+    margin = max(round(24 * coordinate_scale), int(spacing.get("margin", 32 * coordinate_scale)))
+    font = _font(int(typography.get("caption_size", 28 * coordinate_scale)), bold=True)
     caption = _wrap_text(caption, font, project.width - margin * 5)
-    box = draw.multiline_textbbox((0, 0), caption, font=font, spacing=6, align="center")
+    line_spacing = max(1, round(6 * coordinate_scale))
+    box = draw.multiline_textbbox((0, 0), caption, font=font, spacing=line_spacing, align="center")
     text_height = box[3] - box[1]
-    bottom = project.height - max(18, margin * 3 // 4)
-    top = bottom - text_height - 18
-    background = (margin * 2, top - 12, project.width - margin * 2, bottom + 6)
+    bottom = project.height - max(round(18 * coordinate_scale), margin * 3 // 4)
+    top = bottom - text_height - 18 * coordinate_scale
+    background = (
+        margin * 2,
+        top - 12 * coordinate_scale,
+        project.width - margin * 2,
+        bottom + 6 * coordinate_scale,
+    )
     return caption, font, background, (project.width / 2, top)
 
 
@@ -922,6 +1700,14 @@ def _font(size: int, bold: bool = False):
 def _color(value: Any, theme: dict[str, str]) -> str:
     text = str(value or "foreground")
     return theme.get(text, text if text.startswith("#") else theme["foreground"])
+
+
+def _mix_color(start: str, end: str, amount: float) -> str:
+    start_rgb = _rgba(start, 255)[:3]
+    end_rgb = _rgba(end, 255)[:3]
+    ratio = min(1.0, max(0.0, amount))
+    mixed = tuple(round(left + (right - left) * ratio) for left, right in zip(start_rgb, end_rgb))
+    return "#" + "".join(f"{channel:02x}" for channel in mixed)
 
 
 def _rgba(color: str, alpha: int) -> tuple[int, int, int, int]:

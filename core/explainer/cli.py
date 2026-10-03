@@ -40,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("project")
     render.add_argument("--output")
     render.add_argument("--preview-seconds", type=float)
+    render.add_argument("--preview-width", type=int)
 
     add_media = subparsers.add_parser("add-media", help="copy and hash one project-owned image or clip")
     add_media.add_argument("project")
@@ -148,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
                 project,
                 output=args.output,
                 preview_seconds=args.preview_seconds,
+                preview_width=args.preview_width,
                 progress=_progress_reporter(project.directory, phase),
             )
             inspection = read_render_report(output)
@@ -172,9 +174,27 @@ def main(argv: list[str] | None = None) -> int:
                 "video": str(output),
                 "bytes": output.stat().st_size,
                 "preview_seconds": args.preview_seconds,
+                "preview_width": args.preview_width,
                 "inspection": inspection,
                 "status": status_payload,
             })
+    except KeyboardInterrupt:
+        if project is not None:
+            try:
+                interrupted_phase = (
+                    "preview"
+                    if args.command == "render" and getattr(args, "preview_seconds", None)
+                    else _phase_name(str(args.command))
+                )
+                _emit_progress(write_explainer_status(
+                    project.directory,
+                    phase=interrupted_phase,
+                    state="interrupted",
+                    verification={"status": "failed", "detail": "cancelled by operator"},
+                ))
+            except OSError:
+                pass
+        return _print({"error": "explainer operation cancelled", "type": "KeyboardInterrupt"}, code=130)
     except (OSError, ProjectValidationError, RuntimeError, ValueError) as exc:
         if project is not None:
             try:

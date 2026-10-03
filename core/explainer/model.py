@@ -15,8 +15,9 @@ from core.utils.file_hash import file_sha256
 
 PROJECT_VERSION = 1
 SUPPORTED_KINDS = frozenset({"title", "concept", "process", "comparison", "summary"})
-SUPPORTED_ELEMENTS = frozenset({"text", "box", "circle", "line", "arrow", "bar", "image", "video", "callout"})
+SUPPORTED_ELEMENTS = frozenset({"text", "box", "circle", "prism", "line", "arrow", "bar", "image", "video", "callout"})
 SUPPORTED_ANIMATIONS = frozenset({"none", "fade", "rise", "slide_left", "slide_right", "scale", "draw"})
+SUPPORTED_EASINGS = frozenset({"linear", "ease_in", "ease_out", "ease_in_out", "ease_out_back"})
 SUPPORTED_LAYOUTS = frozenset({"explanation", "process", "comparison", "product-demo", "custom"})
 SUPPORTED_TRANSITIONS = frozenset({"cut", "crossfade"})
 ASSET_ORIGINS = frozenset({"user", "captured", "mo-generated", "licensed-local"})
@@ -178,6 +179,34 @@ def validate_project(data: dict[str, Any]) -> list[str]:
                 value = _finite_number(values[key], f"style.{section}.{key}", issues)
                 if value is not None and not minimum <= value <= maximum:
                     issues.append(f"style.{section}.{key} must be between {minimum:g} and {maximum:g}")
+            if section == "motion":
+                if "blur_samples" in values:
+                    samples = _finite_number(values["blur_samples"], "style.motion.blur_samples", issues)
+                    if samples is not None and (samples != int(samples) or not 1 <= samples <= 8):
+                        issues.append("style.motion.blur_samples must be an integer between 1 and 8")
+                if "shutter_angle" in values:
+                    angle = _finite_number(values["shutter_angle"], "style.motion.shutter_angle", issues)
+                    if angle is not None and not 0.0 <= angle <= 360.0:
+                        issues.append("style.motion.shutter_angle must be between 0 and 360")
+        render_style = style.get("render", {})
+        if not isinstance(render_style, dict):
+            issues.append("style.render must be an object")
+        else:
+            if "supersampling" in render_style:
+                factor = _finite_number(render_style["supersampling"], "style.render.supersampling", issues)
+                if factor is not None and (factor != int(factor) or not 1 <= factor <= 4):
+                    issues.append("style.render.supersampling must be an integer between 1 and 4")
+            for key, minimum, maximum in (
+                ("bloom", 0.0, 1.0),
+                ("bloom_radius", 0.0, 48.0),
+                ("vignette", 0.0, 1.0),
+                ("grain", 0.0, 0.12),
+            ):
+                if key not in render_style:
+                    continue
+                value = _finite_number(render_style[key], f"style.render.{key}", issues)
+                if value is not None and not minimum <= value <= maximum:
+                    issues.append(f"style.render.{key} must be between {minimum:g} and {maximum:g}")
 
     voice = data.get("voice", {})
     if not isinstance(voice, dict):
@@ -442,6 +471,27 @@ def _validate_element(
                 if not start <= move_start < move_end <= end:
                     issues.append(f"{prefix}.move must have start < end within the element's visibility window")
 
+    if "keyframes" in element:
+        if "move" in element:
+            issues.append(f"{prefix}.keyframes and move cannot be combined")
+        _validate_keyframes(
+            element["keyframes"], prefix, issues, kind=kind, start=start, end=end,
+        )
+
+    for key, default, minimum, maximum in (
+        ("opacity", 1.0, 0.0, 1.0),
+        ("scale", 1.0, 0.05, 8.0),
+        ("rotation", 0.0, -720.0, 720.0),
+        ("blur", 0.0, 0.0, 64.0),
+    ):
+        if key not in element:
+            continue
+        value = _finite_number(element.get(key, default), f"{prefix}.{key}", issues)
+        if value is not None and not minimum <= value <= maximum:
+            issues.append(f"{prefix}.{key} must be between {minimum:g} and {maximum:g}")
+    if str(element.get("anchor") or "top_left") not in {"top_left", "center"}:
+        issues.append(f"{prefix}.anchor must be top_left or center")
+
     if "stroke" in element:
         stroke = _finite_number(element["stroke"], f"{prefix}.stroke", issues)
         if stroke is not None and not 1.0 <= stroke <= 64.0:
@@ -449,19 +499,25 @@ def _validate_element(
     if "fill" in element and not isinstance(element["fill"], bool):
         issues.append(f"{prefix}.fill must be a boolean")
     if "fill_opacity" in element:
-        if kind not in {"box", "circle"}:
-            issues.append(f"{prefix}.fill_opacity is supported only for box and circle")
+        if kind not in {"box", "circle", "prism", "callout"}:
+            issues.append(f"{prefix}.fill_opacity is supported only for box, circle, prism, and callout")
         else:
             opacity = _finite_number(element["fill_opacity"], f"{prefix}.fill_opacity", issues)
             if opacity is not None and not 0.0 <= opacity <= 1.0:
                 issues.append(f"{prefix}.fill_opacity must be between 0 and 1")
 
-    for key in ("color", "fill_color"):
+    for key in ("color", "fill_color", "top_color", "side_color"):
         if key not in element:
             continue
-        color = str(element[key])
-        if color not in {"background", "foreground", "accent", "secondary", "muted"} and not _HEX_COLOR.fullmatch(color):
-            issues.append(f"{prefix}.{key} must be a theme color name or six-digit hex color")
+        if key in {"top_color", "side_color"} and kind != "prism":
+            issues.append(f"{prefix}.{key} is supported only for prism")
+            continue
+        _validate_color(element[key], f"{prefix}.{key}", issues)
+    if "gradient" in element:
+        _validate_gradient(element["gradient"], prefix, issues, kind=kind)
+    for effect_name in ("shadow", "glow"):
+        if effect_name in element:
+            _validate_effect(element[effect_name], f"{prefix}.{effect_name}", issues, shadow=effect_name == "shadow")
     animation = str(element.get("animation") or "fade")
     if animation not in SUPPORTED_ANIMATIONS:
         issues.append(f"{prefix}.animation is unsupported")
@@ -479,7 +535,7 @@ def _validate_element(
             issues.append(f"{prefix}.align must be left, center, or right")
         if str(element.get("weight") or "bold") not in {"regular", "bold"}:
             issues.append(f"{prefix}.weight must be regular or bold")
-    elif kind in {"box", "bar", "image", "video", "callout"}:
+    elif kind in {"box", "prism", "bar", "image", "video", "callout"}:
         dimensions: dict[str, float] = {}
         for key in ("width", "height"):
             value = _finite_number(element.get(key), f"{prefix}.{key}", issues)
@@ -492,6 +548,10 @@ def _validate_element(
             maximum = min(dimensions.values()) / 2 if len(dimensions) == 2 else None
             if radius is not None and (radius < 0 or (maximum is not None and radius > maximum)):
                 issues.append(f"{prefix}.radius must fit within the box")
+        if kind == "prism":
+            depth = _finite_number(element.get("depth"), f"{prefix}.depth", issues)
+            if depth is not None and not 1.0 <= depth <= 1024.0:
+                issues.append(f"{prefix}.depth must be between 1 and 1024")
         if kind == "bar":
             value = _finite_number(element.get("value", 0.5), f"{prefix}.value", issues)
             if value is not None and not 0.0 <= value <= 1.0:
@@ -506,7 +566,6 @@ def _validate_element(
             if str(element.get("fit") or "cover") not in {"contain", "cover"}:
                 issues.append(f"{prefix}.fit must be contain or cover")
             for key, default, minimum, maximum in (
-                ("opacity", 1.0, 0.0, 1.0),
                 ("zoom", 1.0, 1.0, 4.0),
                 ("zoom_to", element.get("zoom", 1.0), 1.0, 4.0),
                 ("pan_x", 0.0, -1.0, 1.0),
@@ -517,6 +576,17 @@ def _validate_element(
                 value = _finite_number(element.get(key, default), f"{prefix}.{key}", issues)
                 if value is not None and not minimum <= value <= maximum:
                     issues.append(f"{prefix}.{key} must be between {minimum:g} and {maximum:g}")
+            if "radius" in element:
+                radius = _finite_number(element["radius"], f"{prefix}.radius", issues)
+                maximum = min(dimensions.values()) / 2 if len(dimensions) == 2 else None
+                if radius is not None and (radius < 0 or (maximum is not None and radius > maximum)):
+                    issues.append(f"{prefix}.radius must fit within the media frame")
+            if "border_width" in element:
+                border = _finite_number(element["border_width"], f"{prefix}.border_width", issues)
+                if border is not None and not 0.0 <= border <= 64.0:
+                    issues.append(f"{prefix}.border_width must be between 0 and 64")
+            if "border_color" in element:
+                _validate_color(element["border_color"], f"{prefix}.border_color", issues)
             if kind == "video":
                 # Asset validation already reports malformed metadata; use its
                 # finite duration here only to constrain the referenced window.
@@ -554,6 +624,119 @@ def _validate_element(
     elif kind in {"line", "arrow"}:
         for key in ("x2", "y2"):
             _finite_number(element.get(key), f"{prefix}.{key}", issues)
+        if "curve" in element:
+            curve = _finite_number(element["curve"], f"{prefix}.curve", issues)
+            if curve is not None and not -2000.0 <= curve <= 2000.0:
+                issues.append(f"{prefix}.curve must be between -2000 and 2000")
+        if "head" in element:
+            if kind != "arrow":
+                issues.append(f"{prefix}.head is supported only for arrow")
+            elif str(element["head"]) not in {"triangle", "chevron", "none"}:
+                issues.append(f"{prefix}.head must be triangle, chevron, or none")
+        if "head_size" in element:
+            if kind != "arrow":
+                issues.append(f"{prefix}.head_size is supported only for arrow")
+            else:
+                head_size = _finite_number(element["head_size"], f"{prefix}.head_size", issues)
+                if head_size is not None and not 4.0 <= head_size <= 128.0:
+                    issues.append(f"{prefix}.head_size must be between 4 and 128")
+
+
+def _validate_color(value: Any, label: str, issues: list[str]) -> None:
+    color = str(value)
+    if color not in {"background", "foreground", "accent", "secondary", "muted"} and not _HEX_COLOR.fullmatch(color):
+        issues.append(f"{label} must be a theme color name or six-digit hex color")
+
+
+def _validate_gradient(value: Any, prefix: str, issues: list[str], *, kind: str) -> None:
+    label = f"{prefix}.gradient"
+    if kind not in {"box", "circle", "bar", "callout"}:
+        issues.append(f"{label} is supported only for box, circle, bar, and callout")
+        return
+    if not isinstance(value, dict):
+        issues.append(f"{label} must be an object")
+        return
+    for key in ("from", "to"):
+        if key not in value:
+            issues.append(f"{label}.{key} is required")
+        else:
+            _validate_color(value[key], f"{label}.{key}", issues)
+    angle = _finite_number(value.get("angle", 0.0), f"{label}.angle", issues)
+    if angle is not None and not 0.0 <= angle <= 360.0:
+        issues.append(f"{label}.angle must be between 0 and 360")
+
+
+def _validate_effect(value: Any, label: str, issues: list[str], *, shadow: bool) -> None:
+    if not isinstance(value, dict):
+        issues.append(f"{label} must be an object")
+        return
+    if "color" in value:
+        _validate_color(value["color"], f"{label}.color", issues)
+    for key, default, minimum, maximum in (
+        ("opacity", 0.35, 0.0, 1.0),
+        ("blur", 18.0, 0.0, 96.0),
+    ):
+        number = _finite_number(value.get(key, default), f"{label}.{key}", issues)
+        if number is not None and not minimum <= number <= maximum:
+            issues.append(f"{label}.{key} must be between {minimum:g} and {maximum:g}")
+    for key in ("x", "y"):
+        if key not in value:
+            continue
+        if not shadow:
+            issues.append(f"{label}.{key} is supported only for shadow")
+            continue
+        number = _finite_number(value[key], f"{label}.{key}", issues)
+        if number is not None and not -256.0 <= number <= 256.0:
+            issues.append(f"{label}.{key} must be between -256 and 256")
+
+
+def _validate_keyframes(
+    value: Any,
+    prefix: str,
+    issues: list[str],
+    *,
+    kind: str,
+    start: float | None,
+    end: float | None,
+) -> None:
+    label = f"{prefix}.keyframes"
+    if not isinstance(value, list) or len(value) < 2:
+        issues.append(f"{label} must contain at least two rows")
+        return
+    previous_at: float | None = None
+    supported = {"x", "y", "scale", "opacity", "rotation", "draw"}
+    for index, row in enumerate(value):
+        row_label = f"{label}[{index}]"
+        if not isinstance(row, dict):
+            issues.append(f"{row_label} must be an object")
+            continue
+        at = _finite_number(row.get("at"), f"{row_label}.at", issues)
+        if at is not None:
+            if start is not None and end is not None and not start <= at <= end:
+                issues.append(f"{row_label}.at must be within the element's visibility window")
+            if previous_at is not None and at <= previous_at:
+                issues.append(f"{label} times must be strictly increasing")
+            previous_at = at
+        if not supported.intersection(row):
+            issues.append(f"{row_label} must animate at least one supported property")
+        for key in ("x", "y"):
+            if key in row:
+                _finite_number(row[key], f"{row_label}.{key}", issues)
+        for key, minimum, maximum in (
+            ("scale", 0.05, 8.0),
+            ("opacity", 0.0, 1.0),
+            ("rotation", -720.0, 720.0),
+            ("draw", 0.0, 1.0),
+        ):
+            if key not in row:
+                continue
+            number = _finite_number(row[key], f"{row_label}.{key}", issues)
+            if number is not None and not minimum <= number <= maximum:
+                issues.append(f"{row_label}.{key} must be between {minimum:g} and {maximum:g}")
+        if "draw" in row and kind not in {"line", "arrow", "bar"}:
+            issues.append(f"{row_label}.draw is supported only for line, arrow, and bar")
+        if "ease" in row and str(row["ease"]) not in SUPPORTED_EASINGS:
+            issues.append(f"{row_label}.ease is unsupported")
 
 
 def _finite_number(value: Any, label: str, issues: list[str]) -> float | None:

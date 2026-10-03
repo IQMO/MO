@@ -15,35 +15,33 @@ mastery_uses: 0
 mastery_successes: 0
 mastery_corrections: 0
 ---
-Use for explanations, presentations and demos when native motion graphics fit.
-Preserve a chosen external method. Use `mo --explainer` through `shell`;
-discover only missing tools by name.
-`mo --explainer guide` supplies authoring fields and review commands when needed.
+Use for explainers, presentations, and product demos when native motion graphics
+fit. Preserve a chosen external method. Start native work with
+`mo --explainer init` through `shell`;
+`mo --explainer guide` owns authoring fields and review commands.
 
-1. Choose visuals for the brief. Show recognizable subjects and meaningful change
-   when the idea depends on objects/actions. Typography can suit other briefs.
-2. Run `mo --explainer init --title "<title>" --layout
-   <explanation|process|comparison|product-demo>`. Keep this private project as owner.
-   `project.json` owns narration, timing and composition. Reuse authorized media,
-   create local artwork, or choose `generate_image` for a needed asset within the
-   user's cost/method limits. Ingest its returned file with `add-media --origin
-   mo-generated`; the guide shows image composition. Generation is optional.
-3. Support factual claims with primary sources in `research.md` and scene source
-   IDs; verify support. Original suggestions need no invented citations.
-4. Keep the saved MO skin/four-cube brand unless the brief differs. Branding does
-   not require a grid, title, badge, timeline or identical layouts; project
-   `style.decorations` controls them. Customize project theme/style/brand with
-   `style.source: custom`; global Settings remain unchanged.
-5. Run `narrate` for configured Piper, or supply bound 16-bit PCM WAV and timings.
-   Compare measured speech and scene durations; project `voice.speed` adjusts
-   pace. Budget content and holds together. Captions are approximate. Run `check`;
-   fix errors and assess warnings, not regenerate until none remain. Reuse
-   unchanged checks; skip `validate`. Inspect `sheet` with `perceive`.
-6. Render after checks; for work over one minute, inspect a short preview first.
-   Review decoded final-MP4 samples of action and scene changes with `perceive`
-   against the brief, correcting visible mismatches. Image delivery is not a
-   review verdict. Remove internal review scratch afterward. Stills/FFprobe do not prove
-   smooth playback or voice quality; check audio timing and disclose listening limits.
-7. Use the render result's path/hash/duration/audio/status receipt. Call `status`
-   only when that evidence is absent or stale. Report technical checks separately
-   from visual review or listening. Never call a silent output narrated.
+1. Choose visuals that show recognizable subjects and meaningful change when the
+   brief depends on objects or actions.
+2. Initialize the fitting layout. `project.json` owns composition, narration, and
+   timing. Reuse authorized media or build one coherent transparent element kit;
+   use `edit_image` for crops/resizes/conversions and ingest with `add-media`. If
+   the chosen method uses `generate_image`, create only needed reusable assets or
+   an element sheet—not a full-scene substitute for native composition. Inspect
+   generated subjects, count, isolation, and style before cropping or ingesting;
+   alpha and dimensions alone are not a visual pass. Reject prompt drift.
+3. Support factual claims with verified primary sources in `research.md` and scene
+   source IDs. Original suggestions need no invented citations.
+4. Keep the saved MO brand unless the brief differs. Compose primitives, media,
+   curves, gradients, prisms, depth effects, and sparse keyframes as one scene.
+   Establish background, subject, action/evidence, then overlay hierarchy; use
+   brand color for meaning and move depth layers at different rates instead of
+   filling the frame with repeated cards. Reuse the canonical mark as media.
+   Use supersampling and motion blur deliberately; use preview duration/width to
+   diagnose quickly while retaining intended quality settings.
+5. Run `narrate`; compare measured speech and scene timing. Run `check`, fix errors,
+   and assess pacing and source-upscaling warnings. Reuse unchanged checks; inspect
+   `sheet` with `perceive`.
+6. Render after checks; preview long work first. Review decoded MP4 action samples
+   against the brief and correct mismatches. Stills/FFprobe do not prove smooth
+   playback or voice quality. Report the render receipt, technical checks, visual
+   review, and listening separately. Never call a silent output narrated.
