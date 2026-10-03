@@ -1931,7 +1931,7 @@ class TrayPopup:
         import win32api, win32gui
         from PIL import ImageDraw, Image
         from mo_desktop import card
-        from interface.desktop_widgets import DesktopSwitch
+        from interface.desktop_widgets import render_desktop_switch
 
         specs = list(self.owner.item_specs())
         rows = [spec for spec in specs if spec["id"] == "show_hide" or spec["kind"] == "toggle"]
@@ -1960,7 +1960,7 @@ class TrayPopup:
             if spec["kind"] == "toggle":
                 target = float(bool(getattr(self.owner, spec["checked"])()))
                 amount = self._switch_amounts.setdefault(key, target)
-                switch = DesktopSwitch._image(p, amount, True).resize((42*ss, 22*ss), Image.Resampling.LANCZOS)
+                switch = render_desktop_switch(p, amount, True).resize((42*ss, 22*ss), Image.Resampling.LANCZOS)
                 image.alpha_composite(switch, (222*ss, (y+5)*ss))
             elif key == "advanced":
                 glyph = make_glyph_icon("chevron_right", 12*ss, color=p.muted)

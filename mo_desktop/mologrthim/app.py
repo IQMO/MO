@@ -255,6 +255,11 @@ class MologrthimWindow:
         self._chat_key=None
         self._plate=self._furniture=self._plate_key=None
         self._bitmaps.clear()
+        # Hit actions close over canvas widgets. Release them on the GUI lane,
+        # rather than leaving a Tk interpreter for a worker's cyclic GC.
+        self._hits.clear()
+        self._motion_items.clear()
+        self._drag=None
         self._resource_text_items=[]
 
     def apply_visual_state(self,visuals):
@@ -505,7 +510,7 @@ class MologrthimWindow:
                 plate=Image.new('RGBA',(pw*3,ph*3))
                 ImageDraw.Draw(plate).rounded_rectangle((0,0,pw*3-1,ph*3-1),radius=r*3,fill=fill or p.card,outline=outline or p.border,width=3)
                 return plate.resize((pw,ph),Image.Resampling.LANCZOS)
-            c.create_image(x*sx,y*sy,image=bitmap(('panel',pw,ph,r,fill,outline),paint),anchor='nw')
+            return c.create_image(x*sx,y*sy,image=bitmap(('panel',pw,ph,r,fill,outline),paint),anchor='nw')
         def button(box,label,action):
             panel(box,p.entry,self._visuals.metrics.button_corner_radius)
             text((box[0]+box[2])/2,(box[1]+box[3])/2,label,16,anchor='center')
@@ -520,6 +525,7 @@ class MologrthimWindow:
         icon=bitmap(('close',),lambda:make_glyph_icon('close',max(12,round(22*self._scale)),color=p.muted))
         text(128,200,'Mologrthim',25,p.muted)
         roles=self._data.get('roles',[])
+        selection_mark=None
         positions=[(255,405,48),(307,624,53),(904,403,44),(885,681,49)]
         for i,row in enumerate(roles[self._page*4:self._page*4+4]):
             x,y,size=positions[i]
@@ -532,24 +538,42 @@ class MologrthimWindow:
             status={'offered':'Queued','accepted':'Queued','running':'Running','completed':'Report received','blocked':'Blocked','paused':'Paused','cancelled':'Stopped'}.get(state,'Available')
             text(lx,ly+28,status,15,p.error if state=='blocked' else p.accent if state in ('running','completed') else p.muted)
             hit((lx,ly,lx+245,ly+53),lambda r=row['role']:self._select(r),role=True)
-        character(611,484,59,2,state='running' if self._data.get('active_count') else '')
+            if self._inspector=='role' and row['role']==self._selected:
+                selection_mark=(lx,ly)
+        character(611,484,59,2)
         c.create_image(0,0,image=self._furniture,anchor='nw')
         c.tag_raise('scene-text')
+        if selection_mark:
+            lx,ly=selection_mark
+            marker=panel((lx-12,ly+2,lx-8,ly+49),p.accent,
+                         self._visuals.metrics.button_corner_radius,outline=p.accent)
+            c.addtag_withtag('employee-selection',marker)
         text(597,579,'MO',25,anchor='n')
-        text(597,614,'Coordinating' if self._data.get('active_count') else 'Ready',17,p.accent,anchor='n')
+        count=self._data.get('active_count',0)
+        desk_status=f'{count} active assignment' + ('s' if count!=1 else '') if count else 'Open conversation'
+        text(597,614,desk_status,17,p.accent,anchor='n')
+        hit((480,355,735,661),self._show_chat if self._inspector else self._open_conversation)
         brand=bitmap(('brand',),lambda:make_four_cube_icon(max(24,round(48*self._scale)),palette=p))
         c.create_image(581*sx,549*sy,image=brand)
         if not roles:
             text(140,290,'No specialists registered',17,p.muted,240)
         hit((366,109,808,354),lambda:self._inspect_source('tasks'))
-        for j,(label,states) in enumerate([('Next',('pending',)),('Doing',('active',)),('Results',('blocked','completed','cancelled'))]):
+        for j,(label,states) in enumerate([('Next',('pending',)),('In progress',('blocked','active')),('Finished',('completed','cancelled'))]):
             x,y=397+j*132,158+j*19
-            text(x,y,label,17)
             rows=[r for r in self._data.get('tasks',[]) if r.get('status') in states]
+            text(x,y,label,15)
+            # Keep a blocker visible even when earlier active rows exist.
+            rows.sort(key=lambda row:states.index(row['status']))
             if rows:
                 row=rows[0]
-                panel((x-5,y+38,x+113,y+111),mix(p.card,p.accent,.09) if row['status']=='active' else mix(p.card,p.border,.30),radius=self._visuals.metrics.button_corner_radius,outline=p.accent if row['status']=='active' else None)
-                text(x+4,y+48,row['title'][:42],14,p.accent if row['status']=='active' else p.text,102)
+                status=row['status']
+                tint=p.error if status=='blocked' else p.accent if status=='active' else p.border
+                panel((x-5,y+38,x+113,y+111),mix(p.card,tint,.09),
+                      radius=self._visuals.metrics.button_corner_radius,outline=tint)
+                text(x+4,y+44,{'blocked':'Blocked','active':'Working','completed':'Complete','cancelled':'Stopped','pending':'Pending'}[status],11,tint if status in ('blocked','active') else p.muted,102)
+                text(x+4,y+64,row['title'][:34],13,p.text,102)
+                if len(rows)>1:
+                    text(x,y+118,f'+{len(rows)-1} more',11,p.muted)
             else:
                 text(x,y+48,'No rows',13,p.muted)
         events=self._data.get('events',[])

@@ -33,7 +33,9 @@ and responsibilities; they have no separate character names or invented rank.
   Pillow. Tk owns the window, text and input, and this is the sole roster
   renderer. No game engine is required.
 - Select an employee to inspect its current assignment, note, evidence and
-  returned report. Scroll inside the inspector for longer records. Tab selects
+  returned report; an accent marker identifies the selected employee in the room.
+  Select the central MO desk to return to the same conversation. Scroll inside
+  the inspector for longer records. Tab selects
   the next role; rosters larger than four use pages. Empty rosters are explicit.
   The conversation panel retains visible user/MO messages with native scrolling
   and selection. In talk mode its composer submits through the existing host input owner;
@@ -89,8 +91,12 @@ received. Animation cannot imply task completion, approval, worker presence or
 experience that the source records do not establish. The wall taskboard shows
 existing rows and opens their evidence. The inspector retains all supplied
 taskboard rows and their complete redacted titles, blockers and evidence; the
-wall cards are compact previews. Archive receipts describe recorded index
-results, never an invented ongoing indexing operation. Learning shows
+wall cards are compact previews. Blocked tasks stay in
+the board's In progress column with an error-colored status; they never appear
+among Finished tasks. Extra rows have a count and remain available in the
+inspector. MO's desk reports active assignment count, not inferred brain activity.
+Archive receipts describe recorded index results, never an invented ongoing
+indexing operation. Learning shows
 profile-wide pending/adopted/memory counts with an explicit unavailable state.
 Activity opens the recorded correlated details. Monitor reads use the existing
 bounded tail reader on the caller-owned monitor and require both exact session

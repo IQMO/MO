@@ -112,9 +112,10 @@ close and save-confirmation behavior stays with each app.
 Tk has not been removed from Desktop entirely. The frameless
 [Mologrthim workroom](mologrthim/README.md), opened from the Work cube or Project
 Architect, uses a custom painted scene with shared skin, typography and cube
-settings. Shared utility dialogs still use themed Tk widgets. The resident cube,
-composer and selection overlays also use Tk for their window/input lifecycle
-with custom painted surfaces. Settings,
+settings. The resident cube, composer and screen-selection overlay still use
+Tk for window/input lifecycle with custom painted surfaces. Pointer and UIA
+annotation labels use passive native alpha windows and the shared Desktop card
+renderer; obsolete Tk utility dialogs and control wrappers have been removed. Settings,
 Phone and Files no longer have a parallel Tk app renderer. Shell owns its
 native control strip; Windows file pickers and attached third-party windows
 retain their own window chrome.

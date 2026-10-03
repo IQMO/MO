@@ -244,11 +244,12 @@ when that source tree is present.
   `interface.theming.skin_to_desktop_vars`; `bg_deepest` remains the transparency
   key. Keep those roles distinct. `interface.desktop_ui` owns the common font
   sizes and default corner geometry; saved panel preferences still take priority.
-  `DesktopSwitch` owns the antialiased capsule/thumb and finite shared-duration
-  transition used by Tray, Settings, and Phone. Its capsule is structural switch
+  `interface.desktop_widgets.render_desktop_switch` owns the tray switch
+  artwork; `TrayPopup` owns its finite transition on the existing animation
+  clock. WebView switches use `app_controls.css`. The capsule is structural
   geometry; panel/control containers use their respective active radius roles.
-  Retain switch state when it changes, cancel any pending frame
-  on destruction, and schedule no frames after settling. Focus reaches MO through its original notification icon and existing `TrayPopup`, never a second menu owner.
+  Retain switch state, cancel pending work on destruction, and schedule no
+  frames after settling. Focus reaches MO through its original notification icon and existing `TrayPopup`, never a second menu owner.
 - `computer_activity.py` paints a cached, input-transparent bottom cue on the
   existing cube clock. The cue and existing cube are capture-excluded; the cube
   yields input while its existing four sprites carry the activity motion. The
@@ -270,7 +271,7 @@ when that source tree is present.
   from the active visual state and the Body label uses ordinary bold text.
 - The composer key path must not rebuild a full 3x supersampled card. Text edits, selection, and cursor navigation all pass through `_finish_input_edit()` for one 1x repaint; coalesced streaming repaints use 2x, and the existing 240 ms settle performs the single crisp 3x resting render. Morph transitions remain crisp and reuse their prepared base. A successful reply-card blit caches its exact position and size so unchanged key, settle, and cached-caret frames update pixels without asking Tk to reapply identical window geometry. Preserve this latency/quality split and the one layered-window owner rather than adding a typing timer, another renderer, or a background GUI thread.
 - Image and media previews scale with the active 1x/2x/3x card pass, with image dimensions rounded in logical pixels first. A fast repaint and its crisp settle must keep the same native panel geometry. The image preview has a narrow inset and one action row below it: Send to MO, Share, Tools, Folder and Path. Their icons reuse `interface.desktop_brand` and active visual-state colors. A missing source path cannot open Explorer or populate the clipboard. Image drops import through the existing attachment catalog and display locally, without adding a conversation message or submitting a turn. Send to MO routes the currently displayed paths through the existing Desktop request owner; busy turns remain protected. Non-image drops retain automatic inspection. The automatic image-inspection path is removed.
-- Desktop utility surfaces—Settings, tray popup, MO Files, MO Phone, MO Design, dialogs, and pointer overlays—consume the exact active `DesktopVisualState` from `mo_desktop.visuals` through `interface.desktop_ui`; no surface owns a palette, spacing copy, token-completion fallback, or alternate widget renderer. `mo_desktop.settings.PanelSettings` owns the only persisted panel/button geometry and window-effect fields. Settings is the only visual writer and applies a successful change transactionally to existing windows; an adapter failure restores both the active registry and already-painted surfaces. Settings selects skins only through `interface.theming`, and its previews construct the same strict runtime state. Tk utility windows reuse `interface.desktop_widgets` for title-bar, control, field, select, tabs, row, table, dialog, resize, native-corner, and outside-effect behavior; MO Files, Phone, SystemCare and Settings use the MO Design WebView/native visual controller with those same active visual settings; Phone, SystemCare and Settings share native app controls in `app_controls.css`. Keep the exact Dashboard four-cube mark from `interface.desktop_brand`; do not replace it with another brand, native light dialogs, native tray menus, square render substitutes, module-global palette snapshots, per-window persistence, or per-surface fallbacks.
+- Desktop utility surfaces—Settings, tray popup, MO Files, MO Phone, MO Design and pointer overlays—consume the exact active `DesktopVisualState` from `mo_desktop.visuals` through `interface.desktop_ui`; no surface owns a palette, spacing copy, token-completion fallback, or alternate widget renderer. `mo_desktop.settings.PanelSettings` owns the only persisted panel/button geometry and window-effect fields. Settings is the only visual writer and applies a successful change transactionally to existing windows; an adapter failure restores both the active registry and already-painted surfaces. Settings selects skins only through `interface.theming`, and its previews construct the same strict runtime state. The retained Tk lifecycle surfaces reuse `interface.desktop_widgets` for native corners, hidden reveal, and outside effects. Retired Tk utility dialogs, control wrappers, title bars and ttk styles have no parallel renderer; MO Files, Phone, SystemCare and Settings use the MO Design WebView/native visual controller with those same active visual settings; Phone, SystemCare and Settings share native app controls in `app_controls.css`. Keep the exact Dashboard four-cube mark from `interface.desktop_brand`; do not replace it with another brand, native light dialogs, native tray menus, square render substitutes, module-global palette snapshots, per-window persistence, or per-surface fallbacks.
 - The compact Dashboard is one fixed renderer inside `ReplyBubble`, not another window or dashboard owner. `core.dashboard.projection.build_dashboard_projection()` supplies the canonical bounded user/operations semantics; `CompanionSurface` maps those values into Home/Work/You/Systems tiles, rows, and at most four visible delegated controls per view. Command and request controls re-enter the existing `_submit_text_request` Gateway path, Files opens the established Files panel, and destructive work retains the selected owner's fresh-evidence and confirmation rules. The active Desktop skin supplies all colors, the MO Cube mark stays visible, and switching views is local repaint-only. Opening paints cached data and permits one background refresh; never add a Dashboard timer, model call, persistence path, filesystem worker, mutation facade, or second panel. `ReplyBubble` also owns the one 200 ms reveal clock shared by Dashboard, replies, composer, history, and attachments: prepare the crisp base while hidden, paint progress zero, then start the clock after the successful first blit and align later frame starts to that clock rather than adding a full interval after each paint. Reply-recall chevrons retain their accessible labels and show a compact current/total position in the same footer rather than creating another history surface. Dashboard snapshot work starts only after the final frame; same-state content arriving during the reveal waits for that frame, an equal Dashboard projection updates actions without repainting, and completion reuses the prepared base unless newer content requires one full-quality render. Never spend the transition budget rendering off-screen, allow background snapshot/projection work to compete with it, interrupt it with a second content render, or skip its final frame.
 - The Dashboard hosts no editor or business-state owner. Its Profile, Learning, Skills, Projects, Files, and server controls only open or request the existing owner; they never expose or edit raw profile prose, episodic memory, learning stores, prompts, task evidence, credentials, or private roots in the Dashboard. `core.files` remains the MO Files mutation owner and its revision/path/scope checks remain intact.
 - Always-on-top compatibility is opt-in through `behavior.keep_above_apps`. Match exact executable basenames only, keep the public default empty, and never hardcode a machine-local app. A WinEvent reorder/show hook lifts the existing cube/trace/label/reply/settings surfaces as one non-activating batch when a configured overlay moves above them; the home poll is only a slow missed-event fallback. Never add a competing worker, per-frame scan, path match, or unconditional topmost loop. An explicitly configured foreground app also overrides the normal fullscreen fade.
@@ -375,11 +376,9 @@ WebView controller; pin action receipts update selection without polling.
 WinForms has no `TopMostChanged` event. Keep native subscriptions to real Form
 events and release finite animation work when its owning window closes.
 
-`DesktopTitleBar` adapts the same metrics, glyphs and hover treatment for the
-remaining Tk utility windows. Shell consumes those metrics in its existing
-native theme payload and control-strip painter; it retains its cube geometry
-and terminal lifecycle. Tk hover runs only during a control transition on the
-existing event loop; Shell reuses its existing finite animation clock.
+Shell consumes those same metrics and glyphs in its existing native theme
+payload and control-strip painter; it retains its cube geometry, terminal
+lifecycle and finite animation clock. There is no retained Tk title-bar adapter.
 
 Built-in skin authoring lives only in `interface/skins/`: one validated file
 per skin, the copy-ready `template.py.example`, and one immutable registry.
@@ -410,7 +409,17 @@ readiness is valid only when lock and ready records agree on PID and generation;
 an incomplete or inconsistent record fails closed rather than launching a
 second resident.
 
-Every native Tk utility window is constructed withdrawn, fully laid out and
+Pointer and UIA annotation labels share `interface.desktop_label`: one
+`card.surface_canvas`/`card.finish` painter and passive `NativeLayeredWindow`
+lifetime. The existing `render_desktop_window_effect` supplies the configured
+outside treatment, composited into that same window. Labels are click-through,
+non-activating and positioned within the
+target monitor work area, including negative desktop coordinates. Each short-lived
+process paints once, waits for native messages or expiry without a repaint
+clock, and destroys its owned windows in `finally`. The resident pointer route
+and the fallback command-line entry points remain unchanged.
+
+Retained native Tk lifecycle windows are constructed withdrawn, fully laid out and
 positioned, then mapped once through `reveal_desktop_window()`. The shared
 corner adapter must defer while a withdrawn `Toplevel` has no Windows wrapper;
 rounding its temporary client HWND clips the real popup and is forbidden. Do
@@ -428,7 +437,12 @@ cannot disappear behind square client widgets. Surfaces must not add their own
 corner strokes or a competing native-frame path. Descendant Configure events
 must not trigger a native refresh; descendant Expose events may coalesce only a
 frame repaint after child painting, never a region update or descendant-role
-scan. The same registered window controller owns the outside treatment for
+scan. Corner owners cancel their queued Tcl callbacks before command deletion,
+including callbacks superseded by a direct refresh. Destroy releases the
+controller's widget reference on the GUI thread; leaving a widget/controller
+cycle for worker-thread garbage collection can abort Tcl. Scene teardown also
+releases canvas hit-action closures and image references on that same thread.
+The same registered window controller owns the outside treatment for
 every mapped MO utility `Toplevel`: Settings exposes exactly one type selector
 (`None`, `Shadow`, `Glow`, or `Hybrid`) and one intensity control, while the
 active skin supplies the glow color. The layer is click-through,
@@ -752,7 +766,7 @@ disabled profiles contribute no rows and import no private code.
 - `ReplyBubble` owns actual panel visibility and the dock side selected from the rendered card width. Companion may mirror that state for turn guards, but toggle and label placement query the renderer; do not re-estimate panel width or infer visibility from an earlier request.
 - With no open panel, the cube chooses the label side from current screen space. With an open panel, the label uses the actual opposite dock side. Never force a fixed side at a screen edge.
 - The default character remains one layered cluster and one shared panel. Each constituent cube may react to pointer distance and retain its press/release index, but an optional per-cube callback must fall through to the established shared gestures unless it explicitly consumes the click. Do not create per-cube windows or panels without a separately approved interaction design.
-- Tk/ttk remains the resident Desktop's single window and event-loop owner; idle cost belongs to cube cadence and layered compositing, not styling. Visible idle animation targets about 24 Hz so the existing passive-frame cache can reuse slow breathing frames, interaction stays about 60 Hz, and hidden residency stays about 8 Hz. A failed cube tick logs its traceback, pauses only that tick path for five seconds, and retries on the same loop; never swallow it or add a recovery worker. Use monotonic visual clocks and elapsed-time-scaled easing; do not add a second renderer/thread or restore frame-count-dependent steps, binary emote switches, or cusp-shaped motion.
+- Tk remains the resident Desktop's single window and event-loop owner; idle cost belongs to cube cadence and layered compositing, not styling. Visible idle animation targets about 24 Hz so the existing passive-frame cache can reuse slow breathing frames, interaction stays about 60 Hz, and hidden residency stays about 8 Hz. A failed cube tick logs its traceback, pauses only that tick path for five seconds, and retries on the same loop; never swallow it or add a recovery worker. Use monotonic visual clocks and elapsed-time-scaled easing; do not add a second renderer/thread or restore frame-count-dependent steps, binary emote switches, or cusp-shaped motion.
 - Normal Desktop finals use the existing wider reply card. Prefer concise answers for simple requests, but retain the full accepted answer and requested detail; never clip semantic content to a character count or rewrite an evidence-blocked result for presentation. Long content scrolls with a subtle position indicator. Cache only the current body's wrapped lines by text, width, fonts, and render scale; no second renderer. Provider setup narration belongs only in the compact activity label, including when tool metadata arrives later. During a walkthrough, suppress all evolving provider prose from the reply card; numbered verified pointer labels are the only in-flight body, the wider card stays hidden for the entire sequence, and `_set_result` schedules it exactly once as the final recap after every point. This rule never triggers a second tool call or changes specialized panels, structured choices, or terminal answers.
 - Model-driven choices retain their originating canonical assistant content. Recall and restart reparse that same options block and restore its attachment presentation; only navigation and current selections belong to the UI cache. Independent choices use multi-select; exclusive alternatives and approvals use single-select. Labels and details wrap; oversized lists scroll within the available card height while Submit stays visible. Submission binds the displayed attachments and selected rows' full labels/details to that turn; later browsing or drops cannot rebind its reply. Only an image produced by that turn may replace its attachment presentation. Do not add a fixed extra conversational row, strip numbered prose, or retain the newer reply's action callback when browsing an older reply.
 - A pointed walkthrough may use the larger guidance variant of the same glance renderer, showing one numbered title/explanation at a time. Ordinary thinking, observation, volume, sync, notices, and routine activity remain compact; do not add another panel or targeting path.

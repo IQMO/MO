@@ -65,6 +65,16 @@ from interface.desktop_ui import active_desktop_visual_state
 DESKTOP_NAME = "MO Desktop"
 
 
+def _initialize_asyncio_runtime() -> None:
+    """Finish asyncio imports before Desktop starts any worker threads."""
+    import asyncio
+    from asyncio import base_events, coroutines, events
+
+    # Keep the eager imports explicit: concurrent first imports can expose
+    # partially initialized stdlib modules to Live Control and the provider.
+    _ = asyncio, base_events, coroutines, events
+
+
 def release_runtime_lock(lock: Any) -> None:
     from core.runtime.lock import release_runtime_lock as release
 
@@ -387,10 +397,16 @@ class CompanionSurface(
         if importlib.util.find_spec("tkinter") is None:
             return False  # tkinter missing (unusual but possible on headless)
 
-        self._running = True
-        self._gui_ready.clear()
         agent = getattr(self, "_agent", None)
         config = getattr(agent, "config", None)
+        try:
+            _initialize_asyncio_runtime()
+        except Exception:
+            log_exception("mo-desktop-asyncio-startup-failed", config=config)
+            return False
+
+        self._running = True
+        self._gui_ready.clear()
         try:
             from mo_desktop.visuals import load_and_publish_desktop_visual_state
 
