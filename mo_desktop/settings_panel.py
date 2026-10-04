@@ -39,7 +39,8 @@ class SettingsPanel(NativeAppWindow):
         values.update({"voice.role": active_role or str(voice.get("role") or ""),
                        "voice.role_active": bool(active_role) or bool(voice.get("role_active", voice.get("role"))),
                        "voice.speech_rate": normalize_speech_rate(voice.get("speech_rate", 1)),
-                       "voice.output_device": str(voice.get("output_device") or "default")})
+                       "voice.output_device": str(voice.get("output_device") or "default"),
+                       "voice.conversation_provider": str(voice.get("conversation_provider") or "")})
         agent = self._c._agent
         catalog = model_catalog_projection(agent, allow_live=False)
         try:
@@ -62,6 +63,7 @@ class SettingsPanel(NativeAppWindow):
                        "custom": theming.is_custom_skin(key), "colors": theming.skin_palette(skin)}
                       for key, skin in theming.available_skin_items()],
             "roles": list(self._c.conversation_role_options()),
+            "voice_providers": list(self._c.voice_conversation_provider_names()),
             "startup": CompanionTray._startup_enabled(), "terminal": terminal,
             "models": catalog, "model_state": self._model_state(),
             "projects": self._projects(), "graph": self._graph(),
@@ -340,6 +342,8 @@ class SettingsPanel(NativeAppWindow):
             accepted = self._c.set_voice_role_active(value)
         elif key == "voice.output_device":
             accepted = self._c.set_voice_output_device(value)
+        elif key == "voice.conversation_provider":
+            accepted = self._c.set_voice_conversation_provider(value)
         else:
             accepted = self._c.apply_desktop_setting(section, field, value)
         if accepted is False:

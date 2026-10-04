@@ -1937,6 +1937,7 @@ class CompanionSurface(
             if hasattr(self, "_voice_cfg"):
                 self.set_voice_role("")
                 self.set_voice_output_device("default")
+                self.set_voice_conversation_provider("")
         except Exception:
             live_applied = False
         block = {
@@ -1950,6 +1951,7 @@ class CompanionSurface(
                 "role": "",
                 "role_active": False,
                 "output_device": "default",
+                "conversation_provider": "",
             },
         }
         try:

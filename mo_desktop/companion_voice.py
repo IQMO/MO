@@ -226,6 +226,10 @@ class CompanionVoiceMixin:
     def _cancel_speech(self) -> None:
         self._speech_was_speaking = False
         self._reset_voice_timing()
+        conversation = getattr(self, "_voice_conversation_owner", None)
+        if conversation is not None:
+            # New speech or a stop also ends the fast reply still being written.
+            conversation.cancel()
         speech = getattr(self, "_speech", None)
         if speech is not None:
             try:
@@ -265,6 +269,149 @@ class CompanionVoiceMixin:
         if not submitted:
             self._reset_voice_timing()
         return submitted
+
+    # ------------------------------------------------------------------
+    # Voice conversation: fast spoken replies; MO turns only for real work
+    # ------------------------------------------------------------------
+
+    def _voice_conversation(self) -> Any:
+        conversation = getattr(self, "_voice_conversation_owner", None)
+        if conversation is not None:
+            return conversation
+        from mo_desktop.voice.conversation import VoiceConversation
+        from mo_desktop.voice.output import speech_safe_text
+
+        config = getattr(self._agent, "config", None)
+        conversation = VoiceConversation(
+            provider=self._voice_conversation_provider,
+            speech=self._voice_conversation_speech,
+            can_speak=self._voice_can_speak,
+            speech_safe=speech_safe_text,
+            show=lambda text, final: self._render_reply_dialog(text, follow_tail=not final, controls=final),
+            record=self._record_voice_exchange,
+            delegate=self._delegate_voice_request,
+            emote=self._voice_conversation_emote,
+            task_state=self._voice_task_state,
+            log=lambda detail: log_event(detail, config=config),
+        )
+        self._voice_conversation_owner = conversation
+        return conversation
+
+    def _voice_conversation_provider(self) -> Any:
+        """The provider named by ``voice.conversation_provider``, else MO's active one."""
+        from core.state.configuration_defaults import DEFAULT_PREFERENCES
+
+        cfg = getattr(self, "_voice_cfg", {}) or {}
+        name = str(cfg.get("conversation_provider",
+                           DEFAULT_PREFERENCES["mo_desktop.voice.conversation_provider"]) or "").strip()
+        providers = list(getattr(self._agent, "providers", []) or [])
+        for provider in providers:
+            if name and getattr(provider, "name", "") == name:
+                return provider
+        return getattr(self._agent, "active_provider", None) or (providers[0] if providers else None)
+
+    def voice_conversation_provider_names(self) -> tuple[str, ...]:
+        """Configured provider names Settings may offer for spoken replies."""
+        names = (str(getattr(provider, "name", "") or "").strip()
+                 for provider in getattr(self._agent, "providers", []) or [])
+        return tuple(dict.fromkeys(name for name in names if name))
+
+    def set_voice_conversation_provider(self, name: str) -> bool:
+        """Choose the spoken-reply provider live; an empty name follows MO's active provider."""
+        value = str(name or "").strip()
+        if value and value not in self.voice_conversation_provider_names():
+            return False
+        self._voice_cfg["conversation_provider"] = value
+        return True
+
+    def _voice_conversation_speech(self) -> Any:
+        if getattr(self, "_speech", None) is None:
+            self._init_speech_output(force=True)
+        return getattr(self, "_speech", None)
+
+    @staticmethod
+    def _voice_can_speak(text: str) -> bool:
+        # The installed engine is the English Piper voice until the multilingual
+        # engine lands; Arabic replies stay visible instead of being misread.
+        from mo_desktop.voice.conversation import is_arabic
+
+        return not is_arabic(text)
+
+    def _voice_conversation_emote(self, name: str) -> None:
+        cube = getattr(self, "_cube", None)
+        if cube is not None and name:
+            self._post_gui_call(lambda: cube.play_emote(name))
+
+    def _voice_task_state(self) -> str:
+        turn = getattr(self, "_turn_thread", None)
+        if turn is None or not turn.is_alive():
+            return ""
+        objective = str(getattr(self, "_voice_delegated_objective", "") or "").strip()
+        return f"MO is working on: {objective}" if objective else "MO is working on a request."
+
+    def _record_voice_exchange(self, user_text: str, reply: str) -> None:
+        session = getattr(self, "_desktop_session", None)
+        if session is not None and self._record_direct_desktop_exchange(session, user_text, reply):
+            persist = getattr(self, "_persist_desktop_session", None)
+            if callable(persist):
+                try:
+                    persist()
+                except Exception:
+                    pass
+
+    def _delegate_voice_request(self, user_text: str, objective: str) -> bool:
+        """Hand the operator's own words to a normal MO voice turn."""
+        self._voice_delegated_objective = str(objective or user_text)[:200]
+        submitted = self._submit_text_request(
+            user_text,
+            source="voice",
+            _voice_started_at=float(getattr(self, "_voice_conversation_accepted_at", 0.0) or time.monotonic()),
+            _request_panic_generation=getattr(self, "_voice_conversation_panic_generation", None),
+        )
+        if not submitted:
+            self._reset_voice_timing()
+        return submitted
+
+    def _converse(self, text: str, *, accepted_at: float, panic_generation: int) -> None:
+        """Answer one utterance in the conversation layer (runs off the GUI thread)."""
+        self._voice_conversing = True
+        self._voice_conversation_accepted_at = accepted_at
+        self._voice_conversation_panic_generation = panic_generation
+        self._set_status("Answering…", self._visual_palette.accent)
+        try:
+            outcome = self._voice_conversation().handle(text)
+        except Exception as exc:
+            outcome = {"kind": "error", "error": type(exc).__name__, "spoken": False}
+        finally:
+            self._voice_conversing = False
+        log_event(
+            f"voice conversation {outcome.get('kind')}; spoken={bool(outcome.get('spoken'))}",
+            config=getattr(self._agent, "config", None),
+        )
+        if outcome.get("kind") == "delegated" and outcome.get("submitted"):
+            return  # the MO turn speaks its result and re-arms Voice Chat itself
+        if outcome.get("kind") == "error":
+            self._set_status("Voice reply failed — the request is shown instead.", self._visual_palette.warn)
+            self._render_reply_dialog(f"I heard: “{text}”, but the voice reply failed.", controls=True)
+        else:
+            self._set_status("Done", self._visual_palette.ok)
+        if not outcome.get("spoken"):
+            # No speech event will follow, so nothing else re-opens the mic.
+            self._reset_voice_timing()
+            self._resume_voice_chat_after_turn()
+
+    def _warm_voice_conversation(self) -> None:
+        """Open the provider connection while the operator is still speaking."""
+        now = time.monotonic()
+        if now - float(getattr(self, "_voice_conversation_warmed_at", 0.0) or 0.0) < 120.0:
+            return
+        self._voice_conversation_warmed_at = now
+        try:
+            threading.Thread(
+                target=self._voice_conversation().warm, name="mo-voice-warm", daemon=True,
+            ).start()
+        except Exception:
+            pass
 
     def _resume_voice_chat_after_turn(self) -> None:
         """Re-open the Voice Chat mic when no spoken reply will do it for us.
@@ -386,6 +533,7 @@ class CompanionVoiceMixin:
         if callable(prepare):
             prepare()
         if voice.start_recording():
+            self._warm_voice_conversation()
             if self._voice_chat_enabled() and not chat_auto:
                 self._voice_chat_paused = False
             self._cancel_speech()
@@ -416,6 +564,7 @@ class CompanionVoiceMixin:
             or self._voice_chat_paused
             or self._recording_voice
             or bool(getattr(self, "_voice_transcribing", False))
+            or bool(getattr(self, "_voice_conversing", False))
         ):
             return
         if self._turn_thread is not None and self._turn_thread.is_alive():
@@ -481,20 +630,27 @@ class CompanionVoiceMixin:
                 accepted_at = time.monotonic()
                 if getattr(self, "_cube", None) is not None:  # a quick "heard you" cube flourish
                     self._post_gui_call(lambda: self._cube.play_emote("happy"))
+                turn = getattr(self, "_turn_thread", None)
+                busy = turn is not None and turn.is_alive()
                 log_event(
                     "voice transcribed; "
                     f"chars={len(text)}; transcription_ms="
                     f"{round((accepted_at - transcription_started_at) * 1000)}; "
-                    "submitting shared desktop turn",
+                    + ("queueing desktop follow-up behind the running turn" if busy else "answering in voice conversation"),
                     config=getattr(self._agent, "config", None),
                 )
-                if not self._submit_text_request(
-                    text,
-                    source="voice",
-                    _voice_started_at=accepted_at,
-                    _request_panic_generation=panic_generation,
-                ):
-                    self._reset_voice_timing()
+                if busy:
+                    # The conversation layer never writes the session while an
+                    # MO turn is running; the follow-up FIFO already orders it.
+                    if not self._submit_text_request(
+                        text,
+                        source="voice",
+                        _voice_started_at=accepted_at,
+                        _request_panic_generation=panic_generation,
+                    ):
+                        self._reset_voice_timing()
+                else:
+                    self._converse(text, accepted_at=accepted_at, panic_generation=panic_generation)
             else:
                 self._reset_voice_timing()
                 message = text or "No speech detected."

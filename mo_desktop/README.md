@@ -796,10 +796,19 @@ Voice is optional and lazy:
 
 - Double-Alt hold-to-talk starts capture when the second Alt is pressed and
   sends when that same Alt is released. It uses `sounddevice` plus either
-  `faster-whisper` or Windows SAPI, then speaks that voice turn's reply.
+  `faster-whisper` or Windows SAPI.
+- A spoken request is answered by the voice conversation layer, not by a full
+  MO turn. One fast request to `voice.conversation_provider` (thinking off, a
+  small prompt) streams the reply, and each sentence is spoken as soon as it
+  is written while later ones are still arriving. Stop, repeat and "what are
+  you doing" are answered without a model. Requests that need tools, apps,
+  files, the screen, mail, memory or the web get a short spoken acknowledgement
+  and are handed, in the operator's own words, to a normal MO voice turn, which
+  does the work and speaks its result. While an MO turn is already running, a
+  manual voice request joins the existing follow-up queue instead.
 - Local speech output uses an isolated Piper worker and the configured output
   device. **Speak typed replies** extends that output to requests entered as text.
-- Continuous Voice Chat explicitly loops listen → turn → speak → listen while
+- Continuous Voice Chat explicitly loops listen → reply → speak → listen while
   its separate switch is enabled. Manual double-Alt capture does not enable that
   loop. Voice Chat re-arms even when a turn produces no audio.
 - Whisper inference lives in one supervised worker that starts on the first
@@ -813,10 +822,14 @@ Voice is optional and lazy:
 - Desktop records transcription time, accepted-answer time, and first-audible-
   PCM time in its private trace. Piper's worker-start event is synthesis state;
   the cube enters speaking state only after the first PCM slice reaches the
-  output device. Speech starts from the accepted final reply so rejected drafts,
-  tool-call text, and completion-gate rewrites are never spoken as answers. The
-  spoken projection drops command/code detail and Markdown punctuation while the
-  complete accepted answer remains visible in the reply bubble.
+  output device. An MO turn's speech starts from its accepted final reply so
+  rejected drafts, tool-call text, and completion-gate rewrites are never spoken
+  as answers. The conversation layer speaks only its own reply text, sentence by
+  sentence; tool-call arguments never reach speech, and emotion tags only select
+  delivery and the cube's reaction. Both drop command/code detail and Markdown
+  punctuation from speech while the complete text remains visible in the reply
+  bubble. Arabic replies stay visible but unspoken until a multilingual speech
+  engine is installed; the current Piper voice is English.
 
 Voice dependencies and models live in private state, not the product checkout.
 The core companion still runs when optional voice packages are absent.
@@ -905,7 +918,8 @@ Common settings:
 | `voice.stt_worker_timeout_seconds` | `180` | Whisper worker request ceiling |
 | `voice.tts_enabled` | `false` | Also speak replies to typed requests |
 | `voice.speech_rate` | `1.0` | Piper speaking pace multiplier (0.5–2.0; 1.0 preserves the installed voice's default pace) |
-| `voice.chat_enabled` | `false` | Continuous listen → turn → speak → listen mode, separate from manual double-Alt input |
+| `voice.chat_enabled` | `false` | Continuous listen → reply → listen mode, separate from manual double-Alt input |
+| `voice.conversation_provider` | `""` | Configured provider name that answers spoken requests (a fast, non-reasoning model works best); empty uses MO's active provider. Settings → Voice → **Spoken replies** changes it live |
 
 The complete disabled example is in
 [`config.example.yaml`](../config.example.yaml). Additional runtime fields are

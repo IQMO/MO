@@ -32,7 +32,9 @@ def _read_commands(commands: queue.Queue[dict[str, Any]], epoch: list[int]) -> N
         name = str(command.get("command") or "").strip().lower()
         if name in {"cancel", "shutdown", "speak"}:
             epoch[0] += 1
-            command["_epoch"] = epoch[0]
+        # An ``append`` continues the current utterance: it shares the epoch, so
+        # only a cancel or a new ``speak`` interrupts it.
+        command["_epoch"] = epoch[0]
         commands.put(command)
 
 
@@ -65,7 +67,7 @@ def main() -> int:
         name = str(command.get("command") or "").strip().lower()
         if name == "shutdown":
             return 0
-        if name != "speak":
+        if name not in {"speak", "append"}:
             continue
         request_id = str(command.get("id") or "")
         text = str(command.get("text") or "").strip()

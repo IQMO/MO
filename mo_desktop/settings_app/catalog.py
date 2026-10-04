@@ -31,6 +31,7 @@ FIELDS = (
     ("voice.tts_enabled", "voice", "Listening & speech", "Speak typed replies", "Read replies to your typed messages aloud.", "switch", ()),
     ("voice.speech_rate", "voice", "Listening & speech", "Speaking pace", "Preview the voice at your preferred pace.", "range", (.5, 2, .05, "×")),
     ("voice.output_device", "voice", "Listening & speech", "Audio output", "Use the system output or a connected device.", "device", ()),
+    ("voice.conversation_provider", "voice", "Conversation", "Spoken replies", "A fast model answers when you talk; tasks still run on MO's model.", "provider", ()),
     ("voice.role", "voice", "Conversation", "Role", "An existing role, Default, or a custom persona.", "role", ()),
     ("voice.role_active", "voice", "Conversation", "Use selected role", "Applies to text and voice conversations.", "switch", ()),
 )

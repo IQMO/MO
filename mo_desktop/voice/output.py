@@ -50,6 +50,28 @@ _AUDIO_QUEUE_CHUNKS = 8
 
 def prepare_spoken_text(text: str, *, max_chars: int = 320) -> str:
     """Return a short, speech-friendly projection without changing the visible reply."""
+    clean = speech_safe_text(text)
+    if not clean:
+        return "I put the details in the bubble."
+    if len(clean) <= max_chars:
+        return clean
+
+    suffix = " The full answer is in the bubble."
+    limit = max(80, max_chars - len(suffix))
+    sentences = re.split(r"(?<=[.!?])\s+", clean)
+    spoken = ""
+    for sentence in sentences:
+        candidate = f"{spoken} {sentence}".strip()
+        if len(candidate) > limit:
+            break
+        spoken = candidate
+    if not spoken:
+        spoken = clean[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return spoken + suffix
+
+
+def speech_safe_text(text: str) -> str:
+    """Drop code, commands, URLs, paths and Markdown so only speakable words remain."""
     clean = str(text or "").strip()
     clean = re.sub(r"```.*?```", " ", clean, flags=re.DOTALL)
     clean = re.sub(r"\[([^]]+)]\([^)]+\)", r"\1", clean)
@@ -86,24 +108,7 @@ def prepare_spoken_text(text: str, *, max_chars: int = 320) -> str:
     clean = re.sub(r"(?:\s*the detail shown in the bubble\s*){2,}", " the details shown in the bubble ", clean)
     clean = re.sub(r"(?:\s*the path shown in the bubble\s*){2,}", " the paths shown in the bubble ", clean)
     clean = re.sub(r"\s+", " ", clean).strip()
-    clean = re.sub(r"\s+([,.;:!?])", r"\1", clean)
-    if not clean:
-        return "I put the details in the bubble."
-    if len(clean) <= max_chars:
-        return clean
-
-    suffix = " The full answer is in the bubble."
-    limit = max(80, max_chars - len(suffix))
-    sentences = re.split(r"(?<=[.!?])\s+", clean)
-    spoken = ""
-    for sentence in sentences:
-        candidate = f"{spoken} {sentence}".strip()
-        if len(candidate) > limit:
-            break
-        spoken = candidate
-    if not spoken:
-        spoken = clean[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-")
-    return spoken + suffix
+    return re.sub(r"\s+([,.;:!?])", r"\1", clean)
 
 
 def spoken_max_chars(config: Mapping[str, Any] | None = None, *, default: int = 320) -> int:
@@ -153,6 +158,9 @@ class SpeechOutput:
         self._generation = 0
         self._speaking_generation = -1
         self._sample_rate = 0
+        # The open utterance: speed, clauses sent, clauses still synthesizing,
+        # and whether more may follow (see ``begin``/``say``/``finish``).
+        self._utterance: dict[str, Any] | None = None
 
     @property
     def installed(self) -> bool:
@@ -198,24 +206,69 @@ class SpeechOutput:
             return True
 
     def speak(self, text: str, *, speed: float | None = None) -> bool:
-        clean = str(text or "").strip()
-        if not clean or (not self.running and not self.start()):
+        """Speak one complete reply, superseding anything still playing."""
+        if not str(text or "").strip():
+            return False
+        return self.begin(speed=speed) and self.say(text) and self.finish()
+
+    def begin(self, *, speed: float | None = None) -> bool:
+        """Open one utterance whose clauses arrive later through ``say``.
+
+        Opening supersedes anything still playing. Clauses play back to back;
+        audible ``idle`` is published only after ``finish`` and the last
+        clause's audio has drained.
+        """
+        if not self.running and not self.start():
             return False
         rate = normalize_speech_rate(
             self._config.get("speech_rate", 1.0) if speed is None else speed
         )
-        request_id = uuid.uuid4().hex
         with self._lock:
-            self._request_id = request_id
+            self._request_id = uuid.uuid4().hex
             self._generation += 1  # anything still queued belongs to the old request
+            self._utterance = {"rate": rate, "sent": 0, "pending": 0, "open": True}
         self._drain_audio()
-        return self._send({"command": "speak", "id": request_id, "text": clean, "speed": rate})
+        return True
+
+    def say(self, text: str) -> bool:
+        """Queue one clause behind the open utterance's earlier clauses."""
+        clean = str(text or "").strip()
+        with self._lock:
+            utterance = getattr(self, "_utterance", None)
+            if not clean or not utterance or not utterance["open"] or not self._request_id:
+                return False
+            # The first clause starts a new worker epoch (cancelling older
+            # synthesis); later ones continue it.
+            command = "speak" if utterance["sent"] == 0 else "append"
+            utterance["sent"] += 1
+            utterance["pending"] += 1
+            payload = {"command": command, "id": self._request_id, "text": clean, "speed": utterance["rate"]}
+        if self._send(payload):
+            return True
+        with self._lock:
+            utterance["pending"] -= 1
+        return False
+
+    def finish(self) -> bool:
+        """Close the open utterance; returns whether any clause was queued."""
+        with self._lock:
+            utterance = getattr(self, "_utterance", None)
+            if not utterance or not utterance["open"]:
+                return False
+            utterance["open"] = False
+            spoken = utterance["sent"] > 0
+            drained = utterance["pending"] == 0
+            generation = self._generation
+        if spoken and drained:
+            self._enqueue_done(generation)
+        return spoken
 
     def cancel(self) -> None:
         """Stop speaking now. The device is only ever touched by the player thread."""
         with self._lock:
             self._request_id = ""
             self._generation += 1
+            self._utterance = None
         self._drain_audio()
         self._send({"command": "cancel"})
         self._notify("idle")
@@ -291,8 +344,12 @@ class SpeechOutput:
             elif event == "started" and request_id == self._request_id:
                 # The worker has started synthesis; audible playback begins only
                 # after the player successfully hands the first PCM slice to the
-                # output device.
-                self._notify("synthesizing")
+                # output device. Later clauses of an audible utterance must not
+                # flip the state back to synthesizing between sentences.
+                with self._lock:
+                    audible = self._speaking_generation == self._generation
+                if not audible:
+                    self._notify("synthesizing")
             elif event == "audio" and self._stream is not None:
                 with self._lock:
                     generation = self._generation if request_id == self._request_id else None
@@ -308,6 +365,12 @@ class SpeechOutput:
             elif event == "done":
                 with self._lock:
                     generation = self._generation if request_id == self._request_id else None
+                    utterance = getattr(self, "_utterance", None)
+                    if generation is not None and utterance:
+                        utterance["pending"] = max(0, utterance["pending"] - 1)
+                        # Only the last clause of a closed utterance completes it.
+                        if utterance["open"] or utterance["pending"]:
+                            generation = None
                 if generation is not None:
                     # The worker has finished synthesizing, but the player still
                     # owns queued PCM. Only that thread can declare audible idle.

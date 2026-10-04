@@ -437,6 +437,7 @@ mo_desktop:
     stt_worker_timeout_seconds: 180 # bounded whisper load/transcription request wait
     tts_enabled: false              # also speak typed replies through the local Piper worker
     chat_enabled: false             # continuous listen -> reply -> listen; manual double-Alt stays separate
+    conversation_provider: ""       # provider name for fast spoken replies; empty = MO's active provider
     speech_rate: 1.0                # Piper pace multiplier from 0.5 to 2.0; 1.0 keeps the model default
     output_device: default          # system default, or an exact output-device name from Settings
     role: ""                        # Default/empty, a discovered profile role, or bounded custom text

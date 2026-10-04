@@ -178,9 +178,10 @@
       input.oninput = () => { display(); lane.queue(Number(input.value), false); };
       input.onchange = () => lane.queue(Number(input.value), true);
       update = value => { input.value = value; display(); }; control.append(output);
-    } else if (['select', 'role', 'device'].includes(field.kind)) {
+    } else if (['select', 'role', 'device', 'provider'].includes(field.kind)) {
       let items = field.constraints;
       if (field.kind === 'role') items = roleOptions(field.value);
+      if (field.kind === 'provider') items = providerOptions(field.value);
       if (field.kind === 'device') items = [[field.value || 'default', field.value === 'default' ? 'System default' : field.value]];
       choice = picker(field.label, items, field.value, value => {
         if (field.kind === 'role' && value === '__custom__') { custom.hidden = false; custom.focus(); return; }
@@ -195,7 +196,7 @@
         custom.onchange = () => { const value = custom.value.trim(); choice.update(value, roleOptions(value)); lane.queue(value, true); };
         control.append(custom);
       }
-      update = value => choice.update(value, field.kind === 'role' ? roleOptions(value) : choice.options);
+      update = value => choice.update(value, field.kind === 'role' ? roleOptions(value) : field.kind === 'provider' ? providerOptions(value) : choice.options);
     } else if (field.kind === 'color') {
       const follow = element('input', 'settings-switch'), label = element('label', 'muted', 'Follow skin'); follow.type = 'checkbox';
       follow.setAttribute('aria-label', 'Follow skin color'); input = element('input'); input.type = 'color';
@@ -208,6 +209,10 @@
     }
     if (input) { input.id = field.id; input.setAttribute('aria-label', field.label); control.prepend(input); }
     update(field.value); bindings.set(field.id, {root, update, choice, input, lane}); return root;
+  }
+  function providerOptions(value) {
+    const names = [...new Set([...(state.voice_providers || []), ...(value ? [value] : [])])];
+    return [['', 'Same as MO'], ...names.map(name => [name, name])];
   }
   function roleOptions(value) {
     const values = [...new Set(['', ...state.roles, ...(value ? [value] : [])])];
