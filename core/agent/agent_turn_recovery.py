@@ -323,14 +323,14 @@ class AgentTurnRecoveryMixin:
 
         from ..session.handoff import context_pressure as _cp
         pressure_metrics = _cp(self, extra_context=extra_context or "", tools=tools)
-        # The compactor owns its pressure and recoverable-observation thresholds.
+        # Share this unchanged projection; the compactor owns its thresholds.
         # Consult it at every provider checkpoint so an active turn can archive
         # bulky reads before they are replayed on every later request.
         from ..session.session_momentum import maybe_compact_session
 
         compacted = maybe_compact_session(
             self, stage="turn_health", extra_context=extra_context or "",
-            monitor=monitor, tools=tools,
+            monitor=monitor, tools=tools, pressure_metrics=pressure_metrics,
         )
         if compacted.get("changed"):
             pressure_metrics = _cp(self, extra_context=extra_context or "", tools=tools)

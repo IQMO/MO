@@ -556,7 +556,7 @@ class SessionManager:
     def _write_path(path: Path, data: dict[str, Any]) -> None:
         stored = {key: value for key, value in data.items() if key != "_clean_meta"}
         path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(path, stored, indent=2, ensure_ascii=False, default=str)
+        atomic_write_json(path, stored, indent=None, ensure_ascii=False, default=str)
 
     @staticmethod
     def _clear_portable_binding(session: Any, *, name: str = "") -> None:

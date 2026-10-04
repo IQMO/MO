@@ -8,6 +8,7 @@ class TokenStatus:
     saved_tokens_est: int = 0
     saved_chars: int = 0
     saving_ops: int = 0
+    compaction_chars: int = 0
     provider_name: str = ""
     model: str = ""
     reasoning: str = "high"

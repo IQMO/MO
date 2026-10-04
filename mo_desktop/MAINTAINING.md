@@ -9,6 +9,11 @@ when that source tree is present.
 
 ## Process and lane boundaries
 
+Desktop session snapshots retain shared input/output and cache hit/miss/write
+accounting through save and reload. `companion_session` still owns the separate
+Desktop slot and its conversation sanitizer; transient tool and provider replay
+content is not restored as Desktop conversation memory.
+
 - The connected Dashboard is a separate instance-owned WebView surface documented
   in `core/dashboard/README.md`; it has no Desktop voice UI or embedded terminal.
   Cube launcher **Dashboard** reuses Desktop's resident Agent and the same DashboardServer,

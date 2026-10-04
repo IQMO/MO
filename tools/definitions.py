@@ -635,7 +635,7 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "command": {"type": "string", "description": "The shell command to execute"},
                     "workdir": {"type": "string", "description": "Working directory for the command"},
-                    "timeout": {"type": "integer", "description": "Timeout in seconds (default 60)"},
+                    "timeout": {"type": "integer", "minimum": 1, "description": "Execution limit in seconds; explicit values are honored. Defaults: 60, pytest 420, canonical suite 1800, explainer media 3600."},
                 },
             },
         },
@@ -697,7 +697,7 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "command": {"type": "string", "description": "Explicit test command; normally a scoped target"},
                     "workdir": {"type": "string", "description": "Working directory (default current working directory)"},
-                    "timeout": {"type": "integer", "description": "Timeout seconds (default 420)"},
+                    "timeout": {"type": "integer", "minimum": 1, "description": "Execution limit in seconds; explicit values are honored. Default 420, or 1800 for the canonical suite."},
                 },
                 "required": ["command"],
             },

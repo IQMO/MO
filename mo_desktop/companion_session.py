@@ -144,6 +144,7 @@ class CompanionSessionMixin:
             input_tokens=int(getattr(session, "input_tokens", 0) or 0),
             cache_hit_tokens=int(getattr(session, "cache_hit_tokens", 0) or 0),
             cache_miss_tokens=int(getattr(session, "cache_miss_tokens", 0) or 0),
+            cache_write_tokens=int(getattr(session, "cache_write_tokens", 0) or 0),
             token_log=list(getattr(session, "token_log", []) or []),
             compacted_messages_count=int(
                 getattr(session, "compacted_messages_count", 0) or 0

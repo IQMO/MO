@@ -42,6 +42,12 @@ logs and metadata-only session loads do not displace its evidence.
 Response tables preserve literal/code pipes and fit narrow terminals by wrapping
 cells or repeating the identifying column across smaller column groups.
 
+Token displays keep provider input/output totals separate from context reductions.
+The footer labels result-cap text estimates as `capped ~…t` and serialized
+momentum reduction as `compacted …ch`; it does not combine them into a saved-token
+percentage. `/usage` and `/status` identify serialized characters explicitly.
+Provider-reported prefix-cache counts remain independent accounting.
+
 ## Current composition
 
 - PRT has one command-list root. Its submenu offers automatic pre/post selection (`/prt`),

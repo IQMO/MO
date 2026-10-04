@@ -56,37 +56,39 @@ def token_status_from_agent(agent: Any) -> TokenStatus:
     saved_tokens = int(estimator()) if callable(estimator) else 0
     saved_chars = int(getattr(agent, "_tool_context_saved_chars", lambda: 0)() or 0) if callable(getattr(agent, "_tool_context_saved_chars", None)) else 0
     saving_ops = int(getattr(agent, "_tool_context_saving_ops", lambda: 0)() or 0) if callable(getattr(agent, "_tool_context_saving_ops", None)) else 0
-    # Footer is a single aggregate, so fold in session-compaction (momentum) savings —
-    # including the read_file code-skeleton — which /usage and /status show on a SEPARATE
-    # line. The chars are disjoint from result caps, so adding is not
-    # double-counting; chars/4 matches the estimator.
+    # Serialized compaction includes opaque replay; it is not tokenized text.
     try:
         compaction_chars = max(0, int(getattr(agent, "session_compaction_total_saved", 0) or 0))
     except (TypeError, ValueError):
         compaction_chars = 0
-    saved_chars += compaction_chars
-    saved_tokens += round(compaction_chars / 4)
     return TokenStatus(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         saved_tokens_est=saved_tokens,
         saved_chars=saved_chars,
         saving_ops=saving_ops,
+        compaction_chars=compaction_chars,
         provider_name=getattr(agent, "provider_name", ""),
         model=getattr(agent, "model", ""),
         reasoning=reasoning,
     )
 
 
+def format_context_reduction(status: TokenStatus) -> str:
+    """Size reductions, separate from cumulative billed or cached input."""
+    parts = []
+    if status.saved_tokens_est > 0:
+        parts.append(f"capped ~{format_k(status.saved_tokens_est)}t")
+    if status.compaction_chars > 0:
+        parts.append(f"compacted {format_k(status.compaction_chars)}ch")
+    return " · " + " · ".join(parts) if parts else ""
+
+
 def format_token_status(status: TokenStatus) -> str:
     in_str = format_k(status.input_tokens)
     out_str = format_k(status.output_tokens)
     base = f"↑{in_str} ↓{out_str}"
-    if status.saved_tokens_est > 0:
-        total_est = status.input_tokens + status.saved_tokens_est
-        pct = round(status.saved_tokens_est / max(1, total_est) * 100, 1)
-        pct_str = f"{pct}%" if pct >= 0.1 else "<0.1%"
-        base += f" \u25ce~{format_k(status.saved_tokens_est)} ({pct_str})"
+    base += format_context_reduction(status)
     return f"{base} \u00b7 ({status.provider_name}) {status.model} \u2022 {status.reasoning}"
 
 

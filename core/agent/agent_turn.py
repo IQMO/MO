@@ -764,7 +764,7 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
         if turn_intent.kind == KIND_RESUME:
             objective = str(getattr(getattr(self, "_active_task_board", None), "objective", "") or "").strip()
             if objective and not looks_like_contextual_followup(objective):
-                return f"{current}\n{objective[:4000]}", "active_task"
+                return f"{objective[:4000]}\n{current}", "active_task"
         messages = getattr(getattr(self, "session", None), "messages", [])
         for message in reversed(messages if isinstance(messages, list) else []):
             if not isinstance(message, dict) or message.get("role") != "user":
@@ -779,7 +779,9 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 continue
             # Stop at the latest actual subject, including a non-work topic;
             # never reach past it for an older, more convenient project task.
-            if relative or _shares_context_subject(current, prior):
+            if relative:
+                return f"{prior[:4000]}\n{current}", "conversation"
+            if _shares_context_subject(current, prior):
                 return f"{current}\n{prior[:4000]}", "conversation"
             return current, "current_message"
         return current, "current_message"

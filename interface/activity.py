@@ -8,7 +8,7 @@ import re
 import time
 from typing import Any
 
-from .formatting import activity_label, brand_spinner_frame, format_k, idle_status_text, token_status_from_agent
+from .formatting import activity_label, brand_spinner_frame, format_context_reduction, format_k, idle_status_text, token_status_from_agent
 from .transcript_view import cell_width, split_cells
 
 
@@ -252,13 +252,7 @@ def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = N
     project = compact_path_for_footer(str(getattr(agent, "project_cwd", "") or os.environ.get("MO_PROJECT_CWD", "") or ""))
     prefix = f"{project} · " if project else ""
     token_part = f"↑{format_k(status.input_tokens)} ↓{format_k(status.output_tokens)}"
-    # Compression savings
-    saved_part = ""
-    if status.saved_tokens_est > 0:
-        total_est = status.input_tokens + status.saved_tokens_est
-        pct = round(status.saved_tokens_est / max(1, total_est) * 100, 1)
-        pct_str = f"{pct}%" if pct >= 0.1 else "<0.1%"
-        saved_part = f" ◎~{format_k(status.saved_tokens_est)} ({pct_str})"
+    saved_part = format_context_reduction(status)
     base = f"{prefix}{token_part}{saved_part} · {model_label}{reasoning_text}"
     # Official DeepSeek API only: show live account balance (cached, non-blocking).
     try:

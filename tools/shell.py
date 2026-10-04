@@ -510,16 +510,17 @@ def _output_succeeded(output: str) -> bool:
 
 def _tool_timeout(command: object, requested: object, default: int) -> int:
     try:
-        timeout = int(requested if requested is not None else default)
+        if requested is not None:
+            return max(1, int(requested))
     except (TypeError, ValueError):
-        timeout = default
+        pass
     if _looks_like_canonical_test_suite(command):
-        return max(timeout, _CANONICAL_SUITE_TIMEOUT_SECONDS)
+        return max(default, _CANONICAL_SUITE_TIMEOUT_SECONDS)
     if _looks_like_pytest_command(command):
-        return max(timeout, 420)
+        return max(default, 420)
     if _looks_like_explainer_media_job(command):
-        return max(timeout, _EXPLAINER_MEDIA_TIMEOUT_SECONDS)
-    return timeout
+        return max(default, _EXPLAINER_MEDIA_TIMEOUT_SECONDS)
+    return default
 
 
 # Explainer renders and narration stream measured progress to the activity

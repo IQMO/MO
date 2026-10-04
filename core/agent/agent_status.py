@@ -154,7 +154,7 @@ class AgentStatusCommands:
         if self._safe_int(getattr(self, "session_compaction_total_ops", 0)) > 0:
             lines.append(
                 f"  session-compact: {getattr(self, 'session_compaction_total_ops', 0)} ops · "
-                f"{getattr(self, 'session_compaction_total_saved', 0):,} chars saved before handoff"
+                f"{getattr(self, 'session_compaction_total_saved', 0):,} serialized chars removed (not token savings)"
             )
         sess = getattr(self, "session", None)
         input_toks = self._safe_int(getattr(sess, "input_tokens", 0))

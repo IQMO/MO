@@ -400,9 +400,9 @@ def looks_like_contextual_followup(user_input: str) -> bool:
         return True
     return bool(re.fullmatch(
         r"(?:(?:yes|ok(?:ay)?|good|sure|please|now|and|then)[,\s]+)*"
-        r"(?:let(?:['’])?s\s+)?(?:fix|repair|review|check|verify|test|finish|start|begin|approved?)"
+        r"(?:let(?:['’])?s\s+)?(?:fix|repair|review|check|verify|test|finish|start|begin|approved?|update|document|apply|implement)"
         r"(?:\s+(?:it|this|that|them|these|those|all|everything|working|work|"
-        r"your|the|findings|changes|report|please|now))*",
+        r"your|the|findings|changes|report|suggestions|docs|documentation|readme|please|now))*",
         text,
     ))
 

@@ -383,18 +383,20 @@ def compact_completed_tool_chains(
     When the runtime has an authoritative successful ``complete_task`` result,
     ``include_resolved_active`` also compacts the completed current-turn tool
     chain before that exact transition receipt. It never crosses a user steer.
-    This requires an archive; active evidence is never discarded without one.
-    When ``archive_dir`` is given, each compacted chain's full messages are
-    written there first and the summary references the archive path.
+    Every replaced chain requires an archive. Full messages are written there
+    first and the summary references the archive path; unavailable storage
+    leaves the session unchanged.
     ``min_saved_chars`` can reject a candidate without mutating or archiving it.
     The return dict includes a ``truth_boundary`` key so downstream consumers
     can verify the anti-hallucination contract was satisfied.
     """
     from ..gates.consistency_boundary import truth_boundary as _tb
 
+    if archive_dir is None:
+        return {"changed": False, "reason": "archive_unavailable"}
     messages = [m for m in list(getattr(session, "messages", []) or []) if isinstance(m, dict)]
     resolved_active_enabled = bool(
-        include_active_observations and include_resolved_active and archive_dir is not None
+        include_active_observations and include_resolved_active
     )
     if len(messages) <= max(2, keep_recent) and not resolved_active_enabled:
         return {
@@ -422,7 +424,7 @@ def compact_completed_tool_chains(
         cutoff = _history_compaction_cutoff(messages, keep_recent)
     observation_cutoff = (
         max(0, len(messages) - max(2, keep_recent))
-        if include_active_observations and archive_dir is not None else cutoff
+        if include_active_observations else cutoff
     )
     before_chars = _message_chars(messages)
     new_messages: list[dict[str, Any]] = []
@@ -443,8 +445,7 @@ def compact_completed_tool_chains(
                         anchor = f"tool:{name}" if name else ""
                         if anchor and anchor not in evidence_preserved:
                             evidence_preserved.append(anchor)
-                if archive_dir is not None:
-                    pending_archives.append(([summary], messages[i:end], compacted + 1))
+                pending_archives.append(([summary], messages[i:end], compacted + 1))
                 new_messages.append(summary)
                 saved_chars += max(0, chain_before - chain_after)
                 compacted += 1
@@ -603,8 +604,9 @@ def _prune_unreferenced_chain_archives(
 ) -> int:
     """Delete only old chain archives no saved session can recover.
 
-    Named sessions can outlive automatic session-slot retention, so age alone is
-    insufficient. A filename reference in any saved session always wins.
+    Protect transitive references from saved sessions and recent archives.
+    Resolve all references before deleting anything; unreadable evidence makes
+    this pass ineligible to prune. Cycles are visited only once.
     """
     try:
         from .sessions import SLOT_RETENTION_SECONDS
@@ -615,13 +617,26 @@ def _prune_unreferenced_chain_archives(
         from .sessions import iter_all_session_paths
 
         for session_path in iter_all_session_paths(sessions_dir):
-            try:
-                text = session_path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
+            text = session_path.read_text(encoding="utf-8")
             referenced.update(_ARCHIVE_NAME_RE.findall(text))
+        archives = list(archive_dir.glob("*.json"))
+        archive_root = archive_dir.resolve()
+        for archive in archives:
+            if archive.resolve().parent != archive_root:
+                return 0
+            if current - archive.stat().st_mtime <= retention:
+                referenced.add(archive.name)
+        pending = list(referenced)
+        while pending:
+            archive = archive_dir / pending.pop()
+            if archive.resolve().parent != archive_root:
+                return 0
+            text = archive.read_text(encoding="utf-8")
+            children = set(_ARCHIVE_NAME_RE.findall(text)) - referenced
+            referenced.update(children)
+            pending.extend(children)
         removed = 0
-        for archive in archive_dir.glob("*.json"):
+        for archive in archives:
             try:
                 if archive.name in referenced or current - archive.stat().st_mtime <= retention:
                     continue
@@ -643,6 +658,7 @@ def maybe_compact_session(
     monitor: Any = None,
     force: bool = False,
     tools: list[dict] | None = None,
+    pressure_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run conservative deterministic momentum compaction when pressure warrants."""
     is_fg = getattr(agent, "_is_foreground_session", None)
@@ -656,7 +672,9 @@ def maybe_compact_session(
     enabled = bool(agent_cfg.get("context_momentum_compact_enabled", True))
     if not enabled:
         return {"changed": False, "reason": "disabled"}
-    metrics = context_pressure(agent, extra_context=extra_context, tools=tools)
+    metrics = pressure_metrics if pressure_metrics is not None else context_pressure(
+        agent, extra_context=extra_context, tools=tools,
+    )
     pressure = float(metrics.get("pressure") or 0.0)
     message_ratio = float(metrics.get("message_ratio") or 0.0)
     threshold = float(agent_cfg.get("context_momentum_compact_threshold", 0.45) or 0.45)

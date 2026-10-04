@@ -65,6 +65,7 @@ SAFE_EVENT_TYPES = {
     "memory_embed_error",
     "memory_fts5_warning",
     "sandbox_guard",
+    "project_rule_target_review",
     "sandbox_blocked",
     "goal_step",
     "goal_auditor",
@@ -501,6 +502,7 @@ class BackendMonitor:
         self._trace_coverage_digest = ""
         self._trace_coverage_lock = threading.Lock()
         self._trace_coverage_error = ""
+        self._trace_coverage_checked_at: float | None = None
         self.enabled = not self._disabled_by_env()
         if self.enabled:
             try:
@@ -711,10 +713,18 @@ class BackendMonitor:
                 pass
 
     def _check_trace_coverage(self, *, boundary: str) -> None:
-        """Recheck declarations at trace boundaries; only changed files reparse."""
+        """Check every turn boundary; sample long turns at most once a minute."""
         if not self._trace_coverage_lock.acquire(blocking=False):
             return
         try:
+            now = time.monotonic()
+            if (
+                boundary == "provider_request"
+                and self._trace_coverage_checked_at is not None
+                and now - self._trace_coverage_checked_at < 60
+            ):
+                return
+            self._trace_coverage_checked_at = now
             verify_content = boundary == "turn_end"
             with monitor_phase("trace_coverage_check", monitor=self, boundary=boundary, content_verified=verify_content):
                 catalog = backend_event_catalog(

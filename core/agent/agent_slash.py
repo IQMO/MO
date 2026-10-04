@@ -1986,7 +1986,7 @@ class AgentSlashCommands:
             else:
                 lines.append("  cache:   provider reports no prefix-cache breakdown")
         if self._tool_context_saving_ops() > 0:
-            lines.append(f"  saved:   ~{self._context_saved_tokens_estimate():,} tokens ({self._tool_context_saved_chars():,} chars) via explicit result caps")
+            lines.append(f"  capped:  {self._tool_context_saved_chars():,} text chars (~{self._context_saved_tokens_estimate():,} tokens); size reduction, not billed savings")
             carry_text = f" · carried {self._carried_tool_context_saving_ops()}" if self._carried_tool_context_saving_ops() else ""
             lines.append(
                 f"  context-save:{self._tool_context_saving_ops():>4} ops · "
@@ -1995,7 +1995,7 @@ class AgentSlashCommands:
         if self._safe_int(getattr(self, "session_compaction_total_ops", 0)) > 0:
             lines.append(
                 f"  session-compact:{getattr(self, 'session_compaction_total_ops', 0):>3} ops · "
-                f"{getattr(self, 'session_compaction_total_saved', 0):,} chars saved"
+                f"{getattr(self, 'session_compaction_total_saved', 0):,} serialized chars removed (not token savings)"
             )
         lines.extend([
             f"  turns:   {self.session.turn_count}",
