@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
-import threading
 import time
 from collections import deque
 from dataclasses import dataclass, replace
@@ -19,7 +18,9 @@ MAX_ELEMENTS = 120
 MAX_DEPTH = 5
 SCOPED_FIND_DEPTH = 24
 TARGET_GUARD_SECONDS = 120.0
-LAUNCH_WINDOW_TIMEOUT_SECONDS = 2.5
+# A launch waits for its own window and returns one definite result; a busy
+# machine can take several seconds to show even Paint or Chrome.
+LAUNCH_WINDOW_TIMEOUT_SECONDS = 8.0
 LAUNCH_WINDOW_POLL_SECONDS = 0.1
 
 # UIA ScrollAmount, inlined so this module never imports ``uiautomation`` for an enum.
@@ -53,25 +54,8 @@ class _UIAState:
 
 
 _STATES: dict[str, _UIAState] = {}
-_PENDING_LAUNCH_LOCK = threading.RLock()
-_PENDING_LAUNCHES: dict[str, threading.Event] = {}
-
-
-def cancel_pending_launch_verification(owner_id: str = "") -> bool:
-    """Stop a delayed launch from rebinding a later native target."""
-    from .runtime import current_owner_id
-
-    owner = str(owner_id or current_owner_id())
-    with _PENDING_LAUNCH_LOCK:
-        pending = _PENDING_LAUNCHES.pop(owner, None)
-        if pending is not None:
-            pending.set()
-    return pending is not None
-
-
 def release_owner(owner_id: str) -> None:
-    """Drop COM references and pending launch work for one closed conversation."""
-    cancel_pending_launch_verification(owner_id)
+    """Drop COM references for one closed conversation."""
     _STATES.pop(owner_id, None)
 
 
@@ -378,65 +362,6 @@ def correlate_launched_window(
     return LaunchWindowOutcome("outcome_unknown", detail=detail)
 
 
-def continue_launched_window_verification(
-    *,
-    app_name: str,
-    query: str,
-    pid: int,
-    baseline: LaunchWindowBaseline,
-    timeout: float = 12.0,
-    poll_interval: float = LAUNCH_WINDOW_POLL_SECONDS,
-    owner_id: str = "",
-) -> None:
-    """Bind a slow-launching native window without blocking the companion turn."""
-    from .runtime import current_owner_id
-
-    owner = str(owner_id or current_owner_id())
-    cancelled = threading.Event()
-    with _PENDING_LAUNCH_LOCK:
-        previous = _PENDING_LAUNCHES.get(owner)
-        if previous is not None:
-            previous.set()
-        _PENDING_LAUNCHES[owner] = cancelled
-
-    def verify() -> None:
-        deadline = time.monotonic() + max(0.1, float(timeout))
-        try:
-            from .win32 import top_level_windows
-
-            while not cancelled.is_set():
-                windows = top_level_windows()
-                status, matches = _select_native_launch_windows(
-                    windows,
-                    app_name=app_name,
-                    query=query,
-                    pid=pid,
-                    baseline=baseline,
-                )
-                if status == "unique":
-                    # A later native request cancels this verifier before it
-                    # chooses its own target. Keep that cancellation and this
-                    # final bind atomic so the old launch cannot win the race.
-                    with _PENDING_LAUNCH_LOCK:
-                        if cancelled.is_set() or _PENDING_LAUNCHES.get(owner) is not cancelled:
-                            return
-                        _bind_native_runtime_target(matches[0], owner_id=owner)
-                    return
-                if status == "ambiguous" or time.monotonic() >= deadline:
-                    return
-                cancelled.wait(max(0.01, float(poll_interval)))
-        finally:
-            with _PENDING_LAUNCH_LOCK:
-                if _PENDING_LAUNCHES.get(owner) is cancelled:
-                    _PENDING_LAUNCHES.pop(owner, None)
-
-    threading.Thread(
-        target=verify,
-        name="mo-desktop-launch-verifier",
-        daemon=True,
-    ).start()
-
-
 def _top_level_windows(*, root: Any | None = None) -> tuple[DesktopElement, ...]:
     elements = snapshot(max_elements=MAX_ELEMENTS, max_depth=2, root=root)
     return tuple(element for element in elements if _is_window_element(element))
@@ -498,47 +423,6 @@ def _bind_native_launched_window(window: Any, *, method: str) -> LaunchWindowOut
             detail="the unique native application window could not be bound for follow-up control",
         )
     return _bind_launched_window(element, method=method)
-
-
-def _bind_native_runtime_target(window: Any, *, owner_id: str) -> LaunchWindowOutcome:
-    from .runtime import bind_target, record_action, record_observation
-
-    element = _native_window_element(window)
-    target = bind_target(
-        kind="desktop",
-        identity=_window_identity(element),
-        label=element.label,
-        bounds=element.bounds,
-        metadata={
-            "process_id": element.process_id,
-            "native_handle": element.native_handle,
-            "class_name": element.class_name,
-        },
-        owner_id=owner_id,
-    )
-    record_action(
-        "computer_act",
-        target=target,
-        observation=None,
-        status="executed",
-        state_changed=True,
-        invalidate=False,
-    )
-    observation = record_observation(
-        "computer_act",
-        target=target,
-        origin="win32",
-        trust="external_untrusted",
-        foreground_identity=target.label,
-        signature=f"{element.native_handle}|{element.label}|{element.bounds}",
-    )
-    return LaunchWindowOutcome(
-        "verified",
-        method="background_native_window",
-        target=target,
-        observation=observation,
-        element=element,
-    )
 
 
 def _matches_launched_app(element: DesktopElement, *, app_name: str, query: str) -> bool:

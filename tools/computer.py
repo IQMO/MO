@@ -70,10 +70,6 @@ def execute_computer_observe(arguments: dict[str, Any]) -> str:
         return f"Error: {exc}."
     assert call is not None
     args = call.arguments
-    if call.kind in {"desktop", "screen"}:
-        from core.desktop.uia import cancel_pending_launch_verification
-
-        cancel_pending_launch_verification()
     if call.kind == "desktop":
         from . import desktop_semantic
 
@@ -117,11 +113,7 @@ def execute_computer_observe(arguments: dict[str, Any]) -> str:
 
 def _execute_app_launch(args: dict[str, Any]) -> str:
     from core.desktop.apps import format_launch_result, launch_resolved_app, resolve_app
-    from core.desktop.uia import (
-        capture_launch_window_baseline,
-        continue_launched_window_verification,
-        correlate_launched_window,
-    )
+    from core.desktop.uia import capture_launch_window_baseline, correlate_launched_window
 
     value = str(args.get("app") or args.get("target") or "")
     resolved = resolve_app(value)
@@ -133,6 +125,8 @@ def _execute_app_launch(args: dict[str, Any]) -> str:
     if launched.status != "dispatched" or launched.app is None:
         return format_launch_result(launched)
 
+    # One definite result: the launch waits for its own window here instead of
+    # handing off to a background verifier whose late evidence raced the turn.
     outcome = correlate_launched_window(
         app_name=launched.app.name,
         query=launched.query,
@@ -152,34 +146,17 @@ def _execute_app_launch(args: dict[str, Any]) -> str:
             f"trust={observation.trust} window={observation.foreground_identity!r}]"
         )
 
-    from core.desktop.runtime import current_owner_id, record_action
+    from core.desktop.runtime import record_action
 
-    cancel_event = args.get("_cancel_event")
-    pending = not outcome.candidates and not (
-        cancel_event is not None and cancel_event.is_set()
-    )
-    if pending:
-        continue_launched_window_verification(
-            app_name=launched.app.name,
-            query=launched.query,
-            pid=launched.pid,
-            baseline=baseline,
-            owner_id=current_owner_id(),
-        )
     record_action(
         "computer_act",
         target=None,
         observation=None,
         status="outcome_unknown",
         state_changed=None,
-        error_class="launch_window_pending" if pending else "launch_window_unverified",
+        error_class="launch_window_unverified",
         invalidate=False,
     )
-    if pending:
-        return (
-            f"{format_launch_result(launched)}\n"
-            "Verification continues locally; the user can keep chatting. Report the app as opening, not opened."
-        )
     detail = outcome.detail or "the requested application window could not be verified"
     return (
         f"Could not verify a window for {launched.app.name!r}; do not claim it opened. "
@@ -197,9 +174,6 @@ def execute_computer_act(arguments: dict[str, Any]) -> str:
     assert call is not None
     args = call.arguments
     if call.kind == "desktop":
-        from core.desktop.uia import cancel_pending_launch_verification
-
-        cancel_pending_launch_verification()
         if call.operation == "open":
             import webbrowser
 
