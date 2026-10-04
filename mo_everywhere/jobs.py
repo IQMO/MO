@@ -24,12 +24,10 @@ DEFAULT_MAX_JOBS_PER_DEVICE = 50
 MAX_REPLY_CHARS = 40_000
 MAX_CLIENT_REQUEST_ID_CHARS = 64
 _MAIL_OMITTED = "[Mail turn omitted from saved job]"
-# COMPAT(mail-job-placeholder-20260928): replaced-by _MAIL_OMITTED; remove-when no supported saved jobs contain the Gmail-specific placeholder.
-_OLD_MAIL_OMITTED = "[Gmail turn omitted from saved job]"
 
 
 def _mail_placeholder(value: str) -> bool:
-    return value in {_MAIL_OMITTED, _OLD_MAIL_OMITTED}
+    return value == _MAIL_OMITTED
 
 
 class TurnJobError(RuntimeError):

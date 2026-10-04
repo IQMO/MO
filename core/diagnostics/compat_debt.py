@@ -61,9 +61,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "privacy-safe handling for session/taskboard/event rows without current owner ids and for "
         "raw source slots; retire after supported rows are rewritten and the event TTL elapses"
     ),
-    "mail-job-placeholder-20260928": (
-        "Gmail-specific placeholder in saved Hub jobs; retire when no supported saved jobs contain it"
-    ),
 }
 
 _EXCLUDED_PATHS = frozenset({"core/diagnostics/compat_debt.py"})
