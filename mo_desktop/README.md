@@ -66,9 +66,10 @@ Double-click a visible cube to expand the same four cubes outward from their
 shared center into four square app cubes in the existing cube window. Work,
 Devices, Care and Your apps appear inside them without a backing panel. Closing
 the launcher shrinks those cubes back to their live cluster. Their color and
-corner shape follow the live cube
-settings. They use the same action catalog as the optional tray, with
-profile-owned apps under Your apps. Edit gently animates the app rows and lets
+corner shape follow the live cube settings. The launcher projects app actions
+from Desktop's declarative catalog, with profile-owned apps under Your apps. The
+optional tray popup is a compact control projection rather than a second app
+launcher. Edit gently animates the app rows and lets
 them move between cubes. Outside Edit, hold a group heading to see its movable
 state and available landing slots, then drag to swap whole cubes.
 Hold an app to reveal its Remove button; removal affects the launcher entry,
@@ -97,10 +98,11 @@ Dashboard panes, Files folder layers, Phone handset, Design frame, SystemCare
 shield, and Settings sliders. Shell retains its two-piece
 fall and fading trace. Startup does not freeze the cubes; successful launch
 finishes with a small geometric settling motion. Thinking uses the same cube
-motion library. The optional tray
-keeps Show/Hide, Settings, Voice Chat, Advanced controls (Action Log and Edit
-config.yaml), startup control, Panic Stop, restart and exit. Restart waits for
-the resident to release its lock before launching one replacement.
+motion library. The optional tray popup keeps Show / Hide and Settings; session
+toggles for Focus mode, Voice Chat and Run at Startup; Advanced controls (Action Log and
+Edit config.yaml); and Panic Stop, restart and exit. Open Settings from Your
+apps or the launcher gear's Appearance action. Restart waits for the resident to
+release its lock before launching one replacement.
 
 ### Window presentation
 
@@ -111,11 +113,13 @@ close and save-confirmation behavior stays with each app.
 
 Desktop's resident cube, composer, launcher, tray and screen selection use native
 alpha windows and a single Windows message/timer loop. Clipboard, pointer and
-screen services no longer require Tk. The parked [Mologrthim workroom](mologrthim/README.md)
-and existing profile Tk apps retain their widgets in an on-demand host on the
-same GUI thread; normal Desktop startup neither imports Tk nor creates an
-interpreter. Their concept and visuals remain parked. Settings, Phone and Files
-use the shared native WebView renderer. Shell owns its native control strip;
+screen services no longer require Tk. The current on-demand
+[Mologrthim workroom](mologrthim/README.md) and existing profile Tk apps retain
+their widgets in a host on the same GUI thread; normal Desktop startup neither
+imports Tk nor creates an interpreter. Mologrthim remains exposed through the
+Work cube; only further concept and visual changes are parked. Settings, Phone
+and Files use the shared native WebView renderer. Shell owns its native control
+strip;
 Windows file pickers and attached third-party windows retain their own chrome.
 
 ## What the companion can do

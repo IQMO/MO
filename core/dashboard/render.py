@@ -161,7 +161,7 @@ def render_dashboard_html(snapshot: dict[str, Any], *, connected: bool = False) 
             .replace("__MO_DATA__", data))
 
 
-def _dashboard_skin_css() -> str:
+def _dashboard_skin_css(visuals: Any = None) -> str:
     from interface.theming import contrast_text, get_skin, skin_to_code_map_css
     from interface.desktop_ui import active_desktop_visual_state
 
@@ -169,7 +169,7 @@ def _dashboard_skin_css() -> str:
     from mo_desktop.design_studio.theme import studio_theme
     from mo_desktop.mo_renderer import _initial_studio_theme_css
 
-    visuals = active_desktop_visual_state()
+    visuals = visuals or active_desktop_visual_state()
     metrics = visuals.metrics
     return _initial_studio_theme_css(studio_theme(config={}, visuals=visuals)) + skin_to_code_map_css(s) + f""":root {{
   --scheme: {contrast_text(s.bg_dark, dark='light', light='dark')};
