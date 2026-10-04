@@ -38,6 +38,10 @@ _DOCK_INSET_PX = 20
 _DOCK_CLEAR_PX = 88
 
 _GA_ROOT = 2
+_GWL_EXSTYLE = -20
+_WS_EX_TRANSPARENT = 0x00000020
+_WS_EX_LAYERED = 0x00080000
+_SHELL_DESKTOP_CLASSES = frozenset({"progman", "workerw"})
 OWN_WINDOW = "\x00mo-desktop"     # sentinel: a window of ours, never a real title
 _last_rect: Rect | None = None    # the terminal rect we last saw the cursor inside
 
@@ -182,11 +186,39 @@ def terminal_focused() -> bool:
         return False
 
 
-def fullscreen_foreground() -> bool:
-    """Is a window covering the entire screen in front right now — a film, a game, a slideshow?
+def _window_class(hwnd: int) -> str:
+    import ctypes
 
-    Any full-screen window counts. There is no reliable way to tell a video from a game from a
-    presentation, and MO should get out of the way of all three. One of our own windows never does.
+    buf = ctypes.create_unicode_buffer(256)
+    if not ctypes.windll.user32.GetClassNameW(hwnd, buf, len(buf)):
+        return ""
+    return buf.value
+
+
+def _is_fullscreen_content_window(
+    *,
+    window_class: str,
+    ex_style: int,
+    rect: Rect,
+    screen_size: tuple[int, int],
+) -> bool:
+    """Distinguish opaque fullscreen content from shell/click-through cover windows."""
+    if window_class.casefold() in _SHELL_DESKTOP_CLASSES:
+        return False
+    if ex_style & _WS_EX_LAYERED and ex_style & _WS_EX_TRANSPARENT:
+        return False
+    left, top, right, bottom = rect
+    screen_w, screen_h = screen_size
+    return (left <= 0 and top <= 0
+            and right - left >= screen_w
+            and bottom - top >= screen_h)
+
+
+def fullscreen_foreground() -> bool:
+    """Is genuine fullscreen content in front right now — a film, a game, a slideshow?
+
+    The shell desktop and layered click-through cover windows can also fill the monitor, but they
+    are not fullscreen content and must not fade MO. One of MO's own windows never counts either.
     """
     if sys.platform != "win32":
         return False
@@ -203,11 +235,12 @@ def fullscreen_foreground() -> bool:
         rect = _rect_of(root)
         if rect is None:
             return False
-        left, top, right, bottom = rect
-        screen_w, screen_h = u32.GetSystemMetrics(0), u32.GetSystemMetrics(1)
-        return (left <= 0 and top <= 0
-                and right - left >= screen_w
-                and bottom - top >= screen_h)
+        return _is_fullscreen_content_window(
+            window_class=_window_class(root),
+            ex_style=int(u32.GetWindowLongW(root, _GWL_EXSTYLE)),
+            rect=rect,
+            screen_size=(u32.GetSystemMetrics(0), u32.GetSystemMetrics(1)),
+        )
     except Exception:
         return False
 

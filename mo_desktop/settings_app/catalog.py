@@ -56,7 +56,7 @@ CONFIGURATION_GROUPS = (
     ("voice", "Speech engines", "Local recognition and speech workers use these options. Restart Desktop after editing engine configuration.", (
         ("mo_desktop.voice.stt_engine", "Recognition engine", ("whisper", "windows")),
         ("mo_desktop.voice.stt_model", "Recognition model", ("tiny", "base", "small", "medium", "large-v3", "large-v3-turbo")),
-        ("mo_desktop.voice.stt_device", "Recognition device", ("cpu", "cuda", "auto")),
+        ("mo_desktop.voice.stt_device", "Recognition compute", ("cpu", "cuda", "auto")),
         ("mo_desktop.voice.stt_beam_size", "Recognition beam size", "number"),
         ("mo_desktop.voice.stt_idle_seconds", "Recognition worker idle seconds", "number"),
     )),

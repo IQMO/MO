@@ -223,12 +223,14 @@ area using `SPI_SETWORKAREA`. Exit restores only the visibility and work-area
 reservations that Focus changed. It preserves auto-hide preferences, does not
 force an already-hidden taskbar visible, and does not restart Explorer.
 
-During MO's native computer actions, a small bottom glow says **MO is using your
-computer**, and the same four cubes animate as a passive indicator. Both yield
-input and stay out of screen captures. The cue follows current tool activity,
-fades out afterward, and releases its window; it adds no idle timer or service.
-Desktop's own tool activity and its bound MO Terminal activity use their existing
-owners. External automation that does not publish MO activity has no such signal.
+During Desktop's own native computer actions, the normal four-cube character
+remains the passive indicator while its window yields input and stays out of
+screen captures. The action panel steps aside; there is no separate
+computer-use overlay or approval step. If Windows cannot apply click-through
+and capture exclusion, the cube hides as a fail-safe rather than intercepting
+input or appearing in captured pixels. Bound MO Terminal activity retains its
+existing tool-activity cue and yield owner. External automation that does not
+publish MO activity has no such signal.
 
 ### Settings
 
@@ -239,7 +241,10 @@ it available; reopening after closing starts a fresh view from saved settings. I
 window and retains its cube, movement, panel, skin, voice, startup, Chrome bridge,
 and maintenance actions. It also edits declared Agent, learning, service, device
 and policy preferences through the shared configuration writer, with explicit
-reload/restart scope. Projects & checks owns project LSP selection, server setup
+reload/restart scope. Speech engines labels `cpu`/`cuda`/`auto` as recognition
+compute, not as a microphone source. Capture opens the audio runtime's default
+input when recording starts; current Settings does not claim an active microphone
+identity. Projects & checks owns project LSP selection, server setup
 and graph preferences; Dashboard retains recorded checks. Models distinguishes
 Desktop, saved Terminal defaults and observed running Terminals. A failed save
 is shown as unsaved. The [coverage map](settings_app/COVERAGE.md) records supported

@@ -2138,10 +2138,6 @@ class CompanionSurface(
                     self._collect_notices_async()
                 if self._cube is not None and current >= self._cube_tick_retry_at:
                     try:
-                        if getattr(self, "_yielded_for_desktop_actuation", False):
-                            activity = getattr(self._agent, "_computer_activity", {}) or {}
-                            self._cube.set_computer_activity(bool(activity.get("active")) or
-                                bool(getattr(self._cube, "_terminal_computer_activity_yield", False)))
                         if self._recording_voice and self._voice is not None:
                             recorder = getattr(self._voice, "recorder", None)
                             self._cube.set_level(float(getattr(recorder, "level", 0.0) or 0.0))
@@ -2620,6 +2616,7 @@ class CompanionSurface(
         cube = getattr(self, "_cube", None)
         if cube is None:
             return
+        cube._screen_selection_actuation_yield = True
         cube.set_actuation_yield(True)
 
         def open_selection() -> None:
@@ -2642,7 +2639,11 @@ class CompanionSurface(
         self._screen_selection = None
         cube = getattr(self, "_cube", None)
         if cube is not None:
-            cube.set_actuation_yield(False)
+            cube._screen_selection_actuation_yield = False
+            if not bool(getattr(cube, "_terminal_computer_activity_yield", False)) and not bool(
+                getattr(cube, "_companion_actuation_yield", False)
+            ):
+                cube.set_actuation_yield(False)
 
     def _save_screen_selection(self, image: Any) -> None:
         """Encode original pixels off the GUI lane; open the existing image panel."""
@@ -3925,14 +3926,14 @@ class CompanionSurface(
         )
 
     def _yield_for_desktop_actuation(self) -> None:
-        """Hide interactive MO surfaces before they can intercept MO's own click.
+        """Yield MO input before actuation without replacing the four-cube character.
 
-        The small activity label is a separate click-through window, so it may keep
-        narrating progress while the cube body and large panel step out of the target's
-        way.  The final result restores the character at its existing position.
+        The panel steps out of the target's way.  The cube stays visible when its native
+        surface can become click-through and capture-excluded; the existing API-failure
+        fallback hides it rather than risking input interception or captured pixels.
         """
         self._yielded_for_desktop_actuation = True
-        hidden = threading.Event()
+        yielded = threading.Event()
 
         def _do() -> None:
             try:
@@ -3946,19 +3947,20 @@ class CompanionSurface(
                 cube = getattr(self, "_cube", None)
                 yield_control = getattr(cube, "set_actuation_yield", None)
                 if callable(yield_control):
+                    cube._companion_actuation_yield = True
                     yield_control(True)
                 else:
                     hide = getattr(cube, "_hide", None)
                     if callable(hide):
                         hide()
             finally:
-                hidden.set()
+                yielded.set()
 
         queued = self._post_gui_call(_do)
         # _on_activity runs on the Gateway turn thread. Do not let the following
-        # physical tool call race ahead of the GUI and hit MO's own still-visible body.
-        if queued and not hidden.wait(1.0):
-            raise RuntimeError("MO Desktop could not step aside before desktop actuation")
+        # physical tool call race ahead of the GUI's click-through transition.
+        if queued and not yielded.wait(1.0):
+            raise RuntimeError("MO Desktop could not yield input before desktop actuation")
 
     def _restore_after_desktop_actuation(self) -> None:
         if not bool(getattr(self, "_yielded_for_desktop_actuation", False)):
@@ -3967,8 +3969,13 @@ class CompanionSurface(
         cube = getattr(self, "_cube", None)
 
         def _do() -> None:
+            if cube is None:
+                return
+            cube._companion_actuation_yield = False
             yield_control = getattr(cube, "set_actuation_yield", None)
-            if callable(yield_control):
+            if callable(yield_control) and not bool(
+                getattr(cube, "_terminal_computer_activity_yield", False)
+            ) and not bool(getattr(cube, "_screen_selection_actuation_yield", False)):
                 yield_control(False)
             wake = getattr(cube, "wake", None)
             if callable(wake):

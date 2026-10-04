@@ -136,10 +136,15 @@ class CubeMotionMixin:
         yielded = bool(getattr(self, "_terminal_computer_activity_yield", False))
         if should_yield and not yielded:
             self._terminal_computer_activity_yield = True
+            self.set_computer_activity(True)
             self.set_actuation_yield(True)
         elif not should_yield and yielded:
             self._terminal_computer_activity_yield = False
-            self.set_actuation_yield(False)
+            self.set_computer_activity(False)
+            if not bool(getattr(self, "_companion_actuation_yield", False)) and not bool(
+                getattr(self, "_screen_selection_actuation_yield", False)
+            ):
+                self.set_actuation_yield(False)
         if label and not should_yield:
             self.show_bubble(label, seconds=1.25)
 
@@ -172,8 +177,7 @@ class CubeMotionMixin:
         self._expire_app_pulse(current)
         if bool(getattr(self, "_actuation_yield", False)):
             self._update_hover_presence(False, now=current)
-            activity = getattr(self, "_computer_activity", None)
-            if getattr(self, "_activity_cube_visible", False) and activity is not None and activity._target:
+            if getattr(self, "_activity_cube_visible", False):
                 self._show()
                 self._render(current)
             elif self._visible:

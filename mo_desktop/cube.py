@@ -464,12 +464,11 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._capture_hold, self._focus_hold = capture, focus
 
     def set_actuation_yield(self, on: bool) -> None:
-        """Park the same cube as a passive, capture-excluded computer-use indicator."""
+        """Yield input and capture while keeping the normal cube visible when supported."""
         self._actuation_yield = bool(on)
         focus = getattr(self, "_focus_controller", None)
         if focus is not None:
             focus.set_actuation_yield(bool(on))
-        self.set_computer_activity(bool(on))
         surface = getattr(self, "_ulw", None)
         self._activity_cube_visible = bool(surface and surface.set_click_through(bool(on))
                                            and surface.exclude_from_capture(bool(on)))
