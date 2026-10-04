@@ -340,43 +340,29 @@ def _generate_openai(
 
     data = (payload.get("data") or [{}])[0]
     b64 = data.get("b64_json")
-    if b64:
-        try:
-            decoded = base64.b64decode(b64)
-            if _is_cancelled(cancel_event):
-                return _cancelled_result("openai_compatible")
-            out.write_bytes(decoded)
-        except Exception as exc:
-            return {"ok": False, "error": f"image decode/write failed: {exc}", "backend": "openai_compatible"}
-        if _is_cancelled(cancel_event):
-            out.unlink(missing_ok=True)
-            return _cancelled_result("openai_compatible")
-        issue, note = _normalize_png_artifact(out, size)
-        if issue:
-            out.unlink(missing_ok=True)
-            return {"ok": False, "error": f"image API produced {issue}", "backend": "openai_compatible"}
-        return _generated(out, "openai_compatible", note)
-
     img_url = data.get("url")
-    if img_url:
-        try:
+    if not b64 and not img_url:
+        return {"ok": False, "error": "image API returned no image data", "backend": "openai_compatible"}
+    try:
+        if b64:
+            decoded = base64.b64decode(b64)
+        else:
             with urllib.request.urlopen(img_url, timeout=180) as resp:
                 decoded = resp.read()
-            if _is_cancelled(cancel_event):
-                return _cancelled_result("openai_compatible")
-            out.write_bytes(decoded)
-        except Exception as exc:
-            return {"ok": False, "error": f"image download failed: {exc}", "backend": "openai_compatible"}
         if _is_cancelled(cancel_event):
-            out.unlink(missing_ok=True)
             return _cancelled_result("openai_compatible")
-        issue, note = _normalize_png_artifact(out, size)
-        if issue:
-            out.unlink(missing_ok=True)
-            return {"ok": False, "error": f"image API produced {issue}", "backend": "openai_compatible"}
-        return _generated(out, "openai_compatible", note)
-
-    return {"ok": False, "error": "image API returned no image data", "backend": "openai_compatible"}
+        out.write_bytes(decoded)
+    except Exception as exc:
+        failure = "decode/write" if b64 else "download"
+        return {"ok": False, "error": f"image {failure} failed: {exc}", "backend": "openai_compatible"}
+    if _is_cancelled(cancel_event):
+        out.unlink(missing_ok=True)
+        return _cancelled_result("openai_compatible")
+    issue, note = _normalize_png_artifact(out, size)
+    if issue:
+        out.unlink(missing_ok=True)
+        return {"ok": False, "error": f"image API produced {issue}", "backend": "openai_compatible"}
+    return _generated(out, "openai_compatible", note)
 
 
 def _generate_codex(
