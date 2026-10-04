@@ -87,30 +87,7 @@ def _parse_skill(path: Path) -> Skill | None:
             role_verify=str(meta.get("role_verify") or "").strip(),
             project_root=str(meta.get("project_root") or "").strip(),
         )
-    # COMPAT(markdown-skill-v0): replaced-by frontmatter SKILL.md parsing; remove-when supported profile skills have been rewritten to the current contract
-    return _parse_markdown_skill_v0(path, raw)
-
-
-def _parse_markdown_skill_v0(path: Path, raw: str) -> Skill | None:
-    header, _, body = raw.partition("\n---\n")
-    if not body:
-        body = raw
-    name = ""
-    description = ""
-    triggers: list[str] = []
-    for line in header.splitlines():
-        s = line.strip()
-        if not name and s.startswith("# "):
-            name = s[2:].strip()
-        elif s.lower().startswith("description:"):
-            description = s.split(":", 1)[1].strip()
-        elif s.lower().startswith("triggers:"):
-            triggers = [_normalize_trigger(t) for t in s.split(":", 1)[1].split(",") if _normalize_trigger(t)]
-    if not name:
-        name = path.stem.replace("_", " ").replace("-", " ")
-    if not triggers:
-        return None
-    return Skill(name=name, description=description, triggers=tuple(triggers), body=body.strip(), source=str(path))
+    return None
 
 
 def _iter_skill_files(roots: list[str | os.PathLike]) -> list[Path]:
@@ -135,7 +112,6 @@ def _iter_skill_files(roots: list[str | os.PathLike]) -> list[Path]:
                     if not path.parent.name.casefold().endswith(".retired")
                 )
             )
-            paths.extend(sorted(path for path in base.glob("*.md") if path.name.lower() not in {"readme.md", "index.md"}))
         for path in paths:
             key = str(path.resolve(strict=False)).casefold()
             if key in seen:

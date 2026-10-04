@@ -61,10 +61,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "pre-result-cap session metadata stored under compression; retire after supported saved "
         "sessions have been rewritten or aged out"
     ),
-    "markdown-skill-v0": (
-        "pre-frontmatter profile skill files; retire after supported profile skills have been "
-        "rewritten to the current SKILL.md contract"
-    ),
     "continuity-metadata-v0": (
         "privacy-safe handling for session/taskboard/event rows without current owner ids and for "
         "raw source slots; retire after supported rows are rewritten and the event TTL elapses"
