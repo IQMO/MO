@@ -76,8 +76,7 @@ outline only. No arbitrary paths, grouped transforms, or custom fonts (`system-s
 
 Optional `style.motion.blur_samples` (1-8) and `shutter_angle` (0-360) give
 deterministic motion blur; `style.render` controls `supersampling` (1-4), `bloom`,
-`bloom_radius`, `vignette`, `grain`. Both multiply render cost: to diagnose,
-shorten the scene or reduce only output dimensions, keeping quality controls.
+`bloom_radius`, `vignette`, `grain`. Both multiply render cost (preview below).
 
 ### Verification and delivery
 
@@ -87,8 +86,9 @@ project `voice.speed` (0.5-2, default 1) slows speech below 1; shortening text m
 not slow it. `check` covers schema, assets, layout, pacing, and raster media
 enlarged beyond source pixels, not artistry; skip `validate`. Changed text,
 durations or speed need `narrate`. Preview work
-over one minute first (`--preview-seconds 20`; `--preview-width 480` is a faster
-screen-size-only diagnostic keeping supersampling and finish). Sample final MP4
+over one minute first (`--preview-seconds 20`; `--preview-width 480` is faster,
+keeping supersampling and finish); its receipt's `final_estimate.seconds`
+approximates the full render. Sample final MP4
 action into a task-owned scratch directory (ffmpeg `fps=4,scale=320:-1,tile=4x2` strips), review with `perceive`, remove samples.
 
 Stills/FFprobe cannot establish smooth playback or voice quality; disclose listening

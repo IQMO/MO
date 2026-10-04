@@ -222,6 +222,19 @@ def render_video(
                 "frame_workers": source.workers,
                 "render_seconds": round(render_seconds, 3),
             }
+            if preview_seconds is not None:
+                # A narrower preview keeps supersampling relative to its own
+                # size, so its cost understates the final; scale it back up.
+                final_frames = max(1, math.ceil(timeline_end * project.fps))
+                pixel_ratio = (
+                    project.width * project.height * _supersampling(project) ** 2
+                ) / (native_size[0] * native_size[1])
+                inspection["final_estimate"] = {
+                    "frames": final_frames,
+                    "seconds": round(render_seconds / frames * final_frames * pixel_ratio, 1),
+                    "native_pixel_ratio": round(pixel_ratio, 3),
+                    "basis": "preview seconds per frame scaled by frame count and native pixels; approximate",
+                }
             inspection["path"] = str(target)
             inspection["sha256"] = file_sha256(stage)
             atomic_write_text(
