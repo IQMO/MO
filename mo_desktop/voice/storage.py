@@ -97,17 +97,15 @@ def voice_runtime_ready(root: str | Path) -> bool:
     A partial download used to look installed as soon as the interpreter and
     ONNX file existed.  The installer writes its marker only after the model
     and sidecar have loaded successfully, and the recorded digest prevents a
-    later replacement or truncated file from silently entering playback. The
-    exact older marker shape without a digest remains usable as a documented
-    migration path; ``status`` identifies it and one explicit update converts
-    it to the verified shape. A present-but-wrong digest always fails closed.
+    later replacement or truncated file from silently entering playback. A
+    marker without a digest is incomplete, and a present-but-wrong digest always
+    fails closed.
     """
-    return voice_runtime_integrity(root) in {"verified", "legacy-unverified"}
+    return voice_runtime_integrity(root) == "verified"
 
 
-# COMPAT(voice-legacy-unverified): replaced-by digest-verified install markers; remove-when installed voice runtimes are re-verified with hashes
 def voice_runtime_integrity(root: str | Path) -> str:
-    """Return ``verified``, ``legacy-unverified``, ``changed``, or ``incomplete``."""
+    """Return ``verified``, ``changed``, or ``incomplete``."""
     worker = worker_python(root)
     model = voice_model_path(root)
     sidecar = voice_model_config_path(root)
@@ -120,7 +118,7 @@ def voice_runtime_integrity(root: str | Path) -> str:
     except (OSError, TypeError, ValueError):
         return "incomplete"
     if not recorded:
-        return "legacy-unverified"
+        return "incomplete"
     return "verified" if file_sha256_or_empty(model) == recorded else "changed"
 
 

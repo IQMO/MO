@@ -57,10 +57,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "seven-field Android updater environment alongside the generated release manifest; "
         "retire when all maintained deployments use MO_ANDROID_UPDATE_MANIFEST"
     ),
-    "voice-legacy-unverified": (
-        "digest-less voice install markers accepted as legacy-unverified; retire when installed "
-        "voice runtimes are re-verified with hashes"
-    ),
     "context-savings-v0": (
         "pre-result-cap session metadata stored under compression; retire after supported saved "
         "sessions have been rewritten or aged out"

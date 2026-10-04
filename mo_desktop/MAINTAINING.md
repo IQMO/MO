@@ -282,11 +282,9 @@ when that source tree is present.
 - Whisper may receive only a bounded projection of the three most recent operator utterances as its transcription prompt. Assistant text, tool output, and internal continuations never enter it.
 - Voice readiness additionally requires the worker, Joe model, Piper JSON
   sidecar, and successful-install marker. A new/update install also requires a
-  matching recorded model digest. The exact older no-digest marker remains a
-  compatibility read reported as `legacy-unverified`; one explicit update
-  removes that state for the installation, while a wrong digest fails closed.
-  Do not remove this compatibility read before a released mandatory-update
-  migration and one documented deprecation cycle. Install/update stages and
+  matching recorded model digest. A marker without a digest is `incomplete`
+  and a wrong digest is `changed`; both fail closed and `update` reinstalls.
+  Install/update stages and
   warm-loads artifacts before promotion; uninstall requires explicit
   confirmation and removes only layout-owned directories. Do not reintroduce a
   second readiness or path calculation in controller, doctor, settings, or docs.

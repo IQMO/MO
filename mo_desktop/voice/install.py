@@ -69,7 +69,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     model = voice_model_path(root)
     marker = voice_install_marker(root)
     integrity = voice_runtime_integrity(root)
-    ready = integrity in {"verified", "legacy-unverified"}
+    ready = integrity == "verified"
     print(f"status: {'installed' if ready else ('prepared' if root.is_dir() else 'not prepared')}")
     _print_disclosure()
     if marker.is_file():
@@ -85,7 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             recorded = str(installed.get("model_sha256") or "")
             if model.is_file():
                 if not recorded:
-                    print("model integrity: refresh required; run update to verify this legacy installation")
+                    print("model integrity: no digest recorded; run update to reinstall")
                 else:
                     print("model integrity: " + ("verified" if integrity == "verified" else "CHANGED since install"))
         except (OSError, ValueError):
