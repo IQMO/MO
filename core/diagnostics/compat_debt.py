@@ -45,10 +45,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "explicit --init old-home upgraders (credential + layout); retire when the operator "
         "declares no supported old-home restore path"
     ),
-    "live-host-legacy-identity": (
-        "label-hash instance identity for pre-key Live Control hosts; retire when supported "
-        "pre-key hosts have aged out"
-    ),
     "android-update-legacy-env": (
         "seven-field Android updater environment alongside the generated release manifest; "
         "retire when all maintained deployments use MO_ANDROID_UPDATE_MANIFEST"

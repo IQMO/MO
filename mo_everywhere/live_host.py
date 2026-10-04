@@ -133,13 +133,7 @@ class LiveControlHost:
     ):
         self.config = config
         self.label = " ".join(str(label or "MO host").split())[:80] or "MO host"
-        # Third-party/test callers created before the explicit instance-key
-        # protocol may omit the key; production Desktop and TUI callers always
-        # provide their own.
-        # COMPAT(live-host-legacy-identity): replaced-by explicit instance keys; remove-when supported pre-key hosts have aged out
-        self.instance_key = str(instance_key or "").strip() or (
-            "legacy:" + hashlib.sha256(self.label.encode("utf-8")).hexdigest()
-        )
+        self.instance_key = str(instance_key or "").strip()
         if not self.instance_key or len(self.instance_key) > 80 or any(
             ord(char) < 0x21 or ord(char) > 0x7E for char in self.instance_key
         ):

@@ -1377,10 +1377,9 @@ def _bounded_label(value: Any, fallback: str) -> str:
 def _host_instance_key(value: Any, label: str, lanes: frozenset[str]) -> str:
     """Return one reconnect-stable instance identity within a host principal.
 
-    New hosts send ``instance_key`` explicitly. The label-derived branch is a
-    rolling compatibility bridge for already-running hosts from before the
-    stable-key protocol; remove it once every supported host process has been
-    restarted from a release that sends ``instance_key``.
+    Hosts send ``instance_key`` explicitly. A hello without one is recognised only
+    for the Desktop, Terminal and phone hosts MO itself ships; any other host must
+    send its key.
     """
     if value is None or value == "":
         if lanes == frozenset({"screen"}) and label == "MO Desktop":
@@ -1394,11 +1393,7 @@ def _host_instance_key(value: Any, label: str, lanes: frozenset[str]) -> str:
                 return f"terminal:{suffix}"
         if lanes and lanes.issubset(PHONE_HOST_LANES):
             return "phone"
-        # COMPAT(live-host-legacy-identity): replaced-by explicit instance keys; remove-when supported pre-key hosts have aged out
-        legacy = hashlib.sha256(
-            f"{label}\0{','.join(sorted(lanes))}".encode("utf-8")
-        ).hexdigest()
-        return f"legacy:{legacy}"
+        raise RegistryError("live control host instance key is required")
     if not isinstance(value, str):
         raise RegistryError("live control host instance key is invalid")
     text = value.strip()
