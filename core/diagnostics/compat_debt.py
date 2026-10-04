@@ -37,9 +37,6 @@ _DEBT_PHRASES = re.compile(
 # Registered compatibility debt: id -> short human note. Adding a marker requires
 # a row here; deleting the marked code requires deleting the row in the same change.
 REGISTERED_COMPAT: dict[str, str] = {
-    "knowledge-auto-maintenance": (
-        "hidden /knowledge build|refresh aliases; retire when supported saved commands use status/query"
-    ),
     "mo-design-v1-boardless": (
         "read-only support for saved design/v1 artifacts without a Board; retire after supported "
         "artifacts have moved to design/v2 or newer"

@@ -1213,23 +1213,14 @@ class AgentSlashCommands:
         return "Use: /structural-graph status | build | refresh | export [path] [--compat] | explain <query> | neighbors <query> | path <source> -> <target> | stats"
 
     def _cmd_knowledge(self, rest: str) -> str:
-        """Build or query the private source-linked project knowledge index."""
-        from core.knowledge import knowledge_status, maintain_manifest, query_manifest, render_knowledge
+        """Inspect or query the automatically maintained private project knowledge index."""
+        from core.knowledge import knowledge_status, query_manifest, render_knowledge
 
         raw = str(rest or "").strip()
         parts = raw.split(maxsplit=1)
         sub = parts[0].lower() if parts else "status"
         arg = parts[1].strip() if len(parts) > 1 else ""
         root = self._effective_project_cwd() if hasattr(self, "_effective_project_cwd") else self.project_cwd
-        # COMPAT(knowledge-auto-maintenance): replaced-by project index lifecycle; remove-when supported saved commands use status/query
-        if sub in {"build", "refresh"}:
-            outcome = maintain_manifest(root)
-            coverage = outcome.get("coverage") or {}
-            return (
-                "Knowledge index current (automatic, private, source-linked):\n"
-                f"  path: {outcome.get('path')}\n"
-                f"  files: {coverage.get('indexed_files', 0)} · docs: {coverage.get('markdown_files', 0)} · tests: {coverage.get('test_files', 0)}"
-            )
         if sub == "status":
             status = knowledge_status(root)
             if not status.get("available"):
