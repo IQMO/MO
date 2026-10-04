@@ -14,6 +14,7 @@ from core.state.attachments import (
     safe_attachment_name,
 )
 from core.utils.atomic_write import atomic_write_json
+from .context import DESIGN_REQUEST_KINDS
 from .schema import DESIGN_EXTENSION
 
 
@@ -25,8 +26,6 @@ MAX_SESSION_BYTES = 256_000
 REQUEST_TIMEOUT_SECONDS = 15 * 60
 _ROLES = frozenset({"mo", "user"})
 _ROUTES = frozenset({"studio"})
-# COMPAT(mo-design-request-kind-v1): replaced-by auto/repair request kinds; remove-when no supported pre-auto Studio build can leave a baseline/refine pending sidecar
-_REQUEST_KINDS = frozenset({"auto", "repair", "baseline", "refine"})
 _ORIGIN_INTENTS = frozenset({"current_state", "refinement", "new_concept"})
 _LIFECYCLE_STATES = frozenset({"active", "completed"})
 _UNCHANGED = object()
@@ -335,16 +334,8 @@ def complete_design_request(
                 f"Design updated to r{current_revision}. Review it above; "
                 "continue here until you are ready for Handoff."
             ),
-            "baseline": (
-                f"Current surface mapped to r{current_revision}. Review the baseline above; "
-                "no visual changes were proposed."
-            ),
             "repair": (
                 f"Preview repaired at r{current_revision}. Test it again above before Handoff."
-            ),
-            "refine": (
-                f"Visual updated to r{current_revision}. Review it above; "
-                "we can refine it again before any Handoff."
             ),
         }[request_kind]
         clean_message = str(message or "").strip()[:MAX_MESSAGE_CHARS] or fallback_message
@@ -586,7 +577,7 @@ def _normalize_pending(value: Any) -> dict[str, Any] | None:
         raise ValueError("MO Design pending source revision is invalid")
     if route not in _ROUTES:
         raise ValueError("MO Design pending route is invalid")
-    if request_kind not in _REQUEST_KINDS:
+    if request_kind not in DESIGN_REQUEST_KINDS:
         raise ValueError("MO Design request kind is invalid")
     if len(command_id) > 128:
         raise ValueError("MO Design command id is too large")

@@ -41,10 +41,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "read-only support for saved design/v1 artifacts without a Board; retire after supported "
         "artifacts have moved to design/v2 or newer"
     ),
-    "mo-design-request-kind-v1": (
-        "baseline/refine values in pre-auto MO Design pending sidecars; retire when no "
-        "supported pre-auto Studio build can leave one pending"
-    ),
     "state-home-upgraders": (
         "explicit --init old-home upgraders (credential + layout); retire when the operator "
         "declares no supported old-home restore path"
