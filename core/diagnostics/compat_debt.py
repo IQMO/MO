@@ -57,10 +57,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "seven-field Android updater environment alongside the generated release manifest; "
         "retire when all maintained deployments use MO_ANDROID_UPDATE_MANIFEST"
     ),
-    "context-savings-v0": (
-        "pre-result-cap session metadata stored under compression; retire after supported saved "
-        "sessions have been rewritten or aged out"
-    ),
     "continuity-metadata-v0": (
         "privacy-safe handling for session/taskboard/event rows without current owner ids and for "
         "raw source slots; retire after supported rows are rewritten and the event TTL elapses"

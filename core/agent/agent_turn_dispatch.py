@@ -706,28 +706,13 @@ class AgentTurnDispatchMixin:
     def _restore_context_saving_meta(self, meta: dict | None) -> None:
         """Restore context-saving counters from saved session metadata."""
         savings = meta.get("context_savings") if isinstance(meta, dict) else None
-        v0_shape = False
-        if not isinstance(savings, dict) and isinstance(meta, dict):
-            # COMPAT(context-savings-v0): replaced-by context_savings metadata; remove-when supported saved sessions have been rewritten or aged out
-            savings = meta.get("compression")
-            v0_shape = isinstance(savings, dict)
         if not isinstance(savings, dict):
             savings = {}
-        if v0_shape:
-            # Old sessions may contain both lossy-compressor and fallback-cap
-            # counters. Restore only the cap evidence; removed compression is
-            # intentionally not relabelled as a result cap.
-            self.result_cap_total_ops = self._safe_int(savings.get("truncation_ops"))
-            self.result_cap_total_saved = self._safe_int(savings.get("truncation_saved"))
-            self.result_cap_last_pct = self._safe_int(savings.get("truncation_last_pct"))
-            self.carried_result_cap_ops = self._safe_int(savings.get("momentum_truncation_ops"))
-            self.carried_result_cap_saved = self._safe_int(savings.get("momentum_truncation_saved"))
-        else:
-            self.result_cap_total_ops = self._safe_int(savings.get("result_cap_ops"))
-            self.result_cap_total_saved = self._safe_int(savings.get("result_cap_saved"))
-            self.result_cap_last_pct = self._safe_int(savings.get("result_cap_last_pct"))
-            self.carried_result_cap_ops = self._safe_int(savings.get("carried_result_cap_ops"))
-            self.carried_result_cap_saved = self._safe_int(savings.get("carried_result_cap_saved"))
+        self.result_cap_total_ops = self._safe_int(savings.get("result_cap_ops"))
+        self.result_cap_total_saved = self._safe_int(savings.get("result_cap_saved"))
+        self.result_cap_last_pct = self._safe_int(savings.get("result_cap_last_pct"))
+        self.carried_result_cap_ops = self._safe_int(savings.get("carried_result_cap_ops"))
+        self.carried_result_cap_saved = self._safe_int(savings.get("carried_result_cap_saved"))
         self.session_compaction_total_ops = self._safe_int(savings.get("session_compaction_ops"))
         self.session_compaction_total_saved = self._safe_int(savings.get("session_compaction_saved"))
 
