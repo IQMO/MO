@@ -517,7 +517,28 @@ def _tool_timeout(command: object, requested: object, default: int) -> int:
         return max(timeout, _CANONICAL_SUITE_TIMEOUT_SECONDS)
     if _looks_like_pytest_command(command):
         return max(timeout, 420)
+    if _looks_like_explainer_media_job(command):
+        return max(timeout, _EXPLAINER_MEDIA_TIMEOUT_SECONDS)
     return timeout
+
+
+# Explainer renders and narration stream measured progress to the activity
+# lane and routinely outlast the default; a preview's final_estimate tells the
+# model when to request more.
+_EXPLAINER_MEDIA_TIMEOUT_SECONDS = 3600
+
+
+def _looks_like_explainer_media_job(command: object) -> bool:
+    """Recognize only the literal ``mo --explainer render|narrate`` form."""
+    if re.search(r"[;&|<>`\r\n]|\$\(", str(command or "")):
+        return False
+    tokens = _command_tokens(command)
+    return (
+        len(tokens) >= 4
+        and Path(tokens[0]).name.lower() in {"mo", "mo.exe", "mo.cmd"}
+        and tokens[1] == "--explainer"
+        and tokens[2] in {"render", "narrate"}
+    )
 
 
 def _cancel_requested(cancel_event: object) -> bool:

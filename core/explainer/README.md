@@ -118,7 +118,9 @@ contact sheets, previews and final MP4s are derived, each MP4 with a matching
 not decode the final video. Deterministic QC checks geometry, captions, source
 references and pacing; it does not certify visual quality or factual support.
 
-During CLI work, Terminal's existing activity lane shows measured progress,
+MO's `shell` tool gives the literal `mo --explainer render|narrate` forms at
+least 3600 s instead of its 60 s default; a larger requested `timeout` still
+applies. During CLI work, Terminal's existing activity lane shows measured progress,
 saved style, available artifacts, and verification with its MO method effect.
 Desktop's existing glance shows the current phase and percentage. The normal
 CLI result carries the full artifact report; neither surface needs a model
