@@ -89,6 +89,28 @@ def top_level_windows() -> tuple[NativeWindow, ...]:
         return ()
 
 
+def window_process_id(handle: int) -> int:
+    """Return the process that owns one window handle now, or 0 if it is gone."""
+    if sys.platform != "win32" or int(handle or 0) <= 0:
+        return 0
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        user32.IsWindow.argtypes = [wintypes.HWND]
+        user32.IsWindow.restype = wintypes.BOOL
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        if not user32.IsWindow(int(handle)):
+            return 0
+        process_id = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(int(handle), ctypes.byref(process_id))
+        return int(process_id.value)
+    except Exception:
+        return 0
+
+
 def foreground_window_handle() -> int:
     """Return the top-level foreground HWND, or zero when it is unavailable."""
     if sys.platform != "win32":

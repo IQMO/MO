@@ -198,7 +198,7 @@ def format_launch_result(result: AppLaunchResult) -> str:
     if result.status == "failed":
         return f"Error: application launch failed: {result.detail}"
     assert result.app is not None
-    return f"Opening {result.app.name!r}; window verification pending."
+    return f"Launch of {result.app.name!r} was dispatched; its window is not yet verified."
 
 
 def _app_match_score(app: DiscoveredApp, query: str) -> int | None:

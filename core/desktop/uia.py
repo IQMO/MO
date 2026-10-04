@@ -899,21 +899,33 @@ def _remember_window_ref(state: _UIAState, element: DesktopElement) -> None:
             state.window_refs.pop(ref, None)
 
 
+def _rebind_native_window(
+    handle: int, *, process_id: int, title: str, class_name: str,
+    bounds: tuple[int, int, int, int], identity: str,
+) -> DesktopElement | None:
+    """Attach UIA to a window by handle, only if it is still the same window."""
+    if handle <= 0:
+        return None
+    from .win32 import NativeWindow, window_process_id
+
+    if process_id and window_process_id(handle) != process_id:
+        return None  # the window is gone, or Windows reused its handle for another process
+    element = _cache_native_window(NativeWindow(
+        handle=handle, process_id=process_id, title=title, class_name=class_name, bounds=bounds,
+    ))
+    if element is None or _window_identity(element) != identity:
+        return None
+    return element
+
+
 def _rehydrate_window_element(window: DesktopElement) -> tuple[str, Any, DesktopElement] | None:
     """Rebind a window a stale ref named, only if the same window still exists."""
-    from .win32 import NativeWindow
-
-    element = _cache_native_window(NativeWindow(
-        handle=int(window.native_handle),
-        process_id=int(window.process_id or 0),
-        title=window.label,
-        class_name=window.class_name,
-        bounds=tuple(window.bounds),
-    ))
-    if element is None or _window_identity(element) != _window_identity(window):
+    element = _rebind_native_window(
+        int(window.native_handle), process_id=int(window.process_id or 0), title=window.label,
+        class_name=window.class_name, bounds=tuple(window.bounds), identity=_window_identity(window),
+    )
+    if element is None:
         return None
-    if window.process_id and element.process_id != window.process_id:
-        return None  # Windows reused the handle for another process's window
     state = _state()
     return element.ref, state.controls[element.ref], element
 
@@ -921,26 +933,19 @@ def _rehydrate_window_element(window: DesktopElement) -> tuple[str, Any, Desktop
 def _rehydrate_runtime_window(target: Any) -> tuple[str, Any, DesktopElement] | None:
     """Lazily attach UIA to a Win32-bound runtime target on the acting thread."""
     metadata = dict(getattr(target, "metadata", {}) or {})
+    identity = str(getattr(target, "identity", "") or "")
     handle = int(metadata.get("native_handle") or 0)
-    if handle <= 0:
-        identity = str(getattr(target, "identity", "") or "")
-        if identity.startswith("hwnd:"):
-            try:
-                handle = int(identity.partition(":")[2])
-            except ValueError:
-                return None
-    if handle <= 0:
-        return None
-    from .win32 import NativeWindow
-
-    element = _cache_native_window(NativeWindow(
-        handle=handle,
-        process_id=int(metadata.get("process_id") or 0),
-        title=str(getattr(target, "label", "") or ""),
-        class_name=str(metadata.get("class_name") or ""),
-        bounds=tuple(getattr(target, "bounds", None) or (0, 0, 0, 0)),
-    ))
-    if element is None or _window_identity(element) != str(getattr(target, "identity", "") or ""):
+    if handle <= 0 and identity.startswith("hwnd:"):
+        try:
+            handle = int(identity.partition(":")[2])
+        except ValueError:
+            return None
+    element = _rebind_native_window(
+        handle, process_id=int(metadata.get("process_id") or 0),
+        title=str(getattr(target, "label", "") or ""), class_name=str(metadata.get("class_name") or ""),
+        bounds=tuple(getattr(target, "bounds", None) or (0, 0, 0, 0)), identity=identity,
+    )
+    if element is None:
         return None
     state = _state()
     ctrl = state.controls[element.ref]
