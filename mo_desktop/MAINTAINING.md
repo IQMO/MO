@@ -798,7 +798,6 @@ catch-up frames. Native app entrances request 15 ms WinForms ticks to avoid
 rounding a 16 ms request into two default Windows timer quanta. These are
 requested budgets, not a guarantee of presented frames under load.
 
-Retarget finite motion from its current pose. Composer collapse and launcher
 Frame-rate loops on the resident lane (the active cube tick, launcher expand,
 tray popup, composer reveal) schedule with `frame=True`. `NativeGuiLoop` then
 releases the callback on the DirectComposition compositor clock
@@ -815,6 +814,7 @@ with the compositor clock as ground truth, sub-millisecond frames went from abou
 40% irregular presented intervals to about 6%; this is cadence evidence only, not
 visible smoothness acceptance.
 
+Retarget finite motion from its current pose. Composer collapse and launcher
 menu dismissal reverse their existing symmetric curve without a full-size or
 full-opacity flash; repeated collapse does not restart it. Keep completed
 artwork cached, preserve premultiplied-alpha boundaries, and publish the final
