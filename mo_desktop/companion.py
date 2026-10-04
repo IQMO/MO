@@ -204,8 +204,8 @@ _DUPLICATE_POINT_SUPPRESS_SECONDS = 8.0
 # MO Desktop keeps its OWN persisted session slot (never "main"): isolated from
 
 
-def _desktop_frame_delay_ms(surface: Any, now: float | None = None, *, render_ms: float = 0.0) -> int:
-    """Choose a responsive cadence without continuously redrawing an idle cube."""
+def _desktop_frame_plan(surface: Any, now: float | None = None, *, render_ms: float = 0.0) -> tuple[int, bool]:
+    """Return (delay in ms, display-synchronous) without continuously redrawing an idle cube."""
     current = time.perf_counter() if now is None else float(now)
     cube = getattr(surface, "_cube", None)
     active = bool(getattr(surface, "_recording_voice", False))
@@ -219,7 +219,7 @@ def _desktop_frame_delay_ms(surface: Any, now: float | None = None, *, render_ms
                 or getattr(cube, "_speaking", False)
             )
     if active:
-        return max(1, round(_GUI_ACTIVE_FRAME_MS - render_ms))
+        return max(1, round(_GUI_ACTIVE_FRAME_MS - render_ms)), True
     role_view = getattr(surface, "_role_workspace", None)
     role_window = getattr(role_view, "window", None)
     role_visible = False
@@ -232,7 +232,7 @@ def _desktop_frame_delay_ms(surface: Any, now: float | None = None, *, render_ms
         cube is not None and getattr(cube, "_visible", False)
     ) or role_visible
     interval = _GUI_PASSIVE_FRAME_MS if visible else _GUI_HIDDEN_FRAME_MS
-    return max(1, round(interval - render_ms))
+    return max(1, round(interval - render_ms)), False
 
 
 class CompanionSurface(
@@ -2118,7 +2118,7 @@ class CompanionSurface(
         log_event("MO Desktop GUI ready", config=config)
 
         def _gui_tick() -> None:
-            delay = _GUI_HIDDEN_FRAME_MS
+            delay, frame = _GUI_HIDDEN_FRAME_MS, False
             frame_started = time.perf_counter()
             try:
                 if not self._running:
@@ -2149,7 +2149,7 @@ class CompanionSurface(
                         self._cube_tick_retry_at = current + _CUBE_TICK_RETRY_SECONDS
                         log_exception("mo-desktop-cube-tick-error", config=getattr(self._agent, "config", None))
                         _write_stderr(traceback.format_exc())
-                delay = _desktop_frame_delay_ms(self, frame_started,
+                delay, frame = _desktop_frame_plan(self, frame_started,
                     render_ms=(time.perf_counter() - frame_started) * 1000)
             except Exception:
                 if self._running:
@@ -2157,7 +2157,7 @@ class CompanionSurface(
                     _write_stderr(traceback.format_exc())
             if self._running:
                 try:
-                    root.schedule(delay, _gui_tick, frame=delay <= _GUI_ACTIVE_FRAME_MS)
+                    root.schedule(delay, _gui_tick, frame=frame)
                 except Exception:
                     self._running = False
 
