@@ -12,6 +12,7 @@ from .render import (
     _require_pillow,
     caption_chunks,
     caption_layout,
+    camera_state,
     header_layout,
     project_timeline,
     text_layout,
@@ -57,8 +58,18 @@ def quality_report(project: ExplainerProject) -> dict[str, Any]:
         if words and trailing > TRAILING_SILENCE_SECONDS:
             warnings.append({"scene": scene_id, "code": "trailing_silence", "detail": f"{trailing:.1f}s after speech"})
         header = header_layout(draw, project, scene, style)
+        # The widest camera zoom pushes elements furthest from the focus.
+        zoom, focus = max(
+            (camera_state(scene, edge, project.width, project.height) for edge in (0.0, 1.0)),
+            key=lambda state: state[0],
+        )
         for element in scene.get("elements", []):
             union = _union_bounds(draw, element)
+            if union is not None and zoom != 1.0:
+                union = (
+                    focus[0] + (union[0] - focus[0]) * zoom, focus[1] + (union[1] - focus[1]) * zoom,
+                    focus[0] + (union[2] - focus[0]) * zoom, focus[1] + (union[3] - focus[1]) * zoom,
+                )
             if union is not None and element.get("bleed") is not True:
                 left, top, right, bottom = union
                 if left < 0 or right > project.width or top < 0 or bottom > safe_bottom:

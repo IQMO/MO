@@ -1080,6 +1080,11 @@ def _scaled_project(
         "target_x", "target_y", "curve", "head_size", "border_width", "blur", "depth",
     }
     for scene in data.get("scenes", []):
+        camera = scene.get("camera")
+        if isinstance(camera, dict):
+            for key in ("focus_x", "focus_y"):
+                if key in camera:
+                    camera[key] = float(camera[key]) * factor
         for element in scene.get("elements", []):
             for key in spatial:
                 if key in element:
@@ -1181,6 +1186,17 @@ def _grain_overlay(width: int, height: int, strength: float):
     return overlay
 
 
+def camera_state(
+    scene: dict[str, Any], progress: float, width: int, height: int,
+) -> tuple[float, tuple[float, float]]:
+    """Ease a scene camera's zoom about its focus; shared with quality checks."""
+    camera = scene.get("camera") if isinstance(scene.get("camera"), dict) else {}
+    start = float(camera.get("zoom", 1.0))
+    zoom = _mix(start, float(camera.get("zoom_to", start)), _keyframe_ease(progress, "ease_in_out"))
+    focus = (float(camera.get("focus_x", width / 2.0)), float(camera.get("focus_y", height / 2.0)))
+    return (1.0 if math.isclose(zoom, 1.0) else zoom), focus
+
+
 def _render_scene_frame(
     project: ExplainerProject,
     row: dict[str, Any],
@@ -1209,6 +1225,15 @@ def _render_scene_frame(
             image, element, local, duration, theme, style,
             media=media, fade_in=fade_in, fade_out=fade_out,
             authored_duration=float(scene.get("duration", 6.0)),
+        )
+    zoom, focus = camera_state(scene, local / max(0.01, duration), project.width, project.height)
+    if zoom != 1.0:
+        # The scene world moves; header, sources and captions stay fixed.
+        image = image.transform(
+            image.size,
+            _Image.Transform.AFFINE,
+            (1 / zoom, 0.0, focus[0] - focus[0] / zoom, 0.0, 1 / zoom, focus[1] - focus[1] / zoom),
+            resample=_Image.Resampling.BICUBIC,
         )
     evidence = scene_source_ids(scene)
     brand = style.get("brand") if isinstance(style.get("brand"), dict) else {}

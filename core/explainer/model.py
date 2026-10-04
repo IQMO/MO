@@ -323,6 +323,7 @@ def validate_project(data: dict[str, Any]) -> list[str]:
             )
             if transition_duration is not None and not 0.0 <= transition_duration <= min(2.0, duration / 2):
                 issues.append(f"{prefix}.transition.duration must fit within the scene and be at most 2 seconds")
+        _validate_camera(scene.get("camera"), prefix, issues)
         claims = scene.get("claims", [])
         if not isinstance(claims, list):
             issues.append(f"{prefix}.claims must be a list")
@@ -356,6 +357,21 @@ def validate_project(data: dict[str, Any]) -> list[str]:
                 assets_by_id=assets_by_id,
             )
     return issues
+
+
+def _validate_camera(camera: Any, prefix: str, issues: list[str]) -> None:
+    """A scene camera eases zoom about a focus point across the whole scene."""
+    if camera is None:
+        return
+    if not isinstance(camera, dict):
+        issues.append(f"{prefix}.camera must be an object")
+        return
+    for key in ("zoom", "zoom_to"):
+        if key in camera:
+            _bounded_asset_number(camera, key, 1.0, 2.0, f"{prefix}.camera", issues)
+    for key in ("focus_x", "focus_y"):
+        if key in camera:
+            _finite_number(camera[key], f"{prefix}.camera.{key}", issues)
 
 
 def _validate_music(music: Any, assets_by_id: dict[str, dict[str, Any]], issues: list[str]) -> None:

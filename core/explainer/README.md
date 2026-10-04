@@ -65,6 +65,10 @@ limits (captions are approximately timed). A final render also writes
 
 ## Elements and style
 
+A scene `camera` (`zoom`, `zoom_to` 1-2, `focus_x`/`focus_y`, default frame centre)
+eases a push-in or pull-out across the whole scene so held layouts keep living;
+header, sources label and captions stay fixed. Keep zoomed elements inside the frame.
+
 Projects snapshot MO's active skin/four-cube brand; customize with
 `style.source:"custom"` (global Settings stay unchanged). `style.layout` alone does
 not recompose scenes; `style.skin` does not recolor `theme`. `style.decorations`
