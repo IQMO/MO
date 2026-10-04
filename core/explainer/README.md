@@ -54,7 +54,8 @@ so request a larger `timeout` when the estimate exceeds it. Sample final MP4
 action into a task-owned scratch directory (ffmpeg `fps=4,scale=320:-1,tile=4x2` strips), review with `perceive`, remove samples.
 
 Stills/FFprobe cannot establish smooth playback or voice quality; disclose listening
-limits (captions are approximately timed). Report the render receipt and
+limits (captions are approximately timed). A final render also writes
+`explainer.srt` with the same caption timing for upload. Report the render receipt and
 `status <project>` evidence separately from visual strengths and limits.
 
 ## Elements and style
@@ -62,8 +63,9 @@ limits (captions are approximately timed). Report the render receipt and
 Projects snapshot MO's active skin/four-cube brand; customize with
 `style.source:"custom"` (global Settings stay unchanged). `style.layout` alone does
 not recompose scenes; `style.skin` does not recolor `theme`. `style.decorations`
-booleans `grid`, `title`, `scene_badge`, `timeline` default true. Use JSON numbers;
-keep the subtitle lane clear.
+booleans `grid`, `title`, `scene_badge`, `timeline`, `captions` default true;
+`captions:false` stops burning captions in and frees the subtitle lane. Use JSON
+numbers; keep the subtitle lane clear while captions are on.
 
 All elements take `x`, `y`, `color` (theme name or #rrggbb), optional `start`/`end` in scene seconds, `animation`, `opacity`, `scale`, `rotation`, `blur`, `anchor` top_left/center, and `keyframes`. Per type:
 - text: `text`, `width`, `size` (8-300; rendered min 12), `align` left/center/right, `weight` regular/bold.
@@ -139,7 +141,8 @@ default-speed Desktop calls are unchanged. It records the effective speed,
 narration digest, WAV digest, and measured speech duration in `timings.json`.
 The renderer splits captions at sentence ends into balanced chunks of at most
 12 words and gives each chunk a share of the measured speech by its length; the
-render receipt names that mode, and captions are not word-aligned. A supplied WAV must be non-empty 16-bit
+render receipt names that mode and the `.srt` subtitle file written from the same
+cues after a final render; captions are not word-aligned. A supplied WAV must be non-empty 16-bit
 mono/stereo PCM and its timing map must bind both current narration and audio
 hashes. Full audio/timeline duration must agree. Rendering without audio produces
 a silent MP4 and reports it as silent.

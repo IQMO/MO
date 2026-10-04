@@ -305,7 +305,7 @@ def _saved_style(root: Path) -> dict[str, Any]:
 
 
 def _artifact_availability(root: Path, *, verify_videos: bool = True) -> dict[str, dict[str, Any]]:
-    names = ("project.json", "audio.wav", "timings.json", "contact-sheet.png", "preview.mp4", "explainer.mp4")
+    names = ("project.json", "audio.wav", "timings.json", "contact-sheet.png", "preview.mp4", "explainer.mp4", "explainer.srt")
     result: dict[str, dict[str, Any]] = {}
     for name in names:
         path = root / name

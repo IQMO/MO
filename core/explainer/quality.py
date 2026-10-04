@@ -45,8 +45,9 @@ def quality_report(project: ExplainerProject) -> dict[str, Any]:
         if rate < 0.45 and words > 2:
             warnings.append({"scene": scene_id, "code": "sparse_narration", "detail": f"{rate:.2f} words/second"})
         used_sources.update(scene_source_ids(scene))
-        safe_bottom = project.height - subtitle_lane
-        for caption in caption_chunks(str(scene.get("narration") or "")):
+        captions_on = (style.get("decorations") or {}).get("captions", True)
+        safe_bottom = project.height - subtitle_lane if captions_on else project.height
+        for caption in caption_chunks(str(scene.get("narration") or "")) if captions_on else ():
             _text, _font, (left, top, right, bottom), _position = caption_layout(draw, caption, project, style)
             safe_bottom = min(safe_bottom, top)
             if left >= right or top >= bottom or left < 0 or right > project.width or top < 0 or bottom > project.height:

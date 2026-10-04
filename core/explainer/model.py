@@ -159,7 +159,7 @@ def validate_project(data: dict[str, Any]) -> list[str]:
         if not isinstance(decorations, dict):
             issues.append("style.decorations must be an object")
         else:
-            for key in ("grid", "title", "scene_badge", "timeline"):
+            for key in ("grid", "title", "scene_badge", "timeline", "captions"):
                 if key in decorations and not isinstance(decorations[key], bool):
                     issues.append(f"style.decorations.{key} must be a boolean")
         for section, fields in {

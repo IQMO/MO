@@ -209,13 +209,17 @@ def render_video(
                 expect_audio=has_audio,
             )
             inspection["narration"] = audio_details or {"source": "silent"}
+            decorations = (project.data.get("style") or {}).get("decorations", {})
+            cues = subtitle_cues(timeline) if preview_seconds is None else []
             inspection["captions"] = {
-                "mode": "burned-in",
+                "mode": "burned-in" if decorations.get("captions", True) else "off",
                 "timing": (
                     "sentence-chunks-character-weighted-within-"
                     f"{'speech' if has_audio else 'scene'}-duration-approximate"
                 ),
             }
+            if cues:
+                inspection["captions"]["subtitles"] = target.with_suffix(".srt").name
             motion = project.data.get("style", {}).get("motion", {})
             inspection["motion_blur"] = {
                 "samples": int(motion.get("blur_samples", 1)),
@@ -245,6 +249,10 @@ def render_video(
                 json.dumps(inspection, indent=2, ensure_ascii=False) + "\n",
             )
             _publish_video_pair(stage, staged_report, target, cancel_event=cancel_event)
+            if cues:
+                # Derived from the same cues as the burned-in captions; written
+                # after the verified pair so it never blocks publication.
+                atomic_write_text(target.with_suffix(".srt"), subtitle_srt(cues))
         except BaseException:
             _terminate_process(process)
             stage.unlink(missing_ok=True)
@@ -1142,15 +1150,16 @@ def _render_scene_frame(
     image = image.convert("RGB")
     draw = ImageDraw.Draw(image, "RGBA")
     _draw_header(draw, project, scene, theme, style)
-    _draw_caption(
-        draw,
-        narration,
-        local,
-        min(duration, float(row.get("speech_duration", duration))),
-        project,
-        theme,
-        style,
-    )
+    if decorations.get("captions", True):
+        _draw_caption(
+            draw,
+            narration,
+            local,
+            min(duration, float(row.get("speech_duration", duration))),
+            project,
+            theme,
+            style,
+        )
     return image.convert("RGBA")
 
 
@@ -1965,6 +1974,34 @@ def caption_chunks(narration: str) -> list[str]:
             else:
                 chunks.append(" ".join(chunk))
     return chunks
+
+
+def subtitle_cues(timeline: list[dict[str, Any]]) -> list[tuple[float, float, str]]:
+    """Give each caption chunk the same absolute span the renderer shows it for."""
+    cues: list[tuple[float, float, str]] = []
+    for row in timeline:
+        chunks = caption_chunks(str(row["scene"].get("narration") or ""))
+        speech = min(float(row["duration"]), float(row.get("speech_duration", row["duration"])))
+        total = sum(len(chunk) for chunk in chunks)
+        elapsed = 0
+        for chunk in chunks:
+            begin = float(row["start"]) + speech * elapsed / total
+            elapsed += len(chunk)
+            cues.append((begin, float(row["start"]) + speech * elapsed / total, chunk))
+    return cues
+
+
+def subtitle_srt(cues: list[tuple[float, float, str]]) -> str:
+    def stamp(seconds: float) -> str:
+        milliseconds = round(seconds * 1000)
+        hours, rest = divmod(milliseconds, 3_600_000)
+        minutes, rest = divmod(rest, 60_000)
+        return f"{hours:02d}:{minutes:02d}:{rest // 1000:02d},{rest % 1000:03d}"
+
+    return "".join(
+        f"{index}\n{stamp(begin)} --> {stamp(end)}\n{text}\n\n"
+        for index, (begin, end, text) in enumerate(cues, start=1)
+    )
 
 
 def caption_index(chunks: list[str], fraction: float) -> int:
