@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("--slug", default="")
     init.add_argument("--output")
     init.add_argument("--layout", choices=("explanation", "process", "comparison", "product-demo"), default="explanation")
+    init.add_argument("--size", type=_frame_size, default=(1280, 720),
+                      help="WIDTHxHEIGHT, e.g. 1080x1920 for a vertical short (default 1280x720)")
 
     for name in ("validate", "check", "narrate", "sheet"):
         command = subparsers.add_parser(name)
@@ -66,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
                 output=args.output,
                 config=config,
                 layout=args.layout,
+                size=args.size,
             )
             return _print({
                 "created": True,
@@ -208,6 +211,14 @@ def main(argv: list[str] | None = None) -> int:
                 pass
         return _print({"error": str(exc), "type": type(exc).__name__}, code=2)
     return 1
+
+
+def _frame_size(value: str) -> tuple[int, int]:
+    try:
+        width, height = (int(part) for part in str(value).lower().split("x", 1))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("size must look like 1080x1920") from exc
+    return width, height
 
 
 def guide_text(topic: str | None = None) -> str:

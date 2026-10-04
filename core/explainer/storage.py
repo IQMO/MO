@@ -57,6 +57,7 @@ def create_project(
     output: str | Path | None = None,
     config: dict[str, Any] | None = None,
     layout: str = "explanation",
+    size: tuple[int, int] = (1280, 720),
 ) -> Path:
     """Create an evidence/narration/scene workspace without overwriting one."""
     clean_title = str(title or "").strip()
@@ -64,12 +65,15 @@ def create_project(
         raise ValueError("title is required")
     if layout not in QUICK_LAYOUTS:
         raise ValueError(f"layout must be one of: {', '.join(sorted(QUICK_LAYOUTS))}")
+    width, height = (int(value) for value in size)
+    if width % 2 or height % 2 or not 640 <= width <= 3840 or not 360 <= height <= 2160:
+        raise ValueError("size must be even WIDTHxHEIGHT within 640-3840 by 360-2160")
     target = Path(output).expanduser().resolve(strict=False) if output else project_directory(slug or title, config=config)
     if target.exists():
         if not target.is_dir() or any(target.iterdir()):
             raise FileExistsError(f"explainer project already exists: {target}")
     target.mkdir(parents=True, exist_ok=True)
-    payload = _starter_project(clean_title, layout=layout)
+    payload = _starter_project(clean_title, layout=layout, size=(width, height))
     atomic_write_text(target / "project.json", json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
     atomic_write_text(
         target / "research.md",
@@ -84,13 +88,14 @@ def create_project(
     return target
 
 
-def _starter_project(title: str, *, layout: str) -> dict[str, Any]:
+def _starter_project(title: str, *, layout: str, size: tuple[int, int] = (1280, 720)) -> dict[str, Any]:
     style, theme = _resolved_mo_style(layout)
+    width, height = size
     return {
         "version": 1,
         "title": title,
-        "width": 1280,
-        "height": 720,
+        "width": width,
+        "height": height,
         "fps": 30,
         "brief": {
             "purpose": "introduce" if layout == "product-demo" else "explain",
@@ -104,8 +109,29 @@ def _starter_project(title: str, *, layout: str) -> dict[str, Any]:
         "theme": theme,
         "assets": [],
         "sources": [],
-        "scenes": _template_scenes(title, layout),
+        "scenes": [
+            {**scene, "elements": [_fit_design(element, width, height) for element in scene["elements"]]}
+            for scene in _template_scenes(title, layout)
+        ],
     }
+
+
+def _fit_design(element: dict[str, Any], width: int, height: int) -> dict[str, Any]:
+    """Place a 1280x720 starter element in another frame, scaled around the centre.
+
+    The uniform scale fits the 16:9 design inside the frame, so a vertical or
+    square project starts centred instead of keeping landscape coordinates.
+    """
+    unit = min(width / 1280, height / 720)
+    fitted = dict(element)
+    for key, centre, frame_centre in (("x", 640, width / 2), ("x2", 640, width / 2),
+                                      ("y", 360, height / 2), ("y2", 360, height / 2)):
+        if key in fitted:
+            fitted[key] = round(frame_centre + (fitted[key] - centre) * unit)
+    for key in ("width", "height", "size", "radius"):
+        if key in fitted:
+            fitted[key] = round(fitted[key] * unit)
+    return fitted
 
 
 def _resolved_mo_style(layout: str) -> tuple[dict[str, Any], dict[str, str]]:

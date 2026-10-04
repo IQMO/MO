@@ -15,7 +15,7 @@ music the user supplied or licensed (never invent a license). Compose one hierar
 cards; reuse the canonical product mark as media.
 
 ```text
-mo --explainer init --title "<title>" --layout process
+mo --explainer init --title "<title>" --layout process --size 1280x720
 mo --explainer add-media "<project>" "<image.png>" --id subject --origin mo-generated
 mo --explainer narrate "<project>"
 mo --explainer check "<project>"
@@ -24,7 +24,7 @@ mo --explainer render "<project>"
 ```
 
 Layouts (`explanation`, `process`, `comparison`, `product-demo`) are editable
-starters; `init` preserves projects. `project.json` owns composition, narration and
+starters fitted to `--size` (1080x1920 for a vertical short); `init` preserves projects. `project.json` owns composition, narration and
 timing. Optional `brief`: purpose (`explain`, `introduce`, `promote`, `story`),
 audience, language, tone, call_to_action, target_duration_seconds (5-600).
 `add-media` origins: `user`, `captured`, `mo-generated`, `licensed-local`. Optional
