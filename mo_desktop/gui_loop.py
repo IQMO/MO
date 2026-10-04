@@ -33,7 +33,7 @@ def _compositor_wait():
         return None
 
 
-def _display_period() -> float:
+def display_period() -> float:
     """One refresh of the primary display, in seconds (60 Hz when unreadable)."""
     try:
         import win32api
@@ -43,6 +43,24 @@ def _display_period() -> float:
     except Exception:
         hertz = 0
     return 1 / hertz if hertz > 1 else 1 / 60
+
+
+_clock_wait = None  # resolved once; False where the compositor clock is unavailable
+
+
+def display_tick(timeout_ms: int = 25) -> float | None:
+    """Sleep to the next display tick and return its ``perf_counter`` time.
+
+    For a one-off aligned frame outside NativeGuiLoop (a WebView host's finite
+    entrance). A timeout still returns the current time; None means no clock.
+    """
+    global _clock_wait
+    if _clock_wait is None:
+        _clock_wait = _compositor_wait() or False
+    if not _clock_wait:
+        return None
+    _clock_wait(0, None, timeout_ms)
+    return time.perf_counter()
 
 
 class NativeGuiLoop:
@@ -71,7 +89,7 @@ class NativeGuiLoop:
         self._tick_wait = _compositor_wait()
         self._tick_handles = None
         self._frame_tokens: set[int] = set()
-        self._period = _display_period()  # one display refresh; refined from consecutive ticks
+        self._period = display_period()  # one display refresh; refined from consecutive ticks
         self._last_tick: float | None = None
 
     def wake(self) -> None:

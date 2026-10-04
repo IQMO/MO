@@ -818,6 +818,7 @@ cost instead of adding a second pacing mechanism. Measured on a 144 Hz display
 with the compositor clock as ground truth, sub-millisecond frames went from about
 40% irregular presented intervals to about 6%; this is cadence evidence only, not
 visible smoothness acceptance.
+Native app entrances run in the WebView host's WinForms clock, outside `NativeGuiLoop`, so they keep the 15 ms tick but each frame sleeps to the display tick (`gui_loop.display_tick()`) and is posed for `tick + display_period()`, the moment it is actually on screen. Measured against the compositor clock, the pose-versus-display error fell from about 2.3 ms to about 0.7 ms (standard deviation), so a fast entrance no longer wobbles even when frame spacing varies.
 
 Retarget finite motion from its current pose. Composer collapse and launcher
 menu dismissal reverse their existing symmetric curve without a full-size or

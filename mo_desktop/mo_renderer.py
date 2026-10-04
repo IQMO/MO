@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime.subprocess_flags import gui_python_executable
+from mo_desktop.gui_loop import display_period, display_tick
 
 
 def renderer_available() -> bool:
@@ -847,6 +848,12 @@ class _DesignNativeVisualController:
         if entrance is None:
             return
         now = time.perf_counter()
+        if not first:
+            # The WinForms clock fires at an arbitrary phase of the refresh. Sleep to
+            # the display tick and pose this frame for when it is actually on screen.
+            shown = display_tick()
+            if shown is not None:
+                now = shown + display_period()
         elapsed = 0 if first else now - entrance["started"]
         duration = entrance["art"].get("duration", .88)
         if elapsed >= duration and self._content_ready and entrance["fade_started"] is None:
