@@ -6,6 +6,7 @@ from typing import Any
 
 from .model import ExplainerProject, scene_source_ids
 from .render import (
+    _connector_end,
     _keyframe_state,
     _prism_metrics,
     _require_pillow,
@@ -148,8 +149,7 @@ def _element_bounds(
         radius = float(element.get("radius", 0)) * scale
         bounds = (x - radius, y - radius, x + radius, y + radius)
     elif kind in {"line", "arrow"}:
-        x2 = x + (float(element.get("x2", x)) - float(element.get("x", 0))) * scale
-        y2 = y + (float(element.get("y2", y)) - float(element.get("y", 0))) * scale
+        x2, y2 = _connector_end(element, x, y, scale)
         curve = abs(float(element.get("curve", 0.0)) * scale)
         bounds = (min(x, x2) - curve, min(y, y2) - curve, max(x, x2) + curve, max(y, y2) + curve)
     else:

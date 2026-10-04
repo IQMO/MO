@@ -1033,8 +1033,7 @@ def _draw_element(
         for face in (top, side, front):
             draw.line(face + [face[0]], fill=color, width=stroke, joint="curve")
     elif kind in {"line", "arrow"}:
-        x2 = x + (float(element.get("x2", x)) - float(element.get("x", 0))) * scale
-        y2 = y + (float(element.get("y2", y)) - float(element.get("y", 0))) * scale
+        x2, y2 = _connector_end(element, x, y, scale)
         _draw_connector(
             draw,
             (x, y),
@@ -1350,8 +1349,7 @@ def _element_pivot(
     if kind == "circle":
         return x, y
     if kind in {"line", "arrow"}:
-        x2 = x + (float(element.get("x2", x)) - float(element.get("x", 0))) * scale
-        y2 = y + (float(element.get("y2", y)) - float(element.get("y", 0))) * scale
+        x2, y2 = _connector_end(element, x, y, scale)
         return (x + x2) / 2.0, (y + y2) / 2.0
     if kind == "text":
         return (
@@ -1363,6 +1361,14 @@ def _element_pivot(
         rise = depth * 0.65
         return x + (width + depth) / 2.0, y + (height - rise) / 2.0
     return x + width / 2.0, y + height / 2.0
+
+
+def _connector_end(element: dict[str, Any], x: float, y: float, scale: float) -> tuple[float, float]:
+    """Scaled end point of a line or arrow whose animated start is ``(x, y)``."""
+    return (
+        x + (float(element.get("x2", x)) - float(element.get("x", 0))) * scale,
+        y + (float(element.get("y2", y)) - float(element.get("y", 0))) * scale,
+    )
 
 
 def _prism_metrics(
