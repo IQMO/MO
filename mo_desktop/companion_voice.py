@@ -623,11 +623,7 @@ class CompanionVoiceMixin:
 
         def _finish() -> None:
             try:
-                text = (
-                    voice.stop_and_transcribe(initial_prompt=transcription_prompt)
-                    if transcription_prompt
-                    else voice.stop_and_transcribe()
-                )
+                text = voice.stop_and_transcribe(initial_prompt=transcription_prompt)
             finally:
                 self._voice_transcribing = False
             if panic_generation != int(getattr(self, "_panic_generation", 0)):
@@ -726,7 +722,9 @@ class CompanionVoiceMixin:
             recent.append(text[-120:])
             if len(recent) == 3:
                 break
-        return " ".join(reversed(recent))[-320:]
+        # The assistant's own name leads, so Whisper hears "MO" rather than a
+        # look-alike word; recent wording follows for continuity.
+        return ("MO. " + " ".join(reversed(recent))[-316:]).strip()
 
     def _poll_voice_autostop(self) -> None:
         """The recorder can self-stop at the max-seconds cap from its audio thread.
