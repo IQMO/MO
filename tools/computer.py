@@ -138,7 +138,6 @@ def _execute_app_launch(args: dict[str, Any]) -> str:
         query=launched.query,
         pid=launched.pid,
         baseline=baseline,
-        timeout=0.35,
         cancel_event=args.get("_cancel_event"),
     )
     if outcome.status == "verified" and outcome.target is not None and outcome.observation is not None:

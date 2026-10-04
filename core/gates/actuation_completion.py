@@ -12,6 +12,9 @@ class ActuationEvidence:
     complete: bool
     attempted: bool
     reason: str = ""
+    # False when the action bound no target (a launch whose window has not
+    # appeared): no later observation can match it, so asking for one is futile.
+    observable: bool = True
 
 
 def computer_no_progress_block_reason(
@@ -123,6 +126,13 @@ def evaluate_actuation_evidence(
     if action_events:
         action_event = action_events[-1]
         target_id = str(action_event.get("target_id") or "")
+        if not target_id:
+            return ActuationEvidence(
+                complete=False,
+                attempted=True,
+                reason="The app window had not appeared when MO checked.",
+                observable=False,
+            )
         target_revision = int(action_event.get("target_revision") or 0)
         action_sequence = int(action_event.get("sequence") or 0)
         for index, name, event in successful:

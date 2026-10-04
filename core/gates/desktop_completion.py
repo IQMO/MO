@@ -122,7 +122,7 @@ def run_desktop_completion_gate(
             )
         )
     )
-    if count != action_checkpoint:
+    if count != action_checkpoint and evidence.observable:
         _emit_desktop_completion(
             monitor, "verification", count=action_checkpoint,
             reason=evidence.reason, tool_sequence=tool_sequence,
