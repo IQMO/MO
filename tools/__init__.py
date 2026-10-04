@@ -1825,6 +1825,7 @@ def execute_generate_image(arguments: dict[str, Any]) -> str:
 
     saved = result.get("path") or out_path
     backend = result.get("backend") or imagegen.backend_label(config)
+    normalized = f"; {result['normalized']}" if result.get("normalized") else ""
     # Model-facing text MUST carry the full save path (and backend) so MO can tell
     # the operator where the file is and which source made it — not just re-describe
     # the prompt.
@@ -1835,8 +1836,8 @@ def execute_generate_image(arguments: dict[str, Any]) -> str:
         # The label (which emit_operator_image wraps) carries the full path so MO
         # can tell the operator where the file is and which backend made it.
         from core.visualize.operator_visual import emit_operator_image
-        return emit_operator_image(saved, label=f"Generated image at {saved} (backend: {backend}, size {size})")
-    return f"Generated image saved: {saved} (backend: {backend}, size {size})"
+        return emit_operator_image(saved, label=f"Generated image at {saved} (backend: {backend}, size {size}){normalized}")
+    return f"Generated image saved: {saved} (backend: {backend}, size {size}){normalized}"
 
 
 def execute_edit_image(arguments: dict[str, Any]) -> str:

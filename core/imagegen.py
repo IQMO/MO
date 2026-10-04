@@ -74,56 +74,93 @@ def _png_artifact_issue(path: Path, expected_size: str) -> str | None:
     return None
 
 
-def _normalize_png_artifact(path: Path, expected_size: str) -> str | None:
+def _normalize_png_artifact(path: Path, expected_size: str) -> tuple[str | None, str]:
     """Validate a generated PNG and normalize a backend size mismatch.
 
     Backends occasionally return a nearby supported resolution despite an exact
     request.  Keep that transport result only after the existing image-edit
     owner has resized it through a staged file and the staged PNG passes the
-    same custody check.  Pillow remains optional: without it, the mismatch is
-    reported honestly instead of weakening the requested-size contract.
+    same custody check.  A different aspect ratio is centre-cropped to the
+    requested one first, so the resize scales uniformly instead of stretching
+    the picture, and the returned note says so.  Pillow remains optional:
+    without it, the mismatch is reported honestly instead of weakening the
+    requested-size contract.  Returns ``(issue, note)``.
     """
     structural_issue = _png_artifact_issue(path, "")
     if structural_issue:
-        return structural_issue
+        return structural_issue, ""
 
     requested = _requested_dimensions(expected_size)
     mismatch = _png_artifact_issue(path, expected_size)
     if not mismatch or requested is None:
-        return mismatch
+        return mismatch, ""
 
+    note = ""
     try:
         from . import imageedit
 
         if not imageedit.available():
-            return f"{mismatch}; image resizing is unavailable"
+            return f"{mismatch}; image resizing is unavailable", ""
         import os
         import tempfile
 
+        from PIL import Image
+
         requested_width, requested_height = requested
-        descriptor, staged_name = tempfile.mkstemp(
-            prefix=f".{path.stem}-normalized-",
-            suffix=".png",
-            dir=str(path.parent),
-        )
-        os.close(descriptor)
-        staged = Path(staged_name)
+        with Image.open(path) as generated:
+            width, height = generated.size
+        staged_files: list[Path] = []
+
+        def stage(label: str) -> Path:
+            descriptor, name = tempfile.mkstemp(
+                prefix=f".{path.stem}-{label}-", suffix=".png", dir=str(path.parent),
+            )
+            os.close(descriptor)
+            staged_files.append(Path(name))
+            return staged_files[-1]
+
         try:
+            source = path
+            if abs(width * requested_height - height * requested_width) > 0.01 * width * requested_height:
+                crop_width = min(width, round(height * requested_width / requested_height))
+                crop_height = min(height, round(width * requested_height / requested_width))
+                source = stage("cropped")
+                imageedit.crop(
+                    str(path),
+                    x=(width - crop_width) // 2,
+                    y=(height - crop_height) // 2,
+                    width=crop_width,
+                    height=crop_height,
+                    out=str(source),
+                )
+                note = (
+                    f"centre-cropped the backend's {width}x{height} PNG to "
+                    f"{crop_width}x{crop_height} to keep the requested aspect"
+                )
+            staged = stage("normalized")
             imageedit.resize(
-                str(path),
+                str(source),
                 width=requested_width,
                 height=requested_height,
                 out=str(staged),
             )
             normalized_issue = _png_artifact_issue(staged, expected_size)
             if normalized_issue:
-                return f"{mismatch}; resized output was {normalized_issue}"
+                return f"{mismatch}; resized output was {normalized_issue}", ""
             staged.replace(path)
         finally:
-            staged.unlink(missing_ok=True)
+            for staged_file in staged_files:
+                staged_file.unlink(missing_ok=True)
     except Exception as exc:
-        return f"{mismatch}; resize failed: {exc}"
-    return None
+        return f"{mismatch}; resize failed: {exc}", ""
+    return None, note
+
+
+def _generated(path: Path, backend: str, note: str) -> dict:
+    result = {"ok": True, "path": str(path), "backend": backend}
+    if note:
+        result["normalized"] = note
+    return result
 
 
 def _is_cancelled(cancel_event) -> bool:
@@ -314,11 +351,11 @@ def _generate_openai(
         if _is_cancelled(cancel_event):
             out.unlink(missing_ok=True)
             return _cancelled_result("openai_compatible")
-        issue = _normalize_png_artifact(out, size)
+        issue, note = _normalize_png_artifact(out, size)
         if issue:
             out.unlink(missing_ok=True)
             return {"ok": False, "error": f"image API produced {issue}", "backend": "openai_compatible"}
-        return {"ok": True, "path": str(out), "backend": "openai_compatible"}
+        return _generated(out, "openai_compatible", note)
 
     img_url = data.get("url")
     if img_url:
@@ -333,11 +370,11 @@ def _generate_openai(
         if _is_cancelled(cancel_event):
             out.unlink(missing_ok=True)
             return _cancelled_result("openai_compatible")
-        issue = _normalize_png_artifact(out, size)
+        issue, note = _normalize_png_artifact(out, size)
         if issue:
             out.unlink(missing_ok=True)
             return {"ok": False, "error": f"image API produced {issue}", "backend": "openai_compatible"}
-        return {"ok": True, "path": str(out), "backend": "openai_compatible"}
+        return _generated(out, "openai_compatible", note)
 
     return {"ok": False, "error": "image API returned no image data", "backend": "openai_compatible"}
 
@@ -448,11 +485,11 @@ def _generate_codex(
             return {"ok": False, "error": f"codex image custody failed: {exc}", "backend": "codex"}
 
     if out.is_file() and out.stat().st_mtime_ns > pre_mtime:
-        issue = _normalize_png_artifact(out, size)
+        issue, note = _normalize_png_artifact(out, size)
         if issue:
             out.unlink(missing_ok=True)
             return {"ok": False, "error": f"codex produced {issue}", "backend": "codex"}
-        return {"ok": True, "path": str(out), "backend": "codex"}
+        return _generated(out, "codex", note)
 
     tail = ((stderr or "") + (stdout or "")).strip()[-300:]
     return {"ok": False, "error": f"codex produced no image file. {tail}".strip(), "backend": "codex"}
