@@ -245,7 +245,10 @@ def explainer_activity_lines(output: str) -> tuple[str, ...]:
                 checked = label(item.get("verification")) or "unchecked"
                 audio = "narration unchecked"
                 if checked == "passed" and type(item.get("narrated")) is bool:
-                    audio = "narrated" if item["narrated"] else "silent"
+                    # A music bed is audio but not narration; never call it silent.
+                    audio = "narrated" if item["narrated"] else "music only" if item.get("music") is True else "silent"
+                    if item["narrated"] and item.get("music") is True:
+                        audio = "narrated + music"
                 detail += f" ({audio}, {checked})"
             available.append(detail)
         checks = label(verification.get("status")) or "not checked"

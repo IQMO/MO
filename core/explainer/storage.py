@@ -351,6 +351,7 @@ def _artifact_availability(root: Path, *, verify_videos: bool = True) -> dict[st
                 "sha256": str(report.get("sha256") or ""),
                 "duration_seconds": report.get("duration_seconds"),
                 "narrated": bool(report.get("narrated")),
+                "music": bool((report.get("audio") or {}).get("music")),
             })
         result[name] = entry
     return result

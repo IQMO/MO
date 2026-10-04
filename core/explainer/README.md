@@ -10,7 +10,8 @@ Reuse authorized media or one coherent set of isolated transparent elements
 reusable assets or an element sheet, never a pre-composited scene, and inspect it
 against the brief before ingesting. Ingest with `add-media --origin mo-generated`.
 Accepts PNG/JPEG/WebP, muted MP4/MOV/MKV/WebM (no SVG), and WAV/MP3/M4A/AAC/OGG/FLAC
-music the user supplied or licensed (never invent a license). Compose one hierarchy
+music: user-supplied, licensed, or synthesized locally (`mo-generated`); never invent
+a license. Compose one hierarchy
 (atmosphere, subject, action/evidence, then trusted overlays), not a wall of
 cards; reuse the canonical product mark as media.
 
@@ -30,7 +31,7 @@ audience, language, tone, call_to_action, target_duration_seconds (5-600).
 `add-media` origins: `user`, `captured`, `mo-generated`, `licensed-local`. Optional
 project `music`: `asset_id` (an audio asset; loops or trims to the video), `volume`
 (0-1, default 0.25), `duck` (default true: dips under narration), `fade_in`/`fade_out`
-seconds (default 1/2). Every audio track is loudness-normalized to -16 LUFS.
+seconds (default 1/2). Every audio track gets one loudness pass targeting -16 LUFS.
 
 Scenes need unique `id`, `kind` (`title`, `concept`, `process`, `comparison`,
 `summary`), `duration` (1-60s), `narration`, `elements` (painted back to front).

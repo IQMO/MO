@@ -283,7 +283,7 @@ def _emit_progress(status: dict) -> None:
         "total": progress.get("total", 0),
         "style": {key: str(style.get(key) or "")[:64] for key in ("source", "skin", "layout")},
         "artifacts": {
-            name: {key: item[key] for key in ("available", "verification", "narrated") if key in item}
+            name: {key: item[key] for key in ("available", "verification", "narrated", "music") if key in item}
             for name, item in (status.get("artifacts") or {}).items()
         },
         "verification": {key: verification[key] for key in ("status", "kind") if key in verification},
