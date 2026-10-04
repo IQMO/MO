@@ -2161,7 +2161,7 @@ class CompanionSurface(
                     _write_stderr(traceback.format_exc())
             if self._running:
                 try:
-                    root.schedule(delay, _gui_tick)
+                    root.schedule(delay, _gui_tick, frame=delay <= _GUI_ACTIVE_FRAME_MS)
                 except Exception:
                     self._running = False
 

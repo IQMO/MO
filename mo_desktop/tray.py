@@ -830,7 +830,7 @@ class CubeLauncher:
         self._blit(self._animation_frame(self._progress))
         if phase < 1:
             delay = max(1, 16 - round((time.perf_counter() - frame_started) * 1000))
-            self._animation = self.gui.schedule(delay, self._animate)
+            self._animation = self.gui.schedule(delay, self._animate, frame=True)
         else:
             self._animation = None
             if self._animation_target == 0.0:
@@ -1881,7 +1881,7 @@ class TrayPopup:
     def _schedule(self) -> None:
         if self._after is None and self._surface is not None:
             self._frame_at = time.perf_counter()
-            self._after = self.gui.schedule(16, self._frame)
+            self._after = self.gui.schedule(16, self._frame, frame=True)
 
     def _frame(self) -> None:
         from mo_desktop.cube_motion import _time_scaled_ease
@@ -1916,7 +1916,7 @@ class TrayPopup:
             self._effects.refresh_hwnd(self._surface._native_hwnd, *self._size,
                 self._visuals.metrics.panel_corner_radius, self._visuals.effects, self._visuals.token("_GLOW"))
         if moving:
-            self._after = self.gui.schedule(max(1, 16-(time.perf_counter()-now)*1000), self._frame)
+            self._after = self.gui.schedule(max(1, 16-(time.perf_counter()-now)*1000), self._frame, frame=True)
 
     def _render(self) -> None:
         import win32api, win32gui

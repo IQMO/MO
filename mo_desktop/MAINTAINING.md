@@ -798,6 +798,22 @@ rounding a 16 ms request into two default Windows timer quanta. These are
 requested budgets, not a guarantee of presented frames under load.
 
 Retarget finite motion from its current pose. Composer collapse and launcher
+Frame-rate loops on the resident lane (the active cube tick, launcher expand,
+tray popup, composer reveal) schedule with `frame=True`. `NativeGuiLoop` then
+releases the callback on the DirectComposition compositor clock
+(`DCompositionWaitForCompositorClock`) at the display tick nearest the requested
+deadline, so a 16 ms budget on a 144 Hz display becomes every second refresh
+instead of a free-running timer's 2/3-refresh beat. The wait is bounded, wakes
+for queued GUI work, and releases on timeout so a locked or sleeping display
+never strands a final paint; without the API the flag is an ordinary timer.
+Do not substitute `DwmFlush`: measured here its returns jitter between 3 and
+11 ms and it skips a pass when called late in the period. A frame that costs
+about a refresh or more (a full composer re-render) does not benefit; cut its
+cost instead of adding a second pacing mechanism. Measured on a 144 Hz display
+with the compositor clock as ground truth, sub-millisecond frames went from about
+40% irregular presented intervals to about 6%; this is cadence evidence only, not
+visible smoothness acceptance.
+
 menu dismissal reverse their existing symmetric curve without a full-size or
 full-opacity flash; repeated collapse does not restart it. Keep completed
 artwork cached, preserve premultiplied-alpha boundaries, and publish the final

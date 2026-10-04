@@ -1532,7 +1532,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             # Never clear an elapsed transition here: the completion tick owns the
             # final cached-base/latest-content paint.  Skipping it can strand a panel
             # on its last almost-full frame when one render crosses the deadline.
-            self._transition_after = self._gui.schedule(delay, self._panel_transition_tick)
+            self._transition_after = self._gui.schedule(delay, self._panel_transition_tick, frame=delay > 0)
         except Exception:
             self._transition_after = None
 
