@@ -24,11 +24,6 @@ _VOICE_ROLE_PREFIX_RE = re.compile(
     r"[ \t]*(?:\r?\n){2}",
     re.I,
 )
-# COMPAT(desktop-transcript-v0): replaced-by clean transcript plus active-role metadata; remove-when supported Desktop snapshots have been rewritten
-_V0_TURN_POLICY_TAIL_RE = re.compile(
-    r'^\s*\}\s*\(use\s+["“]single["”]\s+for\s+pick-one\)\.[\s\S]*?\][ \t]*(?:\r?\n){2}',
-    re.I,
-)
 
 
 class CompanionSessionMixin:
@@ -515,5 +510,4 @@ class CompanionSessionMixin:
         else:
             text = str(content or "").strip()
         text = _TURN_POLICY_PREFIX_RE.sub("", text, count=1)
-        text = _VOICE_ROLE_PREFIX_RE.sub("", text, count=1)
-        return _V0_TURN_POLICY_TAIL_RE.sub("", text, count=1).strip()
+        return _VOICE_ROLE_PREFIX_RE.sub("", text, count=1).strip()

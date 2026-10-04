@@ -69,10 +69,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "tray_enabled previously lived in the voice block; retire after supported Desktop configs "
         "have migrated to mo_desktop.tray_enabled"
     ),
-    "desktop-transcript-v0": (
-        "pre-metadata Desktop role and provider-policy transcript cleanup; retire after supported "
-        "Desktop snapshots have been rewritten"
-    ),
     "surface-handoff-v2": (
         "read-once import of the pre-journal latest.json handoff; retire after the supported "
         "upgrade window and v2 handoff expiry"
