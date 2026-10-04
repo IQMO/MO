@@ -12,9 +12,15 @@ from .render import (
     _require_pillow,
     caption_chunks,
     caption_layout,
+    header_layout,
     project_timeline,
     text_layout,
 )
+
+# Scene-end silence beyond this after measured speech reads as dead air.
+TRAILING_SILENCE_SECONDS = 2.5
+_TEXT_KINDS = frozenset({"text", "callout"})
+_CONTAINER_KINDS = frozenset({"box", "prism", "callout"})
 
 
 def quality_report(project: ExplainerProject) -> dict[str, Any]:
@@ -46,13 +52,28 @@ def quality_report(project: ExplainerProject) -> dict[str, Any]:
             if left >= right or top >= bottom or left < 0 or right > project.width or top < 0 or bottom > project.height:
                 errors.append({"scene": scene_id, "code": "caption_bounds", "detail": "caption background does not fit within the frame"})
                 break
+        trailing = float(row["duration"]) - float(row["speech_duration"])
+        if words and trailing > TRAILING_SILENCE_SECONDS:
+            warnings.append({"scene": scene_id, "code": "trailing_silence", "detail": f"{trailing:.1f}s after speech"})
+        header = header_layout(draw, project, scene, style)
         for element in scene.get("elements", []):
-            _check_bounds(draw, element, scene_id, project.width, safe_bottom, errors)
+            union = _union_bounds(draw, element)
+            if union is not None and element.get("bleed") is not True:
+                left, top, right, bottom = union
+                if left < 0 or right > project.width or top < 0 or bottom > safe_bottom:
+                    errors.append({"scene": scene_id, "code": "unsafe_bounds",
+                                   "detail": f"{element.get('type')} enters frame edge or subtitle lane"})
+            if union is not None and element.get("type") in _TEXT_KINDS:
+                for item in header:
+                    if _intersection(union, item["box"]) is not None:
+                        errors.append({"scene": scene_id, "code": "header_overlap",
+                                       "detail": f"{element.get('type')} overlaps the {item['kind']}"})
             media_warning = _media_resolution_warning(element, assets)
             if media_warning:
                 warnings.append({"scene": scene_id, "code": "upscaled_media", "detail": media_warning})
             if element.get("type") == "text" and len(str(element.get("text") or "")) > 180:
                 warnings.append({"scene": scene_id, "code": "dense_text", "detail": "visual text exceeds 180 characters"})
+        warnings.extend(_text_collisions(draw, scene, scene_id))
     declared_sources = {str(source["id"]) for source in project.data.get("sources", [])}
     for source_id in sorted(declared_sources - used_sources):
         warnings.append({"scene": "-", "code": "unused_source", "detail": source_id})
@@ -69,19 +90,13 @@ def quality_report(project: ExplainerProject) -> dict[str, Any]:
     }
 
 
-def _check_bounds(
-    draw,
-    element: dict[str, Any],
-    scene_id: str,
-    width: int,
-    safe_bottom: float,
-    errors: list[dict[str, str]],
-) -> None:
+def _union_bounds(draw, element: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    """Bound every sampled visible state of an element, effects included."""
     try:
         start = float(element.get("start", 0.0))
         end = float(element.get("end", start))
     except (TypeError, ValueError):
-        return
+        return None
     sample_times = {start, end}
     keyframes = element.get("keyframes")
     if isinstance(keyframes, list):
@@ -103,14 +118,80 @@ def _check_bounds(
         }
         bounds.append(_effect_bounds(element, _element_bounds(draw, element, moved)))
     if not bounds:
-        return
-    left = min(item[0] for item in bounds)
-    top = min(item[1] for item in bounds)
-    right = max(item[2] for item in bounds)
-    bottom = max(item[3] for item in bounds)
-    if left < 0 or right > width or top < 0 or bottom > safe_bottom:
-        kind = str(element.get("type") or "")
-        errors.append({"scene": scene_id, "code": "unsafe_bounds", "detail": f"{kind} enters frame edge or subtitle lane"})
+        return None
+    return (
+        min(item[0] for item in bounds),
+        min(item[1] for item in bounds),
+        max(item[2] for item in bounds),
+        max(item[3] for item in bounds),
+    )
+
+
+def _intersection(first, second) -> tuple[float, float, float, float] | None:
+    left, top = max(first[0], second[0]), max(first[1], second[1])
+    right, bottom = min(first[2], second[2]), min(first[3], second[3])
+    return (left, top, right, bottom) if right > left and bottom > top else None
+
+
+def _text_collisions(draw, scene: dict[str, Any], scene_id: str) -> list[dict[str, str]]:
+    """Advise when settled text overlaps other text or spills out of a shape.
+
+    Text that sits wholly inside one shape belongs to it, so crossing another
+    shape's edge (a badge stamped over a panel) is not a spill.
+    """
+    elements = [element for element in scene.get("elements", []) if isinstance(element, dict)]
+    scene_end = float(scene.get("duration", 6.0))
+    warnings: list[dict[str, str]] = []
+    reported: set[tuple[int, str, int]] = set()
+    for index, text in enumerate(elements):
+        if text.get("type") != "text":
+            continue
+        for seconds in _shared_moments(text, scene_end):
+            text_box = _settled_bounds(draw, text, seconds)
+            if text_box is None:
+                continue
+            spills: list[int] = []
+            contained = False
+            for other_index, other in enumerate(elements):
+                kind = other.get("type")
+                if other_index == index or other.get("bleed") is True or kind not in _TEXT_KINDS | _CONTAINER_KINDS:
+                    continue
+                if not float(other.get("start", 0.0)) <= seconds <= float(other.get("end", scene_end)):
+                    continue
+                other_box = _settled_bounds(draw, other, seconds)
+                if other_box is None or _intersection(text_box, other_box) is None:
+                    continue
+                if kind in _TEXT_KINDS:
+                    key = (min(index, other_index), "text_overlap", max(index, other_index))
+                    if key not in reported:
+                        reported.add(key)
+                        warnings.append({"scene": scene_id, "code": "text_overlap",
+                                         "detail": f"text {text.get('text')!r} overlaps {kind} {other.get('text')!r}"})
+                elif (
+                    text_box[0] >= other_box[0] - 2 and text_box[1] >= other_box[1] - 2
+                    and text_box[2] <= other_box[2] + 2 and text_box[3] <= other_box[3] + 2
+                ):
+                    contained = True
+                else:
+                    spills.append(other_index)
+            if spills and not contained and (index, "text_box_overflow", spills[0]) not in reported:
+                reported.add((index, "text_box_overflow", spills[0]))
+                warnings.append({"scene": scene_id, "code": "text_box_overflow",
+                                 "detail": f"text {text.get('text')!r} spills out of a {elements[spills[0]].get('type')}"})
+    return warnings
+
+
+def _shared_moments(element: dict[str, Any], scene_end: float) -> tuple[float, float]:
+    start = float(element.get("start", 0.0))
+    end = float(element.get("end", scene_end))
+    return (start + end) / 2.0, max(start, end - 0.05)
+
+
+def _settled_bounds(draw, element: dict[str, Any], seconds: float):
+    state, _controlled = _keyframe_state(element, seconds, float(element.get("start", 0.0)))
+    if state.get("opacity", 1.0) <= 0.001:
+        return None
+    return _element_bounds(draw, element, state)
 
 
 def _element_bounds(

@@ -1151,19 +1151,6 @@ def _render_scene_frame(
         theme,
         style,
     )
-    if evidence:
-        source_domains = {
-            str(source["id"]): str(source.get("url") or "").split("//", 1)[-1].split("/", 1)[0]
-            for source in project.data.get("sources", [])
-        }
-        label = "Sources: " + ", ".join(f"[{item}] {source_domains.get(item, '')}".rstrip() for item in evidence)
-        draw.text(
-            (project.width - 28 * coordinate_scale, 79 * coordinate_scale),
-            label,
-            font=_font(max(1, round(18 * coordinate_scale))),
-            fill=_rgba(theme["muted"], 230),
-            anchor="ra",
-        )
     return image.convert("RGBA")
 
 
@@ -1264,7 +1251,7 @@ def _draw_element(
         x, y, width, height, prism_depth, prism_rise = _prism_metrics(element, x, y, scale)
     stroke = max(1, round(float(element.get("stroke", 4)) * scale))
     if kind == "text":
-        draw.multiline_text(**text_layout(element, x, y, scale), fill=color)
+        draw.multiline_text(**text_layout(element, x, y, scale, coordinate_scale=_coordinate_scale(style)), fill=color)
     elif kind == "box":
         box = (x, y, x + width, y + height)
         radius = float(element.get("radius", 24)) * scale
@@ -1792,9 +1779,15 @@ def _mix(start: float, end: float, progress: float) -> float:
     return start + (end - start) * progress
 
 
-def text_layout(element: dict[str, Any], x: float, y: float, scale: float = 1.0) -> dict[str, Any]:
-    """Share the renderer's exact wrapping, font and anchor with bounds checks."""
-    size = max(12, round(float(element.get("size", 44)) * scale))
+def text_layout(
+    element: dict[str, Any], x: float, y: float, scale: float = 1.0, *, coordinate_scale: float = 1.0,
+) -> dict[str, Any]:
+    """Share the renderer's exact wrapping, font and anchor with bounds checks.
+
+    The 12 px minimum applies at output size, so a supersampled frame clamps
+    at 12 x its coordinate scale and wraps like the unscaled quality check.
+    """
+    size = max(round(12 * coordinate_scale), round(float(element.get("size", 44)) * scale))
     font = _font(size, bold=str(element.get("weight") or "bold") != "regular")
     lines = _wrap_text(str(element.get("text") or ""), font, max(80, int(element.get("width", 800))))
     align = str(element.get("align") or "left")
@@ -1836,6 +1829,64 @@ def _motion(
     return alpha, 0.0, 0.0, 1.0, 1.0
 
 
+def header_layout(
+    draw,
+    project: ExplainerProject,
+    scene: dict[str, Any],
+    style: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Measure the header items drawn over a scene, shared with quality checks."""
+    coordinate_scale = _coordinate_scale(style)
+    spacing = style.get("spacing") if isinstance(style.get("spacing"), dict) else {}
+    margin = int(spacing.get("margin", 32 * coordinate_scale))
+    brand = style.get("brand") if isinstance(style.get("brand"), dict) else {}
+    brand_enabled = brand.get("enabled", False) is True
+    decorations = style.get("decorations", {})
+    items: list[dict[str, Any]] = []
+    title_x = margin
+    if brand_enabled and str(brand.get("mark") or "four-cube") == "four-cube":
+        cube = max(1, round(9 * coordinate_scale))
+        gap = max(1, round(3 * coordinate_scale))
+        top = 20 * coordinate_scale
+        items.append({
+            "kind": "brand mark", "xy": (margin, top), "cube": cube, "gap": gap,
+            "radius": max(1, round(2 * coordinate_scale)),
+            "box": (margin, top, margin + 2 * max(2, cube) + gap, top + 2 * max(2, cube) + gap),
+        })
+        title_x += 34 * coordinate_scale
+    brand_name = str(brand.get("name") or "").strip() if brand_enabled else ""
+    title = project.title if decorations.get("title", True) else ""
+    label = " · ".join(value for value in (brand_name, title) if value)
+    if label:
+        font = _font(max(1, round(22 * coordinate_scale)), bold=True)
+        xy = (title_x, 25 * coordinate_scale)
+        items.append({"kind": "title", "xy": xy, "text": label, "font": font, "box": draw.textbbox(xy, label, font=font)})
+    if decorations.get("scene_badge", True):
+        kind = str(scene.get("kind") or "concept").upper()
+        badge_width = max(110, len(kind) * 14) * coordinate_scale
+        items.append({
+            "kind": "scene badge", "text": kind,
+            "box": (margin, 62 * coordinate_scale, margin + badge_width, 96 * coordinate_scale),
+            "radius": 17 * coordinate_scale,
+            "text_xy": (margin + 16 * coordinate_scale, 79 * coordinate_scale),
+            "font": _font(max(1, round(16 * coordinate_scale)), bold=True),
+        })
+    evidence = scene_source_ids(scene)
+    if evidence:
+        source_domains = {
+            str(source["id"]): str(source.get("url") or "").split("//", 1)[-1].split("/", 1)[0]
+            for source in project.data.get("sources", [])
+        }
+        text = "Sources: " + ", ".join(f"[{item}] {source_domains.get(item, '')}".rstrip() for item in evidence)
+        font = _font(max(1, round(18 * coordinate_scale)))
+        xy = (project.width - 28 * coordinate_scale, 79 * coordinate_scale)
+        items.append({
+            "kind": "sources label", "xy": xy, "text": text, "font": font,
+            "box": draw.textbbox(xy, text, font=font, anchor="ra"),
+        })
+    return items
+
+
 def _draw_header(
     draw,
     project: ExplainerProject,
@@ -1843,50 +1894,27 @@ def _draw_header(
     theme: dict[str, str],
     style: dict[str, Any],
 ) -> None:
-    coordinate_scale = _coordinate_scale(style)
-    spacing = style.get("spacing") if isinstance(style.get("spacing"), dict) else {}
-    margin = int(spacing.get("margin", 32 * coordinate_scale))
-    brand =style.get("brand") if isinstance(style.get("brand"), dict) else {}
-    brand_enabled = brand.get("enabled", False) is True
-    title_x = margin
-    if brand_enabled and str(brand.get("mark") or "four-cube") == "four-cube":
-        draw_four_cube_mark(
-            draw,
-            margin,
-            20 * coordinate_scale,
-            cube_size=max(1, round(9 * coordinate_scale)),
-            gap=max(1, round(3 * coordinate_scale)),
-            radius=max(1, round(2 * coordinate_scale)),
-            fill=_rgba(theme["accent"], 255),
-            shade=_rgba(theme["background"], 170),
-        )
-        title_x += 34 * coordinate_scale
-    brand_name = str(brand.get("name") or "").strip() if brand_enabled else ""
-    decorations = style.get("decorations", {})
-    title = project.title if decorations.get("title", True) else ""
-    label = " · ".join(value for value in (brand_name, title) if value)
-    if label:
-        draw.text(
-            (title_x, 25 * coordinate_scale),
-            label,
-            font=_font(max(1, round(22 * coordinate_scale)), bold=True),
-            fill=_rgba(theme["foreground"], 220),
-        )
-    if decorations.get("scene_badge", True):
-        kind = str(scene.get("kind") or "concept").upper()
-        badge_width = max(110, len(kind) * 14) * coordinate_scale
-        draw.rounded_rectangle(
-            (margin, 62 * coordinate_scale, margin + badge_width, 96 * coordinate_scale),
-            radius=17 * coordinate_scale,
-            fill=_rgba(theme["accent"], 45),
-        )
-        draw.text(
-            (margin + 16 * coordinate_scale, 79 * coordinate_scale),
-            kind,
-            font=_font(max(1, round(16 * coordinate_scale)), bold=True),
-            fill=_rgba(theme["accent"], 255),
-            anchor="lm",
-        )
+    for item in header_layout(draw, project, scene, style):
+        if item["kind"] == "brand mark":
+            draw_four_cube_mark(
+                draw,
+                item["xy"][0],
+                item["xy"][1],
+                cube_size=item["cube"],
+                gap=item["gap"],
+                radius=item["radius"],
+                fill=_rgba(theme["accent"], 255),
+                shade=_rgba(theme["background"], 170),
+            )
+        elif item["kind"] == "title":
+            draw.text(item["xy"], item["text"], font=item["font"], fill=_rgba(theme["foreground"], 220))
+        elif item["kind"] == "scene badge":
+            draw.rounded_rectangle(item["box"], radius=item["radius"], fill=_rgba(theme["accent"], 45))
+            draw.text(
+                item["text_xy"], item["text"], font=item["font"], fill=_rgba(theme["accent"], 255), anchor="lm",
+            )
+        else:
+            draw.text(item["xy"], item["text"], font=item["font"], fill=_rgba(theme["muted"], 230), anchor="ra")
 
 
 def _draw_caption(

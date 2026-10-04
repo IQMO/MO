@@ -42,8 +42,10 @@ Element, style and motion fields: `mo --explainer guide elements`.
 After `narrate`, compare speech_duration and duration in `timings.json`; total
 time is 0.2s lead plus sum(max(scene duration, speech_duration + 0.65s)). Optional
 project `voice.speed` (0.5-2, default 1) slows speech below 1; shortening text may
-not slow it. `check` covers schema, assets, layout, pacing, and raster media
-enlarged beyond source pixels, not artistry; skip `validate`. Changed text,
+not slow it. `check` covers schema, assets, pacing (including silence after
+speech), raster media enlarged beyond source pixels, and layout: frame edges,
+the caption lane, header items (title, badge, sources label), overlapping text,
+and text spilling out of a shape; not artistry. Skip `validate`. Changed text,
 durations or speed need `narrate`. Preview work
 over one minute first (`--preview-seconds 20`; `--preview-width 480` is faster,
 keeping supersampling and finish); its receipt's `final_estimate.seconds`
@@ -92,7 +94,8 @@ Example (retain the asset entry):
 omitted; start/end are scene seconds inside the element window, start < end. It
 excludes `keyframes`. `animation:none` disables entrance/exit presets, not explicit
 motion (presets: fade/rise/slide_left/slide_right/scale/draw). `fill:false` is
-outline only. No arbitrary paths, grouped transforms, or custom fonts (`system-sans`).
+outline only. `bleed:true` lets atmosphere (a glow or backdrop) cross frame
+edges and the caption lane. No arbitrary paths, grouped transforms, or custom fonts (`system-sans`).
 
 Optional `style.motion.blur_samples` (1-8) and `shutter_angle` (0-360) give
 deterministic motion blur; `style.render` controls `supersampling` (1-4; `init`

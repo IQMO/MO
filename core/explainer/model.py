@@ -496,8 +496,9 @@ def _validate_element(
         stroke = _finite_number(element["stroke"], f"{prefix}.stroke", issues)
         if stroke is not None and not 1.0 <= stroke <= 64.0:
             issues.append(f"{prefix}.stroke must be between 1 and 64")
-    if "fill" in element and not isinstance(element["fill"], bool):
-        issues.append(f"{prefix}.fill must be a boolean")
+    for key in ("fill", "bleed"):
+        if key in element and not isinstance(element[key], bool):
+            issues.append(f"{prefix}.{key} must be a boolean")
     if "fill_opacity" in element:
         if kind not in {"box", "circle", "prism", "callout"}:
             issues.append(f"{prefix}.fill_opacity is supported only for box, circle, prism, and callout")
