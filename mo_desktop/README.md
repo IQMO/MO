@@ -119,8 +119,7 @@ their widgets in a host on the same GUI thread; normal Desktop startup neither
 imports Tk nor creates an interpreter. Mologrthim remains exposed through the
 Work cube; only further concept and visual changes are parked. Settings, Phone
 and Files use the shared native WebView renderer. Shell owns its native control
-strip;
-Windows file pickers and attached third-party windows retain their own chrome.
+strip; Windows file pickers and attached third-party windows retain their own chrome.
 
 ## What the companion can do
 

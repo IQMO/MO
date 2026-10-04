@@ -91,7 +91,7 @@ content is not restored as Desktop conversation memory.
   running-app rows focus each exact process, and never create another Shell.
 - `CompanionTray.item_specs()` is the single Desktop app action catalog. The
   launcher projects every app action. The optional themed tray popup projects
-  Settings plus Show/Hide, session toggles, Advanced and danger rows; it is not
+  Settings plus Show/Hide, toggles, Advanced and danger rows; it is not
   a second app launcher. The cube's double-click expands those same four cubes
   from the live cluster's
   center into square app-bearing cubes in the existing cube window, even if the
