@@ -233,8 +233,8 @@ def validate_project(data: dict[str, Any]) -> list[str]:
             issues.append(f"duplicate asset id: {asset_id}")
         else:
             assets_by_id[asset_id] = asset
-        if media_type not in {"image", "video"}:
-            issues.append(f"{prefix}.type must be image or video")
+        if media_type not in {"image", "video", "audio"}:
+            issues.append(f"{prefix}.type must be image, video or audio")
         raw_path = str(asset.get("path") or "")
         asset_path = Path(raw_path)
         if not raw_path or asset_path.is_absolute() or ".." in asset_path.parts or asset_path.parts[:1] != ("media",):
@@ -243,11 +243,15 @@ def validate_project(data: dict[str, Any]) -> list[str]:
             issues.append(f"{prefix}.sha256 must be a lowercase SHA-256 digest")
         if str(asset.get("origin") or "") not in ASSET_ORIGINS:
             issues.append(f"{prefix}.origin is unsupported")
+        if media_type == "audio":
+            _bounded_asset_number(asset, "duration_seconds", 0.5, 3600.0, prefix, issues)
+            continue
         _bounded_asset_number(asset, "width", 1, 7680, prefix, issues, integer=True)
         _bounded_asset_number(asset, "height", 1, 4320, prefix, issues, integer=True)
         if media_type == "video":
             _bounded_asset_number(asset, "duration_seconds", 0.1, 30.0, prefix, issues)
             _bounded_asset_number(asset, "fps", 1.0, 120.0, prefix, issues)
+    _validate_music(data.get("music"), assets_by_id, issues)
 
     source_ids: set[str] = set()
     sources = data.get("sources")
@@ -352,6 +356,23 @@ def validate_project(data: dict[str, Any]) -> list[str]:
                 assets_by_id=assets_by_id,
             )
     return issues
+
+
+def _validate_music(music: Any, assets_by_id: dict[str, dict[str, Any]], issues: list[str]) -> None:
+    """A music bed plays under narration from one project-owned audio asset."""
+    if music is None:
+        return
+    if not isinstance(music, dict):
+        issues.append("music must be an object")
+        return
+    asset = assets_by_id.get(str(music.get("asset_id") or ""))
+    if asset is None or asset.get("type") != "audio":
+        issues.append("music.asset_id must reference an audio asset")
+    for key, minimum, maximum in (("volume", 0.0, 1.0), ("fade_in", 0.0, 10.0), ("fade_out", 0.0, 10.0)):
+        if key in music:
+            _bounded_asset_number(music, key, minimum, maximum, "music", issues)
+    if "duck" in music and not isinstance(music["duck"], bool):
+        issues.append("music.duck must be a boolean")
 
 
 def _validate_brief(brief: Any, issues: list[str]) -> None:

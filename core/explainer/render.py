@@ -145,10 +145,14 @@ def render_video(
         "-f", "rawvideo", "-pix_fmt", "rgb24",
         "-s", f"{output_width}x{output_height}", "-r", str(project.fps), "-i", "-",
     ]
-    if has_audio:
-        command.extend(["-i", str(audio)])
+    audio_inputs, audio_graph, audio_receipt = _audio_mix(
+        project, audio if has_audio else None, expected_duration,
+    )
+    command.extend(audio_inputs)
+    if audio_graph:
+        command.extend(["-filter_complex", audio_graph, "-map", "0:v", "-map", "[aout]"])
     command.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"])
-    if has_audio:
+    if audio_graph:
         command.extend(["-c:a", "aac", "-b:a", "160k"])
     else:
         command.append("-an")
@@ -206,8 +210,11 @@ def render_video(
                 expected_width=output_width,
                 expected_height=output_height,
                 expected_fps=project.fps,
-                expect_audio=has_audio,
+                expect_audio=bool(audio_graph),
             )
+            # The stream may carry only music; narrated means narration.
+            inspection["narrated"] = has_audio
+            inspection["audio"] = audio_receipt
             inspection["narration"] = audio_details or {"source": "silent"}
             decorations = (project.data.get("style") or {}).get("decorations", {})
             cues = subtitle_cues(timeline) if preview_seconds is None else []
@@ -259,6 +266,71 @@ def render_video(
             staged_report.unlink(missing_ok=True)
             raise
     return target
+
+
+LOUDNESS_TARGET = "loudnorm=I=-16:TP=-1.5:LRA=11"
+
+
+def _audio_mix(
+    project: ExplainerProject,
+    narration: Path | None,
+    duration: float,
+) -> tuple[list[str], str, dict[str, Any]]:
+    """Mix narration and an optional music bed, then normalize loudness.
+
+    The bed loops or trims to the video, fades in and out, and by default is
+    ducked under the voice with a sidechain compressor. One loudness pass
+    targets -16 LUFS integrated and -1.5 dBTP so uploads are not clipped.
+    """
+    from .model import project_asset_path
+
+    music = project.data.get("music") if isinstance(project.data.get("music"), dict) else None
+    inputs: list[str] = []
+    chains: list[str] = []
+    labels: list[str] = []
+    index = 1
+    if narration is not None:
+        inputs.extend(["-i", str(narration)])
+        chains.append(f"[{index}:a]aresample=48000,aformat=channel_layouts=stereo[voice]")
+        labels.append("[voice]")
+        index += 1
+    ducked = False
+    if music is not None:
+        asset = project.assets[str(music["asset_id"])]
+        inputs.extend(["-stream_loop", "-1", "-i", str(project_asset_path(project, asset))])
+        fade_in = float(music.get("fade_in", 1.0))
+        fade_out = float(music.get("fade_out", 2.0))
+        chain = (
+            f"[{index}:a]aresample=48000,aformat=channel_layouts=stereo,"
+            f"atrim=0:{duration:.6f},asetpts=PTS-STARTPTS,volume={float(music.get('volume', 0.25)):.4f}"
+        )
+        if fade_in > 0:
+            chain += f",afade=t=in:st=0:d={fade_in:.3f}"
+        if fade_out > 0:
+            chain += f",afade=t=out:st={max(0.0, duration - fade_out):.3f}:d={fade_out:.3f}"
+        chains.append(chain + "[bed]")
+        ducked = narration is not None and music.get("duck", True) is not False
+        if ducked:
+            chains[0] = chains[0].replace("[voice]", "[voice_raw]")
+            chains.append("[voice_raw]asplit=2[voice][key]")
+            chains.append("[bed][key]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[bed_ducked]")
+            labels.append("[bed_ducked]")
+        else:
+            labels.append("[bed]")
+    receipt = {
+        "narration": narration is not None,
+        "music": str(music["asset_id"]) if music is not None else "",
+        "ducked": ducked,
+        "loudness": "" if not labels else "EBU R128 single pass to -16 LUFS, -1.5 dBTP",
+    }
+    if not labels:
+        return [], "", receipt
+    mixed = labels[0]
+    if len(labels) > 1:
+        chains.append(f"{''.join(labels)}amix=inputs={len(labels)}:duration=first[mix]")
+        mixed = "[mix]"
+    chains.append(f"{mixed}{LOUDNESS_TARGET},aresample=48000[aout]")
+    return inputs, ";".join(chains), receipt
 
 
 def _preview_dimensions(
@@ -788,6 +860,8 @@ class _PreparedMedia:
                 if asset.get("type") == "image":
                     self.images[asset_id] = self._load_image(asset_id, asset)
                     continue
+                if asset.get("type") != "video":
+                    continue  # A music bed is mixed by the encoder, not drawn.
                 path = project_asset_path(self.project, asset)
                 width = int(asset["width"])
                 height = int(asset["height"])

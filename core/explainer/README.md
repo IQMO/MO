@@ -9,7 +9,8 @@ Reuse authorized media or one coherent set of isolated transparent elements
 (`edit_image` edits them). With `generate_image`, make only
 reusable assets or an element sheet, never a pre-composited scene, and inspect it
 against the brief before ingesting. Ingest with `add-media --origin mo-generated`.
-Accepts PNG/JPEG/WebP and muted MP4/MOV/MKV/WebM (no SVG). Compose one hierarchy
+Accepts PNG/JPEG/WebP, muted MP4/MOV/MKV/WebM (no SVG), and WAV/MP3/M4A/AAC/OGG/FLAC
+music the user supplied or licensed (never invent a license). Compose one hierarchy
 (atmosphere, subject, action/evidence, then trusted overlays), not a wall of
 cards; reuse the canonical product mark as media.
 
@@ -26,7 +27,10 @@ Layouts (`explanation`, `process`, `comparison`, `product-demo`) are editable
 starters; `init` preserves projects. `project.json` owns composition, narration and
 timing. Optional `brief`: purpose (`explain`, `introduce`, `promote`, `story`),
 audience, language, tone, call_to_action, target_duration_seconds (5-600).
-`add-media` origins: `user`, `captured`, `mo-generated`, `licensed-local`.
+`add-media` origins: `user`, `captured`, `mo-generated`, `licensed-local`. Optional
+project `music`: `asset_id` (an audio asset; loops or trims to the video), `volume`
+(0-1, default 0.25), `duck` (default true: dips under narration), `fade_in`/`fade_out`
+seconds (default 1/2). Every audio track is loudness-normalized to -16 LUFS.
 
 Scenes need unique `id`, `kind` (`title`, `concept`, `process`, `comparison`,
 `summary`), `duration` (1-60s), `narration`, `elements` (painted back to front).
@@ -112,8 +116,11 @@ renderer does not call a generative-video service or bundle third-party template
 engines; authorized external assets can be ingested explicitly.
 
 Projects default to `~/.mo/media/explainers/<slug>/`. Ingested media is copied
-under `media/`, measured and hash-bound; clips are muted because narration owns
-audio. Native `add-media` asset IDs are labels, so `--id wallet` is valid; sandbox
+under `media/`, measured and hash-bound; clips are muted because narration and
+an optional music bed own the audio. The encoder mixes them (a sidechain
+compressor ducks the bed under the voice) and applies one EBU R128 loudness
+pass to -16 LUFS and -1.5 dBTP; the receipt's `narrated` means narration, and
+`audio` records narration, music, ducking and loudness. Native `add-media` asset IDs are labels, so `--id wallet` is valid; sandbox
 checks still protect the actual file operands, including `wallet.dat` and other
 credential paths. A trim ends at measured clip duration by default; loops repeat that trim.
 Output dimensions must be even for encoding. Renders of 48 or more frames spread
@@ -152,7 +159,7 @@ hardcodes another application's copies. Encoding writes a unique sibling stage;
 the next render or narration removes stages a killed process left untouched for
 an hour.
 Only a result with measured frame, geometry, frame-rate, stream, and duration
-checks replaces the previous successful video: H.264, with AAC when narrated.
+checks replaces the previous successful video: H.264, with AAC when it has audio.
 Encoding, validation, cancellation, or handled publication failure preserves the
 previous verified video/receipt pair. The new receipt is prepared and promoted
 first, then the MP4 is the final commit point; a failed video promotion restores

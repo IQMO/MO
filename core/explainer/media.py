@@ -21,6 +21,7 @@ from .model import ASSET_ORIGINS
 _SAFE_ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 _VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm"})
+_AUDIO_SUFFIXES = frozenset({".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"})
 
 
 def ingest_project_asset(
@@ -54,8 +55,10 @@ def ingest_project_asset(
         raise ValueError(f"asset id already exists: {asset_id}")
 
     suffix = source_path.suffix.lower()
-    if suffix not in _IMAGE_SUFFIXES | _VIDEO_SUFFIXES:
-        raise ValueError("asset must be a PNG, JPEG, WebP, MP4, MOV, MKV, or WebM file")
+    if suffix not in _IMAGE_SUFFIXES | _VIDEO_SUFFIXES | _AUDIO_SUFFIXES:
+        raise ValueError(
+            "asset must be a PNG, JPEG, WebP, MP4, MOV, MKV, WebM, WAV, MP3, M4A, AAC, OGG, or FLAC file"
+        )
     media_dir = (project_path.parent / "media").resolve(strict=False)
     try:
         media_dir.relative_to(project_path.parent)
@@ -69,7 +72,9 @@ def ingest_project_asset(
     try:
         shutil.copyfile(source_path, stage)
         metadata = inspect_media(stage)
-        expected_type = "image" if suffix in _IMAGE_SUFFIXES else "video"
+        expected_type = (
+            "image" if suffix in _IMAGE_SUFFIXES else "audio" if suffix in _AUDIO_SUFFIXES else "video"
+        )
         if metadata["type"] != expected_type:
             raise ValueError(f"asset bytes are not a readable {expected_type}")
         row = {
@@ -107,8 +112,8 @@ def inspect_media(path: str | Path) -> dict[str, Any]:
         if not 1 <= width <= 7680 or not 1 <= height <= 4320:
             raise ValueError("image asset dimensions are outside the supported bounds")
         return {"type": "image", "width": width, "height": height}
-    if suffix not in _VIDEO_SUFFIXES:
-        raise ValueError("unsupported visual-media extension")
+    if suffix not in _VIDEO_SUFFIXES | _AUDIO_SUFFIXES:
+        raise ValueError("unsupported media extension")
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
         raise RuntimeError("FFprobe is required to inspect video assets")
@@ -131,6 +136,8 @@ def inspect_media(path: str | Path) -> dict[str, Any]:
         raise RuntimeError("FFprobe timed out while inspecting the video asset") from exc
     if result.returncode != 0:
         raise ValueError(f"video asset is unreadable: {str(result.stderr or '').strip()[-300:]}")
+    if suffix in _AUDIO_SUFFIXES:
+        return _audio_metadata(result.stdout)
     try:
         payload = json.loads(result.stdout)
         videos = [row for row in payload["streams"] if row.get("codec_type") == "video"]
@@ -157,3 +164,17 @@ def inspect_media(path: str | Path) -> dict[str, Any]:
         "duration_seconds": round(duration, 6),
         "fps": round(fps, 6),
     }
+
+
+def _audio_metadata(probe_output: str) -> dict[str, Any]:
+    """Bound a music bed measured by FFprobe; it loops or trims to the video."""
+    try:
+        payload = json.loads(probe_output)
+        if not [row for row in payload["streams"] if row.get("codec_type") == "audio"]:
+            raise ValueError
+        duration = float(payload["format"]["duration"])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("audio asset metadata is incomplete") from exc
+    if not math.isfinite(duration) or not 0.5 <= duration <= 3600.0:
+        raise ValueError("audio assets must be between 0.5 seconds and one hour")
+    return {"type": "audio", "duration_seconds": round(duration, 6)}
