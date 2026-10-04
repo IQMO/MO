@@ -10,7 +10,7 @@ import importlib.util
 import hashlib
 import time
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -48,6 +48,9 @@ class _UIAState:
     controls: dict[str, Any]
     elements: dict[str, "DesktopElement"]
     snapshot_generation: int = 0
+    # Top-level windows keep a stable identity, so a window ref outlives its
+    # snapshot; element refs inside a window still expire with their snapshot.
+    window_refs: dict[str, "DesktopElement"] = field(default_factory=dict)
     context_at: float = 0.0
     context_windows: tuple["DesktopElement", ...] = ()
     context_controls: tuple[Any, ...] = ()
@@ -412,6 +415,7 @@ def _cache_native_window(window: Any) -> DesktopElement | None:
     element = replace(candidate, ref=ref, observed_at=time.monotonic())
     state.controls[ref] = ctrl
     state.elements[ref] = element
+    _remember_window_ref(state, element)
     return element
 
 
@@ -834,6 +838,7 @@ def snapshot(
         element = replace(candidate, ref=ref, patterns=patterns, state_signature=state_signature, observed_at=now)
         state.controls[ref] = ctrl
         state.elements[ref] = element
+        _remember_window_ref(state, element)
         elements.append(element)
     for ref in list(state.elements)[:-4 * MAX_ELEMENTS]:
         state.elements.pop(ref, None)
@@ -880,6 +885,37 @@ def refresh_active_target(target: str = "") -> Any | None:
             state.context_windows = (fresh,)
             return _bind_window_target(fresh)
     return target
+
+
+_MAX_WINDOW_REFS = 64
+# MO's runtime ids and the pseudo-refs models invent for them; never a text query.
+_REF_PREFIXES = ("desktop-", "owned:", "window-")
+
+
+def _remember_window_ref(state: _UIAState, element: DesktopElement) -> None:
+    if element.native_handle and _is_window_element(element):
+        state.window_refs[element.ref] = element
+        for ref in list(state.window_refs)[:-_MAX_WINDOW_REFS]:
+            state.window_refs.pop(ref, None)
+
+
+def _rehydrate_window_element(window: DesktopElement) -> tuple[str, Any, DesktopElement] | None:
+    """Rebind a window a stale ref named, only if the same window still exists."""
+    from .win32 import NativeWindow
+
+    element = _cache_native_window(NativeWindow(
+        handle=int(window.native_handle),
+        process_id=int(window.process_id or 0),
+        title=window.label,
+        class_name=window.class_name,
+        bounds=tuple(window.bounds),
+    ))
+    if element is None or _window_identity(element) != _window_identity(window):
+        return None
+    if window.process_id and element.process_id != window.process_id:
+        return None  # Windows reused the handle for another process's window
+    state = _state()
+    return element.ref, state.controls[element.ref], element
 
 
 def _rehydrate_runtime_window(target: Any) -> tuple[str, Any, DesktopElement] | None:
@@ -931,12 +967,25 @@ def _resolve(target: str, *, root: Any | None = None) -> tuple[str, Any, Desktop
             return rehydrated
     if target in state.controls and target in state.elements:
         return target, state.controls[target], state.elements[target]
+    stale_window = state.window_refs.get(target)
+    if stale_window is not None:
+        rehydrated = _rehydrate_window_element(stale_window)
+        if rehydrated is not None:
+            return rehydrated
+    if target.startswith("desktop-"):
+        from .runtime import current_targets
+
+        owned = next((item for item in current_targets() if item.target_id == target), None)
+        rehydrated = _rehydrate_runtime_window(owned) if owned is not None else None
+        if rehydrated is not None:
+            return rehydrated
     generation, separator, index = target[1:].partition("-") if target.startswith("d") else ("", "", "")
-    if separator and generation.isdigit() and index.isdigit():
+    if (separator and generation.isdigit() and index.isdigit()) or target.startswith(_REF_PREFIXES):
+        # A ref-shaped target that names nothing current fails fast; a
+        # desktop-wide text search for it only burns seconds and finds nothing.
         return (
-            f"Error: cached desktop ref {target!r} expired. Use the refs in the latest "
-            "computer_observe context/find result. "
-            "If the intended target is absent, observe it again and use the newly returned ref."
+            f"Error: {target!r} is not a current desktop ref (its element or window is gone). "
+            "Use a ref from the latest computer_targets or computer_observe result."
         )
     elements = snapshot(query=target, max_elements=1, root=root)
     if not elements:
