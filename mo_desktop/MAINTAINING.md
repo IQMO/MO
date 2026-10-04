@@ -818,6 +818,8 @@ with the compositor clock as ground truth, sub-millisecond frames went from abou
 visible smoothness acceptance.
 Native app entrances run in the WebView host's WinForms clock, outside `NativeGuiLoop`, so they keep the 15 ms tick but each frame sleeps to the display tick (`gui_loop.display_tick()`) and is posed for `tick + display_period()`, the moment it is actually on screen. Measured against the compositor clock, the pose-versus-display error fell from about 2.3 ms to about 0.7 ms (standard deviation), so a fast entrance no longer wobbles even when frame spacing varies.
 
+Per-frame work on the resident lane must stay cheap even when it is only a poll. A live `py-spy` sample of the idle resident found the bound-terminal computer-activity poll at 56% of the GUI thread because it JSON-parsed every row of the heartbeat ledger (hundreds of rows) on each poll, then discarded the rows outside its 15 s window. `recent_instance_snapshots` now reads the append-only ledger newest-first and stops at the first row older than the window plus slack. Profile a changed idle path against the running resident before and after, never by inspection alone.
+
 Retarget finite motion from its current pose. Composer collapse and launcher
 menu dismissal reverse their existing symmetric curve without a full-size or
 full-opacity flash; repeated collapse does not restart it. Keep completed

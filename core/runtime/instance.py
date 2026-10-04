@@ -23,6 +23,8 @@ ENV_MO_TERMINAL_SESSION = "MO_TERMINAL_SESSION"
 MAX_INSTANCE_ID_CHARS = 64
 
 _INSTANCE_ID: str | None = None
+# Rows are appended in time order; this tolerates a clock that stepped back.
+_LEDGER_ORDER_SLACK_SECONDS = 600.0
 
 
 def get_instance_id() -> str:
@@ -81,6 +83,8 @@ def recent_instance_snapshots(
             continue
         created = _safe_float(item.get("created_at"))
         if created and now - created > max_age_seconds:
+            if now - created > max_age_seconds + _LEDGER_ORDER_SLACK_SECONDS:
+                break  # append-only ledger: every earlier row is older still
             continue
         seen.add(pid)
         item = dict(item)
