@@ -635,11 +635,7 @@ class CompanionSurface(
 
     def _init_tray(self) -> None:
         """Start system tray if configured."""
-        self._tray = start_tray_if_enabled(
-            self,
-            companion_config=self._companion_cfg,
-            voice_config=self._voice_cfg,
-        )
+        self._tray = start_tray_if_enabled(self, companion_config=self._companion_cfg)
         self._refresh_systemcare_game_session_async()
 
     def _app_catalog(self) -> CompanionTray:

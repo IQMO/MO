@@ -65,10 +65,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "pre-frontmatter profile skill files; retire after supported profile skills have been "
         "rewritten to the current SKILL.md contract"
     ),
-    "desktop-tray-voice-key": (
-        "tray_enabled previously lived in the voice block; retire after supported Desktop configs "
-        "have migrated to mo_desktop.tray_enabled"
-    ),
     "continuity-metadata-v0": (
         "privacy-safe handling for session/taskboard/event rows without current owner ids and for "
         "raw source slots; retire after supported rows are rewritten and the event TTL elapses"

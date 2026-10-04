@@ -2018,16 +2018,11 @@ class TrayPopup:
 def start_tray_if_enabled(
     companion: Any,
     companion_config: dict | None = None,
-    voice_config: dict | None = None,
 ) -> CompanionTray | None:
     """Start the system tray if configured."""
     cfg = companion_config or {}
-    previous_voice_cfg = voice_config or {}
     if "tray_enabled" in cfg:
         tray_enabled = bool(cfg.get("tray_enabled"))
-    # COMPAT(desktop-tray-voice-key): replaced-by mo_desktop.tray_enabled; remove-when supported Desktop configs have migrated
-    elif "tray_enabled" in previous_voice_cfg:
-        tray_enabled = bool(previous_voice_cfg.get("tray_enabled"))
     else:
         tray_enabled = bool(cfg.get("enabled", False))
     if not tray_enabled:
