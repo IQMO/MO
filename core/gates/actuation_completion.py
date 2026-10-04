@@ -75,6 +75,21 @@ def computer_no_progress_block_reason(
     return None
 
 
+def _mutating(item: object) -> bool:
+    return (
+        isinstance(item, dict)
+        and item.get("event") == "action"
+        and item.get("status") in {"executed", "outcome_unknown", "dispatched"}
+        and item.get("state_changed") is not False
+    )
+
+
+def _has_action_events(record: ToolExecutionRecord) -> bool:
+    return any(
+        isinstance(item, dict) and item.get("event") == "action" for item in record.computer_events
+    )
+
+
 def evaluate_actuation_evidence(
     tool_sequence: list[ToolExecutionRecord],
     *,
@@ -82,11 +97,13 @@ def evaluate_actuation_evidence(
     observation_tools: AbstractSet[str],
     action_label: str = "computer actuation",
 ) -> ActuationEvidence:
-    """Require a successful action followed by observation of its target revision.
+    """Require a state-changing action to carry or be followed by evidence of its result.
 
-    Native adapters emit target-bound ``computer_events``. The compatibility
-    branch accepts a later successful observation tool only when a third-party
-    action adapter has not yet adopted that event contract.
+    Native adapters emit target-bound ``computer_events``; actions normally
+    return their own fresh observation. An action that declares no state change
+    (a pointer move) is not a mutation, and a ``dispatched`` URL open is complete
+    as dispatched. The compatibility branch accepts a later successful
+    observation tool only for an adapter without that event contract.
     """
     records = tool_execution_records(tool_sequence)
     successful = [
@@ -99,13 +116,8 @@ def evaluate_actuation_evidence(
         for index, event in enumerate(records)
         if event.tool in action_tools
         and (
-            event.successful
-            or any(
-                isinstance(item, dict)
-                and item.get("event") == "action"
-                and item.get("status") == "outcome_unknown"
-                for item in event.computer_events
-            )
+            any(_mutating(item) for item in event.computer_events)
+            or (event.successful and not _has_action_events(event))
         )
     ]
     if not actions:
@@ -116,15 +128,11 @@ def evaluate_actuation_evidence(
         )
 
     last_action_index, _last_action_name, last_action_event = actions[-1]
-    action_events = [
-        item
-        for item in last_action_event.computer_events
-        if isinstance(item, dict)
-        and item.get("event") == "action"
-        and item.get("status") in {"executed", "outcome_unknown"}
-    ]
+    action_events = [item for item in last_action_event.computer_events if _mutating(item)]
     if action_events:
         action_event = action_events[-1]
+        if action_event.get("status") == "dispatched":
+            return ActuationEvidence(complete=True, attempted=True)
         target_id = str(action_event.get("target_id") or "")
         if not target_id:
             return ActuationEvidence(
@@ -163,7 +171,7 @@ def evaluate_actuation_evidence(
         return ActuationEvidence(
             complete=False,
             attempted=True,
-            reason="The latest actuation has no fresh observation of the same target revision.",
+            reason="The screen was not checked after the last action.",
         )
 
     if any(index > last_action_index and name in observation_tools for index, name, _ in successful):
@@ -171,5 +179,5 @@ def evaluate_actuation_evidence(
     return ActuationEvidence(
         complete=False,
         attempted=True,
-        reason=f"The latest {action_label} has not been verified from fresh UI evidence.",
+        reason="The screen was not checked after the last action.",
     )

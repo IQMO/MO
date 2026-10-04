@@ -1564,7 +1564,6 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                     continue
                 if isinstance(prepared, str):
                     return prepared
-                tool_sequence_start = len(state.tool_sequence)
                 dispatched = self._dispatch_tool_batch(
                     state,
                     prepared,
@@ -1572,28 +1571,6 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 )
                 task_board = state.task_board
                 if dispatched is _CONTINUE:
-                    if (
-                        continuation_gate == "desktop_completion"
-                        and len(state.tool_sequence) > tool_sequence_start
-                    ):
-                        from ..gates.desktop_completion import desktop_completion_satisfied
-
-                        if desktop_completion_satisfied(state.tool_sequence):
-                            # The gate's evidence request is complete. Restore
-                            # the turn's admitted catalog so compound requests
-                            # can continue after checking the prior action.
-                            clear_internal_continuations(self.session)
-                            continuation_instruction = ""
-                            continuation_fallback_text = ""
-                            continuation_gate = ""
-                            continuation_gate_anchor = None
-                            continuation_tools = None
-                            continuation_gate_requests = 0
-                            if monitor:
-                                monitor.emit("session_event", {
-                                    "kind": "desktop_completion_recovered",
-                                    "request": provider_requests,
-                                })
                     continue
                 return str(dispatched)
 

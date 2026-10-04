@@ -277,13 +277,6 @@ def _pipeline_desktop_completion(agent, ctx):
         count=getattr(ctx, "desktop_action_continuations", 0),
         monitor=ctx.monitor,
     )
-    if result.instruction:
-        # This recovery asks for evidence. Retaining mutation and broad
-        # discovery tools lets the provider restart the task instead of
-        # checking its last action. Target discovery is enough when a newly
-        # opened window or tab has not been selected yet; observation is the
-        # only operation that can satisfy this gate.
-        ctx.continuation_tools = ("computer_targets", "computer_observe")
     return _apply_completion_result(agent, ctx, result, "desktop_action_continuations")
 
 

@@ -516,11 +516,11 @@ An admitted native-action turn directly exposes `computer_targets`,
 `computer_observe`, and `computer_act`; an ordinary visual read starts with the
 first two. A visual walkthrough starts with `computer_observe` and
 `point_on_screen`; an explicitly compound request may add its admitted action.
-These paths do not spend a provider round rediscovering the same tools. If an
-action lacks fresh evidence, its recovery request exposes only target discovery
-and observation, then restores the admitted action catalog after matching
-evidence so unfinished compound work can continue. The initial list does not
-authorize execution. Plain conversation keeps the small core catalog, and
+These paths do not spend a provider round rediscovering the same tools. Each
+action returns its own fresh evidence, and MO reads it to decide the next step;
+no extra verification round is forced. If the last action's result is still
+unknown when MO answers, the reply says so plainly instead of implying success.
+The initial list does not authorize execution. Plain conversation keeps the small core catalog, and
 `computer_act` still requires current action authority.
 Terminal keeps its
 normal agentic diagnostic catalog and work context.

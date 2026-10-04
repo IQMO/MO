@@ -21,36 +21,19 @@ class DesktopCompletionResult:
     blocked_text: str = ""
 
 
-def desktop_completion_satisfied(
-    tool_sequence: list[ToolExecutionRecord],
-) -> bool:
-    """Return whether the latest computer action has fresh target evidence."""
-    return evaluate_actuation_evidence(
-        [
-            event
-            for event in tool_execution_records(tool_sequence)
-            if event.presentation_only is not True
-        ],
-        action_tools=ACTUATION_TOOLS,
-        observation_tools=_VERIFY_TOOLS,
-    ).complete
-
-
 def _emit_desktop_completion(
     monitor: Any,
     action: str,
     *,
-    count: int,
     reason: str,
     tool_sequence: list[ToolExecutionRecord] | None,
 ) -> None:
-    """Record which executed action is awaiting evidence."""
+    """Record an action whose result was left unconfirmed."""
     if monitor is None:
         return
     try:
         monitor.emit("desktop_completion", {
             "action": action,
-            "action_checkpoint": count,
             "reason": str(reason or "")[:200],
             "tools_run": [
                 event.tool
@@ -69,10 +52,11 @@ def run_desktop_completion_gate(
     count: int,
     monitor: Any = None,
 ) -> DesktopCompletionResult:
-    """Require fresh post-action evidence.
+    """State an unconfirmed action result instead of letting the reply imply success.
 
-    Count is the last challenged action's one-based ledger position on every
-    surface. Routing hints never require an action.
+    Actions return their own fresh evidence, so this gate never asks for another
+    provider round; ``count`` passes through the shared completion ledger.
+    Routing hints never require an action.
     """
     desktop_surface = normalize_runtime_surface(route_source) in DESKTOP_SURFACES
     records = tool_execution_records(tool_sequence)
@@ -108,42 +92,13 @@ def run_desktop_completion_gate(
     )
     if not evidence.attempted or evidence.complete:
         return DesktopCompletionResult(count=count)
-    action_checkpoint = max(
-        index + 1 for index, event in enumerate(records)
-        if event.tool in ACTUATION_TOOLS
-        and event.presentation_only is not True
-        and (
-            event.successful
-            or any(
-                isinstance(item, dict)
-                and item.get("event") == "action"
-                and item.get("status") == "outcome_unknown"
-                for item in event.computer_events
-            )
-        )
-    )
-    if count != action_checkpoint and evidence.observable:
-        _emit_desktop_completion(
-            monitor, "verification", count=action_checkpoint,
-            reason=evidence.reason, tool_sequence=tool_sequence,
-        )
-        return DesktopCompletionResult(
-            count=action_checkpoint,
-            instruction=(
-                "[COMPUTER VERIFICATION] The last computer action lacks fresh evidence. "
-                "Observe the same target revision to check the result. Do not repeat the action. "
-                "After it is verified, continue any unfinished part of the operator's request. "
-                "If verification is unavailable, report that limitation without claiming success."
-            ),
-        )
+    # Actions return their own fresh evidence and the model reads it, so there
+    # is no forced verification round. An unknown result is stated, not implied.
     _emit_desktop_completion(
-        monitor, "unverified", count=action_checkpoint,
+        monitor, "unverified",
         reason=evidence.reason, tool_sequence=tool_sequence,
     )
     return DesktopCompletionResult(
         count=count,
-        blocked_text=(
-            f"{assistant_text.strip()}\n\nVerification unavailable: {evidence.reason} "
-            "The action's outcome is not confirmed."
-        ).strip(),
+        blocked_text=f"{assistant_text.strip()}\n\nVerification unavailable: {evidence.reason}".strip(),
     )

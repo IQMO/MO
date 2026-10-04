@@ -187,6 +187,11 @@ def execute_computer_act(arguments: dict[str, Any]) -> str:
             except Exception as exc:
                 return f"Error: could not open the default browser: {type(exc).__name__}: {exc}"
             if opened:
+                from core.desktop.runtime import record_action
+
+                # The browser accepted the URL; that is all a dispatch can know.
+                record_action("computer_act", target=None, observation=None, status="dispatched",
+                              state_changed=None, invalidate=False)
                 return f"Opened {url} in your default browser."
             return f"Requested to open {url}, but no default browser handler confirmed success."
         from core.desktop.runtime import native_desktop_scope
