@@ -661,12 +661,14 @@ def maybe_compact_session(
     pressure_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run conservative deterministic momentum compaction when pressure warrants."""
-    is_fg = getattr(agent, "_is_foreground_session", None)
-    if callable(is_fg) and not is_fg():
-        return {"changed": False, "reason": "not_foreground"}
     session = getattr(agent, "session", None)
     if session is None:
         return {"changed": False, "reason": "no_session"}
+    is_fg = getattr(agent, "_is_foreground_session", None)
+    if callable(is_fg) and not is_fg() and session is not getattr(agent, "_goal_session", None):
+        return {"changed": False, "reason": "not_foreground"}
+    # GoalRunner routes this exact session through isolated_session. Archiving
+    # its observations in place does not replace or hand off foreground chat.
     cfg = getattr(agent, "config", {}) if isinstance(getattr(agent, "config", {}), dict) else {}
     agent_cfg = cfg.get("agent", {}) if isinstance(cfg.get("agent", {}), dict) else {}
     enabled = bool(agent_cfg.get("context_momentum_compact_enabled", True))
