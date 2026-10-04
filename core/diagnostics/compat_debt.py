@@ -76,10 +76,6 @@ REGISTERED_COMPAT: dict[str, str] = {
     "mail-job-placeholder-20260928": (
         "Gmail-specific placeholder in saved Hub jobs; retire when no supported saved jobs contain it"
     ),
-    "memory-desktop-policy-rows": (
-        "database repair for Desktop turns indexed with provider-only policy text; retire after "
-        "supported profiles have completed the repair migration"
-    ),
     "worker-panel-workspace-config": (
         "interface.workspace.enabled read once after worker activity moved to interface.activity.enabled; "
         "retire after the documented configuration migration window"
