@@ -1811,18 +1811,17 @@ def _motion(
     entrance = _ease(min(1.0, elapsed / entrance_window))
     exit_progress = _ease(min(1.0, max(0.0, (elapsed - duration + exit_window) / exit_window)))
     alpha = (entrance if fade_in else 1.0) * (1.0 - exit_progress if fade_out else 1.0)
-    drift = math.sin(elapsed * 1.4) * 1.5
     if name == "rise":
-        return alpha, 0.0, 34 * (1.0 - entrance) + drift, 1.0, 1.0
+        return alpha, 0.0, 34 * (1.0 - entrance), 1.0, 1.0
     if name == "slide_left":
-        return alpha, 55 * (1.0 - entrance), drift, 1.0, 1.0
+        return alpha, 55 * (1.0 - entrance), 0.0, 1.0, 1.0
     if name == "slide_right":
-        return alpha, -55 * (1.0 - entrance), drift, 1.0, 1.0
+        return alpha, -55 * (1.0 - entrance), 0.0, 1.0, 1.0
     if name == "scale":
-        return alpha, 0.0, drift, 0.88 + entrance * 0.12, 1.0
+        return alpha, 0.0, 0.0, 0.88 + entrance * 0.12, 1.0
     if name == "draw":
         return alpha, 0.0, 0.0, 1.0, entrance
-    return alpha, 0.0, drift, 1.0, 1.0
+    return alpha, 0.0, 0.0, 1.0, 1.0
 
 
 def _draw_header(

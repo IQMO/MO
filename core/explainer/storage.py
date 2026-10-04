@@ -108,6 +108,9 @@ def _resolved_mo_style(layout: str) -> tuple[dict[str, Any], dict[str, str]]:
         "typography": {"family": "system-sans", "caption_size": 28},
         "spacing": {"margin": 32, "subtitle_lane": 80},
         "motion": {"entrance_seconds": 0.65, "exit_seconds": 0.4},
+        # Without supersampling, Pillow snaps shapes and text to whole pixels,
+        # so slow motion moves in visible one-pixel steps.
+        "render": {"supersampling": 2},
     }
     return style, theme
 

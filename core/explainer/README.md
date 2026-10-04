@@ -75,7 +75,8 @@ motion (presets: fade/rise/slide_left/slide_right/scale/draw). `fill:false` is
 outline only. No arbitrary paths, grouped transforms, or custom fonts (`system-sans`).
 
 Optional `style.motion.blur_samples` (1-8) and `shutter_angle` (0-360) give
-deterministic motion blur; `style.render` controls `supersampling` (1-4), `bloom`,
+deterministic motion blur; `style.render` controls `supersampling` (1-4; `init`
+writes 2 because 1 moves in whole-pixel steps), `bloom`,
 `bloom_radius`, `vignette`, `grain`. Both multiply render cost (preview below).
 
 ### Verification and delivery
