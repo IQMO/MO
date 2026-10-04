@@ -45,10 +45,6 @@ REGISTERED_COMPAT: dict[str, str] = {
         "explicit --init old-home upgraders (credential + layout); retire when the operator "
         "declares no supported old-home restore path"
     ),
-    "operator-pack-env-alias": (
-        "MO_OPERATOR_PACK env alias for MO_LOCAL_EXTENSION_ROOT; retire after the owner pack "
-        "drops the old name"
-    ),
     "live-host-legacy-identity": (
         "label-hash instance identity for pre-key Live Control hosts; retire when supported "
         "pre-key hosts have aged out"

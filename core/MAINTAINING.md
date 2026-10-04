@@ -30,7 +30,7 @@ public/private-boundary invariants for changes under `core/`. The root
   eligibility. Delivered interim prose resets the reminder interval; a single
   long provider/tool call still relies on the surface's activity display.
 - `core/local_extensions.py` is the neutral bridge for profile-owned local extensions. Empty profiles load no private commands, hooks, context, board rows, Desktop apps, or closeout machinery. An admitted extension may supply bounded ambient context on simple turns without activating one of its workflows. Private Desktop app metadata is bounded and value-free; implementation loads only after an explicit tray open and receives presentation seams rather than Agent/Gateway/model authority.
-- This checkout is the active product source; the product name is **MO Agent**. A checkout folder name is never user-facing identity. Private extension lineage/context lives in the local profile (`~/.mo`, including `~/.mo/operator`, `MO_LOCAL_EXTENSION_ROOT`, or legacy `MO_OPERATOR_PACK`) and never in tracked product docs.
+- This checkout is the active product source; the product name is **MO Agent**. A checkout folder name is never user-facing identity. Private extension lineage/context lives in the local profile (`~/.mo`, including `~/.mo/operator` or `MO_LOCAL_EXTENSION_ROOT`) and never in tracked product docs.
 - Do not duplicate private extension internals here; product code owns only the bridge.
 - Extension `blocked_text` is a terminal gate rejection: return it to the caller
   without running later gates, board-close hooks, or learning. An instruction

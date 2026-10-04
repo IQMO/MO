@@ -15,7 +15,6 @@ ENV_MO_PROJECT_CWD = "MO_PROJECT_CWD"
 ENV_MO_STATE_HOME = "MO_STATE_HOME"
 ENV_MO_STATE_LOCAL = "MO_STATE_LOCAL"  # opt OUT of private-by-default → project-relative state
 ENV_MO_LOCAL_EXTENSION_ROOT = "MO_LOCAL_EXTENSION_ROOT"
-ENV_MO_OPERATOR_PACK = "MO_OPERATOR_PACK"  # COMPAT(operator-pack-env-alias): replaced-by MO_LOCAL_EXTENSION_ROOT; remove-when owner pack drops the old env name
 ENV_TASKBOARD_LEDGER_PATH = "MO_TASKBOARD_LEDGER_PATH"
 ENV_TASKBOARD_LEDGER_DISABLE = "MO_TASKBOARD_LEDGER_DISABLE"
 ENV_HEARTBEAT_LEDGER_PATH = "MO_HEARTBEAT_LEDGER_PATH"
@@ -52,14 +51,14 @@ def mo_home(config: dict[str, Any] | None = None) -> Path:
 def local_extension_root(config: dict[str, Any] | None = None) -> Path:
     """Resolve the profile-owned local extension root.
 
-    Resolution order: ``MO_LOCAL_EXTENSION_ROOT`` env > transitional
-    ``MO_OPERATOR_PACK`` env > ``~/.mo/operator`` under the user's MO profile.
+    Resolution order: ``MO_LOCAL_EXTENSION_ROOT`` env > ``~/.mo/operator`` under
+    the user's MO profile.
     Local extension files never ship, so the product checkout is never a valid
     implicit source for them. Returns the home location by default even when
     absent; an empty profile has no extension module or local token, so extension
     behavior stays off.
     """
-    env = os.getenv(ENV_MO_LOCAL_EXTENSION_ROOT, "").strip() or os.getenv(ENV_MO_OPERATOR_PACK, "").strip()
+    env = os.getenv(ENV_MO_LOCAL_EXTENSION_ROOT, "").strip()
     if env:
         return Path(env).expanduser().resolve(strict=False)
     return mo_home(config) / "operator"

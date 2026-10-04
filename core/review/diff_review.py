@@ -504,7 +504,7 @@ def _run_affected_tests(agent: "Agent", affected_tests: list[str], workspace_roo
             test_env = safe_env()
             # Caller routing may name the live checkout/profile. A child test
             # must resolve project files and extension state inside this run.
-            for key in ("MO_DEFAULT_ROOTS", "MO_TOOL_ROOT_REMAP_FROM", "MO_TOOL_ROOT_REMAP_TO", "MO_OPERATOR_PACK", "MO_LOCAL_EXTENSION_ROOT", "MO_INSTANCE_ID"):
+            for key in ("MO_DEFAULT_ROOTS", "MO_TOOL_ROOT_REMAP_FROM", "MO_TOOL_ROOT_REMAP_TO", "MO_LOCAL_EXTENSION_ROOT", "MO_INSTANCE_ID"):
                 test_env.pop(key, None)
             test_env.update({
                 "MO_STATE_HOME": str(state_home),
