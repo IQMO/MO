@@ -9,7 +9,9 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 from typing import Any, Callable, Iterable
 import uuid
 import wave
@@ -83,6 +85,7 @@ def render_video(
     preview_width: int | None = None,
     cancel_event: object = None,
     progress: Callable[[int, int], None] | None = None,
+    workers: int | None = None,
 ) -> Path:
     """Validate staged media, then publish video and matching receipt in sequence."""
     _require_pillow()
@@ -165,22 +168,24 @@ def render_video(
             cadence = max(1, frames // 20)
             if progress is not None:
                 progress(0, frames)
-            for frame_index in range(frames):
-                if _cancel_requested(cancel_event):
-                    raise RuntimeError("explainer render cancelled")
-                image = _render_video_frame(
-                    render_project,
-                    frame_index / project.fps,
-                    timeline=render_timeline,
-                    media=prepared_media,
-                    maximum_seconds=max(0.0, expected_duration - 1.0 / project.fps),
-                )
-                if image.size != (output_width, output_height):
-                    image = _resize_rgba(image, (output_width, output_height))
-                process.stdin.write(image.convert("RGB").tobytes())
-                completed = frame_index + 1
-                if progress is not None and (completed == frames or completed % cadence == 0):
-                    progress(completed, frames)
+            started = time.perf_counter()
+            with _FrameSource(
+                render_project,
+                render_timeline,
+                prepared_media,
+                frames=frames,
+                size=(output_width, output_height),
+                maximum_seconds=max(0.0, expected_duration - 1.0 / project.fps),
+                workers=_frame_workers(frames) if workers is None else workers,
+            ) as source:
+                for frame_index in range(frames):
+                    if _cancel_requested(cancel_event):
+                        raise RuntimeError("explainer render cancelled")
+                    process.stdin.write(source.frame(frame_index))
+                    completed = frame_index + 1
+                    if progress is not None and (completed == frames or completed % cadence == 0):
+                        progress(completed, frames)
+            render_seconds = time.perf_counter() - started
             process.stdin.close()
             if _cancel_requested(cancel_event):
                 raise RuntimeError("explainer render cancelled")
@@ -212,6 +217,10 @@ def render_video(
             inspection["motion_blur"] = {
                 "samples": int(motion.get("blur_samples", 1)),
                 "shutter_angle": float(motion.get("shutter_angle", 180.0)),
+            }
+            inspection["render"] = {
+                "frame_workers": source.workers,
+                "render_seconds": round(render_seconds, 3),
             }
             inspection["path"] = str(target)
             inspection["sha256"] = file_sha256(stage)
@@ -283,6 +292,232 @@ def _render_video_frame(
     for index, frame in enumerate(frames[1:], start=2):
         averaged = Image.blend(averaged, frame, 1.0 / index)
     return _finish_frame(averaged, project)
+
+
+_PARALLEL_MIN_FRAMES = 48
+_MAX_FRAME_WORKERS = 8
+_WORKER_DEPTH = 2
+
+
+def _frame_workers(frames: int) -> int:
+    """Spread long renders over cores; short ones skip worker start-up.
+
+    Pillow frame work is memory-bound, so SMT siblings add little: 3 and 6
+    workers measured the same on a 4-core/8-thread laptop. Half the logical
+    cores keeps the machine responsive.
+    """
+    if frames < _PARALLEL_MIN_FRAMES:
+        return 1
+    return max(1, min(_MAX_FRAME_WORKERS, (os.cpu_count() or 1) // 2))
+
+
+def _encoded_frame(
+    project: ExplainerProject,
+    seconds: float,
+    *,
+    timeline: list[dict[str, Any]],
+    media: "_PreparedMedia",
+    maximum_seconds: float,
+    size: tuple[int, int],
+) -> bytes:
+    image = _render_video_frame(
+        project, seconds, timeline=timeline, media=media, maximum_seconds=maximum_seconds,
+    )
+    if image.size != size:
+        image = _resize_rgba(image, size)
+    return image.convert("RGB").tobytes()
+
+
+class _FrameSource:
+    """Produce ordered RGB frames in-process or from hidden low-priority workers.
+
+    Worker ``i % n`` renders frame ``i``. Frames are read strictly in order with
+    at most ``_WORKER_DEPTH`` outstanding requests per worker, so pipe
+    backpressure bounds memory. Clips stay decoded once by the parent's media.
+    """
+
+    def __init__(
+        self,
+        project: ExplainerProject,
+        timeline: list[dict[str, Any]],
+        media: "_PreparedMedia",
+        *,
+        frames: int,
+        size: tuple[int, int],
+        maximum_seconds: float,
+        workers: int,
+    ) -> None:
+        self.project = project
+        self.timeline = timeline
+        self.media = media
+        self.frames = frames
+        self.size = size
+        self.maximum_seconds = maximum_seconds
+        self.workers = max(1, min(int(workers), frames))
+        self._processes: list[tuple[subprocess.Popen, Any]] = []
+        self._requested = 0
+
+    def __enter__(self):
+        if self.workers > 1:
+            try:
+                self._start_workers()
+            except BaseException:
+                self._stop(graceful=False)
+                raise
+        return self
+
+    def __exit__(self, exc_type, _exc, _traceback) -> None:
+        self._stop(graceful=exc_type is None)
+
+    def frame(self, index: int) -> bytes:
+        if self.workers == 1:
+            return _encoded_frame(
+                self.project,
+                index / self.project.fps,
+                timeline=self.timeline,
+                media=self.media,
+                maximum_seconds=self.maximum_seconds,
+                size=self.size,
+            )
+        while self._requested < min(self.frames, index + 1 + self.workers * _WORKER_DEPTH):
+            process, stderr = self._processes[self._requested % self.workers]
+            try:
+                process.stdin.write(f"{self._requested}\n".encode("ascii"))
+                process.stdin.flush()
+            except OSError as exc:
+                raise RuntimeError(f"explainer frame worker exited: {_stream_tail(stderr, 500)}") from exc
+            self._requested += 1
+        process, stderr = self._processes[index % self.workers]
+        header = _read_exact(process.stdout, 5)
+        body = _read_exact(process.stdout, int.from_bytes(header[1:], "big")) if header else None
+        if body is None:
+            raise RuntimeError(f"explainer frame worker exited: {_stream_tail(stderr, 500)}")
+        if header[:1] != b"F":
+            raise RuntimeError(f"explainer frame worker failed: {body.decode('utf-8', errors='replace')}")
+        if len(body) != self.size[0] * self.size[1] * 3:
+            raise RuntimeError("explainer frame worker returned a frame of the wrong size")
+        return body
+
+    def _start_workers(self) -> None:
+        job = self.media.scratch / "frame-job.json"
+        atomic_write_text(job, json.dumps({
+            "path": str(self.project.path),
+            "data": self.project.data,
+            "timeline": [
+                {
+                    "id": str(row["scene"]["id"]),
+                    "start": float(row["start"]),
+                    "duration": float(row["duration"]),
+                    "speech_duration": float(row["speech_duration"]),
+                }
+                for row in self.timeline
+            ],
+            "video_frames": {
+                asset_id: [str(path) for path in paths]
+                for asset_id, paths in self.media.video_frames.items()
+            },
+            "size": list(self.size),
+            "maximum_seconds": self.maximum_seconds,
+        }, ensure_ascii=False))
+        product_root = str(Path(__file__).resolve().parents[2])
+        env = dict(os.environ)
+        env["PYTHONPATH"] = product_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        for _index in range(self.workers):
+            stderr = tempfile.TemporaryFile(mode="w+b")
+            kwargs: dict[str, Any] = {
+                "stdin": subprocess.PIPE,
+                "stdout": subprocess.PIPE,
+                "stderr": stderr,
+                "cwd": product_root,
+                "env": env,
+            }
+            apply_windows_hidden_process_flags(kwargs, below_normal_priority=True)
+            try:
+                process = subprocess.Popen(
+                    [sys.executable, "-m", "core.explainer.render", str(job)], **kwargs,
+                )
+            except BaseException:
+                stderr.close()
+                raise
+            self._processes.append((process, stderr))
+
+    def _stop(self, *, graceful: bool) -> None:
+        for process, _stderr in self._processes:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+        for process, stderr in self._processes:
+            if graceful:
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+            _terminate_process(process)
+            process.stdout.close()
+            stderr.close()
+        self._processes = []
+
+
+def _read_exact(stream: Any, size: int) -> bytes | None:
+    data = bytearray()
+    while len(data) < size:
+        chunk = stream.read(size - len(data))
+        if not chunk:
+            return None
+        data.extend(chunk)
+    return bytes(data)
+
+
+def _frame_worker_main(argv: list[str]) -> int:
+    """Render the frame indices one parent ``_FrameSource`` requests on stdin."""
+    if sys.platform != "win32":
+        try:
+            os.nice(10)
+        except (AttributeError, OSError):
+            pass
+    output = sys.stdout.buffer
+    try:
+        job = json.loads(Path(argv[0]).read_text(encoding="utf-8"))
+        project = ExplainerProject(Path(job["path"]), job["data"])
+        scenes = {str(scene["id"]): scene for scene in project.scenes}
+        timeline = [
+            {
+                "scene": scenes[row["id"]],
+                "start": row["start"],
+                "duration": row["duration"],
+                "speech_duration": row["speech_duration"],
+            }
+            for row in job["timeline"]
+        ]
+        media = _PreparedMedia(project)
+        media.load_images()
+        media.video_frames = {
+            asset_id: [Path(path) for path in paths]
+            for asset_id, paths in job["video_frames"].items()
+        }
+        size = (int(job["size"][0]), int(job["size"][1]))
+        for line in sys.stdin.buffer:
+            payload = _encoded_frame(
+                project,
+                int(line) / project.fps,
+                timeline=timeline,
+                media=media,
+                maximum_seconds=float(job["maximum_seconds"]),
+                size=size,
+            )
+            output.write(b"F" + len(payload).to_bytes(4, "big"))
+            output.write(payload)
+            output.flush()
+    except Exception as exc:
+        message = f"{type(exc).__name__}: {exc}".encode("utf-8", errors="replace")[:1000]
+        try:
+            output.write(b"E" + len(message).to_bytes(4, "big") + message)
+            output.flush()
+        except OSError:
+            pass
+        return 1
+    return 0
 
 
 def _publish_video_pair(stage: Path, staged_report: Path, target: Path, *, cancel_event: object = None) -> None:
@@ -495,8 +730,29 @@ class _PreparedMedia:
         self.video_frames: dict[str, list[Path]] = {}
         self._temporary: tempfile.TemporaryDirectory[str] | None = None
 
-    def __enter__(self):
+    @property
+    def scratch(self) -> Path:
+        if self._temporary is None:
+            raise RuntimeError("prepared media is not open")
+        return Path(self._temporary.name)
+
+    def load_images(self) -> None:
+        """Load still assets; frame workers attach the parent's decoded clips."""
+        for asset_id, asset in self.assets.items():
+            if asset.get("type") == "image":
+                self.images[asset_id] = self._load_image(asset_id, asset)
+
+    def _load_image(self, asset_id: str, asset: dict[str, Any]):
         Image, _ImageDraw, _ImageFont = _require_pillow()
+        from .model import project_asset_path
+        try:
+            with Image.open(project_asset_path(self.project, asset)) as source:
+                return source.convert("RGBA").copy()
+        except OSError as exc:
+            raise RuntimeError(f"image asset {asset_id} is unreadable") from exc
+
+    def __enter__(self):
+        _require_pillow()
         from .model import project_asset_path
         video_assets = [asset for asset in self.assets.values() if asset.get("type") == "video"]
         if video_assets and not self.ffmpeg:
@@ -505,14 +761,10 @@ class _PreparedMedia:
         try:
             root = Path(self._temporary.name)
             for asset_id, asset in self.assets.items():
-                path = project_asset_path(self.project, asset)
                 if asset.get("type") == "image":
-                    try:
-                        with Image.open(path) as source:
-                            self.images[asset_id] = source.convert("RGBA").copy()
-                    except OSError as exc:
-                        raise RuntimeError(f"image asset {asset_id} is unreadable") from exc
+                    self.images[asset_id] = self._load_image(asset_id, asset)
                     continue
+                path = project_asset_path(self.project, asset)
                 width = int(asset["width"])
                 height = int(asset["height"])
                 ratio = min(1.0, self.project.width / width, self.project.height / height)
@@ -1731,3 +1983,7 @@ def _require_pillow():
     except ImportError as exc:
         raise RuntimeError("Pillow is required; install MO's optional computer-use requirements") from exc
     return Image, ImageDraw, ImageFont
+
+
+if __name__ == "__main__":
+    raise SystemExit(_frame_worker_main(sys.argv[1:]))

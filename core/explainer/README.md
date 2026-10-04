@@ -107,7 +107,11 @@ under `media/`, measured and hash-bound; clips are muted because narration owns
 audio. Native `add-media` asset IDs are labels, so `--id wallet` is valid; sandbox
 checks still protect the actual file operands, including `wallet.dat` and other
 credential paths. A trim ends at measured clip duration by default; loops repeat that trim.
-Output dimensions must be even for encoding. `status.json` owns phase/progress;
+Output dimensions must be even for encoding. Renders of 48 or more frames spread
+frames over hidden below-normal-priority worker processes (half the logical
+cores, at most 8) that reuse the parent's decoded clips; their frames are
+byte-identical to in-process rendering, and each receipt records
+`render.frame_workers` and `render.render_seconds`. `status.json` owns phase/progress;
 contact sheets, previews and final MP4s are derived, each MP4 with a matching
 `.render.json` FFprobe receipt. Contact sheets draw JSON scene midpoints and do
 not decode the final video. Deterministic QC checks geometry, captions, source
