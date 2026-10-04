@@ -278,13 +278,20 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 lines.append([("", False)])
                 continue
             cur: list[tuple[str, bool]] = []
+            cur_width = 0.0
+            space = self._line_width(draw, [(" ", False)])
             for word, bold in words:
-                trial = cur + ([(" ", False)] if cur else []) + [(word, bold)]
-                if self._line_width(draw, trial) <= limit or not cur:
-                    cur = trial
+                # Line width is the sum of its spans, so extend it instead of
+                # re-measuring the whole line for every candidate word.
+                word_width = self._line_width(draw, [(word, bold)])
+                trial_width = cur_width + (space if cur else 0.0) + word_width
+                if trial_width <= limit or not cur:
+                    cur = cur + ([(" ", False)] if cur else []) + [(word, bold)]
+                    cur_width = trial_width
                 else:
                     lines.append(cur)
                     cur = [(word, bold)]
+                    cur_width = word_width
             lines.append(cur)
         return lines or [[("", False)]]
 
