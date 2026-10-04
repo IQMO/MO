@@ -1381,10 +1381,11 @@ def _draw_element(
             draw.line(face + [face[0]], fill=color, width=stroke, joint="curve")
     elif kind in {"line", "arrow"}:
         x2, y2 = _connector_end(element, x, y, scale)
-        _draw_connector(
-            draw,
+        _draw_smooth_connector(
+            layer,
             (x, y),
             (x2, y2),
+            samples=_connector_samples(style),
             color=color,
             width=stroke,
             curve=float(element.get("curve", 0.0)) * scale,
@@ -1444,10 +1445,11 @@ def _draw_element(
         target_y = float(element.get("target_y", y))
         anchor_x = x if target_x < x else x + width
         anchor_y = min(y + height, max(y, target_y))
-        _draw_connector(
-            draw,
+        _draw_smooth_connector(
+            layer,
             (anchor_x, anchor_y),
             (target_x, target_y),
+            samples=_connector_samples(style),
             color=color,
             width=stroke,
             curve=float(element.get("curve", 0.0)) * scale,
@@ -1534,6 +1536,68 @@ def _keyframe_ease(value: float, name: str) -> float:
         shifted = progress - 1.0
         return 1.0 + (overshoot + 1.0) * shifted ** 3 + overshoot * shifted ** 2
     return progress * progress * (3.0 - 2.0 * progress)
+
+
+def _connector_samples(style: dict[str, Any]) -> int:
+    """Oversample lines to about 4x output pixels whatever the supersampling."""
+    return max(1, round(4 / _coordinate_scale(style)))
+
+
+def _draw_smooth_connector(
+    layer,
+    start: tuple[float, float],
+    end: tuple[float, float],
+    *,
+    samples: int,
+    color: tuple[int, int, int, int],
+    width: int,
+    curve: float = 0.0,
+    progress: float = 1.0,
+    head: str = "none",
+    head_size: float = 16.0,
+) -> None:
+    """Draw a connector on an oversampled local canvas, then box-filter it down.
+
+    Pillow lines are not anti-aliased, so curves stair-stepped even at
+    supersampling 2. A quadratic curve stays inside the triangle of its ends
+    and control point, which bounds the canvas.
+    """
+    Image, ImageDraw, _ImageFont = _require_pillow()
+    (x1, y1), (x2, y2) = start, end
+    distance = math.hypot(x2 - x1, y2 - y1)
+    if distance < 0.01:
+        return
+    control = (
+        (x1 + x2) / 2.0 - (y2 - y1) / distance * curve,
+        (y1 + y2) / 2.0 + (x2 - x1) / distance * curve,
+    )
+    margin = width / 2.0 + max(4.0, head_size) + 2.0
+    xs, ys = (x1, x2, control[0]), (y1, y2, control[1])
+    left = max(0, math.floor(min(xs) - margin))
+    top = max(0, math.floor(min(ys) - margin))
+    right = min(layer.width, math.ceil(max(xs) + margin))
+    bottom = min(layer.height, math.ceil(max(ys) + margin))
+    if right <= left or bottom <= top:
+        return
+    canvas = Image.new("RGBA", ((right - left) * samples, (bottom - top) * samples), (0, 0, 0, 0))
+
+    def local(point: tuple[float, float]) -> tuple[float, float]:
+        return (point[0] - left) * samples, (point[1] - top) * samples
+
+    _draw_connector(
+        ImageDraw.Draw(canvas, "RGBA"),
+        local(start),
+        local(end),
+        color=color,
+        width=max(1, round(width * samples)),
+        curve=curve * samples,
+        progress=progress,
+        head=head,
+        head_size=head_size * samples,
+    )
+    if samples > 1:
+        canvas = canvas.convert("RGBa").resize((right - left, bottom - top), Image.Resampling.BOX).convert("RGBA")
+    layer.alpha_composite(canvas, (left, top))
 
 
 def _draw_connector(
