@@ -21,7 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Create and render evidence-backed MO explainer videos")
     parser.add_argument("--config", default=None, help="MO config path; defaults to the canonical active config")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("guide", help="read the bundled authoring and review guide")
+    guide = subparsers.add_parser("guide", help="read the bundled authoring and review guide")
+    guide.add_argument("topic", nargs="?", choices=("elements",), help="elements: style, element and motion fields")
 
     init = subparsers.add_parser("init", help="create a private explainer project")
     init.add_argument("--title", required=True)
@@ -55,8 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     project = None
     try:
         if args.command == "guide":
-            reference = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
-            print(reference.split("\n## Runtime and verification contract", 1)[0].rstrip())
+            print(guide_text(args.topic))
             return 0
         config = load_config(args.config)
         if args.command == "init":
@@ -208,6 +208,16 @@ def main(argv: list[str] | None = None) -> int:
                 pass
         return _print({"error": str(exc), "type": type(exc).__name__}, code=2)
     return 1
+
+
+def guide_text(topic: str | None = None) -> str:
+    """Return one bundled README section; each fits the shell result cap."""
+    reference = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
+    preamble, _separator, body = reference.partition("\n## ")
+    sections = {block.split("\n", 1)[0]: "## " + block.rstrip() for block in body.split("\n## ")}
+    if topic == "elements":
+        return sections["Elements and style"]
+    return f"{preamble.rstrip()}\n\n{sections['Authoring']}"
 
 
 def _status(project_path: str | None, config: dict) -> int:

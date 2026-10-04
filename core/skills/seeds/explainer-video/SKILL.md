@@ -18,7 +18,8 @@ mastery_corrections: 0
 Use for explainers, presentations, and product demos when native motion graphics
 fit. Preserve a chosen external method. Start native work with
 `mo --explainer init` through `shell`;
-`mo --explainer guide` owns authoring fields and review commands.
+`mo --explainer guide` owns authoring and review commands; `guide elements`
+owns element, style and motion fields.
 
 1. Choose visuals that show recognizable subjects and meaningful change when the
    brief depends on objects or actions.

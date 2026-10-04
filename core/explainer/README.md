@@ -1,6 +1,7 @@
 # MO Explainer
 
-`mo --explainer guide` prints this reference from any directory.
+`mo --explainer guide` prints the authoring guide below from any directory;
+`mo --explainer guide elements` prints the style, element and motion reference.
 
 ## Authoring
 
@@ -34,8 +35,27 @@ and `source_ids` into project `sources`, verified and recorded in `research.md`.
 `transition:{"type":"crossfade","duration":0.35}` blends from the previous scene
 within the new scene's time (default `cut`), replacing element opacity fades at
 scene edges.
+Element, style and motion fields: `mo --explainer guide elements`.
 
-### Style and elements
+### Verification and delivery
+
+After `narrate`, compare speech_duration and duration in `timings.json`; total
+time is 0.2s lead plus sum(max(scene duration, speech_duration + 0.65s)). Optional
+project `voice.speed` (0.5-2, default 1) slows speech below 1; shortening text may
+not slow it. `check` covers schema, assets, layout, pacing, and raster media
+enlarged beyond source pixels, not artistry; skip `validate`. Changed text,
+durations or speed need `narrate`. Preview work
+over one minute first (`--preview-seconds 20`; `--preview-width 480` is faster,
+keeping supersampling and finish); its receipt's `final_estimate.seconds`
+approximates the full render; `render` and `narrate` get a 3600 s shell timeout,
+so request a larger `timeout` when the estimate exceeds it. Sample final MP4
+action into a task-owned scratch directory (ffmpeg `fps=4,scale=320:-1,tile=4x2` strips), review with `perceive`, remove samples.
+
+Stills/FFprobe cannot establish smooth playback or voice quality; disclose listening
+limits (captions are approximately timed). Report the render receipt and
+`status <project>` evidence separately from visual strengths and limits.
+
+## Elements and style
 
 Projects snapshot MO's active skin/four-cube brand; customize with
 `style.source:"custom"` (global Settings stay unchanged). `style.layout` alone does
@@ -78,23 +98,6 @@ Optional `style.motion.blur_samples` (1-8) and `shutter_angle` (0-360) give
 deterministic motion blur; `style.render` controls `supersampling` (1-4; `init`
 writes 2 because 1 moves in whole-pixel steps), `bloom`,
 `bloom_radius`, `vignette`, `grain`. Both multiply render cost (preview below).
-
-### Verification and delivery
-
-After `narrate`, compare speech_duration and duration in `timings.json`; total
-time is 0.2s lead plus sum(max(scene duration, speech_duration + 0.65s)). Optional
-project `voice.speed` (0.5-2, default 1) slows speech below 1; shortening text may
-not slow it. `check` covers schema, assets, layout, pacing, and raster media
-enlarged beyond source pixels, not artistry; skip `validate`. Changed text,
-durations or speed need `narrate`. Preview work
-over one minute first (`--preview-seconds 20`; `--preview-width 480` is faster,
-keeping supersampling and finish); its receipt's `final_estimate.seconds`
-approximates the full render. Sample final MP4
-action into a task-owned scratch directory (ffmpeg `fps=4,scale=320:-1,tile=4x2` strips), review with `perceive`, remove samples.
-
-Stills/FFprobe cannot establish smooth playback or voice quality; disclose listening
-limits (captions are approximately timed). Report the render receipt and
-`status <project>` evidence separately from visual strengths and limits.
 
 ## Runtime and verification contract
 
