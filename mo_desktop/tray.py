@@ -1925,7 +1925,7 @@ class TrayPopup:
         from interface.desktop_widgets import render_desktop_switch
 
         specs = list(self.owner.item_specs())
-        rows = [spec for spec in specs if spec["id"] == "show_hide" or spec["kind"] == "toggle"]
+        rows = [spec for spec in specs if spec["id"] in {"show_hide", "settings"} or spec["kind"] == "toggle"]
         rows.append({"id": "advanced", "label": "Advanced", "kind": "expander"})
         if self._advanced:
             rows.extend(spec for spec in specs if spec["kind"] == "advanced")
