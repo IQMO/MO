@@ -1,7 +1,6 @@
 """MO Everywhere bridge for bounded, thread-scoped continuity events."""
 from __future__ import annotations
 
-import json
 import re
 import time
 from pathlib import Path
@@ -23,7 +22,6 @@ from .device import device_identity
 from .paths import resolve_state_path
 
 
-V2_HANDOFF_PATH = "memory/handoffs/latest.json"
 SurfaceHandoff = ContinuityEvent
 
 
@@ -152,7 +150,6 @@ def pending_handoff(
     if not enabled(config):
         return None
     store = LocalContinuityStore(config)
-    _import_v2_handoff_once(config, store)
     project_id, repo_id, commit_id = _project_evidence(agent)
     return store.pending_for(
         target_surface=normalize_continuity_target(target_surface),
@@ -275,53 +272,6 @@ def has_cross_surface_continuity_binding(
 
 def local_continuity_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     return LocalContinuityStore(config or {}).status()
-
-
-def _import_v2_handoff_once(config: dict[str, Any], store: LocalContinuityStore) -> None:
-    """Read the v2 latest.json shape idempotently; never write or sync it."""
-    # COMPAT(surface-handoff-v2): replaced-by the thread-scoped continuity journal; remove-when the supported upgrade window and v2 handoff expiry have elapsed
-    path = Path(resolve_state_path(V2_HANDOFF_PATH, config))
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        return
-    if not isinstance(raw, dict) or int(raw.get("version") or 0) != 2:
-        return
-    created_at = float(raw.get("completed_at") or 0.0)
-    if created_at <= 0 or time.time() - created_at > _max_age(config):
-        return
-    try:
-        surface = validate_continuity_source(raw.get("source_surface"))
-    except ContinuityEventError:
-        return
-    source_slot = _token(raw.get("source_slot"), 64) or opaque_id(surface, "v2")
-    device_id = _token(raw.get("device_id"), 64)
-    event_id = _token(raw.get("handoff_id"), 64)
-    if not device_id or not event_id:
-        return
-    event_raw = {
-        "version": 1,
-        "event_id": event_id,
-        "thread_id": opaque_id("v2-thread", f"{device_id}:{source_slot}"),
-        "source_device_id": device_id,
-        "source_surface": surface,
-        "source_slot": source_slot,
-        "source_environment": "unknown",
-        "project_id": "",
-        "repo_id": "",
-        "commit_id": "",
-        "kind": "turn",
-        "status": "completed",
-        "intent": raw.get("user", ""),
-        "outcome": raw.get("assistant", ""),
-        "next_step": "",
-        "created_at": created_at,
-        "expires_at": created_at + _max_age(config),
-    }
-    try:
-        store.ingest_inbound([ContinuityEvent.from_dict(event_raw, max_age_seconds=_max_age(config))])
-    except ContinuityEventError:
-        return
 
 
 def _config(agent: Any) -> dict[str, Any]:
@@ -512,7 +462,3 @@ def _max_local_rows(config: dict[str, Any]) -> int:
         return max(100, min(10_000, int(continuity.get("max_local_rows", 2_000) or 2_000)))
     except (TypeError, ValueError):
         return 2_000
-
-
-def _token(value: Any, limit: int) -> str:
-    return "".join(ch for ch in str(value or "").strip() if ch.isalnum() or ch in "-_.")[:limit]
