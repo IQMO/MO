@@ -806,6 +806,10 @@ deadline, so a 16 ms budget on a 144 Hz display becomes every second refresh
 instead of a free-running timer's 2/3-refresh beat. The wait is bounded, wakes
 for queued GUI work, and releases on timeout so a locked or sleeping display
 never strands a final paint; without the API the flag is an ordinary timer.
+Within two refreshes of a frame deadline the loop waits on the compositor clock
+instead of `QS_ALLINPUT`, so window messages are pumped at the next tick: at
+most one refresh of added input latency during motion (about 7 ms at 144 Hz,
+17 ms at 60 Hz).
 Do not substitute `DwmFlush`: measured here its returns jitter between 3 and
 11 ms and it skips a pass when called late in the period. A frame that costs
 about a refresh or more (a full composer re-render) does not benefit; cut its
