@@ -4,8 +4,7 @@ MO Design stores each visual concept privately as a declarative `design/v2` YAML
 document with the `.modesign` suffix. Downloads with Board images use a bounded
 ZIP bundle under the same suffix. The suffix is intentionally not `.mo`: it cannot be
 confused with MO's `~/.mo` private profile and runtime directory.
-Existing `design/v1` artifacts remain readable as Board-less documents; every
-new artifact and every artifact that first saves Board state uses `design/v2`.
+Every artifact is `design/v2`; a document that declares another schema is rejected.
 
 ## What standalone means
 
@@ -83,8 +82,7 @@ board:
 ```
 
 `core.design.schema` rejects unknown keys, invalid identifiers, wrong types,
-oversized fields, excessive list items, and `design/v2` documents above 2 MiB.
-Legacy `design/v1` retains its original 512 KiB limit.
+oversized fields, excessive list items, and documents above 2 MiB.
 `core.design.service` owns atomic creation and revision updates. The renderer
 never treats artifact content as executable Python or as implementation
 authority.

@@ -1,4 +1,4 @@
-"""Strict ``design/v1`` and ``design/v2`` schemas for portable documents.
+"""Strict ``design/v2`` schema for portable documents.
 
 The document is declarative.  HTML and CSS describe the preview; JavaScript is
 off by default and is executed only by the renderer's opaque-origin sandbox.
@@ -15,11 +15,8 @@ from .edits import parse_preview_edits
 
 
 SCHEMA_ID = "design/v2"
-# COMPAT(mo-design-v1-boardless): replaced-by design/v2 plus board/v1; remove-when every supported saved artifact is design/v2 or newer
-LEGACY_SCHEMA_ID = "design/v1"
 DESIGN_EXTENSION = ".modesign"
 MAX_DOCUMENT_BYTES = 2_000_000
-MAX_LEGACY_DOCUMENT_BYTES = 512_000
 MAX_HTML_CHARS = 240_000
 MAX_CSS_CHARS = 120_000
 MAX_SCRIPT_CHARS = 80_000
@@ -90,7 +87,6 @@ class DesignHandoff:
 @dataclass(frozen=True)
 class DesignDocument:
     meta: DesignMeta
-    schema_id: str = SCHEMA_ID
     window: DesignWindow = field(default_factory=DesignWindow)
     runtime: DesignRuntime = field(default_factory=DesignRuntime)
     design: DesignContent = field(default_factory=DesignContent)
@@ -99,7 +95,7 @@ class DesignDocument:
 
     def to_dict(self) -> dict[str, Any]:
         row = {
-            "mo": self.schema_id,
+            "mo": SCHEMA_ID,
             "meta": {
                 "id": self.meta.id,
                 "title": self.meta.title,
@@ -132,8 +128,7 @@ class DesignDocument:
                 "symbols": list(self.handoff.symbols),
             },
         }
-        if self.schema_id == SCHEMA_ID:
-            row["board"] = self.board.to_dict()
+        row["board"] = self.board.to_dict()
         if self.design.edits:
             row["design"]["edits"] = [dict(edit, style=dict(edit["style"])) for edit in self.design.edits]
         return row
@@ -157,18 +152,8 @@ def parse_design(source: str | bytes | dict[str, Any]) -> DesignDocument:
     if not isinstance(raw, dict):
         raise DesignValidationError("MO Design document root must be an object")
     _only_keys(raw, _ROOT_KEYS, "document")
-    schema_id = str(raw.get("mo") or "")
-    if schema_id not in {LEGACY_SCHEMA_ID, SCHEMA_ID}:
-        raise DesignValidationError(
-            f"MO Design document must declare mo: {LEGACY_SCHEMA_ID} or {SCHEMA_ID}"
-        )
-    if schema_id == LEGACY_SCHEMA_ID:
-        if isinstance(source, bytes) and len(source) > MAX_LEGACY_DOCUMENT_BYTES:
-            raise DesignValidationError("design/v1 document is larger than 512 KiB")
-        if isinstance(source, str) and len(source.encode("utf-8")) > MAX_LEGACY_DOCUMENT_BYTES:
-            raise DesignValidationError("design/v1 document is larger than 512 KiB")
-        if "board" in raw:
-            raise DesignValidationError("design/v1 does not support board state")
+    if str(raw.get("mo") or "") != SCHEMA_ID:
+        raise DesignValidationError(f"MO Design document must declare mo: {SCHEMA_ID}")
 
     meta = _mapping(raw.get("meta"), "meta", required=True)
     window = _mapping(raw.get("window"), "window")
@@ -192,7 +177,7 @@ def parse_design(source: str | bytes | dict[str, Any]) -> DesignDocument:
         raise DesignValidationError("design.script requires runtime.allow_scripts: true")
 
     try:
-        board = parse_board(raw.get("board")) if schema_id == SCHEMA_ID else empty_board()
+        board = parse_board(raw.get("board"))
         edits = parse_preview_edits(design.get("edits"))
     except ValueError as exc:
         raise DesignValidationError(str(exc)) from None
@@ -206,7 +191,6 @@ def parse_design(source: str | bytes | dict[str, Any]) -> DesignDocument:
             created_at=_text(meta.get("created_at", ""), "meta.created_at", limit=64),
             updated_at=_text(meta.get("updated_at", ""), "meta.updated_at", limit=64),
         ),
-        schema_id=schema_id,
         window=DesignWindow(
             width=_integer(window.get("width", 1180), "window.width", 640, 3840),
             height=_integer(window.get("height", 760), "window.height", 420, 2160),
@@ -248,8 +232,7 @@ def render_design(document: DesignDocument) -> str:
         width=1000,
         default_flow_style=False,
     )
-    limit = MAX_LEGACY_DOCUMENT_BYTES if document.schema_id == LEGACY_SCHEMA_ID else MAX_DOCUMENT_BYTES
-    if len(text.encode("utf-8")) > limit:
+    if len(text.encode("utf-8")) > MAX_DOCUMENT_BYTES:
         raise DesignValidationError("MO Design document is too large")
     return text
 

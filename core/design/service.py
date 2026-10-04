@@ -175,7 +175,6 @@ def _commit_design_update(
             revision=current.meta.revision + 1,
             updated_at=_now(),
         ),
-        schema_id=SCHEMA_ID if board is not None else current.schema_id,
         window=next_window,
         runtime=runtime,
         design=content,

@@ -947,9 +947,8 @@ interaction clock must not become an always-running background animation.
   saved edits and unfinished revisions, and never accept a different request's
   late callback. Startup and tool failures remain visible in the same conversation.
 
-- `core/design/schema.py` owns the strict `design/v2` `.modesign` contract and
-  reads Board-less `design/v1` inputs as an empty Board; new artifacts and the
-  first Board write emit v2 while Board-less legacy visual updates remain v1;
+- `core/design/schema.py` owns the strict `design/v2` `.modesign` contract; a
+  document that declares any other schema is rejected;
   the explicit suffix keeps Design artifacts distinct from the `~/.mo` private
   runtime/profile home. `core/design/service.py` is the artifact writer and
   `core/design/session.py` owns the bounded non-portable conversation sidecar.

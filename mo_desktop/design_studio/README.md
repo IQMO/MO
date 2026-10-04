@@ -18,7 +18,7 @@ are governed by [`VISUAL_SYSTEM.md`](VISUAL_SYSTEM.md).
 ## Artifact boundary
 
 The [artifact guide](../../core/design/README.md) is the single documentation
-owner for the `design/v2` fields, `design/v1` read compatibility, Board validation,
+owner for the `design/v2` fields, Board validation,
 portability, and storage boundary.
 Studio consumes that contract and never adds a second file format.
 
