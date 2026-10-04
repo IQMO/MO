@@ -1,6 +1,6 @@
 ---
 name: "Explainer video"
-description: "Create an original, evidence-backed explainer or product video with MO's native renderer"
+description: "Create an explainer, product demo, promo, tutorial or short video with MO's native renderer"
 triggers:
   - "explainer video"
   - "educational video"
@@ -9,6 +9,20 @@ triggers:
   - "motion graphics"
   - "turn this into a video"
   - "make a video explaining"
+  - "make a video"
+  - "create a video"
+  - "produce a video"
+  - "promo video"
+  - "promotional video"
+  - "product video"
+  - "demo video"
+  - "showcase video"
+  - "intro video"
+  - "walkthrough video"
+  - "short video"
+  - "youtube short"
+  - "video ad"
+  - "ad video"
 provenance: "seed"
 approval: "shipped"
 mastery_uses: 0
