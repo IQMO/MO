@@ -28,7 +28,7 @@ import traceback
 from ..runtime.lock import RuntimeLock, _live_owner, _recent_lock_claim, release_runtime_lock
 from ..profile import active_project_relative_path
 from ..utils.atomic_write import atomic_write_json, atomic_write_text
-from ..runtime.backend_monitor import get_monitor, redact_monitor_text
+from ..runtime.backend_monitor import get_monitor, monitor_phase, redact_monitor_text
 from ..runtime.subprocess_flags import apply_windows_hidden_process_flags, run_with_file_capture
 from ..utils.env_utils import int_env
 from ..utils.number_utils import as_optional_int as _as_int
@@ -151,26 +151,29 @@ def build_project_orientation(
     root = project_root(cwd or os.getcwd())
     knowledge = history = structural = ""
     try:
-        knowledge = build_project_knowledge_context(user_input, root, max_chars=max_chars // 3)
+        with monitor_phase("context_project_knowledge"):
+            knowledge = build_project_knowledge_context(user_input, root, max_chars=max_chars // 3)
     except Exception:
         traceback.print_exc()
     try:
-        history = history_context(user_input, root, max_chars=max_chars // 3)
+        with monitor_phase("context_project_history"):
+            history = history_context(user_input, root, max_chars=max_chars // 3)
     except Exception:
         traceback.print_exc()
     try:
         status = graph_status(root) if build_if_missing else {}
         if build_if_missing and status.get("available") and status.get("stale"):
             build_structural_graph_isolated(root)
-        structural = select_context(
-            user_input,
-            cwd=root,
-            max_chars=max_chars - len(history) - len(knowledge) - 4,
-            max_nodes=max_nodes,
-            build_if_missing=build_if_missing,
-            allow_stale=True,
-            profile=profile,
-        )
+        with monitor_phase("context_code_graph"):
+            structural = select_context(
+                user_input,
+                cwd=root,
+                max_chars=max_chars - len(history) - len(knowledge) - 4,
+                max_nodes=max_nodes,
+                build_if_missing=build_if_missing,
+                allow_stale=True,
+                profile=profile,
+            )
     except Exception:
         traceback.print_exc()
     return {key: value for key, value in (

@@ -695,7 +695,9 @@ def _read_path_diff(
         )
     else:
         diff_text = stat_out = ""
-    tracked = bool(_git_text(root, "ls-files", "-z", "--cached", "--", *pathspecs, timeout=timeout))
+    tracked = set(filter(None, _git_text(
+        root, "ls-files", "-z", "--cached", "--", *pathspecs, timeout=timeout,
+    ).split("\0")))
     if target.is_file():
         # An explicit file includes local ignored QA, even before the first commit.
         untracked = [rel_ref] if not workspace_oid or not tracked else []
@@ -712,6 +714,12 @@ def _read_path_diff(
         ).split("\0")
     else:
         untracked = []
+    # Explicit batched file targets have the same semantics as a single file:
+    # include named ignored QA, without scanning the rest of an ignored tree.
+    for path in paths:
+        if (not workspace_oid or path not in tracked) and (root / path).is_file():
+            if path not in untracked:
+                untracked.append(path)
     for path in filter(None, untracked):
         if _safe_review_file(root, path) is None:
             continue

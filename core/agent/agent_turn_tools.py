@@ -525,7 +525,9 @@ class AgentTurnToolLoopMixin:
             render_project_rule_context,
             resolve_project_rules,
         )
-        from ..graph.structural_graph import project_root
+        from ..graph.structural_graph import build_project_orientation, project_root
+        from ..state.paths import mo_home
+        from ..tooling.sandbox import path_allowed
 
         snapshots = self._project_rule_snapshots_for_turn()
         active_root = project_root(
@@ -534,6 +536,7 @@ class AgentTurnToolLoopMixin:
             else getattr(self, "project_cwd", None)
         )
         delivered = []
+        orientation_roots = set()
         for item in tool_calls_data:
             function = item.get("function") if isinstance(item, dict) else None
             if not isinstance(function, dict):
@@ -566,15 +569,39 @@ class AgentTurnToolLoopMixin:
                 )
             self._remember_project_rule_snapshot(current, previous=previous)
             delivered.append(current)
+            if (
+                current.project_root != active_root
+                and not current.project_root.is_relative_to(mo_home() / "personal")
+                and path_allowed(
+                    str(current.project_root),
+                    self._effective_allowed_roots_for_tool(state.user_input, name, arguments),
+                )
+            ):
+                orientation_roots.add(current.project_root)
 
         if not delivered:
             return False
         blocks = []
+        intent = self._turn_intent_for(state.user_input)
+        query, _source = self._context_query_for(state.user_input, intent)
+        orientation_budget = 3000 // max(1, len(orientation_roots))
         for snapshot in delivered:
             blocks.append(
                 f"### Target project: {snapshot.project_root}\n"
                 + render_project_rule_context(snapshot)
             )
+            if (
+                snapshot.project_root in orientation_roots
+                and intent.include_code_graph_context
+                and self._provider_surface() not in {"mo_desktop", "companion"}
+            ):
+                orientation = build_project_orientation(
+                    query, cwd=str(snapshot.project_root),
+                    profile=getattr(self, "profile", None),
+                    max_chars=orientation_budget, build_if_missing=False,
+                )
+                blocks.extend(orientation.values())
+                orientation_roots.remove(snapshot.project_root)
         self.session.add_assistant(
             "[TARGET PROJECT RULE REVIEW] The requested tool batch was deferred before "
             "execution because it newly targeted the project contract(s) below. Review "

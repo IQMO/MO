@@ -1844,10 +1844,10 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             workspace_oid = _git_text(root, "rev-parse", "--verify", "HEAD", timeout=10).strip()
         except subprocess.CalledProcessError:
             workspace_oid = ""  # An unborn repository has no committed base.
-        diff = "\n".join(
-            _read_path_diff(root, path, root / path, workspace_oid, include_stats=False, timeout=10)[0]
-            for path in dict.fromkeys(paths)
-        )
+        diff = _read_path_diff(
+            root, ".", root, workspace_oid, paths=tuple(dict.fromkeys(paths)),
+            include_stats=False, timeout=10,
+        )[0]
         return root, prt_impact_summary(
             diff, root=root, allowed_roots=allowed_roots, refresh_if_stale=False,
         ) if diff.strip() else {}
@@ -2042,43 +2042,44 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
         )
         include_profile = turn_intent.include_full_profile_context
         profile = getattr(self, "profile", None)
-        if desktop_assistance and profile and turn_intent.include_profile_context:
-            # Desktop stays a personal assistance surface even when a request
-            # contains an action verb. Give it only the compact query-matched
-            # profile used by chat, never the project/work capsule.
-            if trivial_greeting:
-                profile_context = _profile_identity_context(profile)
-            else:
+        with monitor_phase("context_profile"):
+            if desktop_assistance and profile and turn_intent.include_profile_context:
+                # Desktop stays a personal assistance surface even when a request
+                # contains an action verb. Give it only the compact query-matched
+                # profile used by chat, never the project/work capsule.
+                if trivial_greeting:
+                    profile_context = _profile_identity_context(profile)
+                else:
+                    profile_context = profile.build_profile_context(
+                        max_chars=1200,
+                        query=context_query,
+                        policy="chat",
+                    )
+            elif profile and turn_intent.context_policy in {CONTEXT_LOOKUP, CONTEXT_RUNTIME_STATUS}:
+                # Keep generic lookups small. Explicit profile operations get a
+                # modestly larger bounded capsule so query-matched inventory rows
+                # survive without restoring the full facts file or lifecycle IDs.
+                lookup_chars = 1800 if turn_intent.profile_required else 1200
                 profile_context = profile.build_profile_context(
-                    max_chars=1200,
+                    max_chars=lookup_chars,
                     query=context_query,
-                    policy="chat",
+                    policy="lookup",
                 )
-        elif profile and turn_intent.context_policy in {CONTEXT_LOOKUP, CONTEXT_RUNTIME_STATUS}:
-            # Keep generic lookups small. Explicit profile operations get a
-            # modestly larger bounded capsule so query-matched inventory rows
-            # survive without restoring the full facts file or lifecycle IDs.
-            lookup_chars = 1800 if turn_intent.profile_required else 1200
-            profile_context = profile.build_profile_context(
-                max_chars=lookup_chars,
-                query=context_query,
-                policy="lookup",
-            )
-        elif include_profile:
-            if profile:
-                profile_context = profile.build_profile_context(
-                    query=context_query,
-                    policy="profile" if turn_intent.context_policy == CONTEXT_PROFILE else "work",
-                )
-        elif profile and turn_intent.include_profile_context:
-            if trivial_greeting:
-                profile_context = _profile_identity_context(profile)
-            else:
-                profile_context = profile.build_profile_context(
-                    max_chars=1200,
-                    query=context_query,
-                    policy="chat",
-                )
+            elif include_profile:
+                if profile:
+                    profile_context = profile.build_profile_context(
+                        query=context_query,
+                        policy="profile" if turn_intent.context_policy == CONTEXT_PROFILE else "work",
+                    )
+            elif profile and turn_intent.include_profile_context:
+                if trivial_greeting:
+                    profile_context = _profile_identity_context(profile)
+                else:
+                    profile_context = profile.build_profile_context(
+                        max_chars=1200,
+                        query=context_query,
+                        policy="chat",
+                    )
         # First-contact personalization: fires once for a brand-new operator, even on
         # a bare greeting (when full profile context is skipped). Reuses record_profile_fact
         # for persistence; marked offered so it never nags on later turns.
@@ -2093,7 +2094,8 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             not desktop_assistance or turn_intent.context_policy == CONTEXT_MEMORY
         ):
             try:
-                recalled = memory.recall(context_query, limit=3)
+                with monitor_phase("context_memory_recall"):
+                    recalled = memory.recall(context_query, limit=3)
                 if recalled:
                     recalled_context = (
                         "### Recalled Past Interactions - orientation only\n"
@@ -2148,11 +2150,12 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             )
         )
         workspace_context = ""
-        if workspace_needed:
-            try:
-                workspace_context = build_workspace_awareness(self, cwd=getattr(self, "project_cwd", None))
-            except TypeError:
-                workspace_context = build_workspace_awareness(self)
+        with monitor_phase("context_workspace"):
+            if workspace_needed:
+                try:
+                    workspace_context = build_workspace_awareness(self, cwd=getattr(self, "project_cwd", None))
+                except TypeError:
+                    workspace_context = build_workspace_awareness(self)
         game_collaboration_context = ""
         if not desktop_assistance:
             try:
@@ -2206,47 +2209,48 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             )
 
             include_project_orientation = should_include_code_graph_context(user_input)
-        if include_project_orientation:
-            project_orientation = build_project_orientation(
-                context_query,
-                cwd=self._effective_project_cwd(),
-                profile=getattr(self, "profile", None),
-                max_chars=3000,
-                # Preparation is read-only; the existing lifecycle worker owns
-                # automatic maintenance for all three orientation sources.
-                build_if_missing=False,
-            )
-            root = self._effective_project_cwd()
-            graph_state = graph_status(root)
-            pending_orientation_sources: set[str] = set()
-            if not project_orientation.get("code_graph") and (
-                not graph_state.get("available") or graph_state.get("stale")
-            ):
-                pending_orientation_sources.add("code_graph")
-            try:
-                from ..knowledge import knowledge_status
-
-                knowledge_state = knowledge_status(root)
-                if not project_orientation.get("project_knowledge") and (
-                    not knowledge_state.get("available")
-                    or not knowledge_state.get("manifest_current")
+        with monitor_phase("context_project_orientation"):
+            if include_project_orientation:
+                project_orientation = build_project_orientation(
+                    context_query,
+                    cwd=self._effective_project_cwd(),
+                    profile=getattr(self, "profile", None),
+                    max_chars=3000,
+                    # Preparation is read-only; the existing lifecycle worker owns
+                    # automatic maintenance for all three orientation sources.
+                    build_if_missing=False,
+                )
+                root = self._effective_project_cwd()
+                graph_state = graph_status(root)
+                pending_orientation_sources: set[str] = set()
+                if not project_orientation.get("code_graph") and (
+                    not graph_state.get("available") or graph_state.get("stale")
                 ):
-                    pending_orientation_sources.add("project_knowledge")
-            except Exception:
-                pass
-            try:
-                from ..graph.history import history_status
+                    pending_orientation_sources.add("code_graph")
+                try:
+                    from ..knowledge import knowledge_status
 
-                history_state = history_status(root)
-                if not project_orientation.get("project_history") and (
-                    not history_state.get("available") or history_state.get("stale")
-                ):
-                    pending_orientation_sources.add("project_history")
-            except Exception:
-                pass
-            if pending_orientation_sources:
-                self._pending_orientation_context_query = context_query
-                self._pending_orientation_sources = pending_orientation_sources
+                    knowledge_state = knowledge_status(root)
+                    if not project_orientation.get("project_knowledge") and (
+                        not knowledge_state.get("available")
+                        or not knowledge_state.get("manifest_current")
+                    ):
+                        pending_orientation_sources.add("project_knowledge")
+                except Exception:
+                    pass
+                try:
+                    from ..graph.history import history_status
+
+                    history_state = history_status(root)
+                    if not project_orientation.get("project_history") and (
+                        not history_state.get("available") or history_state.get("stale")
+                    ):
+                        pending_orientation_sources.add("project_history")
+                except Exception:
+                    pass
+                if pending_orientation_sources:
+                    self._pending_orientation_context_query = context_query
+                    self._pending_orientation_sources = pending_orientation_sources
         pending_interrupted_context = (
             "" if desktop_assistance
             else self._pending_interrupted_work_context(user_input)
@@ -2437,16 +2441,17 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 from ..skills import load_skills, select_skills_context_with_metadata
                 from ..skills.inventory import render_skill_directory
                 from ..skills.selection import skill_is_requested
-                authored_skills = load_skills(skill_roots)
-                skill_catalog_context = render_skill_directory(authored_skills, query=context_query, project_cwd=self._effective_project_cwd())
-                skills_context, selected_skills = select_skills_context_with_metadata(
-                    context_query,
-                    skill_roots,
-                    profile=getattr(self, "profile", None),
-                    config=cfg,
-                    authored_skills=authored_skills,
-                    project_cwd=self._effective_project_cwd(),
-                )
+                with monitor_phase("context_skills"):
+                    authored_skills = load_skills(skill_roots)
+                    skill_catalog_context = render_skill_directory(authored_skills, query=context_query, project_cwd=self._effective_project_cwd())
+                    skills_context, selected_skills = select_skills_context_with_metadata(
+                        context_query,
+                        skill_roots,
+                        profile=getattr(self, "profile", None),
+                        config=cfg,
+                        authored_skills=authored_skills,
+                        project_cwd=self._effective_project_cwd(),
+                    )
                 requested_skills = any(skill_is_requested(skill, context_query) for skill in selected_skills)
                 setattr(
                     skill_outcome_holder,
@@ -2475,19 +2480,20 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             try:
                 from ..skills import select_conventions_context
                 from ..graph.structural_graph import relevant_node_paths
-                node_paths = relevant_node_paths(
-                    context_query,
-                    cwd=self._effective_project_cwd(),
-                    profile=getattr(self, "profile", None),
-                )
-                conventions_context = select_conventions_context(
-                    context_query,
-                    skill_roots,
-                    node_paths,
-                    profile=getattr(self, "profile", None),
-                    config=cfg,
-                    project_cwd=self._effective_project_cwd(),
-                )
+                with monitor_phase("context_conventions"):
+                    node_paths = relevant_node_paths(
+                        context_query,
+                        cwd=self._effective_project_cwd(),
+                        profile=getattr(self, "profile", None),
+                    )
+                    conventions_context = select_conventions_context(
+                        context_query,
+                        skill_roots,
+                        node_paths,
+                        profile=getattr(self, "profile", None),
+                        config=cfg,
+                        project_cwd=self._effective_project_cwd(),
+                    )
             except Exception:
                 traceback.print_exc()
         mapthis_context = ""

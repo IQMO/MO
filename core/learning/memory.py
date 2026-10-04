@@ -12,6 +12,7 @@ from typing import Callable
 from .embeddings import cosine
 from ..utils.env_utils import int_env
 from ..utils.text_safety import sanitize_unicode_text
+from ..utils.text_utils import DEFAULT_CONTEXT_STOPWORDS
 
 
 _DESKTOP_POLICY_PREFIX_RE = re.compile(
@@ -435,8 +436,13 @@ class EpisodicMemory:
 
     def _keyword_recall(self, q: str, limit: int) -> list[dict[str, str]]:
         """bm25 (FTS5) keyword recall, with a substring fallback when FTS5 is disabled."""
-        # Sanitize query for FTS5 (strip punctuation to prevent match syntax errors)
-        clean_terms = [t for t in q.replace('"', '').replace("'", "").split() if len(t) > 2]
+        # Spend the bounded lexical budget on distinct subject words. Natural
+        # language prefixes and repeated acknowledgements must not hide a topic
+        # later in the query. Unicode tokens also keep the LIKE fallback literal.
+        clean_terms = list(dict.fromkeys(
+            term for term in re.findall(r"[^\W_]+", q.casefold())
+            if len(term) > 2 and term not in DEFAULT_CONTEXT_STOPWORDS
+        ))
         if not clean_terms:
             self._last_recall_mode = "substring_fallback" if not self._fts5_available else "bm25"
             self._last_recall_reason = "no_search_terms"
