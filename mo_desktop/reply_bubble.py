@@ -255,10 +255,21 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         return load_font(("seguisym.ttf", "segoeui.ttf", "arial.ttf"), size)
 
     # ------------------------------------------------------------------ rendering
+    def _text_width(self, draw: Any, text: str, font: Any) -> float:
+        """Width of one span; typing re-measures the same words on every keystroke."""
+        cache = getattr(self, "_text_widths", None)
+        if cache is None or len(cache) >= 4096:
+            cache = self._text_widths = {}
+        key = (id(font), getattr(font, "size", 0), getattr(draw, "fontmode", ""), text)
+        width = cache.get(key)
+        if width is None:
+            width = cache[key] = float(draw.textlength(text, font=font))
+        return width
+
     def _line_width(self, draw: Any, spans: list[tuple[str, bool]]) -> float:
         bold_font = getattr(self, "_bfont", getattr(self, "_font", None))
         font = getattr(self, "_font", bold_font)
-        return sum(float(draw.textlength(text, font=bold_font if bold else font))
+        return sum(self._text_width(draw, text, bold_font if bold else font)
                    for text, bold in spans if text)
 
     def _wrap_spans(self, draw: Any, text: str, *, rich: bool = False, width: int | None = None) -> list[list[tuple[str, bool]]]:
@@ -547,7 +558,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._max_scroll_line = max(0, len(all_lines) - visible_count)
         self._scroll_line = max(0, min(int(getattr(self, "_scroll_line", 0) or 0), self._max_scroll_line))
         cursor = max(0, min(len(shown), int(getattr(self, "_cursor", 0))))
-        caret_lines = self._wrap_spans(probe, shown[:cursor], rich=False) if is_input else []
+        if not is_input:
+            caret_lines = []
+        elif cursor == len(shown) and not placeholder and not rich_text:
+            caret_lines = all_lines  # the same text and settings the body was just wrapped with
+        else:
+            caret_lines = self._wrap_spans(probe, shown[:cursor], rich=False)
         caret_line = max(0, len(caret_lines) - 1)
         if is_input:
             if caret_line < self._scroll_line:
@@ -573,16 +589,23 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # Base card (soft shadow + rounded fill + border) via the shared primitive, so the
         # panel matches the cube's floating hint. All four corners stay rounded; positioning
         # keeps the panel cube-adjacent (a separate dock bridge read as a square artifact).
-        img = card.new_canvas(W, H)
-        img = card.draw_card(
-            img, tuple(box), radius=rad, fill=(*self._card, 255),
-            edge=(*self._edge, 255), edge_width=max(1, ss),
-            shadow_alpha=int(design.shadow_alpha),
-            shadow_blur=int(design.shadow_blur) * ss, shadow_dy=6 * ss)
         provider = self._composer_search_provider() if is_input else ""
         from interface.desktop_brand import SEARCH_SERVICE_COLORS
         colors = SEARCH_SERVICE_COLORS.get(provider, ((*self._edge, 255), (*self._cyan, 110), (*self._edge, 255)))
-        card.gradient_edge(img, tuple(box), radius=rad, width=max(1, ss), colors=colors)
+        # The shadow, fill and edge depend only on geometry and palette, so typing and
+        # scrolling inside one card size reuse them; the cached base is never drawn on.
+        base_key = (W, H, tuple(box), rad, tuple(self._card), tuple(self._edge), ss,
+                    int(design.shadow_alpha), int(design.shadow_blur), colors)
+        base = getattr(self, "_card_base", None)
+        if base is None or base[0] != base_key:
+            canvas = card.draw_card(
+                card.new_canvas(W, H), tuple(box), radius=rad, fill=(*self._card, 255),
+                edge=(*self._edge, 255), edge_width=max(1, ss),
+                shadow_alpha=int(design.shadow_alpha),
+                shadow_blur=int(design.shadow_blur) * ss, shadow_dy=6 * ss)
+            card.gradient_edge(canvas, tuple(box), radius=rad, width=max(1, ss), colors=colors)
+            base = self._card_base = (base_key, canvas)
+        img = base[1].copy()
         d = ImageDraw.Draw(img)
         ax, ay = pad + panel_padding * ss, pad + int(design.accent_top) * ss
         if is_input:
