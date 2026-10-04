@@ -164,7 +164,6 @@ def synthesize_narration(
             "voice_speed": speed,
             "audio_sha256": audio_sha256,
             "narration_sha256": narration_digest(project),
-            "caption_timing": "linear-within-speech-duration-approximate",
             "duration_seconds": round(cursor_samples / sample_rate, 6),
             "scenes": timings,
         }

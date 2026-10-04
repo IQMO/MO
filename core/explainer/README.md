@@ -128,9 +128,10 @@ model's tool result; failure diagnostics and the final receipt remain available.
 `narrate` reuses MO's configured installed Piper model. Project `voice.speed`
 scales that model's default duration setting through its existing worker;
 default-speed Desktop calls are unchanged. It records the effective speed,
-narration digest, WAV digest, measured speech duration, and the honest caption
-mode in `timings.json`. Caption chunks are distributed within measured speech;
-they are not claimed as word-aligned. A supplied WAV must be non-empty 16-bit
+narration digest, WAV digest, and measured speech duration in `timings.json`.
+The renderer splits captions at sentence ends into balanced chunks of at most
+12 words and gives each chunk a share of the measured speech by its length; the
+render receipt names that mode, and captions are not word-aligned. A supplied WAV must be non-empty 16-bit
 mono/stereo PCM and its timing map must bind both current narration and audio
 hashes. Full audio/timeline duration must agree. Rendering without audio produces
 a silent MP4 and reports it as silent.

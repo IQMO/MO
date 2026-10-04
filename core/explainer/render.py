@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -209,8 +210,8 @@ def render_video(
             inspection["captions"] = {
                 "mode": "burned-in",
                 "timing": (
-                    str((_timing_payload(project) or {}).get("caption_timing") or "scene-duration-linear-approximate")
-                    if has_audio else "scene-duration-linear-approximate"
+                    "sentence-chunks-character-weighted-within-"
+                    f"{'speech' if has_audio else 'scene'}-duration-approximate"
                 ),
             }
             motion = project.data.get("style", {}).get("motion", {})
@@ -1120,7 +1121,11 @@ def _render_scene_frame(
         coordinate_scale=coordinate_scale,
     ).copy()
     for element in scene.get("elements", []):
-        _draw_element(image, element, local, duration, theme, style, media=media, fade_in=fade_in, fade_out=fade_out)
+        _draw_element(
+            image, element, local, duration, theme, style,
+            media=media, fade_in=fade_in, fade_out=fade_out,
+            authored_duration=float(scene.get("duration", 6.0)),
+        )
     evidence = scene_source_ids(scene)
     brand = style.get("brand") if isinstance(style.get("brand"), dict) else {}
     needs_header = (
@@ -1194,10 +1199,15 @@ def _draw_element(
     media: _PreparedMedia | None = None,
     fade_in: bool = True,
     fade_out: bool = True,
+    authored_duration: float | None = None,
 ) -> None:
     Image, ImageDraw, _ImageFont = _require_pillow()
     start = float(element.get("start", 0.0))
     end = float(element.get("end", duration))
+    if authored_duration is not None and duration > authored_duration and math.isclose(end, authored_duration):
+        # Narration stretched the scene: an element shown to its authored end
+        # stays to the timed end instead of vanishing while speech continues.
+        end = duration
     if local < start or local > end:
         return
     motion = style.get("motion") if isinstance(style.get("motion"), dict) else {}
@@ -1889,8 +1899,9 @@ def _draw_caption(
     chunks = caption_chunks(narration)
     if not chunks or speech_duration <= 0 or local < 0 or local >= speech_duration:
         return
-    index = min(len(chunks) - 1, int((local / max(0.01, speech_duration)) * len(chunks)))
-    caption, font, background, position = caption_layout(draw, chunks[index], project, style)
+    caption, font, background, position = caption_layout(
+        draw, chunks[caption_index(chunks, local / speech_duration)], project, style,
+    )
     coordinate_scale = _coordinate_scale(style)
     draw.rounded_rectangle(background, radius=20 * coordinate_scale, fill=(4, 9, 13, 205))
     draw.multiline_text(
@@ -1904,9 +1915,37 @@ def _draw_caption(
     )
 
 
+_CAPTION_WORDS = 12
+
+
 def caption_chunks(narration: str) -> list[str]:
-    words = narration.split()
-    return [" ".join(words[i:i + 12]) for i in range(0, len(words), 12)]
+    """Split at sentence ends into balanced chunks of at most 12 words."""
+    chunks: list[str] = []
+    for sentence in re.split(r"(?<=[.!?…])\s+", narration.strip()):
+        words = sentence.split()
+        if not words:
+            continue
+        size = math.ceil(len(words) / math.ceil(len(words) / _CAPTION_WORDS))
+        for index in range(0, len(words), size):
+            chunk = words[index:index + size]
+            previous = chunks[-1].split() if chunks else []
+            # Fold a one- or two-word sentence into its neighbour.
+            if previous and min(len(previous), len(chunk)) <= 2 and len(previous) + len(chunk) <= _CAPTION_WORDS + 2:
+                chunks[-1] = " ".join(previous + chunk)
+            else:
+                chunks.append(" ".join(chunk))
+    return chunks
+
+
+def caption_index(chunks: list[str], fraction: float) -> int:
+    """Pick the chunk being spoken, giving each a share of time by its length."""
+    position = max(0.0, fraction) * sum(len(chunk) for chunk in chunks)
+    elapsed = 0
+    for index, chunk in enumerate(chunks):
+        elapsed += len(chunk)
+        if position < elapsed:
+            return index
+    return len(chunks) - 1
 
 
 def caption_layout(draw, caption: str, project: ExplainerProject, style: dict[str, Any]):
