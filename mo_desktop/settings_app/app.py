@@ -12,7 +12,7 @@ from interface.desktop_brand import cube_mark_css, cube_mark_html, glyph_html, w
 from mo_desktop.design_studio.theme import studio_theme
 from mo_desktop.mo_renderer import (
     _create_design_native_visual_controller,
-    _initial_studio_theme_css, _renderer_icon_path, renderer_available,
+    _initial_studio_theme_css, _renderer_icon_path, read_host_init, renderer_available, workspace_document,
 )
 from mo_desktop.visuals import load_desktop_visual_state
 
@@ -30,12 +30,8 @@ def assets() -> tuple[str, str, str]:
 
 def shell(theme: dict[str, Any]) -> str:
     html, css, script = assets()
-    return ('<!doctype html><html><head><meta charset="utf-8"><title>MO Settings</title><meta name="viewport" content="width=device-width,initial-scale=1">'
-            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; '
-            'script-src \'unsafe-inline\'; img-src data: blob:; connect-src \'none\'; font-src \'none\'; '
-            'object-src \'none\'; base-uri \'none\'; form-action \'none\'">'
-            f'<style id="settings-theme">{_initial_studio_theme_css(theme)}</style><style>{css}</style>'
-            f'</head><body>{html}<script>{script}</script></body></html>')
+    return workspace_document(theme, theme_id="settings-theme", css=css, body=html,
+                              scripts=(script,), title="MO Settings")
 
 
 class SettingsBridge:
@@ -153,12 +149,7 @@ def run(config: dict[str, Any], *, launch_snapshot: dict | None = None) -> int:
 
 
 def main() -> int:
-    # NativeAppWindow's JSON pipe is UTF-8 on every Windows locale.
-    sys.stdin.reconfigure(encoding="utf-8")
-    sys.stdout.reconfigure(encoding="utf-8")
-    first = json.loads(sys.stdin.readline())
-    if first.get("cmd") != "init" or not isinstance(first.get("config"), dict):
-        raise ValueError("Settings requires its Desktop initialization payload")
+    first = read_host_init("Settings")
     return run(first["config"], launch_snapshot=first.get("launch_snapshot"))
 
 

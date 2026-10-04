@@ -10,8 +10,8 @@ from typing import Any
 
 from interface.desktop_brand import cube_mark_css, cube_mark_html, glyph_html, window_chrome_css, window_controls_html
 from mo_desktop.design_studio.theme import studio_theme
-from mo_desktop.mo_renderer import (_create_design_native_visual_controller,
-                                    _initial_studio_theme_css, _renderer_icon_path, renderer_available)
+from mo_desktop.mo_renderer import (_create_design_native_visual_controller, _initial_studio_theme_css,
+                                    _renderer_icon_path, read_host_init, renderer_available, workspace_document)
 from mo_desktop.visuals import load_desktop_config, load_desktop_visual_state
 
 
@@ -32,14 +32,8 @@ def _shell(theme: dict[str, Any], *, start_scan: bool = False, quick_action: str
     html = html.replace("@@CHEVRON@@", glyphs["chevron_right"])
     initial = json.dumps({"icons": glyphs, "mark": mark, "start_scan": start_scan,
                           "quick_action": str(quick_action or "")}, ensure_ascii=False).replace("<", "\\u003c")
-    return (
-        '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; '
-        'script-src \'unsafe-inline\'; img-src data: blob:; connect-src \'none\'; font-src \'none\'; '
-        'object-src \'none\'; base-uri \'none\'; form-action \'none\'">'
-        f'<style id="mo-care-theme">{_initial_studio_theme_css(theme)}</style><style>{cube_mark_css()}\n{css}</style>'
-        f'</head><body>{html}<script>window.MO_CARE_INITIAL={initial};</script><script>{script}</script></body></html>'
-    )
+    return workspace_document(theme, theme_id="mo-care-theme", css=f"{cube_mark_css()}\n{css}", body=html,
+                              scripts=(f"window.MO_CARE_INITIAL={initial};", script))
 
 
 def run(config: dict[str, Any] | None = None, *, start_scan: bool = False, quick_action: str = "",
@@ -160,9 +154,7 @@ def run(config: dict[str, Any] | None = None, *, start_scan: bool = False, quick
 
 
 def main() -> int:
-    first = json.loads(sys.stdin.readline())
-    if first.get("cmd") != "init" or not isinstance(first.get("config"), dict):
-        raise ValueError("SystemCare requires its Desktop initialization payload")
+    first = read_host_init("SystemCare")
     return run(first["config"], start_scan=first.get("start_scan") is True,
                quick_action=str(first.get("quick_action") or ""), launch_snapshot=first.get("launch_snapshot"))
 

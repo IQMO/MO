@@ -14,7 +14,9 @@ from mo_desktop.mo_renderer import (
     _create_design_native_visual_controller,
     _initial_studio_theme_css,
     _renderer_icon_path,
+    read_host_init,
     renderer_available,
+    workspace_document,
 )
 from mo_desktop.visuals import load_desktop_config, load_desktop_visual_state
 
@@ -28,24 +30,14 @@ def _shell(theme: dict[str, Any], initial: dict[str, str]) -> str:
     css += window_chrome_css()
     html = html.replace("{{WINDOW_CONTROLS}}", window_controls_html(("toggle_pin", "minimize", "toggle_maximize", "close")))
     script = (root / "board.js").read_text(encoding="utf-8")
-    first_theme = _initial_studio_theme_css(theme)
     initial_json = json.dumps(initial, ensure_ascii=False).replace("<", "\\u003c")
     source_mark = json.dumps(
         cube_mark_html(class_name="mo-mark source-cube"), ensure_ascii=False,
     ).replace("<", "\\u003c")
-    return (
-        '<!doctype html><html><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
-        'style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; '
-        'img-src data: blob:; connect-src \'none\'; font-src \'none\'; '
-        'object-src \'none\'; base-uri \'none\'; form-action \'none\'">'
-        f'<style id="mo-files-theme">{first_theme}</style>'
-        f'<style>{cube_mark_css(".mo-mark")}\n{css}</style>'
-        '</head><body>'
-        + html.replace("{{MO_MARK}}", cube_mark_html(class_name="mo-mark", label="MO"))
-        + f'<script>window.MO_FILES_INITIAL={initial_json};window.MO_FILES_MARK={source_mark};</script><script>{script}</script>'
-        '</body></html>'
+    return workspace_document(
+        theme, theme_id="mo-files-theme", css=f'{cube_mark_css(".mo-mark")}\n{css}',
+        body=html.replace("{{MO_MARK}}", cube_mark_html(class_name="mo-mark", label="MO")),
+        scripts=(f"window.MO_FILES_INITIAL={initial_json};window.MO_FILES_MARK={source_mark};", script),
     )
 
 
@@ -168,18 +160,9 @@ def run(
 
 
 def main() -> int:
-    first = sys.stdin.readline()
-    config = None
-    source_id = location_id = ""
-    launch_snapshot = None
-    if first:
-        command = json.loads(first)
-        if command.get("cmd") == "init" and isinstance(command.get("config"), dict):
-            config = command["config"]
-            source_id = str(command.get("source_id") or "")
-            location_id = str(command.get("location_id") or "")
-            launch_snapshot = command.get("launch_snapshot")
-    return run(config, source_id=source_id, location_id=location_id, launch_snapshot=launch_snapshot)
+    command = read_host_init("Files", required=False) or {}
+    return run(command.get("config"), source_id=str(command.get("source_id") or ""),
+               location_id=str(command.get("location_id") or ""), launch_snapshot=command.get("launch_snapshot"))
 
 
 if __name__ == "__main__":

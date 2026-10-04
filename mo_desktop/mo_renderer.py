@@ -1313,6 +1313,46 @@ def _initial_studio_theme_css(theme: dict[str, Any]) -> str:
     return ":root{" + ";".join(f"{name}:{value}" for name, value in values.items()) + "}"
 
 
+_WORKSPACE_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+    "img-src data: blob:; connect-src 'none'; font-src 'none'; "
+    "object-src 'none'; base-uri 'none'; form-action 'none'"
+)
+
+
+def workspace_document(theme: dict[str, Any], *, theme_id: str, css: str, body: str,
+                       scripts: tuple[str, ...], title: str = "") -> str:
+    """Compose one offline native-host page; the strict CSP lives only here."""
+    from html import escape
+
+    heading = f"<title>{escape(title)}</title>" if title else ""
+    return (
+        '<!doctype html><html><head><meta charset="utf-8">' + heading
+        + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        + f'<meta http-equiv="Content-Security-Policy" content="{_WORKSPACE_CSP}">'
+        + f'<style id="{theme_id}">{_initial_studio_theme_css(theme)}</style><style>{css}</style>'
+        + f'</head><body>{body}' + "".join(f"<script>{script}</script>" for script in scripts)
+        + "</body></html>"
+    )
+
+
+def read_host_init(name: str, *, required: bool = True) -> dict[str, Any] | None:
+    """Read a native app host's Desktop-owned JSON init line.
+
+    NativeAppWindow writes its pipe as UTF-8 on every Windows locale, so the host
+    must read and report in UTF-8 too or non-ASCII names and paths are corrupted.
+    """
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
+    line = sys.stdin.readline()
+    first = json.loads(line) if line.strip() else None
+    if isinstance(first, dict) and first.get("cmd") == "init" and isinstance(first.get("config"), dict):
+        return first
+    if required:
+        raise ValueError(f"{name} requires its Desktop initialization payload")
+    return None
+
+
 def _set_process_identity() -> None:
     if os.name != "nt":
         return
