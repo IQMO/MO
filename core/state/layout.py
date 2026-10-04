@@ -11,7 +11,7 @@ Boundary: PRODUCT paths only. Undeclared profile-private data is not enumerated
 here (no operator specifics in product code). The layout check reports
 anything undeclared as ``undeclared`` for the operator to classify — never an
 error. Creation is limited to the declared first-run directories and generated
-README; migrations live separately in ``layout_migration.py``.
+README.
 """
 from __future__ import annotations
 
@@ -20,11 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from .paths import (
-    OBSOLETE_STATE_LAYOUT_MARKERS,
     PROFILE_PROSE_ROLES,
     RUNTIME_PREFERENCES_LOCK_PATH,
     RUNTIME_PREFERENCES_PATH,
-    STATE_LAYOUT_MARKER_PATH,
     mo_home,
 )
 from ..utils.atomic_write import atomic_write_text
@@ -59,7 +57,7 @@ STATE_LAYOUT: tuple[StatePath, ...] = (
     StatePath("credentials/gmail.env", "file", "secret", "config", "operator-owned Gmail OAuth client ID"),
     StatePath("credentials/gmail-token.bin", "file", "secret", "durable", "encrypted device-local Gmail OAuth token"),
     StatePath("credentials/mcp", "dir", "secret", "config", "per-MCP credential files"),
-    StatePath("credentials/legacy", "dir", "secret", "config", "inactive archives created only by explicit upgrade migration"),
+    StatePath("credentials/legacy", "dir", "secret", "config", "inactive credential archives from an earlier upgrade; no longer written"),
     StatePath("credentials/everywhere.json", "file", "secret", "config", "device-local Everywhere hub token bundle"),
     StatePath("credentials/everywhere-live-host.json", "file", "secret", "config", "device-local Everywhere Live Control host token bundle"),
     StatePath("credentials/everywhere-transfer.json", "file", "secret", "config", "device-local Everywhere cargo token bundle"),
@@ -115,8 +113,7 @@ STATE_LAYOUT: tuple[StatePath, ...] = (
     StatePath("run/design-handoffs", "dir", "product", "ephemeral", "bounded prompts explicitly routed from MO Design"),
     StatePath("run/browser-control", "dir", "product", "ephemeral", "authenticated loopback descriptor for Connected Chrome tabs"),
     StatePath("run/heartbeat", "dir", "product", "ephemeral", "bounded multi-instance heartbeat ledger"),
-    StatePath(STATE_LAYOUT_MARKER_PATH, "file", "product", "ephemeral", "completed canonical-layout migration marker"),
-    *(StatePath(path, "file", "product", "ephemeral", "obsolete canonical-layout migration marker", deprecated=True) for path in OBSOLETE_STATE_LAYOUT_MARKERS),
+    *(StatePath(f"run/state-layout-v{version}", "file", "product", "ephemeral", "obsolete layout marker; no longer written or read", deprecated=True) for version in range(2, 6)),
     StatePath("sync", "dir", "product", "durable", "device-local state-sync git metadata and status", sync="device"),
     StatePath("sync/repo.git", "dir", "product", "durable", "private curated-profile synchronization metadata", sync="device"),
     StatePath("sync/everywhere-status.json", "file", "product", "ephemeral", "latest Everywhere coordinator state"),
@@ -409,7 +406,7 @@ def render_state_home_readme() -> str:
         "## Retired locations",
         "",
         "These compatibility-only paths are recognized so `/doctor layout` can flag them and",
-        "the layout migration can relocate them; new state must use the destination in each description.",
+        "new state must use the destination in each description.",
         "",
     ])
     for entry in retired_locations:
@@ -439,9 +436,8 @@ def render_state_home_readme() -> str:
 def refresh_state_home_readme(home: str | Path) -> Path | None:
     """Rewrite the generated map only when it no longer matches the registry.
 
-    Registry edits used to reach the map only when a layout migration happened to
-    run or the file was missing, so a changed `STATE_LAYOUT` could stay invisible
-    on disk indefinitely. The comparison is cheap (sub-millisecond render plus one
+    Registry edits could otherwise reach the map only when the file was missing,
+    so a changed `STATE_LAYOUT` could stay invisible on disk indefinitely. The comparison is cheap (sub-millisecond render plus one
     small read) and it runs on the startup path.
 
     Best-effort by design: the map is informational, and `atomic_write_text`

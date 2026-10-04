@@ -379,7 +379,6 @@ def _canonical_credential_source_violations(
     }
     allowed_env_parsers = {
         broker_rel,
-        "core/state/credential_migration.py",
     }
     python_paths = {
         str(rel or "").replace("\\", "/").strip("/")

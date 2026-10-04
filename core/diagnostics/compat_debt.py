@@ -37,10 +37,6 @@ _DEBT_PHRASES = re.compile(
 # Registered compatibility debt: id -> short human note. Adding a marker requires
 # a row here; deleting the marked code requires deleting the row in the same change.
 REGISTERED_COMPAT: dict[str, str] = {
-    "state-home-upgraders": (
-        "explicit --init old-home upgraders (credential + layout); retire when the operator "
-        "declares no supported old-home restore path"
-    ),
     "android-update-legacy-env": (
         "seven-field Android updater environment alongside the generated release manifest; "
         "retire when all maintained deployments use MO_ANDROID_UPDATE_MANIFEST"

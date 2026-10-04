@@ -66,7 +66,6 @@ def initialize_mo(
     _ensure_command_shims(home_path / "bin", report)
     if create_config:
         _ensure_config(cfg_path, report)
-    _run_explicit_upgrade_migrations(home_path, cfg_path, report)
     try:
         readme = write_state_home_readme(home_path)
         report.existing.append(readme.name)
@@ -283,25 +282,6 @@ def _provider_status(path: Path, report: InitReport) -> None:
         seen.add((name, key))
         status = secret_status(key, config=cfg, service="providers")
         report.provider_status.append((name, key, bool(status.present), status.source))
-
-
-def _run_explicit_upgrade_migrations(home: Path, config_path: Path, report: InitReport) -> None:
-    """Run value-free upgrade migrations only during the explicit --init flow."""
-    try:
-        import yaml
-        from .credential_migration import migrate_legacy_credentials
-        from .layout_migration import migrate_state_layout
-
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {} if config_path.is_file() else {}
-        if not isinstance(config, dict):
-            config = {}
-        config["_config_path"] = str(config_path)
-        credentials = migrate_legacy_credentials(home=home, config=config)
-        layout = migrate_state_layout(home, config_path=config_path)
-        report.migrations.extend(credentials.migrated + credentials.archived + layout.moved)
-        report.warnings.extend(credentials.warnings + layout.warnings)
-    except Exception:
-        report.warnings.append("Legacy private-state migration could not run; existing files were preserved.")
 
 
 def _materialize_historical_learning(profile: Profile, home: Path, config_path: Path, report: InitReport) -> None:

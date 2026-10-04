@@ -209,9 +209,6 @@ MEDIA_ATTACHMENTS_DIR = "media/attachments"
 MO_DESIGN_RUNTIME_DIR = "run/design-preview"
 MO_DESIGN_HANDOFF_DIR = "run/design-handoffs"
 VOICE_RUNTIME_DIR = "models/voice"
-STATE_LAYOUT_VERSION = 5
-STATE_LAYOUT_MARKER_PATH = f"run/state-layout-v{STATE_LAYOUT_VERSION}"
-OBSOLETE_STATE_LAYOUT_MARKERS = ("run/state-layout-v2", "run/state-layout-v3", "run/state-layout-v4")
 
 
 def default_project_roots(config: dict[str, Any] | None = None) -> list[str]:
