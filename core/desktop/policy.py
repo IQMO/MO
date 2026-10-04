@@ -17,7 +17,7 @@ from .tool_actions import normalize_computer_call
 CONFIRMATION_TTL_SECONDS = 180.0
 
 _HIGH_IMPACT = re.compile(
-    r"\b(delete|remove|erase|discard|send|upload|share|publish|post|"
+    r"\b(delete|remove|erase|discard|don'?t\s+save|do\s+not\s+save|send|upload|share|publish|post|"
     r"pay|buy|purchase|transfer|place\s+(?:an?\s+)?order|confirm\s+(?:the\s+)?order|"
     r"submit\s+(?:(?:an?|the)\s+)?(?:order|payment|purchase|transfer|application)|"
     r"unsubscribe|close\s+account|reset|factory\s+reset|password|passcode|credential|"
@@ -430,8 +430,6 @@ def _risk_summary(tool: str, arguments: dict[str, Any]) -> tuple[str, str, str, 
             "this Windows device",
             "exact reversible receipt",
         )
-    if name == "desktop_window" and str(args.get("action") or "focus").lower() == "close":
-        return ("close window", target_summary, destination, "possible unsaved application state")
     if name == "browser_eval":
         return ("run arbitrary page script", target_summary, destination, "script-controlled page data/state")
     if name in {"press_key", "browser_key"}:
@@ -439,7 +437,9 @@ def _risk_summary(tool: str, arguments: dict[str, Any]) -> tuple[str, str, str, 
         normalized = "+".join(str(item).strip().lower() for item in (
             keys if isinstance(keys, list) else [keys]
         ))
-        if "alt+f4" in normalized or "shift+delete" in normalized:
+        # Closing a window is ordinary, like its own close button; the app's
+        # unsaved-changes prompt is where discarding work is confirmed.
+        if "shift+delete" in normalized:
             return (f"press {normalized}", target_summary, destination, "possible destructive shortcut")
     serialized = json.dumps(args, ensure_ascii=False, sort_keys=True, default=str)
     match = _HIGH_IMPACT.search(" ".join((target_summary, serialized)))
