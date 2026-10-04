@@ -1,6 +1,7 @@
 """Spawn-safe heavy Whisper worker entrypoint."""
 from __future__ import annotations
 
+import sys
 import time
 from typing import Any
 
@@ -8,6 +9,10 @@ from typing import Any
 def stt_worker_main(connection: Any, config: dict[str, Any], cancel_event: Any) -> None:
     """Load Whisper only in this process and serve bounded memory-only audio."""
     try:
+        # ctranslate2 imports torch whenever it is installed, only for model
+        # conversion. Recognition never uses it, so this dedicated process
+        # blocks it: seconds less startup and about a gigabyte less memory.
+        sys.modules.setdefault("torch", None)
         from .input import ConfidenceLimits, VoiceRecognizer
 
         confidence = dict(config.get("confidence") or {})
