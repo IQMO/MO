@@ -14,6 +14,15 @@ from typing import Iterable
 from ..runtime.backend_monitor import redact_monitor_text
 
 PROJECT_CONTEXT_FILES = ("AGENTS.md",)
+PROJECT_MARKERS = (
+    ".git",
+    "pyproject.toml",
+    "setup.cfg",
+    "setup.py",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+)
 
 
 def _external_control_roots() -> tuple[Path, ...]:
@@ -58,6 +67,23 @@ class ProjectRuleSnapshot:
         return bool(self.contents) and not self.unreadable
 
 
+def project_rule_snapshot_key(snapshot: ProjectRuleSnapshot) -> str:
+    """Identify one applicable rule chain without coupling it to a file target."""
+    files = "|".join(str(path.resolve(strict=False)).casefold() for path in snapshot.files)
+    if files:
+        return f"rules::{files}"
+    root = str(snapshot.project_root.resolve(strict=False)).casefold()
+    return f"root::{root}"
+
+
+def project_rule_scope_is_project(snapshot: ProjectRuleSnapshot) -> bool:
+    """Exclude ordinary profile/state paths while retaining real project roots."""
+    if snapshot.files:
+        return True
+    root = snapshot.project_root
+    return any((root / marker).exists() for marker in PROJECT_MARKERS)
+
+
 def _read_project_rules(paths: tuple[Path, ...]):
     """Read each contract once so its content and fingerprint describe the same bytes."""
     digests: list[tuple[str, str]] = []
@@ -83,6 +109,19 @@ def resolve_project_rules(start: str | Path) -> ProjectRuleSnapshot:
     if scope.is_file():
         scope = scope.parent
     root = project_root(scope) if scope.is_dir() else scope
+    if root == scope and scope.is_dir():
+        # Outside Git, the nearest explicit project marker owns nested targets.
+        # Ordinary profile/state directories have no marker and remain untouched.
+        for directory in (scope, *scope.parents):
+            if directory.parent == directory:
+                break
+            if _is_external_control_root(directory):
+                continue
+            if any((directory / marker).exists() for marker in PROJECT_MARKERS) or any(
+                (directory / name).is_file() for name in PROJECT_CONTEXT_FILES
+            ):
+                root = directory
+                break
     paths = discover_project_context_files(scope)
     digests, contents, unreadable = _read_project_rules(paths)
     return ProjectRuleSnapshot(

@@ -147,41 +147,80 @@ def _apply_completion_result(agent, ctx, result, attr_name):
 
 
 def _pipeline_project_rules(agent, ctx):
-    """Recheck the project-rule snapshot before accepting project-work output."""
-    snapshot = getattr(agent, "_project_rule_snapshot", None)
-    if snapshot is None:
+    """Recheck every reviewed project-rule chain before accepting output."""
+    primary = getattr(agent, "_project_rule_snapshot", None)
+    snapshot_map = getattr(agent, "_project_rule_snapshots", None)
+    snapshots = dict(snapshot_map) if isinstance(snapshot_map, dict) else {}
+    if primary is not None:
+        from ..context.project_context import project_rule_snapshot_key
+        snapshots.setdefault(project_rule_snapshot_key(primary), primary)
+    if not snapshots:
         return None
+
     from dataclasses import replace
     from ..context.project_context import (
-        project_rules_changed, render_project_context_files,
-        render_project_rule_status, resolve_project_rules,
+        project_rule_snapshot_key, project_rules_changed,
+        render_project_context_files, render_project_rule_status,
+        resolve_project_rules,
     )
-    current = resolve_project_rules(snapshot.scope_path)
-    changed = project_rules_changed(snapshot, current)
-    if changed:
-        snapshot = replace(
-            current, created=snapshot.created, creation_error=snapshot.creation_error,
-            rechecks=snapshot.rechecks + 1,
+
+    updated_snapshots = {}
+    changed_snapshots = []
+    disclosures = []
+    incomplete = []
+    for old_key, snapshot in snapshots.items():
+        current = resolve_project_rules(snapshot.scope_path)
+        changed = project_rules_changed(snapshot, current)
+        updated = snapshot
+        if changed:
+            updated = replace(
+                current,
+                created=snapshot.created,
+                creation_error=snapshot.creation_error,
+                rechecks=snapshot.rechecks + 1,
+            )
+            changed_snapshots.append(updated)
+        updated_snapshots[project_rule_snapshot_key(updated)] = updated
+        if primary is snapshot or (
+            primary is not None and project_rule_snapshot_key(primary) == old_key
+        ):
+            agent._project_rule_snapshot = updated
+        if updated.rechecks > GATE_CONTINUATION_MAX:
+            incomplete.append(updated)
+        elif updated.rechecks or updated.created or updated.creation_error or updated.unreadable:
+            status = render_project_rule_status(updated)
+            disclosures.append(
+                f"{updated.project_root}: {status}" if len(snapshots) > 1 else status
+            )
+
+    agent._project_rule_snapshots = updated_snapshots
+    ctx.project_rule_disclosure = "\n".join(disclosures)
+    if incomplete:
+        roots = ", ".join(str(snapshot.project_root) for snapshot in incomplete)
+        ctx.project_rule_disclosure = (
+            "Project rules: kept changing; final rule review is incomplete "
+            f"for {roots}."
         )
-        agent._project_rule_snapshot = snapshot
-    if snapshot.rechecks > GATE_CONTINUATION_MAX:
-        ctx.project_rule_disclosure = "Project rules: kept changing; final rule review is incomplete."
         ctx.final_text = ctx.project_rule_disclosure
         return None
-    ctx.project_rule_disclosure = (
-        render_project_rule_status(snapshot)
-        if snapshot.rechecks or snapshot.created or snapshot.creation_error or snapshot.unreadable
-        else ""
-    )
-    if changed:
+    if changed_snapshots:
         ctx.final_gates_fired.add("project_rules")
+        blocks = []
+        for snapshot in changed_snapshots:
+            blocks.append(
+                f"### Target project: {snapshot.project_root}\n"
+                + (
+                    render_project_context_files(snapshot.contents)
+                    or "No readable project rules remain."
+                )
+            )
         agent.session.add_assistant(
-            "[PROJECT RULE RECHECK] The applicable AGENTS.md contract changed during this work. "
-            "The current sources follow; they supersede the earlier snapshot. "
-            "Reconcile the work and final report with them, read any omitted files, and assess "
-            "whether the requested work requires a rule update. Do not edit rules without authorization.\n\n"
-            + (render_project_context_files(snapshot.contents) or "No readable project rules remain.")
-            + "\n\n" + ctx.project_rule_disclosure
+            "[PROJECT RULE RECHECK] An applicable AGENTS.md contract changed during this work. "
+            "The current sources follow; they supersede the earlier snapshot. Reconcile the "
+            "work and final report with them, read any omitted files, and assess whether the "
+            "requested work requires a rule update. Do not edit rules without authorization.\n\n"
+            + "\n\n".join(blocks)
+            + ("\n\n" + ctx.project_rule_disclosure if ctx.project_rule_disclosure else "")
         )
         if ctx.on_activity:
             ctx.on_activity("project rules changed: rechecking before finalizing...")

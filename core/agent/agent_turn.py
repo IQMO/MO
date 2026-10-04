@@ -971,6 +971,8 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
         """
         self._turn_onboarding_offer_pending = False
         self._project_rule_snapshot = None
+        self._project_rule_snapshots = {}
+        self._project_rule_preflight_active = True
         self._taskboard_runtime_available_for_turn = bool(task_board is not None or on_first_tool)
         if task_board is not None:
             self._active_task_board = task_board
@@ -2163,6 +2165,7 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             and getattr(self, "_project_rule_snapshot", None) is None
         ):
             self._project_rule_snapshot = resolve_project_rules(project_root)
+            self._remember_project_rule_snapshot(self._project_rule_snapshot)
         project_context = (
             render_project_rule_context(self._project_rule_snapshot)
             if turn_intent.include_project_context and not desktop_assistance else ""

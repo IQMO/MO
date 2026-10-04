@@ -449,9 +449,161 @@ def _json_tool_arguments(arguments: dict[str, Any]) -> str:
 class AgentTurnToolLoopMixin:
     """Validate tool batches and dispatch every call through the single gate."""
 
+    def _project_rule_snapshots_for_turn(self):
+        """Return the per-turn rule-chain ledger, seeding the active project."""
+        from ..context.project_context import project_rule_snapshot_key
+
+        snapshots = getattr(self, "_project_rule_snapshots", None)
+        if not isinstance(snapshots, dict):
+            snapshots = {}
+            self._project_rule_snapshots = snapshots
+        primary = getattr(self, "_project_rule_snapshot", None)
+        if primary is not None and all(
+            hasattr(primary, field) for field in ("project_root", "files", "digests")
+        ):
+            snapshots.setdefault(project_rule_snapshot_key(primary), primary)
+        return snapshots
+
+    def _remember_project_rule_snapshot(self, snapshot, *, previous=None):
+        """Replace one reviewed chain without creating a second rules owner."""
+        if snapshot is None or not all(
+            hasattr(snapshot, field) for field in ("project_root", "files", "digests")
+        ):
+            return snapshot
+        from ..context.project_context import project_rule_snapshot_key
+
+        snapshots = self._project_rule_snapshots_for_turn()
+        if previous is not None:
+            snapshots.pop(project_rule_snapshot_key(previous), None)
+        snapshots[project_rule_snapshot_key(snapshot)] = snapshot
+        primary = getattr(self, "_project_rule_snapshot", None)
+        if primary is previous or (
+            primary is not None
+            and previous is not None
+            and project_rule_snapshot_key(primary) == project_rule_snapshot_key(previous)
+        ):
+            self._project_rule_snapshot = snapshot
+        return snapshot
+
+    @staticmethod
+    def _target_project_rule_scope(name: str, arguments: dict[str, Any]) -> Path | None:
+        """Return the filesystem scope established by one canonical tool call."""
+        if name in {"read_file", "write_file", "edit_file"}:
+            value = arguments.get("path")
+            if not value:
+                return None
+            return Path(str(value)).expanduser().resolve(strict=False).parent
+        if name in {"find_files", "grep"}:
+            value = arguments.get("root")
+            if not value:
+                return None
+            path = Path(str(value)).expanduser().resolve(strict=False)
+            return path.parent if path.is_file() else path
+        if name in {"shell", "test_runner", "git_status"}:
+            value = arguments.get("workdir")
+            if not value:
+                return None
+            return Path(str(value)).expanduser().resolve(strict=False)
+        return None
+
+    def _defer_unreviewed_project_rules(
+        self,
+        state: TurnState,
+        tool_calls_data: list[dict[str, Any]],
+        provider_request: int,
+    ) -> bool:
+        """Deliver every newly targeted project's rules before its batch runs."""
+        # Direct dispatcher tests and internal callers do not own a provider turn.
+        # run_turn explicitly activates this preflight before provider/tool work.
+        if not bool(getattr(self, "_project_rule_preflight_active", False)):
+            return False
+        from dataclasses import replace
+        from ..context.project_context import (
+            project_rule_scope_is_project,
+            project_rule_snapshot_key,
+            project_rules_changed,
+            render_project_rule_context,
+            resolve_project_rules,
+        )
+        from ..graph.structural_graph import project_root
+
+        snapshots = self._project_rule_snapshots_for_turn()
+        active_root = project_root(
+            self._effective_project_cwd()
+            if hasattr(self, "_effective_project_cwd")
+            else getattr(self, "project_cwd", None)
+        )
+        delivered = []
+        for item in tool_calls_data:
+            function = item.get("function") if isinstance(item, dict) else None
+            if not isinstance(function, dict):
+                continue
+            name = str(function.get("name") or "")
+            if name == "project_bridge":
+                continue
+            arguments = self._parsed_tool_arguments(item)
+            scope = self._target_project_rule_scope(name, arguments)
+            if scope is None:
+                continue
+            current = resolve_project_rules(scope)
+            if (
+                getattr(self, "_project_rule_snapshot", None) is None
+                and current.project_root == active_root
+            ):
+                continue
+            if not project_rule_scope_is_project(current):
+                continue
+            key = project_rule_snapshot_key(current)
+            previous = snapshots.get(key)
+            if previous is not None and not project_rules_changed(previous, current):
+                continue
+            if previous is not None:
+                current = replace(
+                    current,
+                    created=previous.created,
+                    creation_error=previous.creation_error,
+                    rechecks=previous.rechecks + 1,
+                )
+            self._remember_project_rule_snapshot(current, previous=previous)
+            delivered.append(current)
+
+        if not delivered:
+            return False
+        blocks = []
+        for snapshot in delivered:
+            blocks.append(
+                f"### Target project: {snapshot.project_root}\n"
+                + render_project_rule_context(snapshot)
+            )
+        self.session.add_assistant(
+            "[TARGET PROJECT RULE REVIEW] The requested tool batch was deferred before "
+            "execution because it newly targeted the project contract(s) below. Review "
+            "these rules, then reissue only the still-needed calls. None of the deferred "
+            "calls ran.\n\n" + "\n\n".join(blocks)
+        )
+        self.session.mark_last_assistant_internal()
+        if state.monitor:
+            state.monitor.emit(
+                "project_rule_target_review",
+                {
+                    "request": provider_request,
+                    "project_count": len(delivered),
+                    "projects": [str(snapshot.project_root) for snapshot in delivered],
+                },
+            )
+        if state.on_activity:
+            state.on_activity("target project rules loaded; reviewing before tools run...")
+        return True
+
     def _create_project_rules_for_tool(self, user_input, name, arguments):
-        """Materialize the previewed starter only for permitted project work."""
-        snapshot = getattr(self, "_project_rule_snapshot", None)
+        """Materialize the reviewed target starter only for permitted project work."""
+        from ..context.project_context import project_rule_snapshot_key, resolve_project_rules
+
+        scope = self._target_project_rule_scope(name, arguments)
+        if scope is None:
+            return None
+        current = resolve_project_rules(scope)
+        snapshot = self._project_rule_snapshots_for_turn().get(project_rule_snapshot_key(current))
         if snapshot is None or snapshot.files or snapshot.created or snapshot.creation_error:
             return None
         root = snapshot.project_root
@@ -469,7 +621,7 @@ class AgentTurnToolLoopMixin:
             return None
 
         from dataclasses import replace
-        from ..context.project_context import discover_project_context_files, resolve_project_rules
+        from ..context.project_context import discover_project_context_files
         from ..context.project_docs import AGENTS_STARTER, create_project_rule_starter
 
         # A concurrently supplied contract belongs to its author. The final
@@ -490,20 +642,27 @@ class AgentTurnToolLoopMixin:
             )
         )
         if denied:
-            self._project_rule_snapshot = replace(snapshot, creation_error=str(denied))
+            self._remember_project_rule_snapshot(
+                replace(snapshot, creation_error=str(denied)), previous=snapshot,
+            )
             return None
         try:
             report = create_project_rule_starter(root)
         except (OSError, ValueError) as exc:
-            self._project_rule_snapshot = replace(snapshot, creation_error=type(exc).__name__)
+            self._remember_project_rule_snapshot(
+                replace(snapshot, creation_error=type(exc).__name__), previous=snapshot,
+            )
             return None
-        self._project_rule_snapshot = replace(snapshot, created=report.created)
+        updated = replace(snapshot, created=report.created)
+        self._remember_project_rule_snapshot(updated, previous=snapshot)
         if report.created:
             current = resolve_project_rules(snapshot.scope_path)
             # The provider already received this exact starter preview. Adopt
             # only those bytes; unexpected concurrent rules still need review.
             if current.files == report.created and len(current.contents) == 1 and current.contents[0].content == AGENTS_STARTER.strip():
-                self._project_rule_snapshot = replace(current, created=report.created)
+                self._remember_project_rule_snapshot(
+                    replace(current, created=report.created), previous=updated,
+                )
         return report.created[0] if report.created else None
 
     def _prepare_effective_tool_arguments(
@@ -860,6 +1019,8 @@ class AgentTurnToolLoopMixin:
         # Canonicalize once before signatures, provider history, guards, audit,
         # and execution. The stored call must describe the operation that ran.
         self._prepare_effective_tool_arguments(state, tool_calls_data)
+        if self._defer_unreviewed_project_rules(state, tool_calls_data, provider_request):
+            return _CONTINUE
         missing_reads = [str(args.get("path") or "") for item in tool_calls_data
                          if str((item.get("function") or {}).get("name") or "") == "read_file"
                          for args in (self._parsed_tool_arguments(item),)
