@@ -4,31 +4,13 @@
 
 ## Authoring
 
-Show recognizable subjects and their action when the brief depends on objects;
-typography can suit other briefs. Reuse authorized media or create a coherent
-set of local artwork. For composited product motion, prefer isolated transparent
-elements in one visual system; use `edit_image` to crop, resize, rotate, or
-convert them, then let the explainer own composition, depth, and movement. If the
-chosen method explicitly uses `generate_image`, generate only the needed reusable
-assets or element sheet rather than a pre-composited environment. Ingest with
-`add-media --origin mo-generated`. Accepts PNG/JPEG/WebP and muted
-MP4/MOV/MKV/WebM, not SVG; export vector art to a supported image with an
-available renderer.
-
-Inspect a generated kit against its brief before cropping or ingesting it.
-Dimensions, transparency, and file custody prove only that an image arrived;
-they do not prove the requested subjects, count, layout, or visual language.
-Reject prompt drift instead of salvaging unrelated assets with geometric edits.
-
-Build one visual hierarchy rather than a wall of cards: background atmosphere,
-world/subject, action/evidence, then trusted title/caption overlays. Reserve
-brand color for meaning, focus, or a decision; vary displacement and blur across
-the first three layers for deliberate parallax. Reuse the canonical product
-mark as media instead of redrawing it. The native `prism` supplies generic
-projected volume for product objects and depth accents, not a replacement logo.
-Keep data displays bounded and let position/length carry magnitude before adding
-more colors. Static grids, light pools, and contact shadows should be composed
-once and moved as layers; do not spend every frame rebuilding visual noise.
+Reuse authorized media or one coherent set of isolated transparent elements
+(`edit_image` edits them). With `generate_image`, make only
+reusable assets or an element sheet, never a pre-composited scene, and inspect it
+against the brief before ingesting. Ingest with `add-media --origin mo-generated`.
+Accepts PNG/JPEG/WebP and muted MP4/MOV/MKV/WebM (no SVG). Compose one hierarchy
+(atmosphere, subject, action/evidence, then trusted overlays), not a wall of
+cards; reuse the canonical product mark as media.
 
 ```text
 mo --explainer init --title "<title>" --layout process
@@ -39,103 +21,79 @@ mo --explainer sheet "<project>"
 mo --explainer render "<project>"
 ```
 
-Layouts: `explanation`, `process`, `comparison`, `product-demo` are editable
-starters. `init` preserves projects. `project.json` owns composition/narration/
-timing; `narration.md` is a draft. Optional
-`brief` accepts purpose (`explain`, `introduce`, `promote`, `story`), audience,
-language, tone, call_to_action, target_duration_seconds (5-600). Origins for
-`add-media`: `user`, `captured`, `mo-generated`, `licensed-local`.
+Layouts (`explanation`, `process`, `comparison`, `product-demo`) are editable
+starters; `init` preserves projects. `project.json` owns composition, narration and
+timing. Optional `brief`: purpose (`explain`, `introduce`, `promote`, `story`),
+audience, language, tone, call_to_action, target_duration_seconds (5-600).
+`add-media` origins: `user`, `captured`, `mo-generated`, `licensed-local`.
 
-Scenes need unique `id`, `kind`, `duration` (1-60s), `narration`, `elements`.
-Kinds: `title`, `concept`, `process`, `comparison`, `summary`. Use `factual:false`
-for original non-empirical suggestions. Factual claims require `claims` with
-`text` and `source_ids` referencing project `sources`; verify support and record
-it in `research.md`. Citations remain visible. Elements paint back to front.
-Scene `transition:{"type":"crossfade","duration":0.35}` blends from the
-previous scene within the new scene's time; default `cut`. Crossfades replace
-element opacity fades at scene edges; inset element windows keep their fades.
+Scenes need unique `id`, `kind` (`title`, `concept`, `process`, `comparison`,
+`summary`), `duration` (1-60s), `narration`, `elements` (painted back to front).
+`factual:false` marks original suggestions; factual claims need `claims` with `text`
+and `source_ids` into project `sources`, verified and recorded in `research.md`. Scene
+`transition:{"type":"crossfade","duration":0.35}` blends from the previous scene
+within the new scene's time (default `cut`), replacing element opacity fades at
+scene edges.
 
 ### Style and elements
 
-Projects snapshot MO's active skin/four-cube brand. Customize theme/style with
-`style.source:"custom"`; global Settings stay unchanged.
-`style.layout` alone does not recompose scenes; `style.skin` does not recolor
-`theme`. Optional `style.decorations` booleans `grid`, `title`, `scene_badge`,
-`timeline` default true; any can be false while `style.brand.enabled` stays true.
-Use JSON numbers. Keep the saved subtitle lane clear.
+Projects snapshot MO's active skin/four-cube brand; customize with
+`style.source:"custom"` (global Settings stay unchanged). `style.layout` alone does
+not recompose scenes; `style.skin` does not recolor `theme`. `style.decorations`
+booleans `grid`, `title`, `scene_badge`, `timeline` default true. Use JSON numbers;
+keep the subtitle lane clear.
 
-| Element | Fields |
-| --- | --- |
-| All | `x`, `y`, `color` (theme name or #rrggbb), optional `start`/`end` in scene seconds, `animation`, `opacity`, `scale`, `rotation`, `blur`, `anchor` top_left/center, and `keyframes`. |
-| text | `text`, `width`, `size` (8-300; rendered min 12), `align` left/center/right, `weight` regular/bold. |
-| box | `width`, `height`, `radius`, `stroke`, `fill`, `fill_color`, `fill_opacity` (0-1, default 52/255), optional `gradient`. |
-| circle | `radius` around x/y; same fill/stroke and optional gradient fields. |
-| prism | `width`, `height`, `depth`; optional `fill_color`, `top_color`, `side_color`, `fill_opacity`. A projected three-face volume. |
-| line/arrow | `x2`, `y2`, `stroke`, optional `curve`; arrows also support `head` triangle/chevron/none and `head_size`. |
-| bar | `width`, `height`, `value` (0-1), optional `gradient`. |
-| image/video | `asset_id`, `width`, `height`, `fit` contain/cover, `radius`, `border_width`, `border_color`. |
-| media motion | `move` below; `zoom`/`zoom_to` (1-4), `pan_x`/`pan_to_x`, `pan_y`/`pan_to_y` (-1 to 1). |
-| video playback | `trim_start`, `trim_end`, `loop`; `muted:true`. Max 30s. |
-| callout | `text`, `width`, `height`, `target_x`, `target_y`, `size` (12-72), optional `curve` and `gradient`. |
+All elements take `x`, `y`, `color` (theme name or #rrggbb), optional `start`/`end` in scene seconds, `animation`, `opacity`, `scale`, `rotation`, `blur`, `anchor` top_left/center, and `keyframes`. Per type:
+- text: `text`, `width`, `size` (8-300; rendered min 12), `align` left/center/right, `weight` regular/bold.
+- box: `width`, `height`, `radius`, `stroke`, `fill`, `fill_color`, `fill_opacity` (0-1, default 52/255), optional `gradient`.
+- circle: `radius` around x/y; same fill/stroke and optional gradient fields.
+- prism: `width`, `height`, `depth`; optional `fill_color`, `top_color`, `side_color`, `fill_opacity`. A projected three-face volume.
+- line/arrow: `x2`, `y2`, `stroke`, optional `curve`; arrows also support `head` triangle/chevron/none and `head_size`.
+- bar: `width`, `height`, `value` (0-1), optional `gradient`.
+- image/video: `asset_id`, `width`, `height`, `fit` contain/cover, `radius`, `border_width`, `border_color`.
+- media motion: `move` below; `zoom`/`zoom_to` (1-4), `pan_x`/`pan_to_x`, `pan_y`/`pan_to_y` (-1 to 1).
+- video playback: `trim_start`, `trim_end`, `loop`; `muted:true`. Max 30s.
+- callout: `text`, `width`, `height`, `target_x`, `target_y`, `size` (12-72), optional `curve` and `gradient`.
 
-`shadow` and `glow` are optional effect objects with `color`, `blur`, and
-`opacity`; shadow also accepts `x`/`y` offsets. `keyframes` contain at least two
-absolute scene-time rows. Rows may animate `x`, `y`, `scale`, `opacity`, or
-`rotation`; line, arrow, and bar rows may also animate `draw`. A row's `ease`
-controls the segment arriving at that row: `linear`, `ease_in`, `ease_out`,
-`ease_in_out`, or `ease_out_back`. Sparse properties hold their prior value.
+`shadow` and `glow` are optional effect objects with `color`, `blur`, `opacity`;
+shadow also accepts `x`/`y`. `keyframes` are at least two absolute scene-time rows
+animating `x`, `y`, `scale`, `opacity`, or `rotation` (line, arrow, and bar rows
+may also animate `draw`); a row's `ease` (`linear`, `ease_in`, `ease_out`,
+`ease_in_out`, `ease_out_back`) shapes the segment arriving at it. Sparse
+properties hold their prior value.
 
-Example after ingesting `subject` (retain its asset entry):
+Example (retain the asset entry):
 ```json
 {"type":"image","asset_id":"subject","x":80,"y":120,"width":180,"height":120,
  "fit":"contain","animation":"none","move":{"x":640,"y":280,"start":1,"end":3}}
 ```
 
-`move` owns image/video position, easing to x/y then holding. Supply either
-axis; omitted axes stay unchanged. start/end use scene seconds, default to the
-element window and must fit inside it with start < end. Pan/zoom spans visibility.
-`move` and `keyframes` are mutually exclusive. `animation:none` disables
-entrance/exit presets, not explicit motion; fade/rise/slide_left/slide_right/
-scale/draw remain presets. `fill_opacity:1` is opaque; `fill:false` is outline
-only. There are no arbitrary paths, grouped transforms, or custom fonts (only
-`system-sans`); use an ingested element when those are essential.
+`move` owns image/video position, easing to x/y then holding; either axis may be
+omitted; start/end are scene seconds inside the element window, start < end. It
+excludes `keyframes`. `animation:none` disables entrance/exit presets, not explicit
+motion (presets: fade/rise/slide_left/slide_right/scale/draw). `fill:false` is
+outline only. No arbitrary paths, grouped transforms, or custom fonts (`system-sans`).
 
-Optional `style.motion.blur_samples` (1-8) and `shutter_angle` (0-360) provide
-deterministic encoded-frame motion blur. Optional `style.render` controls
-`supersampling` (1-4), `bloom`, `bloom_radius`, `vignette`, and restrained
-`grain`. High supersampling and multiple blur samples multiply render cost. For
-diagnosis, shorten the scene or reduce only output dimensions while retaining
-the intended quality controls; restore delivery dimensions for the final render.
+Optional `style.motion.blur_samples` (1-8) and `shutter_angle` (0-360) give
+deterministic motion blur; `style.render` controls `supersampling` (1-4), `bloom`,
+`bloom_radius`, `vignette`, `grain`. Both multiply render cost: to diagnose,
+shorten the scene or reduce only output dimensions, keeping quality controls.
 
 ### Verification and delivery
 
-After `narrate`, compare speech_duration and duration in `timings.json`. Total
+After `narrate`, compare speech_duration and duration in `timings.json`; total
 time is 0.2s lead plus sum(max(scene duration, speech_duration + 0.65s)). Optional
-project `voice.speed` (0.5-2, default 1) slows speech below 1, speeds it above 1.
-Shortening text may not slow speech. Adjust pace deliberately from measured
-timings; warnings are advisory, not a target for repeated regeneration. `check`
-also warns when raster media will be enlarged beyond its recorded source pixels;
-replace or reduce that element when edge quality matters. Changing
-text, durations or speed needs `narrate` to rebind audio. `check` covers schema,
-assets, layout and pacing, not artistry. Reuse unchanged checks; skip `validate`.
-Inspect `sheet` with `perceive`. For work over one minute, render a short preview
-first (`--preview-seconds 20`). Add `--preview-width 480` for a faster
-screen-size-only diagnostic; it preserves the project's supersampling, shutter
-samples, and optical finish and cannot replace the final render. Sample final MP4 action/scene changes into a
-task-owned scratch directory; remove internal samples after inspection, retaining
-requested deliverables. Quote paths:
-```text
-ffmpeg -v error -ss <seconds> -i "<project>/explainer.mp4" -frames:v 1 "<review-temp>/frame.png"
-ffmpeg -v error -ss <start> -i "<project>/explainer.mp4" -vf "fps=4,scale=320:-1,tile=4x2" -frames:v 1 "<review-temp>/strip.png"
-```
-Review samples with `perceive`: subjects, change, composition, readability.
-Correct mismatches; image delivery is not a review verdict. Stills/FFprobe cannot
-establish smooth playback or
-voice quality. Disclose listening limits; captions are approximately timed.
-Use the render receipt's path/hash/duration/audio/status. `status <project>` is
-for missing/stale evidence; `status` checks prerequisites. Link the final local
-MP4 using its file URI. Report technical verification separately from observed
-visual strengths/limits; no blanket visual pass for unmet creative requirements.
+project `voice.speed` (0.5-2, default 1) slows speech below 1; shortening text may
+not slow it. `check` covers schema, assets, layout, pacing, and raster media
+enlarged beyond source pixels, not artistry; skip `validate`. Changed text,
+durations or speed need `narrate`. Preview work
+over one minute first (`--preview-seconds 20`; `--preview-width 480` is a faster
+screen-size-only diagnostic keeping supersampling and finish). Sample final MP4
+action into a task-owned scratch directory (ffmpeg `fps=4,scale=320:-1,tile=4x2` strips), review with `perceive`, remove samples.
+
+Stills/FFprobe cannot establish smooth playback or voice quality; disclose listening
+limits (captions are approximately timed). Report the render receipt and
+`status <project>` evidence separately from visual strengths and limits.
 
 ## Runtime and verification contract
 
