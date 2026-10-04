@@ -681,6 +681,7 @@ class CompanionSurface(
         user_input: str,
         *,
         selected_options: tuple[str, ...] = (),
+        task_text: str = "",
     ) -> DesktopActionAdmission:
         receipt = getattr(self, "_desktop_last_action_receipt", None)
         if receipt is not None and not receipt.is_usable(
@@ -701,7 +702,7 @@ class CompanionSurface(
             except (TypeError, ValueError):
                 self._desktop_native_target_context = None
         admission = admit_desktop_action(
-            user_input,
+            task_text or user_input,
             selected_options=selected_options,
             prior_receipt=receipt,
             active_target=target_context,
@@ -3720,6 +3721,7 @@ class CompanionSurface(
             admission = self._admit_desktop_turn(
                 user_input,
                 selected_options=selected_options,
+                task_text=self._take_voice_task_text(user_input),
             )
             self._active_desktop_admission = admission
             self._turn_is_walkthrough = bool(

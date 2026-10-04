@@ -368,6 +368,7 @@ class CompanionVoiceMixin:
         from mo_desktop.voice.conversation import is_arabic
 
         self._voice_delegated_objective = str(objective or user_text)[:200]
+        self._voice_task_admission = (str(user_text), self._voice_delegated_objective)
         submitted = self._submit_text_request(
             user_text,
             source="voice",
@@ -383,6 +384,19 @@ class CompanionVoiceMixin:
         self._voice_progress_at = time.monotonic()
         self._voice_progress_spoken = ()
         return submitted
+
+    def _take_voice_task_text(self, user_input: str) -> str:
+        """The voice layer's objective for the spoken task now starting, once.
+
+        The turn still answers the operator's own words; only its admission
+        reads the clean objective, so loose wording never hides the computer
+        tools from a task the voice layer already judged to be real work.
+        """
+        task = getattr(self, "_voice_task_admission", None)
+        if isinstance(task, tuple) and len(task) == 2 and task[0] == user_input:
+            self._voice_task_admission = None
+            return str(task[1] or "")
+        return ""
 
     def _voice_progress(self, activity: str) -> None:
         """Fill a voice task's silence with one short line about what MO is doing."""
