@@ -689,7 +689,7 @@ class GoalRunner:
             return False
         if _step_title_is_broad_repair(getattr(step, "title", "")) and not _has_scoped_write_evidence(evidence):
             return False
-        if task_evidence.is_verification_step(getattr(step, "title", "")):
+        if task_evidence.is_verification_step(getattr(step, "title", ""), kind=step.kind):
             return task_evidence.has_verification_tool_evidence(evidence) and task_evidence.has_passing_verification("", evidence)
         return any(task_evidence.evidence_item_is_tool_backed(str(item)) for item in evidence) or any(str(item).startswith("content:") for item in evidence)
 
@@ -813,7 +813,7 @@ class GoalRunner:
 
     @staticmethod
     def _plan_has_verification_step(plan: GoalPlan) -> bool:
-        return any(task_evidence.is_verification_step(step.title) for step in plan.steps)
+        return any(task_evidence.is_verification_step(step.title, kind=step.kind) for step in plan.steps)
 
     def _add_missing_verification_step(self, plan: GoalPlan, feedback: str) -> GoalStep:
         """Append one verification phase when the plan lacks it."""
@@ -1028,7 +1028,7 @@ class GoalRunner:
                 traceback.print_exc()
 
         result_lower = str(result or "").lower()
-        if task_evidence.is_verification_step(step.title):
+        if task_evidence.is_verification_step(step.title, kind=step.kind):
             failed = task_evidence.has_failing_tests(result_lower)
             passed = task_evidence.has_passing_verification(result_lower, [])
             if failed:

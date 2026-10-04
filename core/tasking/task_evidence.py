@@ -138,7 +138,10 @@ def evidence_item_is_tool_backed(item: str) -> bool:
     return any(str(item or "").startswith(f"{tool}:") for tool in TOOL_BACKED_EVIDENCE_TOOLS)
 
 
-def is_verification_step(title: str) -> bool:
+def is_verification_step(title: str, *, kind: str = "") -> bool:
+    """Use the declared row contract; infer from titles only for untyped steps."""
+    if kind:
+        return kind == "verify"
     text = str(title or "").lower()
     # "write ... tests" is a build task, not a verification step
     if "write" in text and "test" in text and any(w in text for w in ("verify", "run")) is False:

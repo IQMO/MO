@@ -151,7 +151,7 @@ class GoalAuditor:
             findings.append("step completed without tool evidence")
 
         # 2. Verification check — test/verify steps need passing tests
-        if task_evidence.is_verification_step(step_title):
+        if task_evidence.is_verification_step(step_title, kind=getattr(step, "kind", "")):
             if step_status == "completed":
                 has_test_evidence = task_evidence.has_verification_tool_evidence(step_evidence)
                 if not has_test_evidence:
@@ -346,7 +346,10 @@ class GoalAuditor:
         # unless the verify phase has concrete passing verification evidence.
         pattern = select_work_pattern(getattr(plan, "objective", ""))
         if pattern and pattern.requires_verification:
-            verify_steps = [s for s in steps if task_evidence.is_verification_step(getattr(s, "title", ""))]
+            verify_steps = [
+                s for s in steps
+                if task_evidence.is_verification_step(getattr(s, "title", ""), kind=getattr(s, "kind", ""))
+            ]
             if not verify_steps:
                 findings.append("work pattern requires a verification step")
             elif not any(
@@ -359,7 +362,7 @@ class GoalAuditor:
 
         for step in steps:
             title = str(getattr(step, "title", "") or "")
-            if task_evidence.is_verification_step(title):
+            if task_evidence.is_verification_step(title, kind=getattr(step, "kind", "")):
                 evidence_text = "\n".join(str(e) for e in (getattr(step, "evidence", []) or []))
                 if task_evidence.has_failing_tests(evidence_text) and not task_evidence.has_passing_after_failure(evidence_text):
                     findings.append(f"verification step '{title}' contains failing test evidence")
