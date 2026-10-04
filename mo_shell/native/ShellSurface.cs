@@ -40,8 +40,8 @@ internal sealed partial class ShellSurface : Control
         AutoPopDelay = 5000,
         ShowAlways = true,
     };
-    // Below whole Windows timer quanta; 16/33 ms can round up to 31/47 ms.
-    private readonly System.Windows.Forms.Timer _identityAnimation = new() { Interval = 31 };
+    // Display-synchronous: a WM_TIMER request rounds to 15.6 ms quanta and beats against the refresh grid.
+    private readonly DisplayTimer _identityAnimation = new() { Interval = 31 };
     private long _identityFrameAt;
     private bool _visualMotion;
     public event Action? VisualFrame;

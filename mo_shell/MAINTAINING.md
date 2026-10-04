@@ -85,10 +85,17 @@ and Desktop skin definitions remain outside this package.
   The real form is hidden before changing layout, so it cannot flash its target
   geometry before the fold. The native layout and terminal grid are committed
   once. At completion the actual form
-  and expanded attachment are revealed. The same WinForms clock requests 15 ms
-  for finite folds, group movement, control/title hover and drop feedback;
-  passive terminal work uses 31 ms. These requests avoid rounding above the
-  default Windows timer quantum, without changing global timer resolution.
+  and expanded attachment are revealed. The same clock is `DisplayTimer`
+  (`ShellDisplayTimer.cs`): released by the DirectComposition compositor clock and
+  rounded to whole refreshes, it requests a 15 ms budget for finite folds, group
+  movement, control/title hover and drop feedback and 31 ms for passive terminal
+  work. A WM_TIMER request rounds to 15.6 ms quanta and beat against the refresh
+  grid (measured on a 144 Hz display: 29% and 56% irregular presented intervals
+  at 15 and 31 ms, against 0% display-synchronous). Where the clock is missing, or
+  no UI synchronization context exists, it is an ordinary WinForms timer. Its
+  worker thread parks while stopped, never queues a frame behind a busy UI thread,
+  and still releases on timeout so a sleeping display cannot strand a final frame.
+  The global timer resolution is never changed.
   Hover and drag easing use actual `Stopwatch` elapsed time, so delayed ticks
   do not change their speed. Settled idle stops the clock entirely; grouped
   work alone never selects the finite-interaction rate.
