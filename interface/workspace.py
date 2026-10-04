@@ -95,14 +95,7 @@ def activity_enabled(config: Any) -> bool:
     if not isinstance(interface_cfg, dict):
         return False
     activity_cfg = interface_cfg.get("activity")
-    if isinstance(activity_cfg, dict) and "enabled" in activity_cfg:
-        return activity_cfg.get("enabled") is True
-    # COMPAT(worker-panel-workspace-config): replaced-by interface.activity.enabled; remove-when the documented configuration migration window closes
-    old_workspace_cfg = interface_cfg.get("workspace")
-    return bool(
-        isinstance(old_workspace_cfg, dict)
-        and old_workspace_cfg.get("enabled") is True
-    )
+    return isinstance(activity_cfg, dict) and activity_cfg.get("enabled") is True
 
 
 def _status_of(state: str) -> str:
