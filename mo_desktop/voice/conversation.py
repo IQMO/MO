@@ -58,7 +58,12 @@ SYSTEM_PROMPT = "\n".join((
         'describe this as handing off, never mention tools or another assistant, and never claim '
         'something was done, checked or found unless the conversation shows you reported it.'
     ),
-    '- If you are unsure what the user wants, ask one short question instead of starting a task.',
+    (
+        '- A request to open, show, check, find or change something is a task even when it is short or '
+        "names one of MO's own apps (Dashboard, Settings, Design, Files): start it instead of asking which "
+        "one, and never say you don't know the user's apps. Ask one short question only when you cannot "
+        'tell what to do at all.'
+    ),
     '- Keep replies short so the user can interrupt; offer detail only when asked.',
 ))
 
@@ -148,6 +153,35 @@ def split_clauses(buffer: str, *, first: bool = False) -> tuple[list[str], str]:
             clauses.append(rest[:cut].strip())
             rest = rest[cut:]
     return clauses, rest
+
+
+# While a spoken task runs, MO says what it is doing instead of going silent.
+PROGRESS_GAP_SECONDS = 4.0
+_PROGRESS_LINES = (
+    (("computer_act desktop:launch",), "Opening it now."),
+    (("computer_act",), "Doing that now."),
+    (("computer_observe", "computer_targets"), "Checking the screen."),
+    (("mail",), "Looking at your mail."),
+    (("web_search", "web_fetch", "browser"), "Looking that up."),
+    (("read_file", "search_files", "code_search", "list_dir", "grep", "glob"), "Going through it."),
+)
+_STILL_LINES = ("Still on it.", "Almost there.", "One moment.")
+
+
+def progress_line(activity: str, *, spoken: tuple[str, ...] = ()) -> str:
+    """A short spoken line for a running task's latest activity; never the last one again."""
+    low = " ".join(str(activity or "").lower().split())
+    if low.startswith("tooling (tool_search"):
+        return ""  # choosing tools is not something the user needs to hear
+    if low.startswith("tooling ("):
+        name = low[len("tooling ("):]
+        for prefixes, line in _PROGRESS_LINES:
+            if name.startswith(prefixes) and line not in spoken:
+                return line
+    elif not low.startswith(("waiting on model", "model request")):
+        return ""
+    last = spoken[-1] if spoken else ""
+    return next((line for line in _STILL_LINES if line != last and line not in spoken[-2:]), _STILL_LINES[0])
 
 
 def take_emotion(clause: str) -> tuple[str, str]:

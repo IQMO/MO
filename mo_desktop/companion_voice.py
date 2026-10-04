@@ -207,7 +207,11 @@ class CompanionVoiceMixin:
             self._speech_was_speaking = False
             if follow_up and self._voice_chat_enabled() and not self._voice_chat_paused:
                 self._post_gui_call(self._start_voice_chat_listening)
-            self._reset_voice_timing()
+            turn = getattr(self, "_turn_thread", None)
+            if turn is None or not turn.is_alive():
+                # A voice task's acknowledgement or progress line ends while the
+                # task still runs; its result keeps the voice origin and is spoken.
+                self._reset_voice_timing()
         if self._speech_state == "device_fallback":
             self._set_status("Voice output device unavailable; using system default.", self._visual_palette.warn)
         elif self._speech_state == "restarting":
@@ -361,16 +365,45 @@ class CompanionVoiceMixin:
 
     def _delegate_voice_request(self, user_text: str, objective: str) -> bool:
         """Hand the operator's own words to a normal MO voice turn."""
+        from mo_desktop.voice.conversation import is_arabic
+
         self._voice_delegated_objective = str(objective or user_text)[:200]
         submitted = self._submit_text_request(
             user_text,
             source="voice",
             _voice_started_at=float(getattr(self, "_voice_conversation_accepted_at", 0.0) or time.monotonic()),
             _request_panic_generation=getattr(self, "_voice_conversation_panic_generation", None),
+            _keep_speech=True,
         )
         if not submitted:
             self._reset_voice_timing()
+        # Progress lines are English until the speech engine speaks Arabic.
+        speaks_language = not is_arabic(user_text) or self._voice_can_speak(user_text)
+        self._voice_progress_thread = getattr(self, "_turn_thread", None) if submitted and speaks_language else None
+        self._voice_progress_at = time.monotonic()
+        self._voice_progress_spoken = ()
         return submitted
+
+    def _voice_progress(self, activity: str) -> None:
+        """Fill a voice task's silence with one short line about what MO is doing."""
+        thread = getattr(self, "_voice_progress_thread", None)
+        if thread is None or thread is not getattr(self, "_turn_thread", None) or not thread.is_alive():
+            return
+        if getattr(self, "_speech_state", "idle") in {"loading", "synthesizing", "speaking"}:
+            return
+        from mo_desktop.voice.conversation import PROGRESS_GAP_SECONDS, progress_line
+
+        now = time.monotonic()
+        if now - float(getattr(self, "_voice_progress_at", 0.0) or 0.0) < PROGRESS_GAP_SECONDS:
+            return
+        spoken = tuple(getattr(self, "_voice_progress_spoken", ()) or ())
+        line = progress_line(activity, spoken=spoken)
+        speech = getattr(self, "_speech", None)
+        if not line or speech is None:
+            return
+        if speech.speak(line, speed=self._voice_cfg.get("speech_rate", 1.0)):
+            self._voice_progress_at = now
+            self._voice_progress_spoken = (*spoken, line)[-3:]
 
     def _converse(self, text: str, *, accepted_at: float, panic_generation: int) -> None:
         """Answer one utterance in the conversation layer (runs off the GUI thread)."""

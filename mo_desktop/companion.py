@@ -2339,6 +2339,7 @@ class CompanionSurface(
         _voice_started_at: float = 0.0,
         _request_panic_generation: int | None = None,
         _from_queue: bool = False,
+        _keep_speech: bool = False,
     ) -> bool:
         text = str(text or "").strip()
         if not text:
@@ -2364,7 +2365,9 @@ class CompanionSurface(
         )
         if request_panic_generation != panic_generation:
             return False
-        self._cancel_speech()
+        if not _keep_speech:
+            # A voice task keeps its own spoken acknowledgement playing.
+            self._cancel_speech()
         turn = self._turn_thread
         # Keep one provider turn in flight, but accept bounded conversational
         # follow-ups from both typing and voice instead of rejecting them.
@@ -3886,6 +3889,7 @@ class CompanionSurface(
     def _on_activity(self, label: str) -> None:
         """Record raw evidence and update the cube's shared glance label."""
         self._set_status(label, self._visual_palette.muted)
+        self._voice_progress(label)
         if self._is_desktop_actuation_activity(label):
             self._yield_for_desktop_actuation()
         short = self._concise_activity_label(label)
