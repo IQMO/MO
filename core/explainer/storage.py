@@ -18,6 +18,27 @@ from core.utils.file_hash import file_sha256
 EXPLAINER_MEDIA_DIR = "media/explainers"
 STATUS_FILE = "status.json"
 QUICK_LAYOUTS = frozenset({"explanation", "process", "comparison", "product-demo"})
+STALE_STAGE_SECONDS = 3600
+
+
+def sweep_stale_stages(directory: str | Path, patterns: tuple[str, ...]) -> list[Path]:
+    """Remove stage files a hard-killed render or narration left behind.
+
+    A live encode keeps writing its stage, so only stages untouched for an hour
+    go. Retained ``.previous.render.json`` recovery evidence is not a stage.
+    """
+    root = Path(directory)
+    cutoff = time.time() - STALE_STAGE_SECONDS
+    removed: list[Path] = []
+    for pattern in patterns:
+        for path in root.glob(pattern):
+            try:
+                if path.is_file() and path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    removed.append(path)
+            except OSError:
+                continue
+    return removed
 
 
 def safe_slug(value: str) -> str:

@@ -24,6 +24,7 @@ from core.utils.file_hash import file_sha256, file_sha256_or_empty
 from interface.desktop_brand import draw_four_cube_mark
 
 from .model import ExplainerProject, narration_digest, scene_source_ids
+from .storage import sweep_stale_stages
 
 
 def project_timeline(project: ExplainerProject) -> list[dict[str, Any]]:
@@ -105,6 +106,7 @@ def render_video(
     if target.suffix.lower() != ".mp4":
         raise ValueError("explainer video output must use the .mp4 extension")
     target.parent.mkdir(parents=True, exist_ok=True)
+    sweep_stale_stages(target.parent, (f".{target.stem}.*.stage.mp4", f".{target.stem}.*.stage.render.json"))
     stage = target.with_name(f".{target.stem}.{uuid.uuid4().hex}.stage.mp4")
     staged_report = stage.with_suffix(".render.json")
     timeline = project_timeline(project)

@@ -28,6 +28,7 @@ from mo_desktop.voice.storage import (
 )
 
 from .model import ExplainerProject, narration_digest
+from .storage import sweep_stale_stages
 
 
 def synthesize_narration(
@@ -148,6 +149,7 @@ def synthesize_narration(
 
     audio_path = project.directory / "audio.wav"
     timing_path = project.directory / "timings.json"
+    sweep_stale_stages(project.directory, (".audio.*.stage.wav", ".timings.*.stage.json"))
     audio_stage = audio_path.with_name(f".audio.{uuid.uuid4().hex}.stage.wav")
     timing_stage = timing_path.with_name(f".timings.{uuid.uuid4().hex}.stage.json")
     try:

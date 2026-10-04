@@ -139,7 +139,9 @@ hashes. Full audio/timeline duration must agree. Rendering without audio produce
 a silent MP4 and reports it as silent.
 
 FFmpeg and FFprobe resolve from `PATH`; the explainer neither bundles nor
-hardcodes another application's copies. Encoding writes a unique sibling stage.
+hardcodes another application's copies. Encoding writes a unique sibling stage;
+the next render or narration removes stages a killed process left untouched for
+an hour.
 Only a result with measured frame, geometry, frame-rate, stream, and duration
 checks replaces the previous successful video: H.264, with AAC when narrated.
 Encoding, validation, cancellation, or handled publication failure preserves the
