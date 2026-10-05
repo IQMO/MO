@@ -4413,11 +4413,13 @@ class CompanionSurface(
         """Compact text input — rendered on the layered panel (typed straight into the
         card, same smooth feel as the cube). The panel is the ONLY surface: if it cannot
         render, this records why and shows nothing."""
+        self._ensure_desktop_session()   # restores the saved replies the composer's Up/Down browse
         if self._show_on_reply_surface(
             "input",
             lambda bubble: bool(
                 bubble.show_input(
                     self._submit_from_input,
+                    history=self._reply_history,
                     on_session_history=self._display_desktop_session_history,
                     on_web_search=self._search_from_input,
                     role_options=self.conversation_role_options,

@@ -1735,8 +1735,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         role_options: Callable[[], tuple[str, ...]] | None = None,
         on_role_select: Callable[[str], None] | None = None,
         role_label: str | None = None,
+        history: list[dict[str, Any]] | None = None,
     ) -> bool:
         already_composing = bool(getattr(self, "_visible", False)) and self._mode == "input"
+        if history is not None:
+            # The composer's Up/Down browse MO's replies from the saved conversation,
+            # not only the replies this process has shown since it started.
+            self._reply_history = [dict(h) for h in history if h.get("content")][-100:]
+            self._reply_idx = len(self._reply_history) - 1
         self._keyboard_hit = ""
         transition = self._prepare_panel_show("input", PanelState.INPUT, controls=True)
         self._on_session_history = on_session_history if callable(on_session_history) else None
