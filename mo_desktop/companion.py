@@ -2616,8 +2616,7 @@ class CompanionSurface(
         cube = getattr(self, "_cube", None)
         if cube is None:
             return
-        cube._screen_selection_actuation_yield = True
-        cube.set_actuation_yield(True)
+        cube.hold_actuation_yield("selection", True)
 
         def open_selection() -> None:
             try:
@@ -2639,11 +2638,7 @@ class CompanionSurface(
         self._screen_selection = None
         cube = getattr(self, "_cube", None)
         if cube is not None:
-            cube._screen_selection_actuation_yield = False
-            if not bool(getattr(cube, "_terminal_computer_activity_yield", False)) and not bool(
-                getattr(cube, "_companion_actuation_yield", False)
-            ):
-                cube.set_actuation_yield(False)
+            cube.hold_actuation_yield("selection", False)
 
     def _save_screen_selection(self, image: Any) -> None:
         """Encode original pixels off the GUI lane; open the existing image panel."""
@@ -3948,10 +3943,9 @@ class CompanionSurface(
                             pass
                         self._reply_visible = False
                 cube = getattr(self, "_cube", None)
-                yield_control = getattr(cube, "set_actuation_yield", None)
-                if callable(yield_control):
-                    cube._companion_actuation_yield = True
-                    yield_control(True)
+                hold = getattr(cube, "hold_actuation_yield", None)
+                if callable(hold):
+                    hold("companion", True)
                 else:
                     hide = getattr(cube, "_hide", None)
                     if callable(hide):
@@ -3980,12 +3974,9 @@ class CompanionSurface(
                     pass
             if cube is None:
                 return
-            cube._companion_actuation_yield = False
-            yield_control = getattr(cube, "set_actuation_yield", None)
-            if callable(yield_control) and not bool(
-                getattr(cube, "_terminal_computer_activity_yield", False)
-            ) and not bool(getattr(cube, "_screen_selection_actuation_yield", False)):
-                yield_control(False)
+            hold = getattr(cube, "hold_actuation_yield", None)
+            if callable(hold):
+                hold("companion", False)
             wake = getattr(cube, "wake", None)
             if callable(wake):
                 wake()

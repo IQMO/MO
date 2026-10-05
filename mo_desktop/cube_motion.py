@@ -133,18 +133,13 @@ class CubeMotionMixin:
             label = ""
             should_yield = False
 
-        yielded = bool(getattr(self, "_terminal_computer_activity_yield", False))
+        yielded = self.actuation_yield_held_by("terminal")
         if should_yield and not yielded:
-            self._terminal_computer_activity_yield = True
             self.set_computer_activity(True)
-            self.set_actuation_yield(True)
+            self.hold_actuation_yield("terminal", True)
         elif not should_yield and yielded:
-            self._terminal_computer_activity_yield = False
             self.set_computer_activity(False)
-            if not bool(getattr(self, "_companion_actuation_yield", False)) and not bool(
-                getattr(self, "_screen_selection_actuation_yield", False)
-            ):
-                self.set_actuation_yield(False)
+            self.hold_actuation_yield("terminal", False)
         if label and not should_yield:
             self.show_bubble(label, seconds=1.25)
 

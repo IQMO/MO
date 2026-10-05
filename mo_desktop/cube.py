@@ -463,6 +463,22 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         """Share the stationary hold gesture between the two lower cubes."""
         self._capture_hold, self._focus_hold = capture, focus
 
+    def hold_actuation_yield(self, owner: str, on: bool) -> None:
+        """Yield while any owner needs it: a companion action, bound terminal activity,
+        or a screen selection. One owner's release never ends another owner's yield."""
+        holders = set(getattr(self, "_actuation_yield_holders", ()) or ())
+        before = bool(holders)
+        if on:
+            holders.add(str(owner))
+        else:
+            holders.discard(str(owner))
+        self._actuation_yield_holders = holders
+        if bool(holders) != before:
+            self.set_actuation_yield(bool(holders))
+
+    def actuation_yield_held_by(self, owner: str) -> bool:
+        return str(owner) in (getattr(self, "_actuation_yield_holders", ()) or ())
+
     def set_actuation_yield(self, on: bool) -> None:
         """Yield input and capture while keeping the normal cube visible when supported."""
         self._actuation_yield = bool(on)
