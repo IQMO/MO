@@ -297,6 +297,7 @@ class CompanionVoiceMixin:
             emote=self._voice_conversation_emote,
             task_state=self._voice_task_state,
             log=lambda detail: log_event(detail, config=config),
+            operator_name=str(getattr(getattr(self._agent, "profile", None), "user_name", "") or ""),
         )
         self._voice_conversation_owner = conversation
         return conversation

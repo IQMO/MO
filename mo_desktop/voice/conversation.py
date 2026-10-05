@@ -209,6 +209,7 @@ class VoiceConversation:
         emote: Callable[[str], None] = lambda _name: None,
         task_state: Callable[[], str] = lambda: "",
         log: Callable[[str], None] = lambda _text: None,
+        operator_name: str = "",
         history_limit: int = 8,
         history_chars: int = 4000,
         max_tokens: int = 320,
@@ -223,6 +224,12 @@ class VoiceConversation:
         self._emote = emote
         self._task_state = task_state
         self._log = log
+        name = " ".join(str(operator_name or "").split())[:80]
+        # Stable for the conversation, so it stays inside the cached prompt prefix.
+        self._system_prompt = (
+            f"{SYSTEM_PROMPT}\n- You are talking with {name}; use the name naturally, not in every reply."
+            if name else SYSTEM_PROMPT
+        )
         self._history: deque[dict[str, str]] = deque(maxlen=max(2, int(history_limit)) * 2)
         self._history_chars = max(500, int(history_chars))
         self._max_tokens = max(64, int(max_tokens))
@@ -255,7 +262,7 @@ class VoiceConversation:
 
             with provider_request_overrides({"thinking_disabled": True}):
                 stream = provider.stream(
-                    messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": "hi"}],
+                    messages=[{"role": "system", "content": self._system_prompt}, {"role": "user", "content": "hi"}],
                     tools=[], temperature=0.0, max_tokens=1,
                 )
                 for _chunk in stream:
@@ -297,7 +304,7 @@ class VoiceConversation:
         history.reverse()
         state = self._task_state()
         current = f"[MO status: {state}]\n{text}" if state else text
-        return [{"role": "system", "content": SYSTEM_PROMPT}, *history, {"role": "user", "content": current}]
+        return [{"role": "system", "content": self._system_prompt}, *history, {"role": "user", "content": current}]
 
     def _reply(self, text: str) -> dict[str, Any]:
         with self._lock:
