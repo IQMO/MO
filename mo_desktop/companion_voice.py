@@ -352,9 +352,14 @@ class CompanionVoiceMixin:
         if turn is None or not turn.is_alive():
             return ""
         objective = str(getattr(self, "_voice_delegated_objective", "") or "").strip()
-        return f"MO is working on: {objective}" if objective else "MO is working on a request."
+        state = f"MO is working on: {objective}" if objective else "MO is working on a request."
+        step = str(getattr(self, "_last_activity_text", "") or "").strip()
+        return f"{state} (now: {step})" if step else state
 
     def _record_voice_exchange(self, user_text: str, reply: str) -> None:
+        turn = getattr(self, "_turn_thread", None)
+        if turn is not None and turn.is_alive():
+            return  # the running turn owns the session; the voice layer keeps its own history
         session = getattr(self, "_desktop_session", None)
         if session is not None and self._record_direct_desktop_exchange(session, user_text, reply):
             persist = getattr(self, "_persist_desktop_session", None)
@@ -368,8 +373,14 @@ class CompanionVoiceMixin:
         """Hand the operator's own words to a normal MO voice turn."""
         from mo_desktop.voice.conversation import is_arabic
 
-        self._voice_delegated_objective = str(objective or user_text)[:200]
-        self._voice_task_admission = (str(user_text), self._voice_delegated_objective)
+        turn = getattr(self, "_turn_thread", None)
+        busy = turn is not None and turn.is_alive()
+        objective_text = str(objective or user_text)[:200]
+        # Progress lines are English until the speech engine speaks Arabic.
+        speaks_language = not is_arabic(user_text) or self._voice_can_speak(user_text)
+        self._voice_task_admission = (str(user_text), objective_text, speaks_language)
+        if not busy:
+            self._voice_delegated_objective = objective_text
         submitted = self._submit_text_request(
             user_text,
             source="voice",
@@ -379,12 +390,14 @@ class CompanionVoiceMixin:
         )
         if not submitted:
             self._reset_voice_timing()
-        # Progress lines are English until the speech engine speaks Arabic.
-        speaks_language = not is_arabic(user_text) or self._voice_can_speak(user_text)
-        self._voice_progress_thread = getattr(self, "_turn_thread", None) if submitted and speaks_language else None
+        if not busy:
+            self._arm_voice_progress(getattr(self, "_turn_thread", None) if submitted and speaks_language else None)
+        return submitted
+
+    def _arm_voice_progress(self, thread: Any) -> None:
+        self._voice_progress_thread = thread
         self._voice_progress_at = time.monotonic()
         self._voice_progress_spoken = ()
-        return submitted
 
     def _take_voice_task_text(self, user_input: str) -> str:
         """The voice layer's objective for the spoken task now starting, once.
@@ -394,8 +407,12 @@ class CompanionVoiceMixin:
         tools from a task the voice layer already judged to be real work.
         """
         task = getattr(self, "_voice_task_admission", None)
-        if isinstance(task, tuple) and len(task) == 2 and task[0] == user_input:
+        if isinstance(task, tuple) and len(task) == 3 and task[0] == user_input:
             self._voice_task_admission = None
+            self._voice_delegated_objective = str(task[1] or "")
+            if getattr(self, "_voice_progress_thread", None) is not threading.current_thread():
+                # A task queued while another ran starts now, on this turn thread.
+                self._arm_voice_progress(threading.current_thread() if task[2] else None)
             return str(task[1] or "")
         return ""
 
@@ -680,21 +697,12 @@ class CompanionVoiceMixin:
                     "voice transcribed; "
                     f"chars={len(text)}; transcription_ms="
                     f"{round((accepted_at - transcription_started_at) * 1000)}; "
-                    + ("queueing desktop follow-up behind the running turn" if busy else "answering in voice conversation"),
+                    + ("answering in voice conversation while MO works" if busy else "answering in voice conversation"),
                     config=getattr(self._agent, "config", None),
                 )
-                if busy:
-                    # The conversation layer never writes the session while an
-                    # MO turn is running; the follow-up FIFO already orders it.
-                    if not self._submit_text_request(
-                        text,
-                        source="voice",
-                        _voice_started_at=accepted_at,
-                        _request_panic_generation=panic_generation,
-                    ):
-                        self._reset_voice_timing()
-                else:
-                    self._converse(text, accepted_at=accepted_at, panic_generation=panic_generation)
+                # The voice layer answers even while MO works; it writes no session
+                # then, and work it starts joins the follow-up FIFO behind the turn.
+                self._converse(text, accepted_at=accepted_at, panic_generation=panic_generation)
             else:
                 self._reset_voice_timing()
                 message = text or "No speech detected."

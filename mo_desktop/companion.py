@@ -4064,6 +4064,8 @@ class CompanionSurface(
         if len(t) > 36:
             clipped = t[:35].rsplit(" ", 1)[0].rstrip(".,;:—–- ") or t[:35]
             t = clipped + "…"
+        if t:
+            self._last_activity_text = t  # what MO is doing now, for voice questions mid-task
         if getattr(self, "_reply_visible", False):
             return
         if not t:

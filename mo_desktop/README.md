@@ -816,8 +816,9 @@ Voice is optional and lazy:
   files, the screen, mail, memory or the web get a short spoken acknowledgement
   and are handed, in the operator's own words, to a normal MO voice turn, which
   does the work and speaks its result. While it works, MO says briefly what it is
-  doing ("Opening it now.", "Checking the screen.") instead of going silent. While an MO turn is already running, a
-  manual voice request joins the existing follow-up queue instead.
+  doing ("Opening it now.", "Checking the screen.") instead of going silent, and
+  you can keep talking: questions are answered right away, and new work waits
+  its turn behind the running task.
 - Local speech output uses an isolated Piper worker and the configured output
   device. **Speak typed replies** extends that output to requests entered as text.
 - Continuous Voice Chat explicitly loops listen → reply → speak → listen while
