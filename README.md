@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mo-banner-v3.png" alt="MO Agent — your work, reachable everywhere through Terminal, Desktop, and Android" width="100%">
+  <img src="assets/mo-banner-v4.png" alt="MO Agent — one local agent runtime, reachable everywhere through Terminal, Desktop, and Android" width="100%">
 </p>
 
 <h1 align="center">MO Agent</h1>
