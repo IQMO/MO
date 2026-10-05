@@ -452,6 +452,7 @@ def _pipeline_phone_completion(agent, ctx):
         ctx.user_input,
         ctx.route_source,
         getattr(ctx, "tool_sequence", []),
+        assistant_text=str(getattr(ctx, "content", "") or ""),
         count=getattr(ctx, "phone_action_continuations", 0),
         on_activity=ctx.on_activity,
     )

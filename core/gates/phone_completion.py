@@ -58,6 +58,7 @@ def run_phone_completion_gate(
     route_source: str,
     tool_sequence: list[ToolExecutionRecord],
     *,
+    assistant_text: str = "",
     count: int,
     max_continuations: int = 1,
     on_activity: Any = None,
@@ -128,6 +129,14 @@ def run_phone_completion_gate(
     )
     if evidence.complete:
         return PhoneCompletionResult(count=count)
+    if evidence.attempted:
+        # Phone actions return their own fresh state when the phone provides
+        # it, as desktop actions do. An unconfirmed result is stated, never
+        # chased with another provider round.
+        return PhoneCompletionResult(
+            count=count,
+            blocked_text=f"{assistant_text.strip()}\n\nVerification unavailable: {evidence.reason}".strip(),
+        )
     if count < max_continuations:
         if on_activity:
             on_activity("completing phone action…")
@@ -135,11 +144,8 @@ def run_phone_completion_gate(
             count=count + 1,
             instruction=(
                 "[PHONE COMPLETION GATE] The requested on-device action is not complete. "
-                f"{evidence.reason} Continue in this same turn with the bounded phone tools, "
-                "then obtain fresh post-action phone_context evidence for UI actuation or "
-                "phone_files, phone_cache_report, or phone_packages evidence for storage, cache, "
-                "or package actuation on the "
-                "same origin phone. Do not claim success or ask the operator to perform the "
+                f"{evidence.reason} Continue in this same turn with the bounded phone tools on "
+                "the same origin phone. Do not claim success or ask the operator to perform the "
                 "action when the authenticated semantic host is available."
             ),
         )
