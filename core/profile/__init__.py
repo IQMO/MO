@@ -740,6 +740,25 @@ class Profile:
                     "\n### facts.md (query-matched operational facts)\n"
                     f"{operational_facts}",
                 )
+        # "How many projects do I have?" needs the whole declared inventory; the bounded
+        # operator.md excerpt below names only the first few and cannot be counted.
+        declared_projects = ""
+        if (lookup_policy or profile_policy) and "project" in query_text:
+            try:
+                names = [entry.name for entry in self.project_locations() if entry.name]
+            except Exception:
+                names = []
+            if names:
+                declared_projects = _cap_profile_text(
+                    f"Declared projects ({len(names)}): " + ", ".join(names),
+                    max(120, min(600, int(max_chars or 3000) // 4)),
+                    "[declared projects truncated]",
+                )
+                lines.insert(
+                    (4 if matched_terms else 3) + bool(operational_facts),
+                    "\n### Declared projects (operator.md Projects sections and project facts)\n"
+                    f"{declared_projects}",
+                )
         if conversation_policy:
             preference_facts = _cap_profile_text(
                 "\n".join(
