@@ -391,6 +391,12 @@ def looks_like_contextual_followup(user_input: str) -> bool:
     if _DIRECT_RESUME_CLAUSE_RE.fullmatch(text):
         return True
     if re.fullmatch(
+        r"(?:what\s*\?\s*)?(?:when\s+(?:was|did)\s+(?:that|this|it)(?:\s+happen)?"
+        r"|are\s+(?:you|u)\s+(?:really\s+)?sure(?:\s+about\s+(?:that|this|it))?)",
+        text,
+    ):
+        return True
+    if re.fullmatch(
         r"(?:have|did)\s+you\s+(?:actually\s+)?"
         r"(?:check|checked|review|reviewed|verify|verified|test|tested)\s+"
         r"(?:it|this|that|them|these|those|everything|all|the\s+current\s+implementation)"

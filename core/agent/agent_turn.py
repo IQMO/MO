@@ -52,6 +52,7 @@ from ..runtime.turn_intent import (
     KIND_RESUME,
     TurnIntent,
     classify_turn,
+    looks_like_continuity_request,
 )
 from ..provider.provider import provider_accepts_image_input, provider_request_overrides
 from ..context.context_bridge import ContextSource, build_active_context_bridge
@@ -2299,9 +2300,28 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                     prt_result_context = str(pending_prt_event.get("text") or "")
             except Exception:
                 traceback.print_exc()
-        # New project tasks use their own subject and query-ranked recall.
-        # The latest other conversation is not an implicit continuation of it.
+        # New tasks and ordinary Terminal chat use their current subject, not
+        # the latest other session. A relative history/lookup follow-up may reuse
+        # its preceding subject, but must not reach past a new conversation topic.
         previous_conversation_context = ""
+        history_intent = (
+            classify_turn(context_query)
+            if context_query_source == "conversation"
+            else turn_intent
+        )
+        # A challenge needs evidence tools, not unrelated saved conversations.
+        # Keep history only when the challenge concerns an actual history subject.
+        history_requested = (
+            history_intent.memory_requested
+            or history_intent.include_continuity
+            or (
+                history_intent.context_policy == CONTEXT_LOOKUP
+                and (
+                    history_intent.reason != "verification_challenge"
+                    or looks_like_continuity_request(context_query)
+                )
+            )
+        )
         desktop_prior_reference_needed = False
         if desktop_assistance:
             visible_messages = [
@@ -2324,7 +2344,10 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             desktop_prior_reference_needed
             or (
                 not desktop_assistance
-                and (not turn_intent.include_orientation_context or continuity_requested)
+                and (
+                    continuity_requested
+                    or (not turn_intent.include_orientation_context and history_requested)
+                )
             )
         ):
             try:
