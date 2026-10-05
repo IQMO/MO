@@ -440,6 +440,10 @@ mo_desktop:
     chat_enabled: false             # continuous listen -> reply -> listen; manual double-Alt stays separate
     conversation_provider: ""       # provider name for fast spoken replies; empty = MO's active provider
     speech_rate: 1.0                # Piper pace multiplier from 0.5 to 2.0; 1.0 keeps the model default
+    clone_model: ""                 # absolute path to YOUR OWN trained RVC voice (.pth); empty = MO's plain voice
+    clone_index: ""                 # optional matching .index for the clone
+    clone_pitch: 0                  # semitones from -24 to 24 between the plain voice and the clone
+    clone_backend: vulkan           # audio.cpp build under <voice root>/engines: vulkan, cuda or cpu
     output_device: default          # system default, or an exact output-device name from Settings
     role: ""                        # Default/empty, a discovered profile role, or bounded custom text
     role_active: false              # pause/resume the selected conversation role

@@ -183,6 +183,11 @@ class SpeechOutput:
             python = self._python_path()
             env = voice_process_environment(self._root)
             env["MO_VOICE_MODEL"] = str(self._model_path())
+            from mo_desktop.voice.clone import CLONE_ENV, clone_settings
+
+            clone = clone_settings(self._config)
+            if clone is not None:
+                env[CLONE_ENV] = json.dumps(clone)
             product_root = str(Path(__file__).resolve().parents[2])
             env["PYTHONPATH"] = product_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
             try:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import site
 import sys
@@ -51,11 +52,13 @@ def voice_layout(root: str | Path) -> dict[str, Path]:
         "root": base,
         "venvs": base / "venvs",
         "models": base / "models",
+        "engines": base / "engines",
         "huggingface_cache": base / "cache" / "huggingface",
         "torch_cache": base / "cache" / "torch",
         "pip_cache": base / "cache" / "pip",
         "numba_cache": base / "cache" / "numba",
         "pkuseg_cache": base / "cache" / "pkuseg",
+        "clone_cache": base / "cache" / "clone",
         "tmp": base / "tmp",
         "profiles": base / "profiles",
     }
@@ -78,6 +81,21 @@ def worker_python(root: str | Path) -> Path:
 def voice_model_path(root: str | Path) -> Path:
     """The one model location for the installed Joe voice."""
     return voice_layout(root)["models"] / "piper" / f"{PIPER_MODEL}.onnx"
+
+
+def clone_server_path(root: str | Path, backend: str = "vulkan") -> Path | None:
+    """Return the newest installed audio.cpp server build for ``backend``, if any."""
+    name = "audiocpp_server.exe" if sys.platform == "win32" else "audiocpp_server"
+    builds = sorted(
+        voice_layout(root)["engines"].glob(f"audio.cpp-*/{backend}/{name}"),
+        key=lambda path: tuple(int(part) for part in re.findall(r"\d+", path.parts[-3])),
+    )
+    return builds[-1] if builds else None
+
+
+def clone_base_model_path(root: str | Path) -> Path:
+    """The audio.cpp RVC base package (content and pitch models) a voice clone runs on."""
+    return voice_layout(root)["models"] / "audiocpp" / "RVC-GGUF" / "rvc-f16.gguf"
 
 
 def voice_model_config_path(root: str | Path) -> Path:

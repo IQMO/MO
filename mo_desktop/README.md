@@ -821,6 +821,19 @@ Voice is optional and lazy:
   its turn behind the running task.
 - Local speech output uses an isolated Piper worker and the configured output
   device. **Speak typed replies** extends that output to requests entered as text.
+- **Your own voice (optional).** MO ships no cloned voice. If you have trained
+  your own RVC voice, point `voice.clone_model` (and `voice.clone_index`) at it;
+  every spoken sentence is then converted through audio.cpp's `rvc` family. MO
+  keeps speaking in its plain voice while the clone loads (a minute or two on
+  a small GPU), and for any sentence the clone cannot convert. The clone runs in
+  one resident `audiocpp_server` process owned by the voice worker; it ends with
+  the worker, even after a crash. Place an audio.cpp release under
+  `<voice root>/engines/audio.cpp-<version>/<backend>/` and its RVC base package
+  at `<voice root>/models/audiocpp/RVC-GGUF/rvc-f16.gguf`. Checkpoints that store
+  their pitch flag as `True` get a fixed copy under `<voice root>/cache/clone/`;
+  the original is never modified. On a small laptop GPU conversion takes about
+  as long as the sentence itself, so the first word comes 2–3 s later than with
+  the plain voice. Use only a voice you have the right to use.
 - Continuous Voice Chat explicitly loops listen → reply → speak → listen while
   its separate switch is enabled. Manual double-Alt capture does not enable that
   loop. Voice Chat re-arms even when a turn produces no audio.
@@ -934,6 +947,10 @@ Common settings:
 | `voice.speech_rate` | `1.0` | Piper speaking pace multiplier (0.5–2.0; 1.0 preserves the installed voice's default pace) |
 | `voice.chat_enabled` | `false` | Continuous listen → reply → listen mode, separate from manual double-Alt input |
 | `voice.conversation_provider` | `""` | Configured provider name that answers spoken requests (a fast, non-reasoning model works best); empty uses MO's active provider. Settings → Voice → **Spoken replies** changes it live |
+| `voice.clone_model` | `""` | Absolute path to your own trained RVC voice (`.pth`); empty keeps MO's plain voice |
+| `voice.clone_index` | `""` | Optional matching retrieval index (`.index`) |
+| `voice.clone_pitch` | `0` | Pitch shift in semitones (−24…24) from the plain voice to the clone |
+| `voice.clone_backend` | `vulkan` | Which installed audio.cpp build runs the clone: `vulkan`, `cuda` or `cpu` |
 
 The complete disabled example is in
 [`config.example.yaml`](../config.example.yaml). Additional runtime fields are

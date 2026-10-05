@@ -36,6 +36,9 @@ def _read_commands(commands: queue.Queue[dict[str, Any]], epoch: list[int]) -> N
         # only a cancel or a new ``speak`` interrupts it.
         command["_epoch"] = epoch[0]
         commands.put(command)
+    # MO closed the pipe (it exited or crashed): stop instead of idling as an orphan.
+    epoch[0] += 1
+    commands.put({"command": "shutdown", "_epoch": epoch[0]})
 
 
 def main() -> int:
@@ -61,11 +64,20 @@ def main() -> int:
     _emit("ready", sample_rate=int(model.config.sample_rate))
     if "--prepare" in sys.argv[1:]:
         return 0
+    clone = None
+    if os.environ.get("MO_VOICE_CLONE"):
+        from mo_desktop.voice.clone import CloneServer
+
+        clone = CloneServer(json.loads(os.environ["MO_VOICE_CLONE"]), sample_rate=int(model.config.sample_rate))
+        clone.start(on_state=lambda state, error: _emit("clone", state=state, error=error))
+        _emit("clone", state="loading", error="")
 
     while True:
         command = commands.get()
         name = str(command.get("command") or "").strip().lower()
         if name == "shutdown":
+            if clone is not None:
+                clone.close()
             return 0
         if name not in {"speak", "append"}:
             continue
@@ -92,7 +104,15 @@ def main() -> int:
                 if epoch[0] != request_epoch:
                     cancelled = True
                     break
-                _emit("audio", id=request_id, data=base64.b64encode(chunk.audio_int16_bytes).decode("ascii"))
+                audio = chunk.audio_int16_bytes
+                if clone is not None and clone.ready:
+                    # One sentence at a time in the user's own voice; the plain
+                    # voice speaks a sentence the clone could not convert.
+                    audio = clone.convert(audio) or audio
+                    if epoch[0] != request_epoch:
+                        cancelled = True
+                        break
+                _emit("audio", id=request_id, data=base64.b64encode(audio).decode("ascii"))
             _emit("done", id=request_id, cancelled=cancelled or epoch[0] != request_epoch)
         except Exception as exc:
             _emit("error", id=request_id, error=type(exc).__name__)
