@@ -175,7 +175,16 @@ _SCREEN_OFFER_ACCEPT_RE = re.compile(
     re.I,
 )
 _CONTINUATION_RE = re.compile(
-    r"\b(?:again|same\s+(?:thing|one)|continue|carry\s+on|do\s+it|do\s+that|resume)\b",
+    r"\b(?:again|same\s+(?:thing|one)|continue|carry\s+on|do\s+it|do\s+that|resume|"
+    r"try\s+(?:it|that)|redo(?:\s+(?:it|that))?)\b",
+    re.I,
+)
+# One whole sentence that only accepts or retries the last attempt ("Yes, fine.
+# Try that."), wherever it sits in a longer message.
+_STANDALONE_CONTINUATION_RE = re.compile(
+    r"(?:(?:yes|yeah|ok(?:ay)?|sure|fine|please)[,.! ]+)*"
+    r"(?:again|same\s+(?:thing|one)|continue|carry\s+on|do\s+it|do\s+that|"
+    r"try\s+(?:it|that)(?:\s+again)?|redo(?:\s+(?:it|that))?)[.!? ]*",
     re.I,
 )
 _TARGET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -555,6 +564,11 @@ def admit_desktop_action(
     )
     receipt_continuation = bool(
         action_continuation
+        or any(
+            _STANDALONE_CONTINUATION_RE.fullmatch(sentence.strip())
+            for sentence in re.split(r"(?<=[.!?])\s+", text)
+            if sentence.strip()
+        )
         or (
             short_continuation
             and re.fullmatch(
