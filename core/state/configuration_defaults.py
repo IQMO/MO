@@ -21,6 +21,7 @@ DEFAULT_PREFERENCES = {
     "mo_desktop.voice.stt_device": "cpu",
     "mo_desktop.voice.stt_beam_size": 1,
     "mo_desktop.voice.stt_idle_seconds": 180.0,
+    "mo_desktop.voice.stt_languages": "",
     "mo_desktop.voice.conversation_provider": "",
     "mo_desktop.computer_use.pixel_policy": "configured_providers",
     "mcp.enabled": True,

@@ -22,6 +22,7 @@ def stt_worker_main(connection: Any, config: dict[str, Any], cancel_event: Any) 
             compute_type=str(config.get("compute_type") or "int8"),
             beam_size=int(config.get("beam_size") or 1),
             confidence=ConfidenceLimits(**confidence),
+            languages=tuple(config.get("languages") or ()),
         )
         ready = recognizer.warm()
         connection.send({"event": "ready", "ok": bool(ready)})

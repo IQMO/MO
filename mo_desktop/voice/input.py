@@ -68,8 +68,10 @@ class VoiceRecognizer:
 
     def __init__(self, model_size: str = "tiny", device: str = "cpu",
                  compute_type: str = "int8", beam_size: int = 1,
-                 *, confidence: "ConfidenceLimits | None" = None) -> None:
+                 *, confidence: "ConfidenceLimits | None" = None,
+                 languages: "tuple[str, ...] | list[str] | str" = ()) -> None:
         self._model_size = model_size
+        self._languages = spoken_languages(languages)
         self._device = device
         self._compute_type = compute_type
         self._beam_size = max(1, int(beam_size or 1))
@@ -154,10 +156,20 @@ class VoiceRecognizer:
             import numpy as np
             audio = np.ascontiguousarray(np.asarray(audio, dtype="float32")).reshape(-1)
             prompt = " ".join(str(initial_prompt or "").split())[-320:]
+            language = self._chosen_language(audio)
+            # One greedy pass (no temperature retries), voice-activity trimming
+            # and no timestamps: about half the time on short spoken requests,
+            # and silence returns at once instead of being decoded.
             segments, info = self._model.transcribe(
                 audio,
                 beam_size=self._beam_size,
                 initial_prompt=prompt or None,
+                language=language,
+                temperature=0.0,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 300},
+                without_timestamps=True,
+                condition_on_previous_text=False,
             )
             segment_rows = []
             for segment in segments:
@@ -211,6 +223,27 @@ class VoiceRecognizer:
             return text
 
 
+    def _chosen_language(self, audio: Any) -> str | None:
+        """The operator's spoken language among those configured, or None (auto)."""
+        if not self._languages:
+            return None
+        if len(self._languages) == 1:
+            return self._languages[0]
+        try:
+            _language, _probability, ranked = self._model.detect_language(audio)
+        except Exception:
+            return None
+        scores = {str(code): float(prob) for code, prob in ranked if str(code) in self._languages}
+        return max(scores, key=scores.get) if scores else None
+
+
+def spoken_languages(value: Any) -> tuple[str, ...]:
+    """Normalize ``voice.stt_languages`` ("en, ar" or a list) to Whisper codes."""
+    items = value.split(",") if isinstance(value, str) else list(value or ())
+    codes = [str(item).strip().lower() for item in items if str(item).strip()]
+    return tuple(dict.fromkeys(code for code in codes if code.isalpha() and 2 <= len(code) <= 3))
+
+
 class WhisperWorkerRecognizer(VoiceRecognizer):
     """Light parent controller for one demand-started Whisper model process."""
 
@@ -256,6 +289,7 @@ class WhisperWorkerRecognizer(VoiceRecognizer):
             "device": self._device,
             "compute_type": self._compute_type,
             "beam_size": self._beam_size,
+            "languages": list(self._languages),
             "idle_seconds": self._idle_seconds,
             "confidence": {
                 "min_avg_logprob": self._confidence.min_avg_logprob,
@@ -699,6 +733,7 @@ def make_voice_recognizer(
         device=cfg.get("stt_device", DEFAULT_PREFERENCES["mo_desktop.voice.stt_device"]),
         compute_type=cfg.get("stt_compute_type", "int8"),
         beam_size=_int_cfg("stt_beam_size", DEFAULT_PREFERENCES["mo_desktop.voice.stt_beam_size"]),
+        languages=cfg.get("stt_languages", DEFAULT_PREFERENCES["mo_desktop.voice.stt_languages"]),
         confidence=ConfidenceLimits(
             min_avg_logprob=_float_cfg("stt_min_avg_logprob", defaults.min_avg_logprob),
             max_no_speech=_float_cfg("stt_max_no_speech", defaults.max_no_speech),

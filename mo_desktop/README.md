@@ -925,6 +925,7 @@ Common settings:
 | `panel.button_corner_radius` | `6` | Shared Desktop action radius |
 | `voice.stt_enabled` | `false` | Double-Alt hold-to-talk request with a spoken reply |
 | `voice.stt_idle_seconds` | `180` | Whisper worker idle lease |
+| `voice.stt_languages` | `""` | Languages the operator speaks (`"en, ar"`); Whisper picks among them instead of guessing any language. Empty detects any |
 | `voice.stt_worker_timeout_seconds` | `180` | Whisper worker request ceiling |
 | `voice.tts_enabled` | `false` | Also speak replies to typed requests |
 | `voice.speech_rate` | `1.0` | Piper speaking pace multiplier (0.5–2.0; 1.0 preserves the installed voice's default pace) |

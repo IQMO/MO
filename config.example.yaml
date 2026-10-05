@@ -434,6 +434,7 @@ mo_desktop:
     stt_beam_size: 1
     stt_timeout_seconds: 15         # windows engine only: max SAPI recognition wait per recording
     stt_idle_seconds: 180           # whisper worker lease after the most recent transcription
+    stt_languages: ""               # e.g. "en, ar": recognize only these; empty = detect any language
     stt_worker_timeout_seconds: 180 # bounded whisper load/transcription request wait
     tts_enabled: false              # also speak typed replies through the local Piper worker
     chat_enabled: false             # continuous listen -> reply -> listen; manual double-Alt stays separate
