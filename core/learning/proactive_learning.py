@@ -127,8 +127,16 @@ def _resolve_suggestions_path(
     return Path(resolve_state_path(path or "memory/learning/suggestions.jsonl", config))
 
 
+_UNPROVEN_RETIREMENT_REASON = "generated skill retired after unproven use"
+
+
 def _retired_suggestion_authority(path: str | Path) -> tuple[set[str], set[str]]:
-    """Resolve recoverable id and semantic tombstones beside one ledger."""
+    """Resolve recoverable id and semantic tombstones beside one ledger.
+
+    Only the operator's dismissal blocks a recommendation for good. A pack
+    retired automatically for unproven use keeps just its id tombstone, so the
+    same pattern can be suggested again from new evidence.
+    """
     source = _resolve_suggestions_path(path)
     owner_root = (
         source.parent.parent
@@ -144,7 +152,20 @@ def _retired_suggestion_authority(path: str | Path) -> tuple[set[str], set[str]]
         from ..skills import retired_learning_authority
 
         ids, recommendations = retired_learning_authority(skill_root)
-        return ids, {_normalize_recommendation(item) for item in recommendations if item}
+        semantic = {_normalize_recommendation(item) for item in recommendations if item}
+        rows = read_jsonl(source) if source.is_file() else []
+        unproven = {
+            _normalize_recommendation(str(row.get("recommendation") or ""))
+            for row in rows
+            if str(row.get("status") or "").casefold() == "retired"
+            and str(row.get("retirement_reason") or "") == _UNPROVEN_RETIREMENT_REASON
+        }
+        dismissed = {
+            _normalize_recommendation(str(row.get("recommendation") or ""))
+            for row in rows
+            if str(row.get("status") or "").casefold() == "dismissed"
+        }
+        return ids, semantic - (unproven - dismissed)
     except Exception:
         return set(), set()
 
@@ -357,7 +378,7 @@ def retire_learning_suggestions(
             ):
                 row["status"] = "retired"
                 row["retired_at"] = current
-                row["retirement_reason"] = "generated skill retired after unproven use"
+                row["retirement_reason"] = _UNPROVEN_RETIREMENT_REASON
                 changed += 1
         if changed:
             write_jsonl(src, rows)
