@@ -116,6 +116,10 @@ _PROJECT_FOLLOWUP_REFERENCE_RE = re.compile(
     r"continuing|proceed|proceeding)\b|\bgo\s+on\b|\bwhat\s+now\b|\band\s+now\b",
     re.IGNORECASE,
 )
+# Desktop screen work is conversational ("show me", "point to it", "how?"): after a turn
+# used these, the next turns keep them loaded instead of paying a tool_search round trip.
+_SCREEN_FOLLOWUP_TOOL_NAMES = frozenset({"computer_targets", "computer_observe", "computer_act", "point_on_screen"})
+_SCREEN_FOLLOWUP_TURNS = 3
 _PROJECT_FOLLOWUP_TOOL_NAMES = frozenset({
     "read_file",
     "find_files",
@@ -887,6 +891,9 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
             str(getattr(self, "_current_user_input", "") or "")
         )
         intent = self._turn_intent_for(raw_input)
+        screen_turns = int(getattr(self, "_screen_followup_turns", 0) or 0)
+        self._screen_followup_active = screen_turns > 0
+        self._screen_followup_turns = max(0, screen_turns - 1)
         recent_project_tools = set(
             getattr(self, "_recent_project_tool_names", ()) or ()
         )
@@ -937,6 +944,10 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
     def _remember_project_tool_for_followup(self, tool_name: str) -> None:
         """Remember bounded native project tools for one referential follow-up."""
         name = str(tool_name or "").strip()
+        if name in _SCREEN_FOLLOWUP_TOOL_NAMES and self._provider_surface() in {"mo_desktop", "companion"}:
+            # "show me", "point to it", "yes, how?": Desktop follow-ups to screen work keep
+            # the see/guide tools loaded instead of searching for them again.
+            self._screen_followup_turns = _SCREEN_FOLLOWUP_TURNS
         if name not in _PROJECT_FOLLOWUP_TOOL_NAMES:
             return
         recent = set(getattr(self, "_recent_project_tool_names", ()) or ())
@@ -1211,6 +1222,8 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
             # to every spoken exchange. A successful search exposes exactly
             # the requested tools on the next provider request.
             names = {"tool_search"}
+            if getattr(self, "_screen_followup_active", False):
+                names.update(_SCREEN_FOLLOWUP_TOOL_NAMES)
             registry = getattr(self, "_tool_registry", None)
             if registry is not None:
                 names.update(registry.activated_names)
@@ -1346,6 +1359,7 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
                 and (
                     CAP_SCREEN_OBSERVATION in capability_hints
                     or self._native_desktop_action_active()
+                    or bool(getattr(self, "_screen_followup_active", False))
                 )
             ):
                 # Prime the see/guide family only for a routed visual or action

@@ -58,7 +58,7 @@ _TRANSFER_RE = re.compile(
     re.I,
 )
 _SCREEN_TARGET_PATTERN = (
-    r"screen|display|monitor|desktop|window|tab|page|button|icon|menu|toolbar|dialog|panel|pixels?|"
+    r"screens?|displays?|monitors?|desktops?|windows?|tabs?|pages?|buttons?|icons?|menus?|toolbars?|dialogs?|panels?|pixels?|"
     r"(?:visible|on[- ]screen|displayed)\s+(?:ui|interface|controls?)"
 )
 _SCREEN_OBSERVATION_RE = re.compile(
@@ -69,7 +69,7 @@ _SCREEN_OBSERVATION_RE = re.compile(
     rf"\bwhere\s+(?:is|are|do|should|can)\b"
     rf"[^.?!\n]{{0,100}}\b(?:{_SCREEN_TARGET_PATTERN})\b|"
     r"\bwhere\s+(?:do|should|can)\s+(?:i|we|you)\s+(?:click|tap|press)\b|"
-    rf"\b(?:point\s+(?:to|at)|show\s+me\s+where|highlight)\b"
+    rf"\b(?:point\s+(?:to|at)|show\s+me\s+where|high\s*light)\b"
     rf"[^.?!\n]{{0,100}}\b(?:{_SCREEN_TARGET_PATTERN}|it|this|that)\b|"
     rf"\bwhat(?:'s|\s+is)\s+on\b"
     rf"[^.?!\n]{{0,100}}\b(?:{_SCREEN_TARGET_PATTERN})\b|"

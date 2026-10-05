@@ -148,7 +148,7 @@ _WALKTHROUGH_RE = re.compile(
     re.I,
 )
 _WALKTHROUGH_TYPO_RE = re.compile(
-    r"\bwalk\s*(?:me\s*)?(?:thorugh|throuhg|thorough)\b",
+    r"\bwall?k\s*(?:me\s*)?(?:thorugh|throuhg|thorough)\b|\bwallk\s*(?:me\s*)?through\b",
     re.I,
 )
 _WALKTHROUGH_CONTINUATION_RE = re.compile(
