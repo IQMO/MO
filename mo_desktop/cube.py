@@ -56,6 +56,10 @@ from mo_desktop.design import (
 _GLIDE_SECONDS = 0.72
 _LEVELS = 22  # brightness buckets in the sprite cache
 _PASSIVE_FRAME_CACHE_LIMIT = 256
+# Sprites land on quarter pixels: the ~3 px idle bob glides (a step every ~85 ms)
+# instead of jumping a whole pixel every ~330 ms, which read as ticking.
+_SUBPIXEL_STEPS = 4
+_SUBPIXEL_CACHE_LIMIT = 512
 _MIN_BRIGHT = 0.5
 _MAX_BRIGHT = 1.0
 _FADE_EASE = 0.12  # how fast the cube dissolves in front of a full-screen window
@@ -92,6 +96,15 @@ def _contrast_outline_rgb(rgb: tuple[int, int, int]) -> tuple[int, int, int]:
     """A quiet keyline that stays visible on both light and dark wallpapers."""
     luminance = (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2])
     return (15, 20, 24) if luminance >= 145 else (244, 248, 250)
+
+
+def _subpixel(value: float) -> tuple[int, int]:
+    """Whole pixel and quarter-pixel remainder (0..3) of a sprite position."""
+    whole = math.floor(value)
+    quarter = round((value - whole) * _SUBPIXEL_STEPS)
+    if quarter == _SUBPIXEL_STEPS:
+        return whole + 1, 0
+    return int(whole), int(quarter)
 
 
 class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
@@ -314,6 +327,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         cache = getattr(self, "_passive_layered_frame_cache", None)
         if cache is not None:
             cache.clear()
+        self._subpixel_sprites = {}
         self._last_layered_frame_signature = None
 
     def _render_sprite_set(self, rgb: tuple[int, int, int], *, edge: int | None = None) -> list:
@@ -1103,6 +1117,30 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._ease_mouth(now)
         return self._paint_layered(now)
 
+    def _subpixel_sprite(self, sprite: Any, qx: int, qy: int) -> Any:
+        """``sprite`` moved right/down by ``qx``/``qy`` quarter pixels (cached; edges resampled
+        in premultiplied alpha so a shifted glow never gains a dark fringe)."""
+        if not qx and not qy:
+            return sprite
+        cache = getattr(self, "_subpixel_sprites", None)
+        if cache is None:
+            cache = self._subpixel_sprites = {}
+        key = (id(sprite), qx, qy)
+        shifted = cache.get(key)
+        if shifted is None:
+            from PIL import Image  # ~0.6 ms once per 27 px sprite and quarter offset
+
+            width, height = sprite.size
+            shifted = sprite.convert("RGBa").transform(
+                (width + 1, height + 1), Image.Transform.AFFINE,
+                (1, 0, -qx / _SUBPIXEL_STEPS, 0, 1, -qy / _SUBPIXEL_STEPS),
+                resample=Image.Resampling.BILINEAR,
+            ).convert("RGBA")
+            cache[key] = shifted
+            if len(cache) > _SUBPIXEL_CACHE_LIMIT:
+                cache.pop(next(iter(cache)))
+        return shifted
+
     def _paint_layered(self, now: float) -> bool:
         """Composite the sprites (glow + cube, NO plate) onto a transparent frame and
         blit it to the shared layered window — the cubes float with smooth edges."""
@@ -1116,17 +1154,21 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             off = (W - self._size) / 2.0
             drag_catch = bool(getattr(self, "_drag", False) or getattr(self, "_drag_armed", False))
             half = self._sprite_px / 2.0
+            left = int(round(self._x - W / 2.0))
+            top = int(round(self._y - W / 2.0))
+            # The window itself moves in whole pixels; carry its remainder into the sprites.
+            shift_x, shift_y = self._x - W / 2.0 - left, self._y - W / 2.0 - top
             items: list[tuple[tuple[int, int], Any, float]] = []
             signature_items: list[tuple[int, int, int, float]] = []
             for i in range(self._cube_count()):
                 cx, cy, b, a = self._cube_state(i, now)
                 idx = max(0, min(_LEVELS - 1, int(round(b * (_LEVELS - 1)))))
                 sprite = self._sprite_for(i, idx, now)
-                dest = (int(cx + off - half), int(cy + off - half))
-                items.append((dest, sprite, a))
-                signature_items.append((dest[0], dest[1], id(sprite), round(a, 6)))
-            left = int(round(self._x - W / 2.0))
-            top = int(round(self._y - W / 2.0))
+                (dx, qx), (dy, qy) = (_subpixel(cx + off - half + shift_x),
+                                      _subpixel(cy + off - half + shift_y))
+                placed = self._subpixel_sprite(sprite, qx, qy)
+                items.append(((dx, dy), placed, a))
+                signature_items.append((dx, dy, id(placed), round(a, 6)))
             content_signature = (W, drag_catch, self._color_rgb, *signature_items)
             if content_signature == getattr(self, "_last_layered_frame_signature", None):
                 return True

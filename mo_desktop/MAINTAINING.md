@@ -24,7 +24,11 @@ content is not restored as Desktop conversation memory.
   Desktop listening feedback uses the original travelling brightness-and-alpha
   ripple, driven by its existing microphone level and animation clock. Preserve
   its continuous alpha motion; an opaque brightness-only substitute becomes
-  visibly stepped through the bounded sprite cache.
+  visibly stepped through the bounded sprite cache. Cube sprites are placed on
+  quarter pixels (`_subpixel_sprite`, resampled in premultiplied alpha, cached
+  per sprite and offset, cleared with the sprite set), including the window's
+  whole-pixel remainder; whole-pixel placement turned the ~3 px idle bob and
+  the end of a chase into visible ticks.
   Its optional native host reuses `mo_renderer`; window chrome never becomes a
   second Agent/data bridge. App opens keep the normal launcher collapse back to
   four cubes. Each native host requests `DesktopCube.capture_launch_origin()`
