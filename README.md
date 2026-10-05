@@ -190,7 +190,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **Works in your Chrome** *(setup)* — *Install MO Connected Tab.* Acts inside your real Chrome tab; no separate browser.
 - **Four-cube companion** — *Runs on the desktop; Win+Alt+M summons it.* A small companion that lives on your screen and comes when called.
 - **Desktop recipes** — *Recorded step sequences.* Transparent replay of known desktop steps.
-- **Living panel** — *Left-click the cubes.* One panel grows from the cubes: type, attach, choose; replies appear in place.
+- **Living panel** — *Left-click the cubes* (again to close). One panel grows from the cubes: type, attach, choose; replies appear in place.
 - **The swallow** — *Drag a file near the cubes and drop it.* Their mouth opens by distance and they swallow the file; it's attached to your message.
 - **App launcher** — *Double-click the cubes.* Four grouped app tiles (Work, Devices, Care, Your apps); add your own files and folders; drag to arrange.
 - **Compact Dashboard** — *Right-click the cubes.* Home, Work, You and Systems at a glance, with project checks.

@@ -642,7 +642,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | **Win+Alt+M** | Summon and open input |
 | **Alt**, then hold **Alt** | Tap Alt once, press and hold Alt a second time to listen, then release that second press to transcribe and send. This also resumes a paused Voice Chat |
 | **Ctrl, Ctrl** | Toggle Free and Lock movement |
-| Left-click cube | Open input; while docked at a terminal, sync after selection |
+| Left-click cube | Open input; click again to close it back into the cubes (the draft is kept); while docked at a terminal, sync after selection |
 | Hold the bottom-left cube for two seconds | That cube brightens in the active skin's accent as the hold completes, then opens screen selection; the selected area darkens while dragging, and the full-resolution PNG opens in the existing image preview |
 | Right-click cube | Open the compact Home/Work/You/Systems Dashboard |
 | Double-click cube | Expand the four grouped MO app tiles; click one to open or focus it |
