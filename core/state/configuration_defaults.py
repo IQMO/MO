@@ -23,6 +23,7 @@ DEFAULT_PREFERENCES = {
     "mo_desktop.voice.stt_idle_seconds": 180.0,
     "mo_desktop.voice.stt_languages": "",
     "mo_desktop.voice.conversation_provider": "",
+    "mo_desktop.voice.arabic_model": "",
     "mo_desktop.voice.clone_model": "",
     "mo_desktop.voice.clone_index": "",
     "mo_desktop.voice.clone_pitch": 0,

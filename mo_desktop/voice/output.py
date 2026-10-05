@@ -48,6 +48,20 @@ _PCM_FRAME_BYTES = 2               # int16 mono
 _AUDIO_QUEUE_CHUNKS = 8
 
 
+def arabic_voice_model(config: Mapping[str, Any] | None) -> Path | None:
+    """Return the operator's configured Arabic Piper voice, or ``None``.
+
+    MO installs only the English voice. Arabic is spoken only through a voice
+    the operator placed and configured themselves (``voice.arabic_model``).
+    """
+    raw = str(dict(config or {}).get("arabic_model") or "").strip()
+    if not raw:
+        return None
+    model = Path(raw).expanduser()
+    sidecar = model.with_suffix(model.suffix + ".json")
+    return model if model.is_absolute() and model.is_file() and sidecar.is_file() else None
+
+
 def prepare_spoken_text(text: str, *, max_chars: int = 320) -> str:
     """Return a short, speech-friendly projection without changing the visible reply."""
     clean = speech_safe_text(text)
@@ -183,6 +197,9 @@ class SpeechOutput:
             python = self._python_path()
             env = voice_process_environment(self._root)
             env["MO_VOICE_MODEL"] = str(self._model_path())
+            arabic = arabic_voice_model(self._config)
+            if arabic is not None:
+                env["MO_VOICE_MODEL_AR"] = str(arabic)
             from mo_desktop.voice.clone import CLONE_ENV, clone_settings
 
             clone = clone_settings(self._config)

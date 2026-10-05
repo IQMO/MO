@@ -265,11 +265,12 @@ class CompanionVoiceMixin:
             return False
         from mo_desktop.voice.output import prepare_spoken_text, spoken_max_chars
 
+        spoken = prepare_spoken_text(text, max_chars=spoken_max_chars(voice_cfg))
+        if not self._voice_can_speak(spoken):
+            self._reset_voice_timing()
+            return False
         self._voice_speech_queued_at = time.monotonic()
-        submitted = bool(speech.speak(
-            prepare_spoken_text(text, max_chars=spoken_max_chars(voice_cfg)),
-            speed=voice_cfg.get("speech_rate", 1.0),
-        ))
+        submitted = bool(speech.speak(spoken, speed=voice_cfg.get("speech_rate", 1.0)))
         if not submitted:
             self._reset_voice_timing()
         return submitted
@@ -334,13 +335,14 @@ class CompanionVoiceMixin:
             self._init_speech_output(force=True)
         return getattr(self, "_speech", None)
 
-    @staticmethod
-    def _voice_can_speak(text: str) -> bool:
-        # The installed engine is the English Piper voice until the multilingual
-        # engine lands; Arabic replies stay visible instead of being misread.
+    def _voice_can_speak(self, text: str) -> bool:
+        # The installed voice is English. Arabic is spoken only through the
+        # operator's own configured Arabic voice; otherwise it stays visible
+        # instead of being misread.
         from mo_desktop.voice.conversation import is_arabic
+        from mo_desktop.voice.output import arabic_voice_model
 
-        return not is_arabic(text)
+        return not is_arabic(text) or arabic_voice_model(getattr(self, "_voice_cfg", {})) is not None
 
     def _voice_conversation_emote(self, name: str) -> None:
         cube = getattr(self, "_cube", None)
@@ -376,8 +378,8 @@ class CompanionVoiceMixin:
         turn = getattr(self, "_turn_thread", None)
         busy = turn is not None and turn.is_alive()
         objective_text = str(objective or user_text)[:200]
-        # Progress lines are English until the speech engine speaks Arabic.
-        speaks_language = not is_arabic(user_text) or self._voice_can_speak(user_text)
+        # Progress lines are English, so they are spoken only in an English exchange.
+        speaks_language = not is_arabic(user_text)
         self._voice_task_admission = (str(user_text), objective_text, speaks_language)
         if not busy:
             self._voice_delegated_objective = objective_text

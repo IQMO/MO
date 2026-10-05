@@ -21,6 +21,13 @@ def _emit(event: str, **fields: Any) -> None:
     print(json.dumps({"event": event, **fields}, separators=(",", ":")), flush=True)
 
 
+def _is_arabic_text(text: str) -> bool:
+    """True when Arabic letters outnumber Latin ones (mixed lines keep their main script)."""
+    arabic = sum(1 for char in text if "\u0600" <= char <= "\u06ff")
+    latin = sum(1 for char in text if char.isascii() and char.isalpha())
+    return arabic > latin
+
+
 def _read_commands(commands: queue.Queue[dict[str, Any]], epoch: list[int]) -> None:
     for raw in sys.stdin:
         try:
@@ -61,6 +68,15 @@ def main() -> int:
     except Exception as exc:
         _emit("fatal", error=type(exc).__name__)
         return 2
+    arabic_model = None
+    if os.environ.get("MO_VOICE_MODEL_AR"):
+        try:
+            arabic_model = PiperVoice.load(Path(os.environ["MO_VOICE_MODEL_AR"]))
+            if int(arabic_model.config.sample_rate) != int(model.config.sample_rate):
+                arabic_model = None  # one playback stream; a different rate cannot share it
+        except Exception:
+            arabic_model = None
+        _emit("arabic", available=arabic_model is not None)
     _emit("ready", sample_rate=int(model.config.sample_rate))
     if "--prepare" in sys.argv[1:]:
         return 0
@@ -97,8 +113,9 @@ def main() -> int:
                 raise ValueError("voice speed must be a finite number from 0.5 to 2.0")
             _emit("started", id=request_id)
             cancelled = False
-            chunks = model.synthesize(text) if speed == 1.0 else model.synthesize(
-                text, syn_config=SynthesisConfig(length_scale=model.config.length_scale / speed),
+            voice = arabic_model if arabic_model is not None and _is_arabic_text(text) else model
+            chunks = voice.synthesize(text) if speed == 1.0 else voice.synthesize(
+                text, syn_config=SynthesisConfig(length_scale=voice.config.length_scale / speed),
             )
             for chunk in chunks:
                 if epoch[0] != request_epoch:

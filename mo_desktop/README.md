@@ -854,8 +854,10 @@ Voice is optional and lazy:
   sentence; tool-call arguments never reach speech, and emotion tags only select
   delivery and the cube's reaction. Both drop command/code detail and Markdown
   punctuation from speech while the complete text remains visible in the reply
-  bubble. Arabic replies stay visible but unspoken until a multilingual speech
-  engine is installed; the current Piper voice is English.
+  bubble. The installed Piper voice is English, so Arabic replies stay visible but
+  unspoken unless you configure an Arabic Piper voice you placed yourself
+  (`voice.arabic_model`); then each reply is spoken with the voice for its main
+  script, and a voice clone converts both. The English voice never reads Arabic.
 
 Voice dependencies and models live in private state, not the product checkout.
 The core companion still runs when optional voice packages are absent.
@@ -947,6 +949,7 @@ Common settings:
 | `voice.speech_rate` | `1.0` | Piper speaking pace multiplier (0.5–2.0; 1.0 preserves the installed voice's default pace) |
 | `voice.chat_enabled` | `false` | Continuous listen → reply → listen mode, separate from manual double-Alt input |
 | `voice.conversation_provider` | `""` | Configured provider name that answers spoken requests (a fast, non-reasoning model works best); empty uses MO's active provider. Settings → Voice → **Spoken replies** changes it live |
+| `voice.arabic_model` | `""` | Absolute path to an Arabic Piper voice (`.onnx` with its `.onnx.json`) you placed yourself; empty keeps Arabic unspoken |
 | `voice.clone_model` | `""` | Absolute path to your own trained RVC voice (`.pth`); empty keeps MO's plain voice |
 | `voice.clone_index` | `""` | Optional matching retrieval index (`.index`) |
 | `voice.clone_pitch` | `0` | Pitch shift in semitones (−24…24) from the plain voice to the clone |
