@@ -12,6 +12,7 @@ import json
 import os
 import posixpath
 import re
+import stat
 import time
 from pathlib import Path
 from typing import Any
@@ -72,8 +73,22 @@ def _discover_files(root: Path) -> list[str]:
     runtime_home = mo_home().resolve(strict=False)
     nested_runtime_home = runtime_home if runtime_home != root and root in runtime_home.parents else None
 
+    resolved_dirs: dict[str, Path] = {}
+
     def outside_runtime_home(rel: str) -> bool:
-        candidate = (root / rel).resolve(strict=False)
+        # Resolve each folder once: a thousand files share a few hundred folders, and
+        # only a file that is itself a link can point somewhere its folder does not.
+        path = root / rel
+        folder = rel.rpartition("/")[0]
+        parent = resolved_dirs.get(folder)
+        if parent is None:
+            parent = resolved_dirs[folder] = path.parent.resolve(strict=False)
+        try:
+            info = path.lstat()
+            linked = stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_reparse_tag", 0))
+        except OSError:
+            linked = True
+        candidate = path.resolve(strict=False) if linked else parent / path.name
         return root in candidate.parents and (
             nested_runtime_home is None
             or (candidate != nested_runtime_home and nested_runtime_home not in candidate.parents)
