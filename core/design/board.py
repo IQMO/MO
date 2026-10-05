@@ -253,7 +253,7 @@ def board_operation_contract() -> dict[str, Any]:
                 "arrowhead": sorted(BOARD_ARROWHEADS),
                 "arrow_size": "0.5-2.5",
             },
-            "text": "required only for text; maximum 8000 characters",
+            "text": "required for text; for rect and ellipse an optional label drawn centred inside the shape; maximum 8000 characters",
         },
     }
 
