@@ -149,6 +149,7 @@ _EVERYWHERE_STATUS_REQUEST_RE = re.compile(
 _ABORTED_TURN_TEXT = "[ABORTED] Current turn stopped."
 _ABORTED_VISIBLE_TEXT = "Stopped before finishing. Type or speak a new request to continue."
 _ACTIVITY_LABEL_SECONDS = 180.0
+_HELD_NOTICE_LIMIT = 5  # glance notices kept while the panel is open, newest last
 _TOOL_PREAMBLE_RE = re.compile(
     r"^\s*(?:sure[,.]?\s*)?"
     r"(?:let\s+me(?:\s+start\s+by)?|i(?:'|’)?ll|i\s+will|i(?:'|’)?m\s+going\s+to|i\s+am\s+going\s+to)"
@@ -628,6 +629,8 @@ class CompanionSurface(
         value = bool(visible)
         self._visible = value
         self._reply_visible = value
+        if not value and getattr(self, "_held_notices", None):
+            self._release_held_notices()
 
     # ------------------------------------------------------------------
     # Tray + startup + panic-stop (Phase 4)
@@ -4054,11 +4057,13 @@ class CompanionSurface(
         return "thinking it through…"
 
     def _present_activity(self, text: str) -> None:
-        """Speak the current short action through the cube's existing glance label.
+        """Show the current short action on the panel's status line.
 
-        Volume, sync, notices, and live activity deliberately share this one small
-        surface. Replies and specialized content own the larger panel; hidden model
-        reasoning never does.
+        One surface at a time: when the turn keeps a selected or attachment card
+        open, that card stays the only panel and the cubes' working spinner shows
+        MO is busy. The cube's glance label carries activity only when no panel is
+        open (a walkthrough observing the screen). Hidden model reasoning never
+        appears.
         """
         t = " ".join(str(text or "").strip().split())
         if len(t) > 36:
@@ -4076,6 +4081,8 @@ class CompanionSurface(
                 return
             if self._show_status_line(t):
                 return
+            if self._panel_visible():
+                return  # the kept card is the one surface; no second label beside it
             cube = getattr(self, "_cube", None)
             if cube is None:
                 return
@@ -5191,11 +5198,24 @@ class CompanionSurface(
         from mo_desktop.notify import emit
 
         def announce() -> None:
+            if self._panel_visible():
+                # One surface at a time: a notice waits for the open panel to close
+                # instead of opening a second label beside it.
+                key = getattr(notice, "key", None)
+                held = [item for item in getattr(self, "_held_notices", []) if key is None or getattr(item, "key", None) != key]
+                self._held_notices = (held + [notice])[-_HELD_NOTICE_LIMIT:]
+                return
             if not emit(cube, notice):
                 tray_fallback()
 
         if not self._post_gui_call(announce):
             tray_fallback()
+
+    def _release_held_notices(self) -> None:
+        """Announce the notices that waited while the panel was open, oldest first."""
+        held, self._held_notices = list(getattr(self, "_held_notices", [])), []
+        for notice in held:
+            self._emit_notice(notice)
 
     def _activate_notice(self) -> bool:
         cube = getattr(self, "_cube", None)

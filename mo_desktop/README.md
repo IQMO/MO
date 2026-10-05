@@ -579,9 +579,10 @@ new windows.
 One panel grows out of the cubes for a whole turn: first a single line with
 what MO heard and what it is doing ("got it…", "opening Paint…"), then the
 answer in the same place. The same card carries input, choices, files and
-Dashboard, with icon controls. The cube-side glance label keeps volume, sync
-and notices. The renderer publishes its real dock side so the label and panel
-do not overlap.
+Dashboard, with icon controls. Only one surface shows at a time: while a card
+is open, MO's progress stays off the screen (the cubes show it is working) and
+new notices wait until the card closes. The cube-side glance label keeps volume,
+sync and notices when no panel is open.
 
 Simple requests receive concise final replies; requested detail remains intact.
 During a walkthrough the larger reply card stays hidden while the pointer shows
