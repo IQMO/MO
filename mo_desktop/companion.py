@@ -3675,8 +3675,10 @@ class CompanionSurface(
             desktop_session = self._ensure_desktop_session()
             if str(user_input or "").strip().casefold() == "/new":
                 result = self._start_new_desktop_session(desktop_session)
-                self._set_result(result)
                 self._log_action("desktop_session_new", result)
+                # Same as the history view's "+": the empty composer is the new
+                # conversation; no separate confirmation panel.
+                self._post_gui_call(self._display_input_dialog)
                 return
             if self._role_stop_requested(user_input):
                 label = self._active_skill_role_name() or "Reviewer"
