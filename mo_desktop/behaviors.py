@@ -209,6 +209,11 @@ class CompanionModes:
         if getattr(self._cube, "_charging", False):
             self._call(self._c, "_sync_with_terminal")
             return
+        # A second click on the cubes closes the composer it opened (the draft is kept).
+        is_open = getattr(self._c, "_composer_open", None)
+        if callable(is_open) and is_open():
+            self._call(self._c, "_close_composer")
+            return
         self._call(self._c, "_display_input_dialog")
 
     def _open_dashboard(self) -> None:
