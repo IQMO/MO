@@ -340,12 +340,29 @@ def _finish_gate_continuation_limit(
     return text
 
 
+def _with_operator_output(agent: object, answer: object, outputs: list[str]) -> str:
+    """Deterministic operator views follow the model's answer, or are the answer.
+
+    Mail and Life receipts reach the operator directly; the model sees only
+    "shown directly after this turn". When those receipts were all the model
+    had, its prose adds nothing and the receipts are the answer (Life's private
+    view). When the model also read real results, its answer is kept: a mail
+    review that checked status first must still show its findings.
+    """
+    if not bool(getattr(agent, "_turn_model_visible_results", False)):
+        answer = ""
+    text = str(answer or "").strip()
+    extra = [output for output in outputs if output and output not in text]
+    return "\n\n".join(part for part in (text, *extra) if part)
+
+
 def _runtime_scoped_turn(function):
     """Check project indexes on entry and restore turn-local provider fallback."""
     @wraps(function)
     def wrapped(agent, *args, **kwargs):
         agent._mail_approval_notice = ""
         agent._local_operator_output = []
+        agent._turn_model_visible_results = False
         begin = getattr(agent, "begin_provider_turn", None)
         owns_scope = bool(begin()) if callable(begin) else False
         maintain = getattr(agent, "_maintain_project_indexes", None)
@@ -363,11 +380,11 @@ def _runtime_scoped_turn(function):
                 except ProviderRequestLimitReached:
                     outputs = list(getattr(agent, "_local_operator_output", []) or [])
                     if outputs:
-                        return "\n\n".join(outputs)
+                        return _with_operator_output(agent, "", outputs)
                     return _finish_request_limit(agent, limit, monitor=kwargs.get("monitor"))
                 outputs = list(getattr(agent, "_local_operator_output", []) or [])
                 if outputs:
-                    return "\n\n".join(outputs)
+                    return _with_operator_output(agent, result, outputs)
                 if limit["exhausted"]:
                     return _finish_request_limit(
                         agent, limit, monitor=kwargs.get("monitor"), discarded_result=result,
@@ -378,6 +395,7 @@ def _runtime_scoped_turn(function):
                 return result
         finally:
             agent._local_operator_output = []
+            agent._turn_model_visible_results = False
             agent._mail_approval_notice = ""
             finish_mail = getattr(getattr(agent, "session", None), "finish_mail_sensitive_turn", None)
             if callable(finish_mail):

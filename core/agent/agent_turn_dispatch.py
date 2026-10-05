@@ -1567,6 +1567,7 @@ class AgentTurnDispatchMixin:
         if name == "migrate":
             runtime_arguments["_mo_project_cwd"] = getattr(self, "project_cwd", None)
 
+        receipts_before = len(getattr(self, "_local_operator_output", []) or [])
         try:
             result = executor(runtime_arguments)
         except Exception as exc:
@@ -1614,6 +1615,12 @@ class AgentTurnDispatchMixin:
             except (OSError, ValueError):
                 output = "Life record changed, but its details are unavailable. Refresh Dashboard → Life."
             self._local_operator_output = list(getattr(self, "_local_operator_output", []) or []) + [output]
+        if (
+            len(getattr(self, "_local_operator_output", []) or []) == receipts_before
+            and not str(result).startswith("Error")
+        ):
+            # The model saw this result, so its answer reports something real.
+            self._turn_model_visible_results = True
 
         # Handle background shell activation
         bg_match = re.search(r'\[BACKGROUND_ACTIVE\|([^|\]]+)\|([^\]]*)\]', result) if name in {"shell", "test_runner"} and isinstance(result, str) else None
