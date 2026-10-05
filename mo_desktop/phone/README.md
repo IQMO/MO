@@ -17,11 +17,11 @@ There is no Tk fallback.
   Audio uses AAC so phones without an Opus encoder can still mirror with sound.
   Mirror and Trackpad each have one active session; their cards name the
   original phone even after the selection changes.
-- Trackpad opens the existing Direct Android Activity and nonce-bound loopback
-  tunnel through the selected ADB transport. Waiting for the phone and connected
-  input are distinct states. Stop and close clean up the session's original
-  transport, independently of the current selection. The Play client does not
-  supply Trackpad.
+- Trackpad opens the existing Android Activity, packaged in both the Google Play
+  and Direct builds, and its nonce-bound loopback tunnel through the selected ADB
+  transport. Waiting for the phone and connected input are distinct states. Stop
+  and close clean up the session's original transport, independently of the
+  current selection.
 - Keep a frame uses the existing attachment writer and provenance index. Its
   count describes frames kept in this workspace session, not the whole catalog.
 - Files opens the Desktop's existing MO Files instance. Success requires the

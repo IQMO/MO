@@ -96,8 +96,9 @@ settings.
 
 MO's shared Board and Phone Trackpad are not Everywhere payload lanes. Board is
 the existing private MO Design artifact rendered by Desktop or a standalone
-Board window. The optional local Trackpad integration is absent from the current
-Google Play client and does not use the Everywhere hub. Raw motion, strokes,
+Board window. The Phone Trackpad, in both the Google Play and Direct Android
+builds, reaches Desktop through an authenticated ADB tunnel and does not use the
+Everywhere hub. Raw motion, strokes,
 pressure, screenshots, and Board scenes never traverse or persist in the hub;
 Everywhere pairing is neither required nor sufficient to enable that private
 local integration.
