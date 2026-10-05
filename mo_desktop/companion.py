@@ -616,9 +616,11 @@ class CompanionSurface(
 
     def _composer_open(self) -> bool:
         """Whether the visible panel is the composer (a cube click then closes it)."""
+        from mo_desktop.design import PanelState
+
         bubble = getattr(self, "_bubble", None)
         return bool(bubble and bubble is not False and self._panel_visible()
-                    and getattr(bubble, "_mode", "") == "input")
+                    and getattr(bubble, "_panel_state", None) == PanelState.INPUT)
 
     def _close_composer(self) -> None:
         """Close the composer like a click away does: the half-typed draft is kept."""
