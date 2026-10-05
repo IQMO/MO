@@ -232,7 +232,7 @@ class VoiceRecognizer:
         try:
             _language, _probability, ranked = self._model.detect_language(audio)
         except Exception:
-            return None
+            return self._languages[0]  # never fall back to guessing among every language
         scores = {str(code): float(prob) for code, prob in ranked if str(code) in self._languages}
         return max(scores, key=scores.get) if scores else None
 

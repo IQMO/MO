@@ -381,6 +381,7 @@ class CompanionVoiceMixin:
         self._voice_task_admission = (str(user_text), objective_text, speaks_language)
         if not busy:
             self._voice_delegated_objective = objective_text
+            self._last_activity_text = ""  # a new task has no step yet
         submitted = self._submit_text_request(
             user_text,
             source="voice",
@@ -410,6 +411,7 @@ class CompanionVoiceMixin:
         if isinstance(task, tuple) and len(task) == 3 and task[0] == user_input:
             self._voice_task_admission = None
             self._voice_delegated_objective = str(task[1] or "")
+            self._last_activity_text = ""
             if getattr(self, "_voice_progress_thread", None) is not threading.current_thread():
                 # A task queued while another ran starts now, on this turn thread.
                 self._arm_voice_progress(threading.current_thread() if task[2] else None)
