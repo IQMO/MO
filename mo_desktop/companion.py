@@ -4365,6 +4365,8 @@ class CompanionSurface(
             now = time.time()
             if follow_tail and (now - getattr(self, "_bubble_render_at", 0.0)) < 0.07:
                 return
+            if follow_tail and self._walkthrough_recap_must_wait():
+                return  # a pointer label is on screen: one surface; the reply follows it
             self._bubble_render_at = now
             self._display_reply_dialog(safe, controls=controls)
 
@@ -4725,6 +4727,9 @@ class CompanionSurface(
         self._remember_reply(summary)  # keep the options with their own canonical reply
         final_text = visible or "No response."
         walkthrough = bool(getattr(self, "_turn_is_walkthrough", False))
+        # Any turn that pointed waits like a walkthrough: the reply panel opens once the
+        # pointer label has had its time, never beside it.
+        pointing = walkthrough or self._walkthrough_recap_must_wait()
         role_workspace_active = bool(
             getattr(self, "_role_workspace_requested", False)
         )
@@ -4739,7 +4744,7 @@ class CompanionSurface(
             if not self._speak_reply(final_text):
                 self._resume_voice_chat_after_turn()
             return
-        if walkthrough:
+        if pointing:
             # Pointer labels are the only walkthrough body. The normal reply card
             # appears once, after the FIFO, as the final recap and response path.
             self._render_walkthrough_recap(summary, final_text)
@@ -4749,7 +4754,7 @@ class CompanionSurface(
             != final_text.strip()
         ):
             self._render_reply_dialog(summary, follow_tail=False, controls=True)
-        if not walkthrough and not self._speak_reply(final_text):
+        if not pointing and not self._speak_reply(final_text):
             self._resume_voice_chat_after_turn()
 
     def _submit_options(self, selected: list[str]) -> bool:
