@@ -120,36 +120,6 @@
       "reason": "Named skins intentionally expose the same complete semantic-token schema with independently chosen immutable values.",
       "behavior_owner": "interface/skins Skin validation and BUILTIN_SKINS registry",
       "removal": "intentional-permanent: explicit complete definitions keep every theme token reviewable and prevent inheritance from coupling named skins"
-    },
-    {
-      "id": "renamed-token-block:5861b5bc321037e4",
-      "members": [
-        "core/dashboard/brain_index.py",
-        "mo_everywhere/overview.py"
-      ],
-      "reason": "Local brain index and remote overview intentionally project different safe subsets from a shared snapshot shape.",
-      "behavior_owner": "local brain index and remote Everywhere overview boundaries",
-      "removal": "intentional-permanent: distinct presentation surfaces retain separate safe-subset policies"
-    },
-    {
-      "id": "renamed-token-block:948a712d25534159",
-      "members": [
-        "mo_desktop/mo_renderer.py",
-        "mo_everywhere/overview.py"
-      ],
-      "reason": "Desktop theme validation and the remote counts-only projection independently unpack bounded dictionaries at different trust boundaries; they share no state or behavior.",
-      "behavior_owner": "MO Desktop theme renderer and Everywhere remote overview projection",
-      "removal": "intentional-permanent: a generic dictionary-unpacking helper would couple unrelated validation and privacy boundaries"
-    },
-    {
-      "id": "renamed-token-block:b768f76ce62513ad",
-      "members": [
-        "core/dashboard/brain_index.py",
-        "mo_desktop/mo_renderer.py"
-      ],
-      "reason": "The counts-only brain index and Desktop theme validation independently unpack bounded dictionaries with unrelated schemas and outputs.",
-      "behavior_owner": "Dashboard brain projection and MO Desktop theme renderer",
-      "removal": "intentional-permanent: retaining explicit schema-local reads is clearer than a cross-domain dictionary adapter"
     }
   ]
 }

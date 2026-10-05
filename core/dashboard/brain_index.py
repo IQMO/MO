@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .projection import _mapping
 from .snapshot import build_dashboard_snapshot
 
 BRAIN_LAYER = "brain"
@@ -28,13 +29,13 @@ def build_brain_index(snapshot: dict[str, Any] | None = None, *, agent: Any = No
     built from ``agent``. Stats are drawn from snapshot counts only.
     """
     snap = snapshot if isinstance(snapshot, dict) else build_dashboard_snapshot(agent)
-    work = snap.get("work") if isinstance(snap.get("work"), dict) else {}
-    profile = snap.get("profile") if isinstance(snap.get("profile"), dict) else {}
-    learning = snap.get("learning") if isinstance(snap.get("learning"), dict) else {}
-    artifacts = snap.get("artifacts") if isinstance(snap.get("artifacts"), dict) else {}
-    desktop = artifacts.get("mo_desktop") if isinstance(artifacts.get("mo_desktop"), dict) else {}
-    desktop_categories = desktop.get("categories") if isinstance(desktop.get("categories"), dict) else {}
-    suggestions = learning.get("suggestions") if isinstance(learning.get("suggestions"), dict) else {}
+    work = _mapping(snap.get("work"))
+    profile = _mapping(snap.get("profile"))
+    learning = _mapping(snap.get("learning"))
+    artifacts = _mapping(snap.get("artifacts"))
+    desktop = _mapping(artifacts.get("mo_desktop"))
+    desktop_categories = _mapping(desktop.get("categories"))
+    suggestions = _mapping(learning.get("suggestions"))
     sug_total = sum(int(v or 0) for v in suggestions.values())
 
     nodes = [
