@@ -614,6 +614,10 @@ class CompanionSurface(
         """Toggle the companion window visibility."""
         self.hide() if self._panel_visible() else self.show()
 
+    def _overlay_acting(self) -> bool:
+        """MO is driving the computer: keep the cubes above the window it acts on."""
+        return bool(getattr(getattr(self, "_cube", None), "_actuation_yield", False))
+
     def _panel_visible(self) -> bool:
         """Return the one layered panel's actual visibility."""
         bubble = getattr(self, "_bubble", None)
@@ -1781,7 +1785,7 @@ class CompanionSurface(
                     names = normalize_keep_above_apps(value)
                     compat = getattr(self, "_overlay_compat", None)
                     if compat is None:
-                        compat = OverlayCompatibility(names)
+                        compat = OverlayCompatibility(names, acting=self._overlay_acting)
                         self._overlay_compat = compat
                     else:
                         compat.set_executable_names(names)
@@ -2040,7 +2044,7 @@ class CompanionSurface(
                                         focus=lambda: self._tray and self._tray._on_toggle_focus())
             from mo_desktop.overlay_compat import OverlayCompatibility
 
-            self._overlay_compat = OverlayCompatibility(settings.behavior.keep_above_apps)
+            self._overlay_compat = OverlayCompatibility(settings.behavior.keep_above_apps, acting=self._overlay_acting)
             set_desktop_pointer(self._point_with_cube)
             set_desktop_sync(self.sync_for_tool)
         except Exception:

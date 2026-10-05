@@ -937,7 +937,7 @@ Common settings:
 | `behavior.default_mode` | `free` | `free` or `lock` |
 | `behavior.follow_distance` | `64` | Lock-mode trailing distance |
 | `behavior.follow_ease` | `0.16` | Lock-mode spring |
-| `behavior.keep_above_apps` | `[]` | Exact executable basenames allowed to lift MO above their overlays |
+| `behavior.keep_above_apps` | `[]` | Exact executable basenames allowed to lift MO above their overlays. MO Shell is always included, and while MO itself acts on the computer the cubes stay above any always-on-top window |
 | `panel.padding` | `16` | Shared Desktop panel padding |
 | `panel.corner_radius` | `12` | Shared Desktop window/panel radius |
 | `panel.button_padding` | `8` | Shared Desktop action padding |

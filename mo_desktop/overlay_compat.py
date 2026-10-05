@@ -268,10 +268,33 @@ def _raise_hwnds_topmost(hwnds: Iterable[int]) -> bool:
         return False
 
 
-class OverlayCompatibility:
-    """Keep MO above exact approved overlay executables without periodic Z-order fighting."""
+# MO's own always-on-top surfaces. MO Shell floats its terminal (and the window it
+# attaches) in the topmost band; the cubes must stay above them, not behind.
+_MO_OWN_EXECUTABLES = frozenset({"moshell.native.exe"})
 
-    def __init__(self, executable_names: Any = None) -> None:
+
+class _AnyExecutable:
+    """While MO acts, every always-on-top window above MO is answered."""
+
+    def __contains__(self, _name: object) -> bool:
+        return True
+
+
+_ANY_EXECUTABLE = _AnyExecutable()
+
+
+class OverlayCompatibility:
+    """Keep MO above exact approved overlay executables without periodic Z-order fighting.
+
+    MO's own MO Shell is always approved. While ``acting()`` reports that MO itself is
+    driving the computer (the cubes are click-through and capture-excluded then), any
+    always-on-top window that moves above MO is answered too, so the cubes stay visible
+    over the window MO acts on.
+    """
+
+    def __init__(self, executable_names: Any = None, *, acting: Callable[[], bool] | None = None) -> None:
+        self._acting = acting
+        self._configured: tuple[str, ...] = ()
         self._allowed: set[str] = set()
         self._last_check_at = 0.0
         self._process_names: dict[int, tuple[str, float]] = {}
@@ -283,19 +306,28 @@ class OverlayCompatibility:
 
     @property
     def executable_names(self) -> tuple[str, ...]:
-        return tuple(sorted(self._allowed))
+        return self._configured
 
     @property
     def event_driven(self) -> bool:
         return bool(self._event_hook)
 
     def set_executable_names(self, value: Any) -> None:
-        self._allowed = {name.casefold() for name in normalize_keep_above_apps(value)}
+        configured = {name.casefold() for name in normalize_keep_above_apps(value)}
+        self._configured = tuple(sorted(configured))
+        self._allowed = configured | _MO_OWN_EXECUTABLES
         self._last_check_at = 0.0
         self._process_names.clear()
         self._pending_match = ""
-        if not self._allowed:
-            self.close()
+
+    def _is_acting(self) -> bool:
+        try:
+            return bool(self._acting and self._acting())
+        except Exception:
+            return False
+
+    def _keeps_above(self, name: str) -> bool:
+        return name.casefold() in self._allowed or self._is_acting()
 
     def _name_for_pid(self, pid: int) -> str:
         current = time.monotonic()
@@ -312,7 +344,7 @@ class OverlayCompatibility:
         if row is None or not row.topmost or row.pid == os.getpid() or row.hwnd in self._own_hwnds:
             return
         name = self._name_for_pid(row.pid)
-        if name.casefold() not in self._allowed:
+        if not self._keeps_above(name):
             return
         if _raise_hwnds_topmost(self._own_hwnds):
             self._pending_match = name
@@ -370,8 +402,9 @@ class OverlayCompatibility:
         if not force and current - self._last_check_at < _FALLBACK_CHECK_SECONDS:
             return ""
         self._last_check_at = current
+        allowed = _ANY_EXECUTABLE if self._is_acting() else self._allowed
         matched = _matching_overlay_above(
-            windows_in_z_order(), set(self._own_hwnds), self._allowed, self._name_for_pid,
+            windows_in_z_order(), set(self._own_hwnds), allowed, self._name_for_pid,
         )
         if not matched or not _raise_hwnds_topmost(self._own_hwnds):
             return pending
