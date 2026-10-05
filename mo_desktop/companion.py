@@ -614,24 +614,6 @@ class CompanionSurface(
         """Toggle the companion window visibility."""
         self.hide() if self._panel_visible() else self.show()
 
-    def _composer_open(self) -> bool:
-        """Whether the visible panel is the composer (a cube click then closes it)."""
-        from mo_desktop.design import PanelState
-
-        bubble = getattr(self, "_bubble", None)
-        return bool(bubble and bubble is not False and self._panel_visible()
-                    and getattr(bubble, "_panel_state", None) == PanelState.INPUT)
-
-    def _close_composer(self) -> None:
-        """Close the composer like a click away does: the half-typed draft is kept."""
-        bubble = getattr(self, "_bubble", None)
-        if not bubble or bubble is False:
-            return
-        stash = getattr(bubble, "_stash_input_draft", None)
-        if callable(stash):
-            stash()
-        bubble.hide()
-
     def _overlay_acting(self) -> bool:
         """MO is driving the computer: keep the cubes above the window it acts on."""
         return bool(getattr(getattr(self, "_cube", None), "_actuation_yield", False))

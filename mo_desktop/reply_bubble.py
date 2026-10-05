@@ -1997,6 +1997,35 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         self._activate_hit(self._hit_key_at(x, y))
 
+    def collapse_to_cube(self) -> None:
+        """Close the composer back into its cube, keeping the half-typed draft.
+
+        Its collapse control and a second click on the cubes both close it this way."""
+        if getattr(self, "_cube_closing", False):
+            return
+        self._stash_input_draft()
+        self._cancel_panel_transition()
+        self._stop_blink()
+        if self._transition_seconds() <= 0 or getattr(self._cube, "_composer_controller", None) is not self:
+            self.hide()
+            return
+        now = time.perf_counter()
+        duration = self._transition_seconds()
+        started = self._transition_started_at
+        opened_for = (0.0 if self._transition_pending_start else
+                      min(duration, max(0.0, now-started)) if started > 0 else duration)
+        if opened_for >= duration:
+            bx, by = self._cube._bases[1]
+            self._cube_source_center = (self._cube._x+bx-self._cube._size/2,
+                                        self._cube._y+by-self._cube._size/2)
+        self._cube_closing = True
+        self._transition_pending_start = False
+        # Smoothstep is symmetric: reverse the current phase and cached
+        # pixels instead of jumping to a fresh, fully expanded close pose.
+        self._transition_started_at = now - (duration-opened_for)
+        self._repaint()
+        self._schedule_panel_transition()
+
     def _activate_hit(self, key: str) -> None:
         """Activate one custom-drawn control from either mouse or keyboard."""
         key = str(key or "")
@@ -2004,30 +2033,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         self._keyboard_hit = key
         if key == "collapse":
-            if getattr(self, "_cube_closing", False):
-                return
-            self._stash_input_draft()
-            self._cancel_panel_transition()
-            self._stop_blink()
-            if self._transition_seconds() <= 0 or getattr(self._cube, "_composer_controller", None) is not self:
-                self.hide()
-                return
-            now = time.perf_counter()
-            duration = self._transition_seconds()
-            started = self._transition_started_at
-            opened_for = (0.0 if self._transition_pending_start else
-                          min(duration, max(0.0, now-started)) if started > 0 else duration)
-            if opened_for >= duration:
-                bx, by = self._cube._bases[1]
-                self._cube_source_center = (self._cube._x+bx-self._cube._size/2,
-                                            self._cube._y+by-self._cube._size/2)
-            self._cube_closing = True
-            self._transition_pending_start = False
-            # Smoothstep is symmetric: reverse the current phase and cached
-            # pixels instead of jumping to a fresh, fully expanded close pose.
-            self._transition_started_at = now - (duration-opened_for)
-            self._repaint()
-            self._schedule_panel_transition()
+            self.collapse_to_cube()
         elif key == "role":
             self._role_menu_open = not getattr(self, "_role_menu_open", False)
             if self._role_menu_open:

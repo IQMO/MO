@@ -172,6 +172,16 @@ class CompanionModes:
         except Exception:
             return False
 
+    def _composer_open(self) -> bool:
+        bubble = getattr(self._c, "_bubble", None)
+        if not bubble or bubble is False:
+            return False
+        try:
+            from mo_desktop.design import PanelState
+            return bool(bubble.visible()) and getattr(bubble, "_panel_state", None) == PanelState.INPUT
+        except Exception:
+            return False
+
     def _close_panel(self) -> None:
         bubble = getattr(self._c, "_bubble", None)
         if bubble and bubble is not False:
@@ -210,9 +220,8 @@ class CompanionModes:
             self._call(self._c, "_sync_with_terminal")
             return
         # A second click on the cubes closes the composer it opened (the draft is kept).
-        is_open = getattr(self._c, "_composer_open", None)
-        if callable(is_open) and is_open():
-            self._call(self._c, "_close_composer")
+        if self._composer_open():
+            self._call(self._c._bubble, "collapse_to_cube")
             return
         self._call(self._c, "_display_input_dialog")
 
