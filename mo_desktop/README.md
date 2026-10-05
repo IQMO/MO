@@ -648,7 +648,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | Double-click cube | Expand the four grouped MO app tiles; click one to open or focus it |
 | Hover cube | Show only running MO-owned apps for window switching |
 | Mouse wheel over cube | Adjust Windows master volume |
-| Drop a file on cube | Attach locally and show its preview; use **Send** (image Tools) or **Send file** for a separate paired-device transfer |
+| Drop a file on cube | Attach locally; MO reads it and answers in the one panel. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
 
 Screen selections are saved under the active private profile's ordinary
 `media/attachments/gallery` catalog and appear in MO Files. Escape or right-click

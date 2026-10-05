@@ -3072,10 +3072,14 @@ class CompanionSurface(
                     if rejected else ""
                 )
                 self._set_status(f"Attached: {names}{note}", self._visual_palette.ok)
-                self._show_attachment_panel(saved)
                 from mo_desktop.artifacts import attachment_panel_state
                 from mo_desktop.design import PanelState
-                if attachment_panel_state(saved) != PanelState.IMAGE:
+                if attachment_panel_state(saved) == PanelState.IMAGE:
+                    # An image is previewed on its card and goes to MO only by an explicit action.
+                    self._show_attachment_panel(saved)
+                else:
+                    # A dropped file goes straight to MO: the one living panel shows the
+                    # reading and then the answer, with no file card in front of it.
                     self._send_attachment_to_mo(saved)
 
             self._post_gui_call(finish_import)
@@ -3083,8 +3087,10 @@ class CompanionSurface(
         threading.Thread(target=import_in_background, daemon=True).start()
 
     def _send_attachment_to_mo(self, saved: list[Any]) -> None:
-        """Submit the displayed attachment only at its explicit MO action boundary."""
+        """Ask MO about a dropped file in the one living panel (no file card in front of it)."""
         if self._turn_thread is not None and self._turn_thread.is_alive():
+            # MO is busy: the card acknowledges the drop so it is never silent.
+            self._show_attachment_panel(saved)
             self._set_status("Attached — MO is mid-turn, ask about it after", self._visual_palette.muted)
             return
         if not saved:
@@ -3106,11 +3112,10 @@ class CompanionSurface(
         self._submit_text_request(
             f"[{DESKTOP_NAME} attachment] {paths}. {context}. "
             "Inspect once: use perceive for image/PDF input or read_file for text. "
-            "Already displayed; show_image only displays to the operator, so do not display again. "
+            "show_image only displays to the operator; do not use it for this file. "
             "Briefly explain what you actually inspected and ask what to do. "
             "Offer only executable multi-select choices.",
             source="attach-ask",
-            preserve_panel=True,
         )
 
     @contextmanager
