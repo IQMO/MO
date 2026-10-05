@@ -743,7 +743,7 @@ class Profile:
         # "How many projects do I have?" needs the whole declared inventory; the bounded
         # operator.md excerpt below names only the first few and cannot be counted.
         declared_projects = ""
-        if (lookup_policy or profile_policy) and "project" in query_text:
+        if (conversation_policy or profile_policy) and "project" in query_text:
             try:
                 names = [entry.name for entry in self.project_locations() if entry.name]
             except Exception:
