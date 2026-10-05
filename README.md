@@ -195,7 +195,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **App launcher** — *Double-click the cubes.* Four grouped app tiles (Work, Devices, Care, Your apps); add your own files and folders; drag to arrange.
 - **Compact Dashboard** — *Right-click the cubes.* Home, Work, You and Systems at a glance, with project checks.
 - **Screen capture by hold** — *Hold a cube for two seconds, drag a rectangle.* A full-resolution snip you can preview and send to MO.
-- **Volume on the cubes** — *Scroll over the cubes.* Windows volume up or down, shown as a small label.
+- **Volume and brightness on the cubes** — *Scroll over the cubes* for Windows volume; *Shift + scroll* for the brightness of the screen they sit on (a laptop panel's own brightness, or MO's dim layer on an external screen).
 - **Chase or rest** — *Ctrl-Ctrl.* The cubes follow your cursor, or stay where you left them.
 - **Body language** — *Automatic.* The cubes react to real events with their own emotes.
 - **Personality** — *Settings: moodiness, warmth, playfulness.* Tune how lively the companion is.

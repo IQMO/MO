@@ -614,6 +614,22 @@ class CompanionSurface(
         """Toggle the companion window visibility."""
         self.hide() if self._panel_visible() else self.show()
 
+    def _start_brightness(self, root: Any, level: float) -> None:
+        """Shift + wheel brightness: restore the saved dim and save later changes."""
+        from mo_desktop import brightness
+        from mo_desktop.focus_native import native_handle
+        from mo_desktop.settings import persist_mo_desktop_settings
+
+        config = getattr(self._agent, "config", None)
+        brightness.configure(
+            level=level,
+            save=lambda value: persist_mo_desktop_settings(config, {"behavior": {"dim_level": value}}),
+            schedule=root.schedule,
+        )
+        cube = self._cube
+        if cube is not None and brightness.dim_level() > 0:
+            brightness.restore(*cube.center(), anchor_hwnd=native_handle(cube._win))
+
     def _overlay_acting(self) -> bool:
         """MO is driving the computer: keep the cubes above the window it acts on."""
         return bool(getattr(getattr(self, "_cube", None), "_actuation_yield", False))
@@ -2047,6 +2063,7 @@ class CompanionSurface(
             self._overlay_compat = OverlayCompatibility(settings.behavior.keep_above_apps, acting=self._overlay_acting)
             set_desktop_pointer(self._point_with_cube)
             set_desktop_sync(self.sync_for_tool)
+            self._start_brightness(root, settings.behavior.dim_level)
         except Exception:
             self._cube = None
             self._modes = None
@@ -2211,6 +2228,8 @@ class CompanionSurface(
             if bubble:
                 bubble.destroy()
                 self._bubble = None
+            from mo_desktop import brightness
+            brightness.clear_dim()
             if self._cube is not None:
                 try:
                     self._cube.destroy()

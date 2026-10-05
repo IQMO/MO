@@ -44,7 +44,8 @@ class CubeInteractionMixin:
         elif kind == "double":
             self._handle_double()
         elif kind == "wheel" and self._volume_controls:
-            self._on_scroll(event.delta)
+            self._on_scroll(event.delta, shift=bool(int(getattr(event, "state", 0) or 0) & 1),
+                            point=(getattr(event, "x_root", 0), getattr(event, "y_root", 0)))
         elif kind == "key" and event.keysym == "Escape" and self._escape is not None:
             self._escape()
 
@@ -264,13 +265,22 @@ class CubeInteractionMixin:
         if callable(cb):
             cb()
 
-    # --- volume (scroll to change) ---
-    def _on_scroll(self, delta: int) -> None:
-        """Scroll over the cube -> nudge Windows volume; show the level as a small text
-        label. Only on scroll — hovering the cube never shows it."""
+    # --- volume (scroll) and brightness (Shift + scroll) ---
+    def _on_scroll(self, delta: int, *, shift: bool = False, point: tuple[int, int] | None = None) -> None:
+        """Scroll over the cube -> nudge Windows volume; Shift + scroll -> the brightness of
+        the display under the cubes. The level shows as a small text label, only on scroll."""
         if bool(getattr(self, "_launcher_active", False)):
             return
         try:
+            if shift:
+                from mo_desktop import brightness
+                from mo_desktop.focus_native import native_handle
+
+                x, y = point if point and any(point) else self.center()
+                text = brightness.nudge(x, y, 1 if delta > 0 else -1, anchor_hwnd=native_handle(self._win))
+                if text:
+                    self.show_bubble(text, seconds=1.4)
+                return
             from mo_desktop import volume
 
             v = volume.nudge_volume(0.04 if delta > 0 else -0.04)
