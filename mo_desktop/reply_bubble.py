@@ -462,6 +462,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return self._render_session_history()
         if getattr(self, "_panel_state", None) == PanelState.DASHBOARD:
             return self._render_dashboard()
+        if getattr(self, "_panel_state", None) == PanelState.STATUS:
+            return self._render_status()
         from PIL import Image, ImageDraw, ImageChops
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
         button_pad = int(self._visuals.metrics.button_padding) * ss
@@ -961,23 +963,26 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
             right_edge = box[2] - panel_padding * ss
             if has_footer_action:
+                # Icon only; the label remains the control's accessible name.
                 label = str(getattr(self, "_footer_action_label", "") or "Report")[:18]
-                lw = int(d.textlength(label, font=self._sfont))
                 px = button_pad
                 ic = 13 * ss
                 rx1 = right_edge
-                rx0 = rx1 - lw - 2 * px - ic
+                rx0 = rx1 - ic - 2 * px
                 d.rounded_rectangle([rx0, cyy - 4 * ss, rx1, cyy + 15 * ss], radius=button_radius,
                                     fill=(*self._edge, 255),
                                     outline=(*self._cyan, 255 if self._hovering("action") else 220),
                                     width=max(1, ss) * (2 if self._hovering("action") else 1))
                 ix, iy = rx0 + px, cyy - 1 * ss
-                d.ellipse([ix, iy, ix + 10 * ss, iy + 10 * ss], outline=(*self._cyan, 255), width=ss)
-                d.line([(ix + 5 * ss, iy + 2 * ss), (ix + 5 * ss, iy + 6 * ss)],
-                       fill=(*self._cyan, 255), width=ss)
-                d.point((ix + 5 * ss, iy + 8 * ss), fill=(*self._cyan, 255))
-                d.text((rx0 + ic + px - 2 * ss, cyy - 3 * ss), label,
-                       font=self._sfont, fill=(*self._text, 255))
+                if "send" in label.casefold():
+                    from interface.desktop_brand import make_glyph_icon
+                    glyph = make_glyph_icon("share", ic, color="#%02x%02x%02x" % tuple(self._cyan))
+                    img.alpha_composite(glyph, (int(ix), int(iy)))
+                else:   # a circled "!" for reporting
+                    d.ellipse([ix, iy, ix + 10 * ss, iy + 10 * ss], outline=(*self._cyan, 255), width=ss)
+                    d.line([(ix + 5 * ss, iy + 2 * ss), (ix + 5 * ss, iy + 6 * ss)],
+                           fill=(*self._cyan, 255), width=ss)
+                    d.point((ix + 5 * ss, iy + 8 * ss), fill=(*self._cyan, 255))
                 _set_hit(
                     "action",
                     (int(rx0 / ss), int((cyy - 5 * ss) / ss),
@@ -1028,11 +1033,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     min_height=28,
                 )
             elif bool(getattr(self, "_controls_enabled", True)):
-                # Reply pill (drawn return-arrow + label)
-                label = "Reply"
-                lw = int(d.textlength(label, font=self._sfont)); px = button_pad; ic = 13 * ss
+                # Reply: icon only (a drawn return arrow on the accent fill).
+                px = button_pad; ic = 13 * ss
                 rx1 = right_edge
-                rx0 = rx1 - lw - 2 * px - ic
+                rx0 = rx1 - 2 * px - ic
                 d.rounded_rectangle([rx0, cyy - 4 * ss, rx1, cyy + 15 * ss], radius=button_radius,
                                     fill=(*self._cyan, 255),
                                     outline=(*self._text, 255) if self._hovering("reply") else None,
@@ -1042,7 +1046,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 d.line([(ix + 9 * ss, iy - 4 * ss), (ix + 9 * ss, iy), (ix, iy)], fill=ink, width=ss)
                 d.line([(ix, iy), (ix + 4 * ss, iy - 3 * ss)], fill=ink, width=ss)
                 d.line([(ix, iy), (ix + 4 * ss, iy + 3 * ss)], fill=ink, width=ss)
-                d.text((rx0 + ic + px - 2 * ss, cyy - 3 * ss), label, font=self._sfont, fill=(*ink, 255))
                 _set_hit(
                     "reply",
                     (int(rx0 / ss), int((cyy - 5 * ss) / ss),
@@ -1324,7 +1327,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         """Give the custom-drawn surface a useful Automation window name."""
         state = getattr(self, "_panel_state", PanelState.REPLY)
         mode = str(getattr(self, "_mode", "reply") or "reply")
-        if state == PanelState.DASHBOARD:
+        if state == PanelState.STATUS:
+            title = f"MO Desktop — {getattr(self, '_status_text', '') or 'Working'}"
+        elif state == PanelState.DASHBOARD:
             title = "MO Desktop — Dashboard"
         elif state == PanelState.HISTORY:
             title = "MO Desktop — Conversation history"
@@ -1685,6 +1690,19 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if self._controls_enabled and history is not None:
             self._reply_history = [dict(h) for h in history if h.get("content")][-100:]
         self._reply_idx = len(self._reply_history) - 1
+        return self._repaint_for_panel_show(transition)
+
+    def show_status(self, text: str) -> bool:
+        """Show what MO heard or is doing as the compact line the reply grows from.
+
+        Repeated steps update the same line in place; the next reply or composer
+        is a state change, so it grows out of the cube through the usual reveal.
+        """
+        if getattr(self, "_mode", "reply") == "input" and bool(getattr(self, "_visible", False)):
+            self._stash_input_draft()
+        self._keyboard_hit = ""
+        transition = self._prepare_panel_show("status", PanelState.STATUS)
+        self._status_text = " ".join(str(text or "").split())[:120]
         return self._repaint_for_panel_show(transition)
 
     def show_session_history(
@@ -2422,6 +2440,50 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not self._repaint_cached_input_caret():
             self._repaint()
         self._start_blink()
+
+    # ------------------------------------------------------------------ input yield
+    def set_input_yield(self, on: bool) -> bool:
+        """Stay visible while MO acts: let its clicks pass through and keep out of captures.
+
+        Click-away is paused meanwhile, so MO's own clicks never dismiss the panel.
+        Returns False when Windows cannot apply both; the caller then hides instead.
+        """
+        win = getattr(self, "_win", None)
+        if on:
+            if not bool(getattr(self, "_input_yielded", False)):
+                self._dismissible_before_yield = bool(getattr(self, "_dismissible", True))
+            try:
+                applied = bool(win is not None and win.set_click_through(True) and win.exclude_from_capture(True))
+            except Exception:
+                applied = False
+            if not applied:
+                self._release_input_yield(win)
+                return False
+            self._input_yielded = True
+            self._dismissible = False
+            if self._watch_after is not None:
+                try:
+                    self._gui.cancel(self._watch_after)
+                except Exception:
+                    pass
+                self._watch_after = None
+            return True
+        if bool(getattr(self, "_input_yielded", False)):
+            self._release_input_yield(win)
+            self._input_yielded = False
+            self._dismissible = bool(getattr(self, "_dismissible_before_yield", True))
+            if bool(getattr(self, "_visible", False)):
+                self._arm_click_away()
+        return True
+
+    @staticmethod
+    def _release_input_yield(win: Any) -> None:
+        try:
+            if win is not None:
+                win.set_click_through(False)
+                win.exclude_from_capture(False)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------ click-away
     def _arm_click_away(self) -> None:

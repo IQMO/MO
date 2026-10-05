@@ -3658,13 +3658,10 @@ class CompanionSurface(
         # the whole turn; fall back to a text line only when there is no cube.
         if getattr(self, "_cube", None) is not None:
             self._cube_set_thinking(True)
-            b = getattr(self, "_bubble", None)
-            if (
-                b
-                and b is not False
-                and not bool(getattr(self, "_preserve_panel_for_turn", False))
-            ):      # selected/attachment cards stay visible while the cube shows work
-                self._post_gui_call(b.hide)
+            # The turn starts on the panel's status line ("got it…"), grown from
+            # the cubes; the reply later grows from that same surface. A preserved
+            # selected/attachment card keeps its place and status uses the label.
+            self._reply_visible = False
             self._present_activity(self._turn_start_activity())
         else:
             self._show_reply_dialog("Thinking...")
@@ -3928,9 +3925,10 @@ class CompanionSurface(
     def _yield_for_desktop_actuation(self) -> None:
         """Yield MO input before actuation without replacing the four-cube character.
 
-        The panel steps out of the target's way.  The cube stays visible when its native
-        surface can become click-through and capture-excluded; the existing API-failure
-        fallback hides it rather than risking input interception or captured pixels.
+        The panel and the cube both stay visible: their native surfaces become
+        click-through and capture-excluded, so MO's clicks reach the target and its
+        captures never include them. Where Windows cannot do that, the surface hides
+        rather than risking input interception or captured pixels.
         """
         self._yielded_for_desktop_actuation = True
         yielded = threading.Event()
@@ -3940,10 +3938,15 @@ class CompanionSurface(
                 bubble = getattr(self, "_bubble", None)
                 if bubble and bubble is not False:
                     try:
-                        bubble.hide()
+                        if not (bubble.visible() and bubble.set_input_yield(True)):
+                            bubble.hide()
+                            self._reply_visible = False
                     except Exception:
-                        pass
-                self._reply_visible = False
+                        try:
+                            bubble.hide()
+                        except Exception:
+                            pass
+                        self._reply_visible = False
                 cube = getattr(self, "_cube", None)
                 yield_control = getattr(cube, "set_actuation_yield", None)
                 if callable(yield_control):
@@ -3969,6 +3972,12 @@ class CompanionSurface(
         cube = getattr(self, "_cube", None)
 
         def _do() -> None:
+            bubble = getattr(self, "_bubble", None)
+            if bubble and bubble is not False:
+                try:
+                    bubble.set_input_yield(False)
+                except Exception:
+                    pass
             if cube is None:
                 return
             cube._companion_actuation_yield = False
@@ -4072,12 +4081,27 @@ class CompanionSurface(
         def _do() -> None:
             if getattr(self, "_reply_visible", False):
                 return
+            if self._show_status_line(t):
+                return
             cube = getattr(self, "_cube", None)
             if cube is None:
                 return
             cube.show_bubble(t, seconds=_ACTIVITY_LABEL_SECONDS, side=self._activity_label_side())
 
         self._post_gui_call(_do)
+
+    def _show_status_line(self, text: str) -> bool:
+        """Put MO's current step on the panel's status line (GUI thread).
+
+        A selected or attachment card this turn preserves keeps the panel, and
+        status then stays on the cube label so that card is never replaced.
+        """
+        if bool(getattr(self, "_preserve_panel_for_turn", False)):
+            return False
+        shown = self._show_on_reply_surface("status", lambda bubble: bool(bubble.show_status(text)))
+        if shown:
+            self._visible = True
+        return shown
 
     def _clear_activity(self) -> None:
         """Clear the shared cube-label activity without touching an open panel."""

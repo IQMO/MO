@@ -225,10 +225,10 @@ force an already-hidden taskbar visible, and does not restart Explorer.
 
 During Desktop's own native computer actions, the normal four-cube character
 remains the passive indicator while its window yields input and stays out of
-screen captures. The action panel steps aside; there is no separate
-computer-use overlay, and ordinary actions ask for no approval (deleting, sending,
+screen captures. The panel stays visible too: it lets MO's clicks through and
+stays out of captures. There is no separate computer-use overlay, and ordinary actions ask for no approval (deleting, sending,
 paying or discarding unsaved work still does). If Windows cannot apply click-through
-and capture exclusion, the cube hides as a fail-safe rather than intercepting
+and capture exclusion, the cube or panel hides as a fail-safe rather than intercepting
 input or appearing in captured pixels. Bound MO Terminal activity retains its
 existing tool-activity cue and yield owner. External automation that does not
 publish MO activity has no such signal.
@@ -576,10 +576,12 @@ wanders; Lock mode follows the pointer. Thinking, listening, success, warnings,
 notices, and authored emotes change the existing cluster instead of creating
 new windows.
 
-The cube-side glance label carries brief activity, volume, sync, and notice
-text. The larger cube-attached card carries replies, input, choices, files,
-and Dashboard. The renderer publishes its real dock side so
-the label and panel do not overlap.
+One panel grows out of the cubes for a whole turn: first a single line with
+what MO heard and what it is doing ("got it…", "opening Paint…"), then the
+answer in the same place. The same card carries input, choices, files and
+Dashboard, with icon controls. The cube-side glance label keeps volume, sync
+and notices. The renderer publishes its real dock side so the label and panel
+do not overlap.
 
 Simple requests receive concise final replies; requested detail remains intact.
 During a walkthrough the larger reply card stays hidden while the pointer shows
