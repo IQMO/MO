@@ -117,8 +117,10 @@ For read requests, MO uses its existing Markdown subject, sender, recipient,
 and body labels. Terminal and Hub use their existing rich text renderers.
 Desktop's existing reply card tints the mail title from its active visual
 state; it has no mail-only palette, panel, app window, or skin.
-Desktop notices use the existing generic count, emote, and chat activation
-route. Android This Phone mail, Telegram mail delivery, accounting writes,
+A Desktop new-mail notice names the newest message's sender and subject (a
+metadata read, no body) and a click opens that message in Gmail in the default
+browser. While Google has ended MO's access, Desktop says so every half hour
+and one click reopens Google consent, then syncs. Android This Phone mail, Telegram mail delivery, accounting writes,
 and automatic model triage are not provided here.
 
 ## Personalization, tasks, and dashboard

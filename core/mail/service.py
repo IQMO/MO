@@ -273,16 +273,27 @@ class MailService:
         listing = self._request("GET", "/messages", params=params)
         rows = []
         for item in listing.get("messages") or []:
-            ident = self._id(item.get("id"))
             try:
-                value = self._request("GET", f"/messages/{ident}", params={"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]})
+                rows.append(self.message_summary(item.get("id")))
             except gmail.GmailError as exc:
                 if exc.status != 404:
                     raise
                 # A message can disappear between the inbox list and metadata read.
                 continue
-            rows.append(gmail.message_view(value))
         return {"messages": rows, "estimate": int(listing.get("resultSizeEstimate") or 0)}
+
+    def message_summary(self, ident: str) -> dict:
+        """Sender, subject and date of one message (metadata only, no body)."""
+        value = self._request("GET", f"/messages/{self._id(ident)}",
+                              params={"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]})
+        return gmail.message_view(value)
+
+    def account(self) -> str:
+        """The connected Gmail address, or ""."""
+        try:
+            return str(self._token().get("account") or "")
+        except Exception:
+            return ""
 
     def read_message(self, ident: str) -> dict:
         value = self._request("GET", f"/messages/{self._id(ident)}", params={"format": "full"})
@@ -490,16 +501,17 @@ class MailService:
                 _write_json(self.state_path, state)
                 raise
 
-    def claim_notices(self) -> int:
+    def claim_notices(self) -> list[str]:
+        """Take the queued new-mail notices: their Gmail message ids, oldest first."""
         with file_byte_lock(self.lock_path, _STATE_LOCK):
             state = _read_json(self.state_path)
             if state.get("notifications_enabled", True) is False:
-                return 0
-            queued = list(state.get("notices") or [])
-            if queued:
+                return []
+            queued = [str(ident) for ident in state.get("notices") or [] if _ID.fullmatch(str(ident))]
+            if state.get("notices"):
                 state["notices"] = []
                 _write_json(self.state_path, state)
-            return len(queued)
+            return queued
 
 
 def dashboard_glance(provider: str, *, config: dict | None = None, agent: Any = None,

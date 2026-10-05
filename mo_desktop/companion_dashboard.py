@@ -19,6 +19,16 @@ def redact_sensitive_text(text: str) -> str:
     return redact(text)
 
 
+# While Gmail access is ended, remind at most this often (a missed glance must not hide it for good).
+_MAIL_REAUTH_REPEAT_SECONDS = 1800.0
+
+
+def _sender_name(header: str) -> str:
+    """"Name <a@b>" -> "Name"; a bare address stays as it is."""
+    text = " ".join(str(header or "").split())
+    name = text.split("<", 1)[0].strip().strip('"') if "<" in text else text
+    return name[:40]
+
 class CompanionDashboardMixin:
     """Verbatim extraction from companion.py; state and composition stay
     with the host class."""
@@ -196,13 +206,16 @@ class CompanionDashboardMixin:
         service = MailService(self._config())
         status = service.status()
         if status.get("state") == "reconnect_required":
-            if not bool(getattr(self, "_mail_reauth_notified", False)):
-                self._mail_reauth_notified = True
-                return [Notice("gmail:reauth", "Gmail reconnect", "Run /mail connect in MO Terminal", "notify_email", 3.0)]
+            # Without access MO cannot see new mail at all: say so, and let one click fix it.
+            now = time.monotonic()
+            if now - float(getattr(self, "_mail_reauth_notified_at", -1e9) or -1e9) >= _MAIL_REAUTH_REPEAT_SECONDS:
+                self._mail_reauth_notified_at = now
+                return [Notice("gmail:reauth", "Gmail disconnected", "Google ended MO's access · click to reconnect",
+                               "notify_email", 6.0, activate=self._reconnect_gmail)]
             return []
         if status.get("state") not in {"connected", "sync_unknown"}:
             return []
-        self._mail_reauth_notified = False
+        self._mail_reauth_notified_at = -1e9
         outcomes = getattr(self, "_mail_sync_outcomes", None)
         if outcomes is None:
             outcomes = queue.SimpleQueue()
@@ -240,11 +253,57 @@ class CompanionDashboardMixin:
         elif event == "resynced":
             self._mail_sync_error_notified = False
             return [Notice("gmail:resync", "Gmail refreshed", "Open Gmail to review recent mail", "notify_email", 3.0)]
-        count = service.claim_notices()
-        if not count:
+        idents = service.claim_notices()
+        if not idents:
             return []
-        return [Notice("gmail:new", "New Gmail", f"{count} new unread message{'s' if count != 1 else ''}", "notify_email", 3.0,
-                       activate=self.summon)]
+        newest = idents[-1]
+        try:
+            summary = service.message_summary(newest)
+        except Exception:
+            summary = {}
+        sender = _sender_name(str(summary.get("from") or ""))
+        subject = " ".join(str(summary.get("subject") or "").split())[:70] or "(no subject)"
+        more = f" · +{len(idents) - 1} more" if len(idents) > 1 else ""
+        account = service.account()
+        return [Notice("gmail:new", f"Gmail · {sender}" if sender else "New Gmail", subject + more, "notify_email", 6.0,
+                       activate=lambda: self._open_gmail_message(newest, account))]
+
+    def _open_gmail_message(self, ident: str, account: str = "") -> None:
+        """A click on a new-mail notice opens that message in Gmail in the default browser."""
+        from urllib.parse import quote
+
+        user = f"?authuser={quote(account)}" if account else ""
+        self._open_dashboard_url(f"https://mail.google.com/mail/u/{user}#all/{quote(ident)}", "the new Gmail message")
+
+    def _reconnect_gmail(self) -> None:
+        """A click on the disconnected notice: Google consent in the browser, then a first sync."""
+        if bool(getattr(self, "_mail_reconnecting", False)):
+            return
+        self._mail_reconnecting = True
+        from mo_desktop.notify import Notice
+
+        def _run() -> None:
+            from core.mail.service import MailService
+
+            try:
+                service = MailService(self._config())
+                service.connect()
+                service.sync()
+                unread = service.status().get("unread")
+                notice = Notice("gmail:connected", "Gmail connected",
+                                f"{unread} unread" if unread is not None else "Inbox synced", "notify_email", 3.0)
+                self._mail_reauth_notified_at = -1e9
+            except Exception as exc:
+                notice = Notice("gmail:reauth", "Gmail not reconnected", str(exc)[:80] or "Click to try again",
+                                "notify_email", 6.0, activate=self._reconnect_gmail)
+            finally:
+                self._mail_reconnecting = False
+            self._emit_notice(notice)
+
+        try:
+            threading.Thread(target=_run, name="mo-desktop-gmail-reconnect", daemon=True).start()
+        except Exception:
+            self._mail_reconnecting = False
 
     def _collect_notices_async(self) -> None:
         """Collect filesystem/SQLite-backed notice sources off the resident GUI lane."""
