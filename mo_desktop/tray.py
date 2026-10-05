@@ -1771,6 +1771,12 @@ class CubeLauncher:
             self._blit(self._art)
             return
         spec = self._hit(event.x, event.y)
+        if spec is None and self._editing:
+            # A click away from every app ends the wiggle, as Escape and "Done editing" do.
+            self._editing = False
+            self._remove_app = ""
+            self._render()
+            return
         if spec is not None and not self._editing:
             if spec.get("kind") == "folder":
                 box = next(box for box, item in self._hitboxes if item is spec)
