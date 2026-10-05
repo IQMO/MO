@@ -42,7 +42,10 @@ the direct operator result. No second credential store or setup service runs.
 
 `/mail status` reports connection and count state. `/mail disconnect` removes
 local authority and sync state; revoke access in Google Account settings if
-desired. Google OAuth apps in Testing status can have short-lived refresh tokens.
+desired. Google ends the refresh authorization of an OAuth app in Testing status
+after 7 days; MO then reopens consent through `mail action=connect` and you approve
+once. To stop the weekly reconnect, set the app's publishing status to In production
+in Google Cloud.
 Windows user-bound encryption owns the local token and bounded cursor. Other
 hosts report `secure_storage_unavailable` until an equivalent store exists.
 

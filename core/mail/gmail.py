@@ -18,6 +18,10 @@ SCOPE = "https://www.googleapis.com/auth/gmail.modify"
 API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+# Google ended the refresh authorization (an OAuth app in Testing status does so after 7 days).
+# The text tells MO to recover through the existing connect action rather than report it.
+_EXPIRED = ("Gmail authorization expired (Google ended it). Run mail action=connect now: it reopens "
+            "Google consent in the browser, the operator approves once, and the request can continue")
 
 
 class GmailError(RuntimeError):
@@ -44,7 +48,7 @@ def _token_request(values: dict[str, str]) -> dict:
         raise GmailError("Google authorization did not complete") from exc
     if response.status_code != 200 or not isinstance(payload, dict):
         reason = str(payload.get("error") or "") if isinstance(payload, dict) else ""
-        raise GmailError("Gmail authorization expired; reconnect the account" if reason == "invalid_grant" else "Google authorization failed", status=401 if reason == "invalid_grant" else response.status_code)
+        raise GmailError(_EXPIRED if reason == "invalid_grant" else "Google authorization failed", status=401 if reason == "invalid_grant" else response.status_code)
     if not payload.get("access_token"):
         raise GmailError("Google authorization returned no access token")
     payload["expires_at"] = time.time() + max(60, int(payload.get("expires_in") or 3600)) - 60
