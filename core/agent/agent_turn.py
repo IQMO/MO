@@ -1172,7 +1172,13 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 not continuation_gate
                 and request_intent.context_policy == CONTEXT_RUNTIME_STATUS
             ):
-                provider_tools = []
+                # Runtime status answers from its supplied context. The one exception is
+                # desktop_sync, offered only on Desktop for a question about MO Terminal's
+                # work: it reads the live Terminal, which that context does not carry.
+                provider_tools = [
+                    definition for definition in provider_tools
+                    if self._tool_definition_name(definition) == "desktop_sync"
+                ]
             try:
                 from core.review.prt_report import refresh_prt_provider_context
 
