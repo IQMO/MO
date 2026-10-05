@@ -161,33 +161,42 @@ def render_dashboard_html(snapshot: dict[str, Any], *, connected: bool = False) 
             .replace("__MO_DATA__", data))
 
 
-def _dashboard_skin_css(visuals: Any = None) -> str:
+def _dashboard_skin_css(visuals: Any = None, config: Any = None) -> str:
+    """The Dashboard's colours come from the same configured app theme as MO Files and
+    Design (``--mo-*``); only code-map details without an app-theme token use the skin."""
     from interface.theming import contrast_text, get_skin, skin_to_code_map_css
     from interface.desktop_ui import active_desktop_visual_state
 
     s = get_skin()
     from mo_desktop.design_studio.theme import studio_theme
     from mo_desktop.mo_renderer import _initial_studio_theme_css
+    from mo_desktop.visuals import load_desktop_config
 
     visuals = visuals or active_desktop_visual_state()
     metrics = visuals.metrics
-    return _initial_studio_theme_css(studio_theme(config={}, visuals=visuals)) + skin_to_code_map_css(s) + f""":root {{
-  --scheme: {contrast_text(s.bg_dark, dark='light', light='dark')};
+    try:
+        loaded = load_desktop_config(config)
+    except Exception:
+        loaded = {}
+    theme = studio_theme(config=loaded, visuals=visuals)
+    background = str(theme["tokens"]["background"])
+    return _initial_studio_theme_css(theme) + skin_to_code_map_css(s) + f""":root {{
+  --scheme: {contrast_text(background, dark='light', light='dark')};
   color-scheme: var(--scheme);
   --button-radius: {metrics.button_corner_radius}px;
   --button-pad: {metrics.button_padding}px;
-  --bg: {s.bg_dark};
-  --panel: {s.bg_surface};
-  --panel2: {s.bg_input};
-  --text: {s.text_primary};
+  --bg: var(--mo-bg);
+  --panel: var(--mo-surface);
+  --panel2: var(--mo-input);
+  --text: var(--mo-text);
   --text-bright: {s.text_bright};
-  --muted: {s.text_muted};
+  --muted: var(--mo-muted);
   --line: {s.code_map_line};
-  --edge: {s.border_default};
-  --brand: {s.brand_primary};
-  --good: {s.status_done};
-  --warn: {s.status_active};
-  --bad: {s.status_blocked};
+  --edge: var(--mo-border);
+  --brand: var(--mo-brand);
+  --good: var(--mo-ok);
+  --warn: var(--mo-warn);
+  --bad: var(--mo-error);
   --chip: {s.code_map_badge_bg};
   --pre: {s.bg_deepest};
 }}"""

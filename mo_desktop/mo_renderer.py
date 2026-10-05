@@ -405,7 +405,7 @@ def run_dashboard(url: str, *, config_path: str = "", close_after: float = 0,
                 apply_loaded_frame()
                 native_visuals.refresh()
             from core.dashboard.render import _dashboard_skin_css
-            return _dashboard_skin_css(current)
+            return _dashboard_skin_css(current, config)
         elif action in {"reveal", "ready"}:
             native_visuals.mark_content_ready()
         elif action == "resize":
