@@ -120,6 +120,12 @@ _PROJECT_FOLLOWUP_REFERENCE_RE = re.compile(
 # used these, the next turns keep them loaded instead of paying a tool_search round trip.
 _SCREEN_FOLLOWUP_TOOL_NAMES = frozenset({"computer_targets", "computer_observe", "computer_act", "point_on_screen"})
 _SCREEN_FOLLOWUP_TURNS = 3
+# A Desktop question about MO Terminal's work is answered by desktop_sync, which only reads
+# the live Terminal session; offer it without a tool_search round trip.
+_DESKTOP_TERMINAL_QUESTION_RE = re.compile(
+    r"\bmo\s+terminal\b|\bterminal\b[^.?!\n]{0,40}\b(?:work|working|doing|task|session|last|history)\b",
+    re.IGNORECASE,
+)
 _PROJECT_FOLLOWUP_TOOL_NAMES = frozenset({
     "read_file",
     "find_files",
@@ -1224,6 +1230,8 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
             names = {"tool_search"}
             if getattr(self, "_screen_followup_active", False):
                 names.update(_SCREEN_FOLLOWUP_TOOL_NAMES)
+            if _DESKTOP_TERMINAL_QUESTION_RE.search(raw_input):
+                names.add("desktop_sync")
             registry = getattr(self, "_tool_registry", None)
             if registry is not None:
                 names.update(registry.activated_names)
@@ -1368,6 +1376,11 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
                 required_names.update({
                     "computer_targets", "computer_observe", "point_on_screen",
                 })
+            if (
+                self._provider_surface() in {"mo_desktop", "companion"}
+                and _DESKTOP_TERMINAL_QUESTION_RE.search(raw_input)
+            ):
+                required_names.add("desktop_sync")
             delivered = getattr(self, "_last_turn_context_flags", {}) or {}
             # The admitted context names exact files. Offer its existing reader
             # with those references; exposure does not grant path permission.

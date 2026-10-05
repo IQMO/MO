@@ -56,7 +56,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "desktop_sync",
-            "description": "MO Desktop only. Recharge: read what MO terminal is currently working on and take it as context, announcing it on the cube when the handoff completes. Actuates nothing. Offer this when the operator asks what you are doing and you have no terminal context; run it only after they say yes.",
+            "description": "MO Desktop only. Recharge: read what MO terminal is currently working on and take it as context, announcing it on the cube when the handoff completes. Actuates nothing. Run it when the operator asks what MO Terminal is doing or did last; offer it when they ask what you are doing and you have no terminal context.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
