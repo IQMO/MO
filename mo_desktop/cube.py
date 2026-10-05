@@ -988,7 +988,10 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             breathe = 1.0 if holds_still else 0.93 + 0.07 * math.sin(now * 2.0 + phase)
             bright = breathe
             cx = bx
-            cy = by if holds_still else by + self._bob_amp * math.sin(now * 1.6 + phase)
+            # A docked panel holds the cubes: they keep breathing but stop bobbing, so
+            # the cubes beside the composer or reply never drift against its edge.
+            docked = bool(getattr(self, "_held", False))
+            cy = by if holds_still or docked else by + self._bob_amp * math.sin(now * 1.6 + phase)
             if not holds_still and self._chase_idle_dimmed(now):
                 bright = 0.60 + 0.06 * math.sin(now * 1.2 + phase)
                 alpha = 0.68

@@ -532,7 +532,9 @@ class CubeMotionMixin:
             _CURSOR_REACTION_EASE,
             getattr(self, "_frame_dt", 1.0 / _NOMINAL_ACTIVE_FPS),
         )
-        suppress = bool(getattr(self, "_drag", False)) or self._emote_holds_still()
+        # A docked panel holds the cubes still; their lean eases back to rest.
+        suppress = (bool(getattr(self, "_drag", False)) or self._emote_holds_still()
+                    or bool(getattr(self, "_held", False)))
         next_values: list[tuple[float, float, float]] = []
         nearest: tuple[float, int] | None = None
         offset = float(getattr(self, "_size", 84) or 84) / 2.0
