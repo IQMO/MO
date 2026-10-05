@@ -16,12 +16,22 @@ from typing import Any
 # learning, so they are intentionally excluded in favour of MO-directed phrases.
 # Forward-looking rules ("from now on", "next time") are workflow signals handled by
 # workflow_learning as confirm-gated candidates, not auto-applied here.
-FEEDBACK_MARKERS = (
+# Talking about MO's learning is not a correction by itself ("what did you learn
+# today?" wrote two rules). It counts only alongside an instruction.
+_LEARNING_TALK_MARKERS = (
     "what did you learn",
     "you learned",
     "improve yourself",
     "self-improvement",
     "self improvement",
+)
+_INSTRUCTION_RE = re.compile(
+    r"(?:^|[.!?:;]\s*|\b(?:and|but|so)\s+)(?:stop|don'?t|do not|never|always|check|verify|test|"
+    r"make sure|avoid|keep|remember|use|follow|leave|ask)\b"
+    r"|\b(?:this|that|it)\s+is\s+(?:\S+\s+){0,2}feedback\b",
+    re.IGNORECASE,
+)
+FEEDBACK_MARKERS = (
     "when corrected",
     "not what i asked",
     "you did not",
@@ -82,6 +92,8 @@ def is_explicit_feedback(user_text: str) -> bool:
     if not low:
         return False
     if any(marker in low for marker in FEEDBACK_MARKERS):
+        return True
+    if any(marker in low for marker in _LEARNING_TALK_MARKERS) and _INSTRUCTION_RE.search(low):
         return True
     if (_DIRECTED_CORRECTION_RE.search(low) or _DIRECTED_WRONG_REPORTING_RE.search(low)
             or _DIRECT_METHOD_CORRECTION_RE.search(low)):
