@@ -226,7 +226,8 @@ force an already-hidden taskbar visible, and does not restart Explorer.
 During Desktop's own native computer actions, the normal four-cube character
 remains the passive indicator while its window yields input and stays out of
 screen captures. The action panel steps aside; there is no separate
-computer-use overlay or approval step. If Windows cannot apply click-through
+computer-use overlay, and ordinary actions ask for no approval (deleting, sending,
+paying or discarding unsaved work still does). If Windows cannot apply click-through
 and capture exclusion, the cube hides as a fail-safe rather than intercepting
 input or appearing in captured pixels. Bound MO Terminal activity retains its
 existing tool-activity cue and yield owner. External automation that does not
