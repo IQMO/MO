@@ -1307,6 +1307,9 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                     "stored_messages": len(self.session.messages),
                     "tools": len(provider_tools),
                     "configured_max_tokens": self.max_tokens,
+                    # The level this request actually asks for (adaptive: light chat
+                    # drops below the configured ceiling), not the configured one.
+                    "reasoning_effort": self._adaptive_reasoning_level(user_input),
                     "max_output_tokens": requested_limit,
                     "output_token_limit_field": limit_field or "not_sent",
                     "offered_tool_names": list(offered_tool_names),
