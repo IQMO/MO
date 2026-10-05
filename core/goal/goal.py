@@ -43,6 +43,8 @@ from ..worker import ensure_worker_registry
 
 GOAL_MAX_WALL_SECONDS = 4 * 60 * 60
 GOAL_MAX_CONSECUTIVE_INCOMPLETE_TURNS = 3
+# Final-audit repairs of one row before the goal pauses with the auditor's reason.
+_MAX_COMPLETION_REPAIRS = 3
 GOAL_BLOCKER_KINDS = {
     "none",
     "missing_evidence",
@@ -797,6 +799,14 @@ class GoalRunner:
             self._persist(plan)
             return self._format_progress(plan)
         target = self._step_for_auditor_feedback(plan, feedback)
+        if max(0, int(getattr(target, "reopened_count", 0) or 0)) >= _MAX_COMPLETION_REPAIRS:
+            # The same final rejection after repeated repairs will not converge
+            # by trying again; stop with the auditor's reason instead of looping
+            # until the wall-clock budget runs out.
+            return self._finish(
+                plan, "paused",
+                f"final audit still rejects after {_MAX_COMPLETION_REPAIRS} repairs: {feedback}",
+            )
         self._reopen_step(plan, target, feedback)
         self._persist(plan)
         return self._format_progress(plan)
@@ -853,12 +863,19 @@ class GoalRunner:
     @staticmethod
     def _step_for_auditor_feedback(plan: GoalPlan, feedback: str) -> GoalStep:
         """Pick the existing phase the auditor is asking to repair."""
-        _ = feedback
         candidates = list(plan.steps)
-        # Return the first incomplete step, or the last step if all done
         for step in candidates:
             if step.status != "completed":
                 return step
+        if "verif" in str(feedback or "").lower():
+            # Missing verification proof is repaired by verifying, not by
+            # reopening whatever row happens to be last (often the report).
+            verification = [
+                step for step in candidates
+                if task_evidence.is_verification_step(step.title, kind=step.kind)
+            ]
+            if verification:
+                return verification[-1]
         return candidates[-1]
 
     def _check_progress_or_stop(self, plan: GoalPlan) -> str:

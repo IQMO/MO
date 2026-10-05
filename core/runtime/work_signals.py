@@ -418,9 +418,29 @@ def looks_like_taskboard_repair_request(user_input: str) -> bool:
     ))
 
 
+# Environment-only assignments run before a command in cmd (set "NAME=value" &&),
+# PowerShell ($env:NAME = 'value';) and POSIX (NAME=value cmd). They change only
+# the child process environment, never the checkout, so they do not hide a write.
+_ENVIRONMENT_PREFIX = re.compile(
+    r'(?:set\s+"[A-Za-z_][A-Za-z0-9_]*=[^"&|<>`$\r\n]*"'
+    r"|set\s+[A-Za-z_][A-Za-z0-9_]*=[^\s\"&|<>`$\r\n]*"
+    r"|\$env:[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:'[^'`\r\n]*'|\"[^\"`$\r\n]*\"))"
+    r"\s*(?:&&|;)\s*"
+    r"|[A-Za-z_][A-Za-z0-9_]*=(?:'[^'\r\n]*'|\"[^\"`$\r\n]*\"|[^\s\"'`$;&|<>]*)\s+",
+    re.I,
+)
+
+
+def _without_environment_prefix(command: str) -> str:
+    value = str(command or "").strip()
+    while (match := _ENVIRONMENT_PREFIX.match(value)) is not None:
+        value = value[match.end():].lstrip()
+    return value
+
+
 def shell_is_verification_command(command: str) -> bool:
     """Recognize a direct verifier invocation, never words in command data."""
-    value = str(command or "").strip()
+    value = _without_environment_prefix(command)
     if (
         not value or _shell_has_ambiguous_controls(value)
         or re.search(r"`|\$\(", value)
