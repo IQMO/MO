@@ -2954,11 +2954,15 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
         try:
             profile = getattr(self, "profile", None)
             config = getattr(self, "config", {}) or {}
+            # The current turn is already checkpointed into the saved session, so
+            # the backfill would capture it first and the per-turn capture would
+            # then find it recorded and return no label (the learned note never
+            # showed). Capture this turn first; the backfill dedupes by hash.
+            events = process_operator_message(profile, user_input, final_text, source_id=turn_id, config=config)
             if getattr(self, "_sessions", None):
                 reconciled = reconcile_saved_operator_messages(profile, config=config)
                 if reconciled.get("failed"):
                     notes.append(self._learning_activity_note(f"learning reconciliation had {reconciled['failed']} failure(s)"))
-            events = process_operator_message(profile, user_input, final_text, source_id=turn_id, config=config)
             labels = []
             for event in events:
                 if event.get("status") == "failed":
