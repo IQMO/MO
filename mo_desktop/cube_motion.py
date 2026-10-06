@@ -135,6 +135,11 @@ class CubeMotionMixin:
                     snapshots,
                     instance_id,
                 )
+                if should_yield:   # who to stop when Esc is pressed (row 45)
+                    snapshot = next((row for row in snapshots if isinstance(row, dict)
+                                     and str(row.get("instance_id") or "") == instance_id), {})
+                    self._working_terminal = {"instance_id": instance_id, "pid": int(snapshot.get("pid") or 0),
+                                              "cwd": str(snapshot.get("cwd") or "")}
         except Exception:
             label = ""
             should_yield = False

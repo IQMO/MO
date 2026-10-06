@@ -162,6 +162,35 @@ def native_desktop_scope(*, invalidate: bool = False):
             _NATIVE_CONTEXT.prior_revision = None
 
 
+def native_input_held() -> bool:
+    """Whether some MO owner (this process or another) is inside ``native_desktop_scope`` right
+    now, injecting input; probed without waiting. A key event seen then is MO's own."""
+    if not _NATIVE_LOCK.acquire(blocking=False):
+        return True                                    # another thread of this process acts
+    try:
+        path = _native_input_path()
+        if not path.exists():
+            return False
+        with path.open("a+b") as handle:
+            handle.seek(0)
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                return True                            # another process holds it
+        return False
+    finally:
+        _NATIVE_LOCK.release()
+
+
 def current_owner_id() -> str:
     """Stable actuation owner for the current instance/session/surface."""
     try:

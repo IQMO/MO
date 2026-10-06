@@ -5687,6 +5687,8 @@ class CompanionSurface(
         Win+Alt+M) and key auto-repeat never arm a gesture."""
         name = str(getattr(event, "name", "") or "")
         etype = getattr(event, "event_type", "")
+        if name == "esc" and etype == "down":
+            self._maybe_escape_stop()
         is_ctrl = "ctrl" in name
         is_alt = "alt" in name
         if not is_ctrl and not is_alt:
@@ -5700,6 +5702,37 @@ class CompanionSurface(
         self._ctrl_tap_armed = False           # mixing modifiers breaks the ctrl chain
         self._last_ctrl_release_at = 0.0
         self._note_alt(etype)
+
+    def _maybe_escape_stop(self) -> None:
+        """Esc while MO acts on this computer stops it: Desktop's own turn (Panic Stop) or the bound
+        MO Terminal (its Esc, sent as the typed stop control). An Esc that MO itself injects while
+        acting arrives inside the native input scope and never stops anything (row 45)."""
+        turn = getattr(self, "_turn_thread", None)
+        desktop = bool(getattr(self, "_yielded_for_desktop_actuation", False)) and bool(turn is not None and turn.is_alive())
+        cube = getattr(self, "_cube", None)
+        terminal = getattr(cube, "_working_terminal", None) if getattr(cube, "_terminal_working", None) is not None else None
+        if not desktop and not terminal:
+            return
+        try:
+            from core.desktop.runtime import native_input_held
+
+            if native_input_held():
+                return
+        except Exception:
+            return
+        if desktop:
+            self._post_gui_call(self.panic_stop)
+        if terminal:
+            try:
+                from core.design.terminal_handoff import queue_terminal_control
+
+                queue_terminal_control("stop", "", {"instance_id": terminal["instance_id"], "pid": terminal["pid"]},
+                                       project_root=terminal["cwd"], config=getattr(self._agent, "config", None))
+                if cube is not None:
+                    self._post_gui_call(lambda: cube.show_bubble("Stopping MO Terminal…", seconds=1.6))
+            except Exception as exc:
+                log_event(f"Esc could not stop MO Terminal: {type(exc).__name__}",
+                          config=getattr(self._agent, "config", None))
 
     def _reset_tap_chains(self) -> None:
         self._ctrl_tap_armed = False

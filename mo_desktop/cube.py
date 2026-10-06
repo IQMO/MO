@@ -225,6 +225,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._follow_ease = 0.16  # chase spring 0..1 (lower = more lag) — a setting
         self._follow_pause_until = 0.0
         self._terminal_working: dict | None = None   # where the cubes were before MO Terminal took the PC
+        self._working_terminal: dict | None = None   # that Terminal (instance, pid, cwd), for Esc
         self._last_ptr: tuple[float, float] | None = None  # for catch-detection
         self._cursor_reactions: list[tuple[float, float, float]] = []
         self._active_cube_index: int | None = None
