@@ -111,6 +111,7 @@ def _subpixel(value: float) -> tuple[int, int]:
 # screen's edges in the corner they take.
 _WORKING_SCALE = 1.6
 _WORKING_MARGIN = 18
+_CORNER_RECHECK_SECONDS = 3.0
 # Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
 # _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
 _HEARTBEAT_SECONDS = 1.1
@@ -580,6 +581,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 self.set_size(working["size"])
             return
         if working.get("moved"):
+            self._working_corner_still_free(working, time.perf_counter())
             return
         corner = self._empty_corner()
         if corner is None:
@@ -587,7 +589,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         working.setdefault("size", self._size)
         working.setdefault("home", getattr(self, "_home", None))
         working.setdefault("at", (self._x, self._y))
-        working.update(moved=True, corner=corner)
+        working.update(moved=True, corner=corner, checked_at=time.perf_counter())
         self.set_size(round(working["size"] * _WORKING_SCALE))
         if self._follow_enabled:
             self.set_home(corner)                    # home holds it off the cursor's tail
@@ -602,8 +604,9 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         return not (self._desktop_busy() or getattr(self, "_listening", False) or getattr(self, "_speaking", False))
 
     def _empty_corner(self) -> tuple[float, float] | None:
-        """The centre for the cubes in the corner of their screen's work area that other windows
-        cover least (the current corner wins a tie)."""
+        """The centre for the cubes in the freest corner of their screen's work area, any of the
+        four: one the window MO is working in (the foreground) leaves free first, then the one other
+        windows cover least, then the one farthest from the pointer MO is moving."""
         try:
             import win32api
             import win32gui
@@ -612,21 +615,50 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
 
             left, top, right, bottom = win32api.GetMonitorInfo(
                 win32api.MonitorFromWindow(native_handle(self._win), 2))["Work"]
-            rects = []
+            foreground = int(win32gui.GetForegroundWindow() or 0)
+            rects, focus = [], None
             for handle, _title, _active in switchable_windows():
                 if not win32gui.IsIconic(handle):
-                    rects.append(win32gui.GetWindowRect(handle))
+                    rect = win32gui.GetWindowRect(handle)
+                    rects.append(rect)
+                    if handle == foreground:
+                        focus = rect
+            try:
+                pointer = tuple(win32api.GetCursorPos())
+            except Exception:
+                pointer = (self._x, self._y)
         except Exception:
             return None
         half = self._size / 2 + _WORKING_MARGIN
         centres = ((left + half, top + half), (right - half, top + half),
                    (left + half, bottom - half), (right - half, bottom - half))
 
-        def covered(centre: tuple[float, float]) -> int:
+        def overlap(centre: tuple[float, float], rect: tuple[int, int, int, int]) -> float:
             x0, y0, x1, y1 = centre[0] - half, centre[1] - half, centre[0] + half, centre[1] + half
-            return sum(max(0, min(x1, r[2]) - max(x0, r[0])) * max(0, min(y1, r[3]) - max(y0, r[1])) for r in rects)
+            return max(0, min(x1, rect[2]) - max(x0, rect[0])) * max(0, min(y1, rect[3]) - max(y0, rect[1]))
 
-        return min(centres, key=lambda c: (covered(c), (c[0] - self._x) ** 2 + (c[1] - self._y) ** 2))
+        def score(centre: tuple[float, float]) -> tuple[float, float, float]:
+            return (overlap(centre, focus) if focus else 0.0,
+                    sum(overlap(centre, rect) for rect in rects),
+                    -((centre[0] - pointer[0]) ** 2 + (centre[1] - pointer[1]) ** 2))
+
+        return min(centres, key=score)
+
+    def _working_corner_still_free(self, working: dict, now: float) -> None:
+        """Every few seconds while MO Terminal works: if a clearly freer corner exists (the work
+        or the pointer came to this one), glide there; otherwise stay put (no fidgeting)."""
+        if now - float(working.get("checked_at", 0.0) or 0.0) < _CORNER_RECHECK_SECONDS:
+            return
+        working["checked_at"] = now
+        corner = self._empty_corner()
+        current = working.get("corner")
+        if corner is None or current is None or corner == current:
+            return
+        working["corner"] = corner
+        if self._follow_enabled:
+            self.set_home(corner)
+        else:
+            self.summon_to(*corner, chase=False)
 
     def enable_follow(self, enabled: bool = True) -> None:
         if self.game_session_active():
