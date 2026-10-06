@@ -2321,6 +2321,9 @@ class CompanionSurface(
                         if self._recording_voice and self._voice is not None:
                             recorder = getattr(self._voice, "recorder", None)
                             self._cube.set_level(float(getattr(recorder, "level", 0.0) or 0.0))
+                        elif getattr(self._cube, "_speaking", False):
+                            speech = getattr(self, "_speech", None)
+                            self._cube.set_level(float(getattr(speech, "level", 0.0) or 0.0))
                         # Presentation shares the scheduler's precise clock. Service
                         # deadlines above retain their own monotonic time domain.
                         self._cube.tick(frame_started)
@@ -2589,6 +2592,9 @@ class CompanionSurface(
         if source == "voice":
             self._accepted_voice_transcript = text
             self._voice_turn_started_at = float(_voice_started_at or time.monotonic())
+            cube = getattr(self, "_cube", None)
+            if cube is not None:                       # heard: the cubes nod once, no words
+                self._post_gui_call(lambda: cube.play_emote("nod"))
         if source != "options":
             self._clear_native_interaction()
         # Bind this turn to the card and attachments present when it was

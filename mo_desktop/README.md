@@ -639,8 +639,11 @@ opens or focuses one native Dashboard using Desktop's already-running Agent,
 project and configuration. It does not start a terminal or another Agent.
 The cube's right-click gesture still opens the compact panel. Voice remains in Desktop; the full
 Dashboard does not add another voice interface.
-Listening keeps all four cubes visible, with brightness reacting to the existing
-microphone level and animation clock.
+Voice shows on the four cubes, never as extra text. While you speak, your microphone
+level lifts and lights the cubes one after another (each answers a moment after the one
+before) and they settle into a slow ripple in every pause; when MO has heard you they nod
+once. While MO speaks, the level of the audio it is actually playing lifts the cubes and
+opens the cluster a little with each syllable, and they settle between words.
 
 Right-clicking the cube opens the existing cube-attached panel as a fixed
 Home/Work/You/Systems Dashboard. It applies the active Desktop skin and keeps

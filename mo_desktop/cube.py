@@ -112,6 +112,17 @@ def _subpixel(value: float) -> tuple[int, int]:
 _WORKING_SCALE = 1.6
 _WORKING_MARGIN = 18
 _CORNER_RECHECK_SECONDS = 3.0
+# Voice: the level (recorder/RMS scale) that reads as a full lift, how fast the cubes rise to a
+# syllable and settle in a pause, how much voice they remember, the per-cube delay, and the lift in
+# bob amplitudes (2.4 x bob stays inside the travel the `jump` emote already proves safe).
+_VOICE_FULL_LEVEL = 0.10
+_VOICE_RISE_SECONDS = 0.035
+_VOICE_FALL_SECONDS = 0.16
+_VOICE_TRAIL_SECONDS = 0.5
+_VOICE_LISTEN_STAGGER = 0.07
+_VOICE_SPEAK_STAGGER = 0.03
+_VOICE_LIFT = 2.4
+_VOICE_SWELL = 0.10   # speaking: how far a full syllable opens the cluster (heartbeat uses .07)
 # Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
 # _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
 _HEARTBEAT_SECONDS = 1.1
@@ -985,6 +996,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
 
     def set_listening(self, on: bool) -> None:
         self._listening = bool(on)
+        self._voice_env, self._voice_trail = 0.0, []
         if on:
             self._hide_at = 0.0
             self._hide_label()
@@ -994,8 +1006,9 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self._hide_at = time.perf_counter() + 0.6
 
     def set_speaking(self, on: bool) -> None:
-        """Show a distinct steady cadence while MO is producing audible speech."""
+        """MO's own voice moves the cubes while it is audible (see ``_voice_lift``)."""
         self._speaking = bool(on)
+        self._voice_env, self._voice_trail = 0.0, []
         if on:
             self._hide_at = 0.0
             self._show()
@@ -1128,23 +1141,29 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             bright = .90 + db
             cx, cy = bx + dx * self._cube_edge, by + dy * self._cube_edge
         elif getattr(self, "_speaking", False):
-            # Speaking stays fully present and alternates in a conversational
-            # cadence; listening lights the same intact cube formation.
-            wave = 0.5 + 0.5 * math.sin(now * 7.0 + i * math.pi)
-            bright = 0.72 + 0.28 * wave
-            cx = bx
-            cy = by - self._bob_amp * 0.45 * wave
+            # MO talking: its own voice lifts and lights the cubes word by word (a near-unison
+            # with a slight stagger), and they settle in every pause. Fully present throughout.
+            voice = self._voice_lift(i, now, _VOICE_SPEAK_STAGGER)
+            sway = 0.5 + 0.5 * math.sin(now * 7.0 + i * math.pi)
+            lift = voice * (0.82 + 0.18 * sway)
+            bright = 0.74 + 0.26 * min(1.0, voice * 1.25)
+            # Each syllable also opens the cluster a little (like a speaker cone), so MO talking
+            # reads differently from MO listening, where the voice travels cube to cube.
+            center = self._size / 2.0
+            cx = bx + (bx - center) * _VOICE_SWELL * voice
+            cy = by + (by - center) * _VOICE_SWELL * voice - self._bob_amp * _VOICE_LIFT * 0.6 * lift
         elif self._listening:
-            # Listening = the original staggered travelling ripple: the crest
-            # brightens and reveals each cube while its trail fades. Continuous
-            # alpha changes also preserve smooth 60 Hz motion between the sprite
-            # cache's deliberately bounded brightness levels.
-            lvl = min(1.0, self._level * 3.0)
-            wave = max(0.0, math.sin(now * (0.8 + 1.0 * lvl) - i * 0.9))  # slow staggered follow
-            bright = 0.60 + 0.40 * wave
-            alpha = 0.06 + wave * (0.5 + 0.5 * lvl)
+            # Listening: quiet keeps the slow travelling ripple (crest reveals each cube while
+            # its trail fades); the operator's voice rises through the four cubes in turn, each
+            # answering a moment after the one before. Continuous alpha keeps motion smooth
+            # between the sprite cache's bounded brightness levels.
+            voice = self._voice_lift(i, now, _VOICE_LISTEN_STAGGER)
+            wave = max(0.0, math.sin(now * (0.8 + 1.0 * voice) - i * 0.9))
+            lift = max(voice, 0.35 * wave)
+            bright = 0.60 + 0.40 * max(wave, min(1.0, voice * 1.2))
+            alpha = 0.06 + max(wave * 0.5, min(1.0, voice * 1.3)) * (0.94 if voice > wave * 0.5 else 1.0)
             cx = bx
-            cy = by - self._bob_amp * 0.60 * wave
+            cy = by - self._bob_amp * _VOICE_LIFT * lift
         else:
             # Subtle idle shimmer that stays in the BRIGHT band (≈0.86–1.0) so the four
             # cubes read as bright, same-shade cyan — not a dim teal half-brightness.
@@ -1256,10 +1275,39 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         led.putalpha(led.split()[3].point(lambda p, k=blend: int(p * k)))
         return self._Image.alpha_composite(sprite, led)
 
+    def _ease_voice(self, now: float) -> None:
+        """Once per frame: follow the live voice level with a quick rise and a softer fall (a
+        syllable lands at once, a pause settles), and keep half a second of it so each cube can
+        answer a moment after the one before."""
+        if not (getattr(self, "_listening", False) or getattr(self, "_speaking", False)):
+            return
+        dt = float(getattr(self, "_frame_dt", 1.0 / _NOMINAL_ACTIVE_FPS) or 0.0)
+        target = min(1.0, max(0.0, float(getattr(self, "_level", 0.0) or 0.0)) / _VOICE_FULL_LEVEL) ** 0.75
+        env = float(getattr(self, "_voice_env", 0.0) or 0.0)
+        rate = _VOICE_RISE_SECONDS if target > env else _VOICE_FALL_SECONDS
+        env += (target - env) * (1.0 - math.exp(-dt / rate)) if dt > 0 else 0.0
+        self._voice_env = env
+        trail = getattr(self, "_voice_trail", None)
+        if trail is None:
+            trail = self._voice_trail = []
+        trail.append((now, env))
+        while trail and now - trail[0][0] > _VOICE_TRAIL_SECONDS:
+            trail.pop(0)
+
+    def _voice_lift(self, i: int, now: float, delay: float) -> float:
+        """The voice envelope as cube ``i`` hears it: cube 0 now, each next one ``delay`` later."""
+        trail = getattr(self, "_voice_trail", None) or []
+        when = now - i * delay
+        for stamp, value in reversed(trail):
+            if stamp <= when:
+                return value
+        return trail[0][1] if trail else 0.0
+
     def _ease_mouth(self, now: float) -> None:
         """Chase the drag nearness once per frame so the gape follows the file smoothly
         instead of snapping between OS drag events (which arrive irregularly)."""
         self._ease_fade()
+        self._ease_voice(now)
         self._settle_drag(now)
         target = float(getattr(self, "_mouth_target", 0.0) or 0.0)
         current = float(getattr(self, "_mouth", 0.0) or 0.0)

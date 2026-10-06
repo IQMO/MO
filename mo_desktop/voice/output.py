@@ -45,6 +45,19 @@ def normalize_speech_rate(value: Any = 1.0) -> float:
 # cancel is honoured at the next slice boundary rather than at the next sentence.
 _PLAYBACK_SLICE_FRAMES = 1024      # ~46 ms at 22.05 kHz
 _PCM_FRAME_BYTES = 2               # int16 mono
+
+
+def _pcm_level(chunk: bytes) -> float:
+    """RMS of one int16 mono slice on the recorder's float scale (full scale = 1.0)."""
+    if not chunk:
+        return 0.0
+    try:
+        import numpy as np
+
+        samples = np.frombuffer(chunk[: len(chunk) // 2 * 2], dtype=np.int16).astype(np.float32)
+        return float(np.sqrt(np.mean(np.square(samples)))) / 32768.0 if samples.size else 0.0
+    except Exception:
+        return 0.0
 _AUDIO_QUEUE_CHUNKS = 8
 
 
@@ -172,6 +185,7 @@ class SpeechOutput:
         self._generation = 0
         self._speaking_generation = -1
         self._sample_rate = 0
+        self.level = 0.0  # RMS of the slice just played (0..~0.3, the recorder's scale); the cubes read it
         # The open utterance: speed, clauses sent, clauses still synthesizing,
         # and whether more may follow (see ``begin``/``say``/``finish``).
         self._utterance: dict[str, Any] | None = None
@@ -535,11 +549,14 @@ class SpeechOutput:
                     except Exception:
                         self._close_stream()
                     break
+                chunk = data[start:start + step]
                 try:
-                    stream.write(data[start:start + step])
+                    stream.write(chunk)
                 except Exception:
+                    self.level = 0.0
                     self._notify("error")
                     break
+                self.level = _pcm_level(chunk)
                 announce_speaking = False
                 with self._lock:
                     if (
@@ -553,6 +570,7 @@ class SpeechOutput:
 
     def _finish_playback(self, generation: int) -> None:
         """Drain the device from its owner thread, then publish audible idle."""
+        self.level = 0.0
         if generation != self._generation:
             return
         stream = self._stream
