@@ -141,21 +141,16 @@ class CubeMotionMixin:
 
         yielded = self.actuation_yield_held_by("terminal")
         if should_yield and not yielded:
-            self.set_computer_activity(True)
+            self.set_terminal_working(True)
             self.hold_actuation_yield("terminal", True)
         elif not should_yield and yielded:
-            self.set_computer_activity(False)
+            self.set_terminal_working(False)
             self.hold_actuation_yield("terminal", False)
         if label and not should_yield:
             self.show_bubble(label, seconds=1.25)
 
     def tick(self, now: float | None = None) -> None:
         current = time.perf_counter() if now is None else float(now)
-        activity = getattr(self, "_computer_activity", None)
-        if activity is not None:
-            activity.tick(current)
-            if not activity._target and not activity._amount:
-                self._computer_activity = None
         focus = getattr(self, "_focus_controller", None)
         if focus is not None:
             focus.tick(current)
@@ -282,9 +277,6 @@ class CubeMotionMixin:
         between those cadences does not change chase or wander speed.
         """
         current = time.perf_counter() if now is None else float(now)
-        activity = getattr(self, "_computer_activity", None)
-        if activity is not None and activity.needs_active_frames(current):
-            return True
         focus = getattr(self, "_focus_controller", None)
         if focus is not None and focus.needs_active_frames(current):
             return True

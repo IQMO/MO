@@ -232,9 +232,11 @@ screen captures. The panel stays visible too: it lets MO's clicks through and
 stays out of captures. There is no separate computer-use overlay, and ordinary actions ask for no approval (deleting, sending,
 paying or discarding unsaved work still does). If Windows cannot apply click-through
 and capture exclusion, the cube or panel hides as a fail-safe rather than intercepting
-input or appearing in captured pixels. Bound MO Terminal activity retains its
-existing tool-activity cue and yield owner. External automation that does not
-publish MO activity has no such signal.
+input or appearing in captured pixels. While the bound MO Terminal uses the
+computer there is no overlay either: the cubes grow, glide to the corner of their
+screen that windows cover least and keep their working motion (yielding input and
+captures) until it is done, then return to their place and size. External
+automation that does not publish MO activity has no such signal.
 
 ### Settings
 

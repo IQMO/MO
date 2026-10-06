@@ -107,6 +107,11 @@ def _subpixel(value: float) -> tuple[int, int]:
     return int(whole), int(quarter)
 
 
+# While MO Terminal uses the computer the cubes grow by this much and keep this far from the
+# screen's edges in the corner they take.
+_WORKING_SCALE = 1.6
+_WORKING_MARGIN = 18
+
 class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     """A native sprite-cached cube driven by the resident's existing GUI clock."""
 
@@ -219,6 +224,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._follow_distance = 64.0  # trailing gap behind the cursor (px) — a setting
         self._follow_ease = 0.16  # chase spring 0..1 (lower = more lag) — a setting
         self._follow_pause_until = 0.0
+        self._terminal_working: dict | None = None   # where the cubes were before MO Terminal took the PC
         self._last_ptr: tuple[float, float] | None = None  # for catch-detection
         self._cursor_reactions: list[tuple[float, float, float]] = []
         self._active_cube_index: int | None = None
@@ -504,15 +510,59 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         else:
             self._show()
 
-    def set_computer_activity(self, on: bool) -> None:
-        """Update the cue from actual tool activity, independent of the turn's input hold."""
+    def set_terminal_working(self, on: bool) -> None:
+        """MO Terminal is using the computer: no overlay of its own. The cubes grow, glide to the
+        emptiest corner of their screen and keep their working motion until it is done, then
+        come back to where they were (row 13, 2026-10-06)."""
+        saved = getattr(self, "_terminal_working", None)
+        if bool(on) == (saved is not None):
+            return
         if on:
-            from mo_desktop.computer_activity import ComputerActivityOverlay
-            if getattr(self, "_computer_activity", None) is None:
-                self._computer_activity = ComputerActivityOverlay(self)
-        activity = getattr(self, "_computer_activity", None)
-        if activity is not None:
-            activity.set_active(bool(on), time.perf_counter())
+            self._terminal_working = {"size": self._size, "home": getattr(self, "_home", None),
+                                      "thinking": bool(getattr(self, "_thinking", False)), "at": (self._x, self._y)}
+            self.set_size(round(self._size * _WORKING_SCALE))
+            corner = self._empty_corner()
+            if corner is not None:
+                if self._follow_enabled:
+                    self.set_home(corner)            # home holds it off the cursor's tail
+                else:
+                    self.summon_to(*corner, chase=False)
+            self.set_thinking(True)
+            return
+        self._terminal_working = None
+        self.set_size(saved["size"])
+        self.set_thinking(saved["thinking"])
+        if self._follow_enabled:
+            self.set_home(saved["home"])
+        else:
+            self.summon_to(*saved["at"], chase=False)
+
+    def _empty_corner(self) -> tuple[float, float] | None:
+        """The centre for the cubes in the corner of their screen's work area that other windows
+        cover least (the current corner wins a tie)."""
+        try:
+            import win32api
+            import win32gui
+            from mo_desktop.focus_native import native_handle
+            from mo_desktop.phone.trackpad import switchable_windows
+
+            left, top, right, bottom = win32api.GetMonitorInfo(
+                win32api.MonitorFromWindow(native_handle(self._win), 2))["Work"]
+            rects = []
+            for handle, _title, _active in switchable_windows():
+                if not win32gui.IsIconic(handle):
+                    rects.append(win32gui.GetWindowRect(handle))
+        except Exception:
+            return None
+        half = self._size / 2 + _WORKING_MARGIN
+        centres = ((left + half, top + half), (right - half, top + half),
+                   (left + half, bottom - half), (right - half, bottom - half))
+
+        def covered(centre: tuple[float, float]) -> int:
+            x0, y0, x1, y1 = centre[0] - half, centre[1] - half, centre[0] + half, centre[1] + half
+            return sum(max(0, min(x1, r[2]) - max(x0, r[0])) * max(0, min(y1, r[3]) - max(y0, r[1])) for r in rects)
+
+        return min(centres, key=lambda c: (covered(c), (c[0] - self._x) ** 2 + (c[1] - self._y) ** 2))
 
     def enable_follow(self, enabled: bool = True) -> None:
         if self.game_session_active():
@@ -931,9 +981,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     def destroy(self) -> None:
         self._cancel_cube_hold()
         self._cancel_running_hide()
-        activity = getattr(self, "_computer_activity", None)
-        if activity is not None:
-            activity.destroy()
         for surf in (getattr(self, "_ulw", None), getattr(self, "_label", None), getattr(self, "_trace", None)):
             if surf is not None and hasattr(surf, "destroy"):
                 try:

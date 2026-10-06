@@ -5092,8 +5092,8 @@ class CompanionSurface(
         from mo_desktop import home
 
         cube = getattr(self, "_cube", None)
-        if bool(getattr(cube, "_focus_mode", False)):
-            return
+        if bool(getattr(cube, "_focus_mode", False)) or getattr(cube, "_terminal_working", None) is not None:
+            return      # Focus, or the corner the cubes took while MO Terminal uses the computer
         set_home = getattr(cube, "set_home", None)
         if not callable(set_home):
             return
