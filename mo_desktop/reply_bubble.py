@@ -62,7 +62,7 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # The composer's earlier-message browse: room kept for the three dots above Send, the dim behind
 # the composer, and the cross-fade between messages.
 _COMPOSER_DOTS_RESERVE = 16
-_BROWSE_DIM_ALPHA = 150    # row 31: how far the panel dims around the browsed message's line
+_BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
 _BROWSE_FADE_SECONDS = 0.15
 
 class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
@@ -2091,7 +2091,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._crop.end()            # a crop drag ends here; keep the selection, not a click
             self._repaint()
             return
-        self._activate_hit(self._hit_key_at(x, y))
+        key = self._hit_key_at(x, y)
+        if getattr(self, "_browse_idx", None) is not None and key != "sessions":
+            # While browsing, the darkened panel is not clickable: a click there only brings the
+            # composer back to normal. The history button at the top stays live.
+            self._end_browse()
+            return
+        self._activate_hit(key)
 
     def collapse_to_cube(self) -> None:
         """Close a docked face back into its cube: the composer into the upper-right cube
@@ -2442,7 +2448,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
         veil = _Image.new("RGBA", img.size, (0, 0, 0, 0))
         vd = _ImageDraw.Draw(veil)
-        vd.rounded_rectangle(tuple(box), radius=radius, fill=(*self._card, _BROWSE_DIM_ALPHA))
+        vd.rounded_rectangle(tuple(box), radius=radius, fill=(0, 0, 0, _BROWSE_DIM_ALPHA))
         vd.rectangle((box[0] + ss, line_top - 4 * ss, box[2] - ss, line_top + line_h + 4 * ss), fill=(0, 0, 0, 0))
         img.alpha_composite(veil)
 
