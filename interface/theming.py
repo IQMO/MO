@@ -394,10 +394,10 @@ def skin_to_tui_style_dict(skin: Skin | None = None) -> dict[str, str]:
         "workspace-body": "",
         "workspace-terminal": "",
         "workspace-error": f"{s.accent_critical} bold",
-        "workspace-border": s.text_placeholder,
+        "workspace-border": _quiet_line(s.bg_dark, s.text_placeholder),
         "workspace-launcher": "",
         "workspace-launcher-title": f"{b} bold",
-        "workspace-launcher-selected": f"bg:{s.selected_bg} {s.text_bright} bold underline",
+        "workspace-launcher-selected": f"bg:{s.selected_bg} {s.text_bright} bold",
     }
 
 
@@ -529,19 +529,31 @@ def hex_to_rgb(value: Any, fallback: tuple[int, int, int] = (0, 0, 0)) -> tuple[
         return fallback
 
 
+def _luminance(value: Any) -> float:
+    channels = [channel / 255 for channel in hex_to_rgb(value)]
+    linear = [channel / 12.92 if channel <= .04045 else ((channel + .055) / 1.055) ** 2.4
+              for channel in channels]
+    return sum(channel * weight for channel, weight in zip(linear, (.2126, .7152, .0722)))
+
+
+def _contrast(first: Any, second: Any) -> float:
+    a, b = _luminance(first), _luminance(second)
+    return (max(a, b) + .05) / (min(a, b) + .05)
+
+
 def contrast_text(background: Any, dark: str = "#0b1417", light: str = "#ffffff") -> str:
     """Choose the supplied text color with the higher luminance contrast."""
-    def luminance(value: Any) -> float:
-        channels = [channel / 255 for channel in hex_to_rgb(value)]
-        linear = [channel / 12.92 if channel <= .04045 else ((channel + .055) / 1.055) ** 2.4
-                  for channel in channels]
-        return sum(channel * weight for channel, weight in zip(linear, (.2126, .7152, .0722)))
+    return dark if _contrast(dark, background) >= _contrast(light, background) else light
 
-    fill = luminance(background)
-    def contrast(value: str) -> float:
-        ink = luminance(value)
-        return (max(fill, ink) + .05) / (min(fill, ink) + .05)
-    return dark if contrast(dark) >= contrast(light) else light
+
+def _quiet_line(background: str, ink: str, minimum: float = 3.0) -> str:
+    """The quietest mix of ``ink`` into ``background`` that still keeps ``minimum`` contrast:
+    a separator line that recedes on every skin without dropping below the readable floor."""
+    for step in range(1, 21):
+        mixed = _mix(background, ink, step / 20)
+        if _contrast(mixed, background) >= minimum:
+            return mixed
+    return ink
 
 
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:

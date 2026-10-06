@@ -20,7 +20,7 @@ from prompt_toolkit.layout.dimension import Dimension
 
 from .activity import fit_fragments_to_cells, status_line_mode
 from .formatting import brand_spinner_frame
-from .transcript_view import fit_cells, wrap_fragment_line
+from .transcript_view import cell_width, fit_cells, wrap_fragment_line
 from .workspace import STATUS_GLYPHS, WorkspaceTile, active_sources
 
 MAX_ACTIVITY_ROWS = 6
@@ -762,8 +762,6 @@ def launcher_fragments(controller: Any, *, width: int) -> list[tuple[str, str]]:
             else "class:workspace-launcher"
         )
         rows.append((style, f" {'›' if index == controller.launcher_index else ' '} {destination.label}"))
-    rows.append(("class:dim", " ↑/↓ choose · Enter open"))
-    rows.append(("class:dim", " Esc back"))
     output: list[tuple[str, str]] = []
     for index, (style, text) in enumerate(rows):
         if index:
@@ -772,75 +770,154 @@ def launcher_fragments(controller: Any, *, width: int) -> list[tuple[str, str]]:
     return output
 
 
+_RAIL_HEADING = "class:workspace-title bold"
+_RAIL_SELECTED = "class:workspace-launcher-selected"
+_RUNNING_KINDS = frozenset({"pane", "running", "window"})
+
+
+def _clip(text: str, width: int) -> str:
+    return fit_cells(text, max(0, int(width))).rstrip() if width > 0 else ""
+
+
+def _rail_line(prefix: str, left: str, right: str, width: int, *, left_style: str = "",
+               right_style: str = "class:dim") -> list[tuple[str, str]]:
+    """One rail row: ``left`` after ``prefix`` and ``right`` flush with the rail's right edge."""
+    right = _clip(right, max(0, width - cell_width(prefix) - 2))
+    left = _clip(left, max(1, width - cell_width(prefix) - cell_width(right) - (1 if right else 0)))
+    pad = max(0, width - cell_width(prefix) - cell_width(left) - cell_width(right))
+    return [("", prefix), (left_style, left), ("", " " * pad), (right_style, right)]
+
+
+def _rail_rows(controller: Any, width: int) -> tuple[list[list[tuple[str, str]]], int]:
+    """The rail's lines (RUNNING terminals, then PROJECTS) and the cursor's line."""
+    projects = {project.key: project for project in controller.projects}
+    pane_tiles = {tile.pane_id: tile for tile in controller.tiles(all_projects=True, include_output=False)}
+    running = {terminal.instance_id: terminal for terminal in controller.running_terminals}
+    windows = {str(row.get("instance_id")): row for row in getattr(controller, "local_terminals", ()) or ()}
+    turn_of = getattr(controller, "terminal_turn", None)
+    entries = controller.rail_entries
+    running_count = sum(1 for kind, _identity in entries if kind in _RUNNING_KINDS)
+    pane_counts: dict[str, int] = {}
+    for tile in pane_tiles.values():
+        pane_counts[tile.project_name] = pane_counts.get(tile.project_name, 0) + 1
+    lines: list[list[tuple[str, str]]] = []
+    cursor = 0
+    heading_running = heading_projects = False
+    for index, (kind, identity) in enumerate(entries):
+        selected = controller.rail_index == index
+        prefix = " \u203a " if selected else "   "
+        detail = ""
+        if kind in _RUNNING_KINDS and not heading_running:
+            heading_running = True
+            lines += [[], [("", " "), (_RAIL_HEADING, "RUNNING"), ("class:dim", f"  {running_count}")]]
+        if kind == "project" and not heading_projects:
+            heading_projects = True
+            error = str(controller.running_terminals_error or "")
+            if error:
+                lines.append([("class:workspace-error", _clip("   " + error, width))])
+            lines += [[], [("", " "), (_RAIL_HEADING, "PROJECTS")]]
+        if kind == "pane":
+            tile = pane_tiles[identity]
+            marker, state = workspace_terminal_state(tile.state)
+            doing = turn_of(tile.worker_id) if callable(turn_of) else ""
+            where = "server" if tile.destination.value == "host" else ""
+            row = _rail_line(prefix, f"{marker} {workspace_terminal_name(tile)}", state, width,
+                             right_style=_STATUS_STYLE.get(state, "class:dim"))
+            detail = " \u00b7 ".join(part for part in (tile.project_name, doing or where) if part)
+        elif kind == "running":
+            terminal = running[identity]
+            row = _rail_line(prefix, f"\u25cc {_discovered_terminal_name(terminal)}", "attach", width)
+            path = str(getattr(terminal, "project_path", "") or "")
+            detail = " \u00b7 ".join(part for part in (path.rstrip("/\\").rsplit("/", 1)[-1] if path else "", "server") if part)
+        elif kind == "window":
+            terminal = windows[identity]
+            turn = terminal.get("turn") if isinstance(terminal.get("turn"), dict) else {}
+            busy = bool(turn.get("busy"))
+            glyph = "\u25cf" if busy else "\u25cb"
+            row = _rail_line(prefix, f"{glyph} MO \u00b7 {identity[:8]}",
+                             "working" if busy else "idle", width,
+                             right_style=_STATUS_STYLE["working" if busy else "idle"])
+            folder = str(terminal.get("cwd") or "").replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+            detail = " \u00b7 ".join(part for part in (folder, str(turn.get("request") or "") or "another window") if part)
+        elif kind == "project":
+            project = projects[identity]
+            source = "no folder" if not project.path else (
+                "server" if project.destination.value == "host" else "local")
+            count = pane_counts.get(project.name, 0) if project.key == controller.selected_project.key else 0
+            row = _rail_line("\u203a" if selected else " ", project.name,
+                             source + (f" \u00b7 {count}" if count else ""), width)
+            if project.key == controller.selected_project.key and not selected:
+                row = [("class:workspace-title-1", text) for _style, text in row]
+        elif kind == "new":
+            row = [("", prefix if selected else " "), ("class:workspace-launcher-title", "+ New terminal")]
+        else:
+            row = [("", prefix), ("", "Health")]
+        if selected:
+            cursor = len(lines)
+            used = sum(cell_width(text) for _style, text in row)
+            row = [(f"{style} {_RAIL_SELECTED}".strip(), text) for style, text in row]
+            row.append((_RAIL_SELECTED, " " * max(0, width - used)))
+        lines.append(row)
+        if detail:
+            lines.append([("", "     "), ("class:dim", _clip(detail, width - 5))])
+    return lines, cursor
+
+
 def workspace_rail_fragments(
     controller: Any,
     tiles: list[WorkspaceTile],
     *,
     width: int,
 ) -> list[tuple[str, str]]:
-    """Render the one vertical terminal selector and its nested new action."""
+    """Render the rail's list: + New terminal, Health, every RUNNING MO terminal (this window's
+    panes, the server's, other windows on this machine), then PROJECTS. Key help is the footer."""
     # Host discovery mutates project/terminal rows off the UI thread. Read
     # one coherent view under its existing owner lock; no PTY output is read.
     with controller._lock:
         if controller.launcher_open:
             return launcher_fragments(controller, width=width)
-        projects = {project.key: project for project in controller.projects}
-        pane_tiles = {tile.pane_id: tile for tile in controller.tiles(all_projects=True, include_output=False)}
-        running = {terminal.instance_id: terminal for terminal in controller.running_terminals}
-        entries = controller.rail_entries
-        rows: list[tuple[str, str]] = []
-        for index, (kind, identity) in enumerate(entries):
-            selected = controller.rail_index == index
-            style = "class:workspace-launcher"
-            if kind == "project":
-                project = projects[identity]
-                marker = "▾" if controller.project_expanded(identity) else "▸"
-                source = "no folder" if not project.path else (
-                    "host" if project.destination.value == "host" else "local"
-                )
-                if project.key == controller.selected_project.key:
-                    style += " class:workspace-title-1 bold"
-                name = fit_cells(project.name, max(1, width - 8 - len(source)))
-                label = f"{marker} {name} · {source}"
-            elif kind == "pane":
-                tile = pane_tiles[identity]
-                marker, _label = workspace_terminal_state(tile.state)
-                style += " " + _TITLE_STYLES[(tile.position - 1) % len(_TITLE_STYLES)]
-                terminal_name = workspace_terminal_name(tile)
-                label = f"  {marker} {terminal_name}"
-            elif kind == "running":
-                label = f"○ {_discovered_terminal_name(running[identity])} · attach"
-            else:
-                label = "+ New terminal" if kind == "new" else "Health"
-            # Cursor selection wins the visual cascade. The active project keeps
-            # its pane accent whenever the cursor moves elsewhere.
-            if selected:
-                style += " class:workspace-launcher-selected"
-            rows.append((style, f" {'›' if selected else ' '} {label}"))
-        running_error = str(controller.running_terminals_error or "")
-        if running_error:
-            rows.append(("class:workspace-error", f"     {running_error}"))
+        lines, _cursor = _rail_rows(controller, width)
+    output: list[tuple[str, str]] = []
+    for index, line in enumerate(lines):
+        if index:
+            output.append(("", "\n"))
+        output.extend(line or [("", "")])
+    return output
 
-        selected_kind, selected_identity = entries[controller.rail_index]
-        if selected_kind == "pane":
-            help_text = (
-                " Enter focus · Esc"
-                if selected_identity == "main"
-                else " Enter focus · x close" if width >= 23 else " Enter · x close"
-            )
-        elif selected_kind == "project":
-            help_text = " Enter toggle · Esc"
-        elif selected_kind == "running":
-            help_text = " Enter attach · Esc"
+
+def workspace_rail_cursor_line(controller: Any, *, width: int) -> int:
+    with controller._lock:
+        if controller.launcher_open:
+            return controller.launcher_index + 1
+        return _rail_rows(controller, width)[1]
+
+
+_RAIL_HELP = {
+    "pane": ("Enter switch \u00b7 x close \u00b7 Esc", "Enter \u00b7 x close"),
+    "main": ("Enter switch \u00b7 1-9 \u00b7 Esc", "Enter \u00b7 1-9 \u00b7 Esc"),
+    "running": ("Enter attach \u00b7 Esc", "Enter attach"),
+    "window": ("Enter show \u00b7 Esc", "Enter show"),
+    "project": ("Enter select \u00b7 Esc", "Enter select"),
+    "new": ("Enter choose \u00b7 Esc", "Enter choose"),
+    "health": ("Enter open \u00b7 Esc", "Enter open"),
+    "health_open": ("Alt+\u2191\u2193 scroll \u00b7 Esc", "Alt+\u2191\u2193 scroll"),
+    "launcher": ("\u2191\u2193 choose \u00b7 Enter open \u00b7 Esc back", "Enter open \u00b7 Esc back"),
+}
+
+
+def workspace_rail_footer(controller: Any, *, width: int) -> list[tuple[str, str]]:
+    """The rail's one pinned key-help row for the current selection."""
+    with controller._lock:
+        if controller.launcher_open:
+            key = "launcher"
         else:
-            help_text = " Enter open · Esc"
-        rows.append(("class:dim", help_text))
-        output: list[tuple[str, str]] = []
-        for index, (style, text) in enumerate(rows):
-            if index:
-                output.append(("", "\n"))
-            output.append((style, fit_cells(text, width)))
-        return output
+            kind, identity = controller.rail_entries[controller.rail_index]
+            key = "main" if (kind, identity) == ("pane", "main") else kind
+            if kind == "health" and bool(getattr(controller, "health_open", False)):
+                key = "health_open"
+    full, short = _RAIL_HELP.get(key, ("Enter \u00b7 Esc", "Enter"))
+    text = full if cell_width(full) <= width - 1 else short
+    return [("class:dim", fit_cells(" " + text, width))]
 
 
 def workspace_available_rows(tui: Any) -> int:
@@ -951,20 +1028,33 @@ def build_workspace_grid(tui: Any, composer: Any = None, composer_rows: Any = 1)
         )
     if not rail_open:
         return grid
-    rail = Window(
+    list_rows = max(1, rows - 1)
+    rail_list = Window(
         content=FormattedTextControl(
             lambda: FormattedText(
                 workspace_rail_fragments(controller, tiles, width=rail_width)
             ),
-            get_cursor_position=lambda: Point(0, controller.launcher_index + 1 if controller.launcher_open else controller.rail_index),
+            # The window scrolls to keep the cursor's line visible in a long list.
+            get_cursor_position=lambda: Point(0, workspace_rail_cursor_line(controller, width=rail_width)),
         ),
         width=Dimension.exact(rail_width),
-        height=Dimension.exact(rows),
+        height=Dimension.exact(list_rows),
         dont_extend_width=True,
         wrap_lines=False,
         always_hide_cursor=True,
         style="class:workspace-launcher",
     )
+    rail = HSplit([
+        rail_list,
+        Window(
+            content=FormattedTextControl(lambda: FormattedText(workspace_rail_footer(controller, width=rail_width))),
+            width=Dimension.exact(rail_width),
+            height=Dimension.exact(1),
+            dont_extend_width=True,
+            always_hide_cursor=True,
+            style="class:workspace-launcher",
+        ),
+    ], width=Dimension.exact(rail_width)) if rows > 1 else rail_list
     return VSplit([
         rail,
         Window(width=1, char="│", style="class:workspace-border"),

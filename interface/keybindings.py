@@ -527,6 +527,15 @@ def build_tui_key_bindings(tui: Any) -> KeyBindings:
                 set_notice(controller.open_rail())
             event.app.invalidate()
 
+    for digit in "123456789":
+        @kb.add(digit, eager=True, filter=workspace_rail_open)
+        def _(event, number=int(digit)):
+            """1-9 in the rail switches straight to that running terminal."""
+            controller = getattr(tui, "_workspace", None)
+            if controller is not None:
+                set_notice(controller.rail_jump(number))
+                event.app.invalidate()
+
     @kb.add("x", eager=True, filter=workspace_rail_open)
     @kb.add("escape", "x", eager=True, filter=workspace_split_active)
     def _(event):

@@ -207,7 +207,6 @@ class WorkspaceController:
         cwd = str(Path(getattr(agent, "project_cwd", "") or os.getcwd()).resolve())
         project_key = "local:" + os.path.normcase(cwd)
         self._projects = {project_key: WorkspaceProject(project_key, cwd, Path(cwd).name or cwd)}
-        self._expanded_projects = {project_key}
         self._state = WorkspaceState(PaneState(
             pane_id="main",
             destination=PaneDestination.THIS_MACHINE,
@@ -232,6 +231,8 @@ class WorkspaceController:
         self._running_terminals: tuple[Any, ...] = ()
         self._running_terminals_loading = False
         self._running_terminals_error = ""
+        self._local_terminals: tuple[dict[str, Any], ...] = ()
+        self._terminal_turns: dict[str, str] = {}
         self._input_drafts: dict[str, str] = {}
         self._pane_scroll_offsets: dict[str, int] = {}
         self._pane_scroll_limits: dict[str, int] = {}
@@ -254,12 +255,10 @@ class WorkspaceController:
                             if project.path and project.name.casefold() == selected.name.casefold()), None)
             if located is not None:
                 self._state.select_project(located.key)
-                self._expanded_projects.add(located.key)
         retained = {pane.project_key for pane in self._state.all_panes} | {self._state.selected_project}
         self._projects = {key: project for key, project in self._projects.items()
                           if project.destination is PaneDestination.MO_HOST or key in available or key in retained}
         self._projects.update(available)
-        self._expanded_projects.intersection_update(self._projects)
 
     @property
     def projects(self) -> tuple[WorkspaceProject, ...]:
@@ -271,9 +270,6 @@ class WorkspaceController:
         with self._lock:
             return self._projects[self._state.selected_project]
 
-    def project_expanded(self, key: str) -> bool:
-        return key in self._expanded_projects
-
     def select_project(self, key: str) -> str:
         with self._lock:
             project = self._projects.get(key)
@@ -281,7 +277,6 @@ class WorkspaceController:
                 return "That project is no longer available."
             self._save_input_draft(self._state.focused_pane_id)
             self._state.select_project(key)
-            self._expanded_projects.add(key)
             self._pane_full_window = False
             self._health_open = False
             self._restore_input_draft(self._state.focused_pane_id)
@@ -355,7 +350,8 @@ class WorkspaceController:
         with self._lock:
             return self._pane_full_window
 
-    def _available_running_terminals_locked(self) -> tuple[Any, ...]:
+    def _occupied_instance_ids_locked(self) -> set[str]:
+        """MO instances this window already shows: itself and its attached panes."""
         agent = getattr(self.tui, "agent", None)
         occupied = {str(getattr(agent, "instance_id", "") or "")}
         for terminal in self._terminals.values():
@@ -365,12 +361,36 @@ class WorkspaceController:
             identity = mo_terminal_identity(getattr(terminal, "terminal_title", ""))
             if identity:
                 occupied.add(identity[0])
+        return occupied
+
+    def _available_running_terminals_locked(self) -> tuple[Any, ...]:
+        occupied = self._occupied_instance_ids_locked()
         return tuple(
             terminal
             for terminal in self._running_terminals
             if str(getattr(terminal, "instance_id", "") or "") not in occupied
             and getattr(terminal, "connected", True)
         )
+
+    def _other_windows_locked(self) -> tuple[dict[str, Any], ...]:
+        """Live MO terminals on this machine in other windows (not shown here, not on the server)."""
+        occupied = self._occupied_instance_ids_locked() | {
+            str(getattr(terminal, "instance_id", "") or "") for terminal in self._running_terminals}
+        return tuple(row for row in self._local_terminals if str(row.get("instance_id") or "") not in occupied)
+
+    @property
+    def local_terminals(self) -> tuple[dict[str, Any], ...]:
+        with self._lock:
+            return self._other_windows_locked()
+
+    def terminal_turn(self, instance_id: str) -> str:
+        """What one MO terminal is working on, from its heartbeat (this one: its own turn)."""
+        agent = getattr(self.tui, "agent", None)
+        if instance_id and instance_id == str(getattr(agent, "instance_id", "") or ""):
+            turn = getattr(agent, "_heartbeat_turn", None)
+            return str(turn.get("request") or "") if isinstance(turn, dict) else ""
+        with self._lock:
+            return self._terminal_turns.get(str(instance_id or ""), "")
 
     @property
     def running_terminals(self) -> tuple[Any, ...]:
@@ -401,13 +421,13 @@ class WorkspaceController:
         return rows[min(self._rail_index, len(rows) - 1)]
 
     def _rail_entries_locked(self) -> tuple[tuple[str, str], ...]:
+        """+ New terminal, Health, every running MO terminal (this window's panes, the server's,
+        other windows on this machine), then every project."""
         rows = [("new", ""), ("health", "")]
-        for project in self._projects.values():
-            rows.append(("project", project.key))
-            if project.key in self._expanded_projects:
-                rows.extend(("pane", pane.pane_id) for pane in self._state.all_panes
-                            if pane.project_key == project.key)
+        rows.extend(("pane", pane.pane_id) for pane in self._state.all_panes)
         rows.extend(("running", terminal.instance_id) for terminal in self._available_running_terminals_locked())
+        rows.extend(("window", str(row.get("instance_id"))) for row in self._other_windows_locked())
+        rows.extend(("project", project.key) for project in self._projects.values())
         return tuple(rows)
 
     @property
@@ -878,8 +898,47 @@ class WorkspaceController:
                 self._state.focused_pane_id or self._state.selected_project,
             )
         self._begin_running_terminal_discovery()
+        self._begin_local_terminal_discovery()
         self.invalidate()
         return "Terminal panel opened."
+
+    def _begin_local_terminal_discovery(self) -> None:
+        """Other MO terminals on this machine and what each is working on, from the shared
+        instance heartbeats; read off the UI thread when the rail opens, never per render."""
+        agent = getattr(self.tui, "agent", None)
+        config = getattr(agent, "config", None)
+
+        def read() -> None:
+            try:
+                from core.runtime.instance import recent_instance_snapshots
+
+                rows = recent_instance_snapshots(config if isinstance(config, dict) else None,
+                                                 current_pid=os.getpid(), max_age_seconds=180.0, limit=32)
+            except Exception:
+                rows = []
+            live = tuple(row for row in rows if isinstance(row, dict) and row.get("pid_alive")
+                         and str(row.get("surface") or "") == "terminal" and row.get("instance_id"))
+            turns = {str(row["instance_id"]): str(row["turn"].get("request") or "") for row in live
+                     if isinstance(row.get("turn"), dict) and row["turn"].get("busy")}
+            with self._lock:
+                if self._shutting_down:
+                    return
+                selection = self._rail_selection_locked()
+                self._local_terminals, self._terminal_turns = live, turns
+                if self._rail_open and not self._launcher_open:
+                    self._set_rail_selection_locked(*selection)
+            self.invalidate()
+
+        threading.Thread(target=read, daemon=True, name="mo-workspace-local-terminals").start()
+
+    def rail_jump(self, number: int) -> str:
+        """1-9 in the rail: switch straight to the Nth running terminal."""
+        with self._lock:
+            running = [entry for entry in self._rail_entries_locked() if entry[0] in {"pane", "running", "window"}]
+            if not self._rail_open or self._launcher_open or not 1 <= int(number) <= len(running):
+                return f"No running terminal {number}."
+            self._set_rail_selection_locked(*running[int(number) - 1])
+        return self.rail_accept()
 
     def rail_move(self, delta: int) -> None:
         with self._lock:
@@ -921,15 +980,13 @@ class WorkspaceController:
             return self.open_health()
         if kind == "running":
             return self.attach_running_terminal(identity)
+        if kind == "window":
+            from .terminal_host import focus_terminal
+
+            shown = focus_terminal(identity)
+            return "Showing that MO terminal's window." if shown else "That MO terminal's window could not be found."
         if kind == "project":
-            with self._lock:
-                collapse = identity == self._state.selected_project and identity in self._expanded_projects
-            result = self.select_project(identity)
-            if collapse:
-                with self._lock:
-                    self._expanded_projects.discard(identity)
-                self.invalidate()
-            return result
+            return self.select_project(identity)
         result = self.focus_pane(identity)
         with self._lock:
             self._rail_open = False
@@ -944,6 +1001,8 @@ class WorkspaceController:
             kind, pane_id = self._rail_selection_locked()
             if kind == "running":
                 return "Attach the running MO terminal before closing it."
+            if kind == "window":
+                return "Close that MO terminal in its own window."
             if kind == "new":
                 return "The new-terminal action cannot be closed."
             if kind == "health":
@@ -1082,7 +1141,6 @@ class WorkspaceController:
             self._next_pane_number += 1
             agent = getattr(self.tui, "agent", None)
             project = self.selected_project
-            self._expanded_projects.add(project.key)
             cwd = project.path
             cwd_label = "MO host" if is_host else (Path(cwd).name if cwd else "")
             try:
@@ -1203,7 +1261,6 @@ class WorkspaceController:
             except WorkspaceModelError as exc:
                 return str(exc)
             focused_pane_id = self._state.focused_pane_id
-            self._expanded_projects.add(self._state.selected_project)
             position = self._state.pane_ids.index(focused_pane_id) + 1
             self._health_open = False
         self._restore_input_draft(focused_pane_id)
