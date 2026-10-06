@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+import weakref
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -32,6 +33,7 @@ _BLOCKED_STATES = frozenset({"blocked"})
 _IDLE_STATES = frozenset({"paused", "offered"})
 _HEALTH_BASELINE_SECONDS = 1.0
 _HEALTH_REFRESH_SECONDS = 2.0
+_RAIL_REFRESH_SECONDS = 3.0
 # A local PTY only owns raw keystrokes once it can actually receive them. MO-host
 # text is a semantic submit boundary, not a byte stream: those panes retain the
 # outer composer and send one complete message on Enter.
@@ -234,6 +236,7 @@ class WorkspaceController:
         self._running_terminals_error = ""
         self._local_terminals: tuple[dict[str, Any], ...] = ()
         self._terminal_turns: dict[str, str] = {}
+        self._local_discovery_running = False
         self._input_drafts: dict[str, str] = {}
         self._pane_scroll_offsets: dict[str, int] = {}
         self._pane_scroll_limits: dict[str, int] = {}
@@ -919,32 +922,52 @@ class WorkspaceController:
 
     def _begin_local_terminal_discovery(self) -> None:
         """Other MO terminals on this machine and what each is working on, from the shared
-        instance heartbeats; read off the UI thread when the rail opens, never per render."""
-        agent = getattr(self.tui, "agent", None)
-        config = getattr(agent, "config", None)
+        instance heartbeats: one background reader while the rail is open, a read every
+        _RAIL_REFRESH_SECONDS and a repaint only when something changed; never per render.
+        It holds the controller weakly, so it also ends when the controller is gone."""
+        with self._lock:
+            if self._local_discovery_running:
+                return
+            self._local_discovery_running = True
+        controller = weakref.ref(self)
 
         def read() -> None:
-            try:
-                from core.runtime.instance import recent_instance_snapshots
-
-                rows = recent_instance_snapshots(config if isinstance(config, dict) else None,
-                                                 current_pid=os.getpid(), max_age_seconds=180.0, limit=32)
-            except Exception:
-                rows = []
-            live = tuple(row for row in rows if isinstance(row, dict) and row.get("pid_alive")
-                         and str(row.get("surface") or "") == "terminal" and row.get("instance_id"))
-            turns = {str(row["instance_id"]): str(row["turn"].get("request") or "") for row in live
-                     if isinstance(row.get("turn"), dict) and row["turn"].get("busy")}
-            with self._lock:
-                if self._shutting_down:
+            while True:
+                subject = controller()
+                if subject is None:
                     return
-                selection = self._rail_selection_locked()
-                self._local_terminals, self._terminal_turns = live, turns
-                if self._rail_open and not self._launcher_open:
-                    self._set_rail_selection_locked(*selection)
-            self.invalidate()
+                subject._read_local_terminals()
+                with subject._lock:
+                    if not subject._rail_open or subject._shutting_down:
+                        subject._local_discovery_running = False
+                        return
+                del subject
+                time.sleep(_RAIL_REFRESH_SECONDS)
 
         threading.Thread(target=read, daemon=True, name="mo-workspace-local-terminals").start()
+
+    def _read_local_terminals(self) -> None:
+        agent = getattr(self.tui, "agent", None)
+        config = getattr(agent, "config", None)
+        try:
+            from core.runtime.instance import recent_instance_snapshots
+
+            rows = recent_instance_snapshots(config if isinstance(config, dict) else None,
+                                             current_pid=os.getpid(), max_age_seconds=180.0, limit=32)
+        except Exception:
+            rows = []
+        live = tuple(row for row in rows if isinstance(row, dict) and row.get("pid_alive")
+                     and str(row.get("surface") or "") == "terminal" and row.get("instance_id"))
+        turns = {str(row["instance_id"]): str(row["turn"].get("request") or "") for row in live
+                 if isinstance(row.get("turn"), dict) and row["turn"].get("busy")}
+        with self._lock:
+            if self._shutting_down or (live, turns) == (self._local_terminals, self._terminal_turns):
+                return
+            selection = self._rail_selection_locked()
+            self._local_terminals, self._terminal_turns = live, turns
+            if self._rail_open and not self._launcher_open:
+                self._set_rail_selection_locked(*selection)
+        self.invalidate()
 
     def rail_jump(self, number: int) -> str:
         """1-9 in the rail: switch straight to the Nth running terminal."""
@@ -996,10 +1019,19 @@ class WorkspaceController:
         if kind == "running":
             return self.attach_running_terminal(identity)
         if kind == "window":
-            from .terminal_host import focus_terminal
+            from .terminal_host import focus_terminal, focus_window
 
-            shown = focus_terminal(identity)
-            return "Showing that MO terminal's window." if shown else "That MO terminal's window could not be found."
+            if focus_terminal(identity):
+                return "Showing that MO terminal's window."
+            with self._lock:
+                row = next((item for item in self._local_terminals if item.get("instance_id") == identity), {})
+            try:
+                host = int(row.get("shell_host") or 0)
+            except (TypeError, ValueError):
+                host = 0
+            if host and focus_window(host):
+                return "Showing MO Shell; that MO terminal is one of its panes."
+            return "That MO terminal's window could not be found."
         if kind == "project":
             return self.select_project(identity)
         result = self.focus_pane(identity)

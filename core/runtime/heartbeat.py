@@ -280,6 +280,8 @@ def build_heartbeat_snapshot(
         ),
         "computer_activity": _computer_activity_state(getattr(agent, "_computer_activity", None)),
         "turn": _turn_state(getattr(agent, "_heartbeat_turn", None)),
+        # An MO Shell pane has no window title of its own; its host window lets the rail show it.
+        "shell_host": _shell_host_window(),
         "extra": _safe_extra(extra),
     }
 
@@ -622,6 +624,13 @@ def _taskboard_state(board: Any, *, session_id: str = "") -> dict[str, Any]:
         "next_task_title": "" if active_id else _taskboard_task_title(tasks, ready_id),
         "graph_valid": bool((context.get("graph") or {}).get("valid", True)),
     }
+
+
+def _shell_host_window() -> int:
+    try:
+        return max(0, int(os.environ.get("MO_SHELL_HOST_HWND") or 0))
+    except ValueError:
+        return 0
 
 
 def _turn_state(value: Any) -> dict[str, Any]:

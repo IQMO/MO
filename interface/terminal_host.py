@@ -251,15 +251,33 @@ def focus_terminal(instance_id: str) -> bool:
     user32.EnumWindows(visit, 0)
     if len(matches) != 1:
         return False
-    user32.ShowWindow(matches[0], 9)
-    user32.SetForegroundWindow(matches[0])
+    return focus_window(matches[0])
+
+
+def focus_window(hwnd: int) -> bool:
+    """Restore and bring one exact window to the front, verified briefly."""
+    if sys.platform != "win32" or not hwnd:
+        return False
+    import ctypes
+    import time
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    if not user32.IsWindow(hwnd):
+        return False
+    user32.ShowWindow(hwnd, 9)
+    user32.SetForegroundWindow(hwnd)
     # A terminal host may acknowledge activation after the native call returns.
     # Verify the exact window briefly, without another launcher or input hack.
     for _ in range(20):
-        if user32.GetForegroundWindow() == matches[0]:
+        if user32.GetForegroundWindow() == hwnd:
             return True
         time.sleep(0.01)
-    return user32.GetForegroundWindow() == matches[0]
+    return user32.GetForegroundWindow() == hwnd
 
 
 def publish_terminal_title(
