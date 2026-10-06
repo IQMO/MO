@@ -481,7 +481,9 @@ class AgentTurnRecoveryMixin:
     )
     _PROVIDER_AUTH_GUIDANCE = (
         "\n\nThe selected provider rejected its authentication. Refresh or re-authenticate that "
-        "provider (sign in again for OAuth) before retrying, or choose another model with `/model`."
+        "provider (sign in again for OAuth) before retrying, or choose another model with `/model`. "
+        "For Codex, give this machine its own sign-in (a copied one breaks when another machine "
+        "refreshes): run `python -m core.provider.codex_login start`, open the link, then `finish`."
     )
     _PROVIDER_QUOTA_GUIDANCE = (
         "\n\nThe selected provider's usage or billing allowance is exhausted. "

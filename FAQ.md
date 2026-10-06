@@ -218,7 +218,10 @@ MO's provider abstraction supports:
 - official DeepSeek;
 - official Z.ai/GLM;
 - OpenCode catalogs;
-- OpenAI/Codex OAuth through the local Codex auth file;
+- OpenAI/Codex OAuth through the local Codex auth file; a machine without the Codex
+  CLI (a server) gets its own sign-in with `python -m core.provider.codex_login start`
+  (open the link, enter the code) and then `finish`. Give each machine its own
+  sign-in: a copied auth file breaks once another machine refreshes the session;
 - Ollama and other local OpenAI-compatible servers;
 - custom OpenAI-compatible chat endpoints.
 
