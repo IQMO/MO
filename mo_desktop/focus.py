@@ -117,6 +117,7 @@ class FocusBar:
         self._power_minutes, self._power_deadline = 15, 0.0
         self._layout_motion = None
         self._paint_key = None
+        self._painted_hover = None
         self._sprite_key = None
         self._cube_sprites = []
         self._image = None
@@ -286,7 +287,6 @@ class FocusBar:
         self._paint_page()
 
     def _paint_page(self) -> None:
-        from mo_desktop.focus_paint import cube_face
         from interface.desktop_brand import make_glyph_icon
         source_rows = ([(row.path, row.name, index == self._result_selected) for index, row in enumerate(self._results)]
                        if self._query else self._rows)
@@ -312,9 +312,49 @@ class FocusBar:
                self._power_delay, self._power_minutes, self._power_remaining(), self._power_busy, self._power_error, id(sprite))
         if key == self._paint_key:
             return
-        self._paint_key = key
+        previous_key, self._paint_key = self._paint_key, key
         pins = tuple(self._pins[self._pin_offset:self._pin_offset+self._pin_capacity]) if not self._collapsed else ()
         row_kind = "result" if self._query else "window"
+        if not self._patch_hover_rows(previous_key, key, rows, row_kind):
+            self._paint_full_face(rows, row_kind, pins, stamp, sprite)
+        self._painted_hover = self._hover
+        self._publish_face(rows, row_kind, pins)
+
+    def _patch_hover_rows(self, previous_key: Any, key: tuple, rows: list, row_kind: str) -> bool:
+        """When only the hover moved between window rows, redraw just those rows (row 20: the
+        whole-face repaint cost 30 ms on the cubes' GUI thread for each hover change)."""
+        from mo_desktop.focus_paint import row_hover_patch
+        if (previous_key is None or self._image is None or self._collapsed or self._settings_open
+                or len(previous_key) != len(key) or previous_key[:3] + previous_key[4:] != key[:3] + key[4:]):
+            return False
+        handles = {handle: index for index, (handle, _title, _active) in enumerate(rows)}
+
+        def row_of(hover: Any) -> int | None:
+            if hover is None:
+                return None
+            if isinstance(hover, tuple) and len(hover) == 2 and hover[0] in {row_kind, "close"} and hover[1] in handles:
+                return handles[hover[1]]
+            raise LookupError
+
+        try:
+            indexes = tuple(index for index in (row_of(getattr(self, "_painted_hover", None)), row_of(self._hover))
+                            if index is not None)
+        except LookupError:
+            return False
+        if not indexes:
+            return False
+        self._image, patch_hits = row_hover_patch(
+            self._image, self._target_size, self._visuals, rows, self._result_icons if self._query else self._icons,
+            hover=self._hover, failed=self._failed_handle, row_kind=row_kind, indexes=indexes)
+        affected = {rows[index][0] for index in indexes}
+        hits = {name: box for name, box in self._hits.items()
+                if not (isinstance(name, tuple) and len(name) == 2 and name[0] in {row_kind, "close"} and name[1] in affected)}
+        hits.update(patch_hits)
+        self._hits = hits
+        return True
+
+    def _paint_full_face(self, rows: list, row_kind: str, pins: tuple, stamp: Any, sprite: Any) -> None:
+        from mo_desktop.focus_paint import cube_face
         self._image, self._hits = cube_face(self._target_size, self._visuals, rows, self._result_icons if self._query else self._icons,
             collapsed=self._collapsed, hover=self._hover, failed=self._failed_handle,
             tray_failed=self._tray_failed, now=stamp, total=len(self._rows),
@@ -323,6 +363,8 @@ class FocusBar:
             selection=self._search_selection, row_kind=row_kind, settings=self._settings_open, idle_opacity=self._idle_opacity,
             power=(self._power_action, self._power_delay, self._power_minutes,
                    self._power_remaining(), self._power_busy, self._power_error))
+
+    def _publish_face(self, rows: list, row_kind: str, pins: tuple) -> None:
         labels = {"toggle": "Expand windows" if self._collapsed else "Collapse windows",
                   "tray": "System tray", "clock": "Calendar", "search": "Search this PC", "search:clear": "Clear search", "settings": "Focus settings",
                   "dimming": f"Dimming {round((1-self._idle_opacity)*100)} percent"}

@@ -73,6 +73,11 @@ content is not restored as Desktop conversation memory.
   extent across their current payloads, not independent tab resizes or zero tiles.
 
 - MO Desktop is a separate, opt-in MO-branded companion (`mo_desktop.enabled: true`), summoned with **Win+Alt+M** or launched with `/desktop`. It survives closing the terminal. Keep it fast and request-local: Terminal owns agentic diagnosis, project planning, and engineering orchestration; Desktop directly fulfills ordinary companion requests through the smallest canonical route and must not grow a planner, evaluator, or diagnostic loop.
+- Focus hover is cheap by construction: moving between window rows redraws only the rows it
+  leaves and enters (`focus_paint.row_hover_patch`: each band is finished with real neighbour
+  pixels, so the result equals a full `cube_face` render), and the face's card surface and scaled
+  icons are built once. Any other hover or state change renders the whole face. Keep new row
+  drawing inside `_draw_row`, which both paths use.
 - Focus follows the main character's fullscreen visibility policy. Fullscreen
   suppression fades its expanded or collapsed face and dismisses its previews,
   calendar, and tray popup; it does not disable Focus or discard its position.

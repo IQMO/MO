@@ -10,6 +10,41 @@ from mo_desktop import card
 
 
 SS = card.SS
+# Hover repaints the whole face (row 20: 32 ms each, on the cubes' GUI thread). The window and
+# pin icons and the card surface are the same on every paint, so they are scaled and built once;
+# entries hold the source object, so a reused id can never return another icon's pixels.
+_SCALED: dict[tuple, tuple[Any, Any]] = {}
+_SURFACES: dict[tuple, tuple[Any, Any]] = {}
+_CACHE_LIMIT = 256
+
+
+def _scaled(icon: Any, edge: int, *, dim: bool = False) -> Any:
+    """``icon`` at ``edge`` px (LANCZOS), optionally at the idle 72% alpha; never mutate the result."""
+    from PIL import Image
+
+    key = (id(icon), edge, dim)
+    hit = _SCALED.get(key)
+    if hit is not None and hit[0] is icon:
+        return hit[1]
+    sprite = icon.resize((edge, edge), Image.Resampling.LANCZOS)
+    if dim:
+        sprite.putalpha(sprite.getchannel("A").point(lambda alpha: round(alpha*.72)))
+    if len(_SCALED) >= _CACHE_LIMIT:
+        _SCALED.clear()
+    _SCALED[key] = (icon, sprite)
+    return sprite
+
+
+def _surface(size: tuple[int, int], visuals: Any) -> Any:
+    """A fresh copy of the face's card surface (built once per size and visual state)."""
+    key = (tuple(size), id(visuals))
+    hit = _SURFACES.get(key)
+    if hit is None or hit[0] is not visuals:
+        if len(_SURFACES) >= 16:
+            _SURFACES.clear()
+        hit = (visuals, card.surface_canvas(size, visuals))
+        _SURFACES[key] = hit
+    return hit[1].copy()
 
 
 
@@ -53,7 +88,7 @@ def cube_face(size: tuple[int, int], visuals: Any, rows: list, icons: dict,
         draw.text((left+13*SS, 30*SS), label, font=font, fill=ink, anchor="lm")
         return card.finish(image), {"toggle": (0, 0, width, height)}
 
-    image = card.surface_canvas(size, visuals)
+    image = _surface(size, visuals)
     draw = ImageDraw.Draw(image)
     hits = {"toggle": (7, 4, 24, 28), "search": (105, 7, width-112, 23)}
     radius = visuals.metrics.button_corner_radius*SS
@@ -91,10 +126,7 @@ def cube_face(size: tuple[int, int], visuals: Any, rows: list, icons: dict,
         if hover == key:
             draw.rounded_rectangle((x*SS, y*SS, (x+32)*SS, (y+32)*SS), radius=radius, fill=p.entry)
         if icon is not None:
-            sprite = icon.resize((22*SS, 22*SS), Image.Resampling.LANCZOS)
-            if hover != key:
-                sprite.putalpha(sprite.getchannel("A").point(lambda alpha: round(alpha*.72)))
-            image.alpha_composite(sprite, ((x+5)*SS, (y+5)*SS))
+            image.alpha_composite(_scaled(icon, 22*SS, dim=hover != key), ((x+5)*SS, (y+5)*SS))
     power_names = {"sleep": "Sleep", "restart": "Restart", "shutdown": "Shut down"}
     def control(key: str, label: str, box: tuple, selected: bool = False) -> None:
         x, y, w, h = box
@@ -105,29 +137,8 @@ def cube_face(size: tuple[int, int], visuals: Any, rows: list, icons: dict,
         draw.text(((x+w/2)*SS, (y+h/2)*SS), label, font=card.role_font("tiny"),
                   fill=p.muted if power_busy else p.text, anchor="mm")
     for index, (handle, title, active) in enumerate([] if settings else rows):
-        x, y, w, h = 7, 35+index*30, width-14, 29
-        key = (row_kind, handle)
-        close = ("close", handle)
-        row_hover = hover in (key, close)
-        if row_kind == "window" and row_hover:
-            hits[close] = (width-34, y+3, 23, 23)
-        hits[key] = (x, y, w, h)
-        if active or row_hover or handle == failed:
-            draw.rounded_rectangle((x*SS, y*SS, (x+w)*SS, (y+h)*SS), radius=radius,
-                fill=p.entry, outline=p.error if handle == failed else None, width=SS)
-        icon = icons.get(handle)
-        if icon is not None:
-            image.alpha_composite(icon.resize((18*SS, 18*SS), Image.Resampling.LANCZOS), (14*SS, (y+6)*SS))
-        if active:
-            draw.ellipse((8*SS, (y+13)*SS, 10*SS, (y+15)*SS), fill=p.accent)
-        label = card.fit_text(draw, title, (width-(78 if row_hover and row_kind == "window" else 56))*SS, card.role_font("small"))
-        draw.text((40*SS, (y+15)*SS), label, font=card.role_font("small"), fill=p.text, anchor="lm")
-        if close in hits:
-            cx, cy, cw, ch = hits[close]
-            if hover == close:
-                draw.rounded_rectangle((cx*SS, cy*SS, (cx+cw)*SS, (cy+ch)*SS), radius=radius, fill=p.card)
-            image.alpha_composite(make_glyph_icon("close", 10*SS, color=p.error if hover == close else p.muted),
-                                  ((cx+6)*SS, (cy+6)*SS))
+        _draw_row(image, draw, visuals, width, index, handle, title, active, row_kind=row_kind,
+                  hover=hover, failed=failed, icons=icons, hits=hits)
     if settings:
         draw.text((15*SS, 49*SS), "Focus settings", font=card.role_font("small"), fill=p.text, anchor="lm")
         draw.text((15*SS, 68*SS), f"Dimming   {round((1-idle_opacity)*100)}%", font=card.role_font("tiny"), fill=p.muted, anchor="lm")
@@ -270,3 +281,74 @@ def calendar_image(visuals: Any, year: int, month: int, today: datetime) -> tupl
             draw.text((x*SS, y*SS), str(day), font=card.role_font(), fill=p.card if selected else p.text, anchor="mm")
     draw.text((18*SS, 264*SS), today.strftime("%A, %d %B"), font=card.role_font("tiny"), fill=p.muted, anchor="lm")
     return card.finish(image), hits
+
+
+def _draw_row(image: Any, draw: Any, visuals: Any, width: int, index: int, handle: Any, title: str,
+              active: bool, *, row_kind: str, hover: Any, failed: Any, icons: dict, hits: dict,
+              top: int = 0) -> None:
+    """One window (or search result) row at its slot; ``top`` is the 1x row a band canvas starts at."""
+    p = visuals.palette
+    radius = visuals.metrics.button_corner_radius*SS
+    x, y, w, h = 7, 35+index*30, width-14, 29
+    key = (row_kind, handle)
+    close = ("close", handle)
+    row_hover = hover in (key, close)
+    if row_kind == "window" and row_hover:
+        hits[close] = (width-34, y+3, 23, 23)
+    hits[key] = (x, y, w, h)
+    y -= top
+    if active or row_hover or handle == failed:
+        draw.rounded_rectangle((x*SS, y*SS, (x+w)*SS, (y+h)*SS), radius=radius,
+            fill=p.entry, outline=p.error if handle == failed else None, width=SS)
+    icon = icons.get(handle)
+    if icon is not None:
+        image.alpha_composite(_scaled(icon, 18*SS), (14*SS, (y+6)*SS))
+    if active:
+        draw.ellipse((8*SS, (y+13)*SS, 10*SS, (y+15)*SS), fill=p.accent)
+    label = card.fit_text(draw, title, (width-(78 if row_hover and row_kind == "window" else 56))*SS, card.role_font("small"))
+    draw.text((40*SS, (y+15)*SS), label, font=card.role_font("small"), fill=p.text, anchor="lm")
+    if close in hits:
+        cx, cy, cw, ch = hits[close]
+        cy -= top
+        if hover == close:
+            draw.rounded_rectangle((cx*SS, cy*SS, (cx+cw)*SS, (cy+ch)*SS), radius=radius, fill=p.card)
+        image.alpha_composite(make_glyph_icon("close", 10*SS, color=p.error if hover == close else p.muted),
+                              ((cx+6)*SS, (cy+6)*SS))
+
+
+# A row band is finished with this many 1x px of real neighbour pixels on each side and pasted
+# without them: the downscale (LANCZOS at 1/SS) reaches 3 px, so the pasted pixels match a full render.
+_BAND_MARGIN = 4
+
+
+def row_hover_patch(base: Any, size: tuple[int, int], visuals: Any, rows: list, icons: dict, *,
+                    hover: Any, failed: Any, row_kind: str, indexes: tuple[int, ...]) -> tuple[Any, dict]:
+    """The finished face ``base`` with only the rows at ``indexes`` redrawn for ``hover`` (row 20:
+    hovering windows repainted the whole face, 30 ms each). Returns the image and those rows' hits."""
+    from PIL import ImageDraw
+
+    width, height = size
+    key = (tuple(size), id(visuals))
+    surface = _SURFACES[key][1] if key in _SURFACES and _SURFACES[key][0] is visuals else card.surface_canvas(size, visuals)
+    out, hits = base.copy(), {}
+    spans: list[list[int]] = []
+    for index in sorted(set(indexes)):                                 # adjacent rows share one band
+        if spans and index == spans[-1][1] + 1:
+            spans[-1][1] = index
+        else:
+            spans.append([index, index])
+    for first, last in spans:
+        first_top, last_top = 35 + first*30, 35 + last*30
+        top, bottom = max(0, first_top - _BAND_MARGIN), min(height, last_top + 29 + _BAND_MARGIN)
+        band = surface.crop((0, top*SS, width*SS, bottom*SS))
+        draw = ImageDraw.Draw(band)
+        for other, (handle, title, active) in enumerate(rows):
+            other_top = 35 + other*30
+            if other_top + 29 >= top and other_top <= bottom:      # neighbours that reach the band
+                _draw_row(band, draw, visuals, width, other, handle, title, active, row_kind=row_kind,
+                          hover=hover, failed=failed, icons=icons,
+                          hits=hits if first <= other <= last else {}, top=top)
+        finished = card.finish(band)
+        inner_top, inner_bottom = first_top - 1, last_top + 30       # the rows and their 1 px gaps
+        out.paste(finished.crop((0, inner_top - top, width, inner_bottom - top)), (0, inner_top))
+    return out, hits
