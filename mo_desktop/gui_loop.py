@@ -145,12 +145,18 @@ class NativeGuiLoop:
                     heapq.heappop(self._deadlines)
                     due.append(token)
             ticked = False
-            for token in due:
+            for index, token in enumerate(due):
+                if self._stopped:
+                    # A stop that was due in the same batch leaves the rest for the next run():
+                    # they are off the heap already and would otherwise be lost silently.
+                    with self._lock:
+                        for rest in due[index:]:
+                            if rest in self._callbacks:
+                                heapq.heappush(self._deadlines, (now, rest))
+                    break
                 with self._lock:
                     callback = self._callbacks.pop(token, None)
                     self._frame_tokens.discard(token)
-                if self._stopped:
-                    break
                 if callback is not None:
                     try:
                         callback()
