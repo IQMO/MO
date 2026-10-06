@@ -151,6 +151,8 @@ class CubeMotionMixin:
         elif not should_yield and yielded:
             self.set_terminal_working(False)
             self.hold_actuation_yield("terminal", False)
+        elif should_yield:
+            self.set_terminal_working(True)       # takes the corner once Desktop is idle
         if label and not should_yield:
             self.show_bubble(label, seconds=1.25)
 
@@ -287,6 +289,8 @@ class CubeMotionMixin:
             return True
         if bool(getattr(self, "_launcher_active", False)):
             return bool(getattr(self, "_launcher_interacting", False))
+        if bool(getattr(self, "_visible", False)) and self._heartbeat_shown():
+            return True       # MO Terminal acts in another process; the heartbeat stays smooth
         if not bool(getattr(self, "_visible", False)) or bool(getattr(self, "_actuation_yield", False)):
             return False
         if any(

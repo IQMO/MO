@@ -111,6 +111,20 @@ def _subpixel(value: float) -> tuple[int, int]:
 # screen's edges in the corner they take.
 _WORKING_SCALE = 1.6
 _WORKING_MARGIN = 18
+# Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
+# _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
+_HEARTBEAT_SECONDS = 1.1
+_HEARTBEAT_SWELL = .07
+
+
+def _heartbeat(elapsed: float) -> float:
+    """0..1: a strong beat, a softer one 0.22 s later, then rest (one heart cycle)."""
+    phase = (max(0.0, elapsed) % _HEARTBEAT_SECONDS) / _HEARTBEAT_SECONDS
+
+    def bump(centre: float, width: float) -> float:
+        return math.exp(-((phase - centre) / width) ** 2)
+
+    return min(1.0, bump(.08, .055) + .62 * bump(.28, .06))
 
 class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     """A native sprite-cached cube driven by the resident's existing GUI clock."""
@@ -517,26 +531,55 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         come back to where they were (row 13, 2026-10-06)."""
         saved = getattr(self, "_terminal_working", None)
         if bool(on) == (saved is not None):
+            if on:
+                self._take_working_corner()          # Desktop may have become idle since
             return
         if on:
-            self._terminal_working = {"size": self._size, "home": getattr(self, "_home", None),
-                                      "thinking": bool(getattr(self, "_thinking", False)), "at": (self._x, self._y)}
-            self.set_size(round(self._size * _WORKING_SCALE))
-            corner = self._empty_corner()
-            if corner is not None:
-                if self._follow_enabled:
-                    self.set_home(corner)            # home holds it off the cursor's tail
-                else:
-                    self.summon_to(*corner, chase=False)
-            self.set_thinking(True)
+            self._terminal_working = {"since": time.perf_counter(), "moved": False}
+            self._take_working_corner()
+            self._show()
             return
         self._terminal_working = None
+        if not saved.get("moved"):
+            return
         self.set_size(saved["size"])
-        self.set_thinking(saved["thinking"])
+        here = (self._x - saved["corner"][0]) ** 2 + (self._y - saved["corner"][1]) ** 2
         if self._follow_enabled:
             self.set_home(saved["home"])
-        else:
+        elif here < 16:                              # never undo a move the operator made
             self.summon_to(*saved["at"], chase=False)
+
+    def _desktop_busy(self) -> bool:
+        """Desktop itself is in use: a docked face, a panel holding the cubes, the launcher,
+        expanded Focus, a Desktop turn or its own acting. MO Terminal's corner waits for that."""
+        focus = getattr(self, "_focus_controller", None)
+        holders = set(getattr(self, "_actuation_yield_holders", ()) or ()) - {"terminal"}
+        return bool(any(getattr(self, name, None) is not None for name in ("_composer_controller", "_dashboard_controller"))
+                    or (focus is not None and not getattr(focus, "_collapsed", True))
+                    or getattr(self, "_held", False) or getattr(self, "_launcher_active", False)
+                    or getattr(self, "_thinking", False) or holders)
+
+    def _take_working_corner(self) -> None:
+        working = getattr(self, "_terminal_working", None)
+        if working is None or working.get("moved") or self._desktop_busy():
+            return
+        corner = self._empty_corner()
+        if corner is None:
+            return
+        working.update(moved=True, size=self._size, home=getattr(self, "_home", None),
+                       at=(self._x, self._y), corner=corner)
+        self.set_size(round(self._size * _WORKING_SCALE))
+        if self._follow_enabled:
+            self.set_home(corner)                    # home holds it off the cursor's tail
+        else:
+            self.summon_to(*corner, chase=False)
+
+    def _heartbeat_shown(self) -> bool:
+        """The heartbeat shows while MO Terminal is the only one acting (never over Desktop's own)."""
+        if getattr(self, "_terminal_working", None) is None:
+            return False
+        holders = set(getattr(self, "_actuation_yield_holders", ()) or ())
+        return not (holders - {"terminal"})
 
     def _empty_corner(self) -> tuple[float, float] | None:
         """The centre for the cubes in the corner of their screen's work area that other windows
@@ -1013,7 +1056,15 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         phase = i * 0.62
         alpha = 1.0
         holds_still = self._emote_holds_still()
-        if getattr(self, "_actuation_yield", False):
+        if self._heartbeat_shown():
+            # MO Terminal is using the computer: one heart for all four cubes, a lub-dub of
+            # light with a slight outward swell, unlike Desktop's own acting wave or thinking.
+            beat = _heartbeat(now - float(self._terminal_working.get("since", now)))
+            center = self._size / 2.0
+            bright, alpha = .68 + .32 * beat, .86 + .14 * beat
+            cx = bx + (bx - center) * _HEARTBEAT_SWELL * beat
+            cy = by + (by - center) * _HEARTBEAT_SWELL * beat
+        elif getattr(self, "_actuation_yield", False):
             wave = .5+.5*math.sin(now*3-i*math.pi/2)
             bright, alpha = .72+.28*wave, .78+.22*wave
             cx, cy = bx, by-self._bob_amp*.25*wave

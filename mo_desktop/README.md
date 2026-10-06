@@ -233,9 +233,13 @@ stays out of captures. There is no separate computer-use overlay, and ordinary a
 paying or discarding unsaved work still does). If Windows cannot apply click-through
 and capture exclusion, the cube or panel hides as a fail-safe rather than intercepting
 input or appearing in captured pixels. While the bound MO Terminal uses the
-computer there is no overlay either: the cubes grow, glide to the corner of their
-screen that windows cover least and keep their working motion (yielding input and
-captures) until it is done, then return to their place and size. External
+computer there is no overlay either: the cubes beat like a heart (a lub-dub of
+light with a slight swell, distinct from thinking and from Desktop's own acting
+wave), grow, glide to the corner of their screen that windows cover least and stay
+there (yielding input and captures) until it is done, then return to their place
+and size. They take the corner only while Desktop itself is idle (no docked face,
+launcher, expanded Focus, Desktop turn or Desktop acting); otherwise they beat in
+place, and a cube you moved meanwhile stays where you put it. External
 automation that does not publish MO activity has no such signal.
 
 ### Settings
