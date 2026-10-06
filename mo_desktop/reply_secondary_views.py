@@ -14,7 +14,7 @@ _SS = card.SS
 
 
 # The docked Dashboard face keeps one height: the column beside it with Focus open, else this.
-_DASHBOARD_FACE_HEIGHT = 360
+from mo_desktop.dashboard_card import FACE_HEIGHT as _DASHBOARD_FACE_HEIGHT  # one owner: the card
 _DASHBOARD_MIN_HEIGHT = 200
 
 def _plain_card_row(img: Any, below: int, pad: int) -> Any:

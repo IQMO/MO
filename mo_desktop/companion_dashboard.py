@@ -473,197 +473,152 @@ class CompanionDashboardMixin:
             surface="desktop",
         )
 
-        def _metric_tile(metric: Any) -> dict[str, Any]:
-            item = metric if isinstance(metric, dict) else {}
-            tile = {
-                "value": str(item.get("value") if item.get("value") is not None else "—"),
-                "label": str(item.get("label") or "Not reported"),
-                "tone": str(item.get("tone") or "neutral"),
-            }
-            return tile
+        data, actions = self._dashboard_mini(snap, user_projection, operations_projection, everywhere, systemcare)
+        return data, actions
 
-        def _section_rows(
-            projection: dict[str, Any],
-            section_ids: tuple[str, ...] = (),
-            *,
-            one_per_section: bool = False,
-        ) -> list[dict[str, str]]:
-            sections = projection.get("sections") if isinstance(projection.get("sections"), list) else []
-            selected = []
-            if section_ids:
-                selected = [
-                    section
-                    for identifier in section_ids
-                    for section in sections
-                    if isinstance(section, dict) and section.get("id") == identifier
-                ]
-            if not selected and sections:
-                selected = [section for section in sections if isinstance(section, dict)]
-            rows: list[dict[str, str]] = []
-            used: set[tuple[str, str]] = set()
+    def _dashboard_mini(self, snap: dict[str, Any], user_projection: dict[str, Any],
+                        operations_projection: dict[str, Any], everywhere: dict[str, Any],
+                        systemcare: dict[str, Any]) -> tuple[dict, dict]:
+        """The mini Dashboard (row 19, approved v2): a glance that jumps into MO's main Dashboard
+        app, never a copy of it. Three views - Now, You, System - each with three figures and two
+        short lists from data the snapshot already holds; one fixed size, '+N' instead of growing."""
+        import os
 
-            def _append(section: dict[str, Any], raw_item: Any) -> None:
-                if not isinstance(raw_item, dict):
-                    return
-                key = (str(section.get("id") or ""), str(raw_item.get("id") or ""))
-                if key in used:
-                    return
-                used.add(key)
-                value = str(raw_item.get("value") or raw_item.get("detail") or "Not reported")
-                if key == ("communication", "gmail") and value == "Connected":
-                    value = str(raw_item.get("detail") or value)
-                rows.append({
-                    "label": str(raw_item.get("label") or section.get("title") or "Status"),
-                    "value": value,
-                    "tone": str(raw_item.get("tone") or "neutral"),
-                })
+        def metric(projection: dict[str, Any], identifier: str) -> dict[str, Any]:
+            for item in projection.get("metrics") or []:
+                if isinstance(item, dict) and item.get("id") == identifier:
+                    return item
+            return {}
 
-            if one_per_section:
-                for section in selected:
-                    items = section.get("items") if isinstance(section.get("items"), list) else []
-                    if items:
-                        _append(section, items[0])
-                    if len(rows) == 3:
-                        return rows
-            for section in selected:
-                for raw_item in section.get("items") or []:
-                    _append(section, raw_item)
-                    if len(rows) == 3:
-                        return rows
-            return rows
+        def item(projection: dict[str, Any], section_id: str, item_id: str) -> dict[str, Any]:
+            for section in projection.get("sections") or []:
+                if isinstance(section, dict) and section.get("id") == section_id:
+                    for entry in section.get("items") or []:
+                        if isinstance(entry, dict) and entry.get("id") == item_id:
+                            return entry
+            return {}
 
-        action_by_id = {
-            str(action.get("id") or ""): dict(action)
-            for action in list(user_projection.get("actions") or [])
-            if isinstance(action, dict) and action.get("id")
-        }
+        def tile(value: Any, label: str, tone: str = "neutral") -> dict[str, str]:
+            text = str(value if value not in (None, "") else "—")
+            return {"value": text[:10], "label": label, "tone": tone}
 
-        def _view(
-            projection: dict[str, Any],
-            *,
-            section_ids: tuple[str, ...] = (),
-            metric_ids: tuple[str, ...] = (),
-            action_ids: tuple[str, ...] = (),
-            one_row_per_section: bool = False,
-        ) -> dict[str, Any]:
-            metrics = projection.get("metrics") if isinstance(projection.get("metrics"), list) else []
-            selected_metrics = [
-                metric for identifier in metric_ids
-                for metric in metrics
-                if isinstance(metric, dict) and metric.get("id") == identifier
-            ] if metric_ids else [metric for metric in metrics if isinstance(metric, dict)]
-            # A view is not a four-slot grid. Never fill it with unrelated counts.
-            selected_metrics = [metric for metric in selected_metrics
-                                if str(metric.get("value", "")).lower()
-                                not in {"", "0", "0/0", "idle", "none"}]
-            status_payload = projection.get("status") if isinstance(projection.get("status"), dict) else {}
-            return {
-                "status": str(status_payload.get("label") or "Dashboard"),
-                "tone": str(status_payload.get("tone") or "neutral"),
-                "tiles": [_metric_tile(metric) for metric in selected_metrics[:4]],
-                "rows": _section_rows(
-                    projection,
-                    section_ids,
-                    one_per_section=one_row_per_section,
-                ),
-                "actions": [
-                    action_by_id[action_id]
-                    for action_id in action_ids
-                    if action_id in action_by_id
-                ][:4],
-            }
+        def tone_of(entry: dict[str, Any]) -> str:
+            return str(entry.get("tone") or "neutral")
 
-        apps = list(snap.get("desktop_apps") or [])[:4]
-        data = {"comms": [{"label": "Outlook"}, {"label": "Gmail"}, {"label": "Telegram"}],
-                "apps": apps,
-                "apps_total": len(snap.get("desktop_apps") or []),
-                "systemcare": systemcare,
-                "views": {
-                    "overview": _view(
-                        user_projection,
-                        section_ids=("work", "personal", "surfaces"),
-                        metric_ids=("open_work", "learning"),
-                        action_ids=("dashboard.open.work", "dashboard.open.projects", "dashboard.open.learning", "dashboard.open.checks"),
-                        one_row_per_section=True,
-                    ),
-                    "work": _view(
-                        user_projection,
-                        section_ids=("work",),
-                        metric_ids=("open_work", "work_state"),
-                        action_ids=("dashboard.open.work", "dashboard.open.goals", "dashboard.open.schedules", "dashboard.open.checks"),
-                    ),
-                    "personal": _view(
-                        user_projection,
-                        section_ids=("communication", "personal"),
-                        metric_ids=("profile", "learned_behavior", "learning"),
-                        action_ids=("dashboard.open.profile", "dashboard.open.learning", "dashboard.open.skills"),
-                    ),
-                    "systems": _view(
-                        operations_projection,
-                        section_ids=(
-                            "runtime",
-                            "graph",
-                            "systemcare" if systemcare.get("available") else "evidence",
-                        ),
-                        action_ids=(
-                            "dashboard.open.files",
-                            "dashboard.open.connections",
-                            "dashboard.open.servers",
-                            "dashboard.open.map",
-                        ),
-                        one_row_per_section=True,
-                    ),
-                },
-                "terminal": {
-                    "state": str(everywhere.get("state") or "loading"),
-                    "detail": str(everywhere.get("detail") or "Checking live terminals"),
-                }}
-        glance = snap.get("_mail_glance") if isinstance(snap.get("_mail_glance"), dict) else {}
-        recent = []
-        gmail = glance.get("gmail") if isinstance(glance.get("gmail"), dict) else {}
-        for message in list(gmail.get("messages") or [])[:2]:
-            if isinstance(message, dict):
-                recent.append({"label": "Gmail · Recent",
-                               "value": str(message.get("title") or "(no subject)")[:140],
-                               "tone": "neutral"})
-        if recent:
-            overview = data["views"]["overview"]
-            existing = overview["rows"]
-            overview["rows"] = (existing[:1] + recent + existing[1:])[:3]
-        actions = {
+        actions: dict[str, Any] = {
+            "open": self.open_dashboard,
+            "terminal": self._dashboard_switch_terminal,
             "comm:0": lambda: self._submit_text_request("List my Outlook inbox", source="dashboard", hide_input=True),
             "comm:1": lambda: self._submit_text_request("List my Gmail inbox", source="dashboard", hide_input=True),
-            "comm:2": lambda: self._open_dashboard_url("https://web.telegram.org/", "Telegram"),
-            "terminal": self._dashboard_switch_terminal,
             "systemcare:scan": self._dashboard_systemcare_scan,
             "systemcare:open": self._display_systemcare_panel,
             "systemcare:cancel": self._dashboard_systemcare_cancel,
+            "learning": lambda: self._dashboard_run_action({"kind": "command", "target": "/learning pending"}),
+            "work": lambda: self._dashboard_run_action({"kind": "command", "target": "/now"}),
+            "gmail:reconnect": getattr(self, "_reconnect_gmail", lambda: None),
         }
-        for index in range(4):
-            actions[f"action:{index}"] = (
-                lambda selected=index: self._dashboard_dispatch_owner_action(selected)
-            )
+
+        # Now: open work, live terminals, mail; what is running; what needs the operator.
+        terminals: list[dict[str, str]] = []
+        try:
+            from core.runtime.instance import recent_instance_snapshots
+
+            for entry in recent_instance_snapshots(self._config(), current_pid=os.getpid(), max_age_seconds=180.0, limit=16):
+                if not entry.get("pid_alive") or str(entry.get("surface") or "").lower() != "terminal":
+                    continue
+                turn = entry.get("turn") if isinstance(entry.get("turn"), dict) else {}
+                busy = bool(turn.get("busy"))
+                request = " ".join(str(turn.get("request") or "").split())
+                terminals.append({"name": os.path.basename(str(entry.get("cwd") or "").rstrip("\\/")) or "MO",
+                                  "detail": ("working · " + request) if busy and request else ("working" if busy else "idle"),
+                                  "tone": "accent" if busy else "muted", "hit": "terminal"})
+        except Exception:
+            terminals = []
+        mail_status: dict[str, Any] = {}
+        try:
+            from core.mail.service import MailService
+
+            mail_status = MailService(self._config()).status()
+        except Exception:
+            mail_status = {}
+        mail_state = str(mail_status.get("state") or "")
+        unread = mail_status.get("unread")
+        needs: list[dict[str, str]] = []
+        if mail_state == "reconnect_required":
+            needs.append({"name": "Gmail", "detail": "signed out · click to reconnect", "tone": "attention",
+                          "hit": "gmail:reconnect"})
+        learning = metric(user_projection, "learning")
+        pending = str(learning.get("detail") or learning.get("value") or "")
+        if "review" in pending.lower() or tone_of(learning) == "attention":
+            needs.append({"name": "Learning", "detail": pending or "reviews waiting", "tone": "attention", "hit": "learning"})
+        open_work = metric(user_projection, "open_work")
+        now = {
+            "tiles": [tile(open_work.get("value"), "open tasks", tone_of(open_work)),
+                      tile(len(terminals) or "0", "terminals", "accent" if terminals else "neutral"),
+                      tile(unread if isinstance(unread, int) else "—", "unread mail",
+                           "attention" if mail_state == "reconnect_required" else "neutral")],
+            "sections": [{"title": "Running now", "rows": terminals[:2],
+                          "more": f"+{len(terminals) - 2}" if len(terminals) > 2 else ""},
+                         {"title": "Needs you", "rows": needs[:2] or [
+                             {"name": "Work", "detail": str(item(user_projection, "work", "current").get("value") or "nothing waiting"),
+                              "tone": "muted", "hit": "work"}]}],
+        }
+
+        # You: what MO knows and has learned about the operator; mail; their own apps.
+        apps = list(snap.get("desktop_apps") or [])
         for app in apps:
-            actions["app:" + app["id"]] = lambda app_id=app["id"]: self.open_private_desktop_app(app_id)
+            actions["app:" + str(app.get("id"))] = lambda app_id=app.get("id"): self.open_private_desktop_app(app_id)
+        profile = metric(user_projection, "profile")
+        behavior = metric(user_projection, "learned_behavior")
+        mail_rows = [{"name": "Outlook", "detail": "open inbox", "tone": "accent", "hit": "comm:0"},
+                     {"name": "Gmail",
+                      "detail": ("signed out" if mail_state == "reconnect_required"
+                                 else f"{unread} unread" if isinstance(unread, int) else (mail_state or "not connected")),
+                      "tone": "attention" if mail_state == "reconnect_required" else "accent",
+                      "hit": "gmail:reconnect" if mail_state == "reconnect_required" else "comm:1"}]
+        you = {
+            "tiles": [tile(profile.get("value"), "profile files", tone_of(profile)),
+                      tile(behavior.get("value"), "learned skills", tone_of(behavior)),
+                      tile(learning.get("value"), "learning", tone_of(learning))],
+            "sections": [{"title": "Mail", "rows": mail_rows},
+                         {"title": "Your apps",
+                          "chips": [{"label": str(app.get("label") or app.get("id")), "hit": "app:" + str(app.get("id"))}
+                                    for app in apps[:3]],
+                          "more": f"+{len(apps) - 3}" if len(apps) > 3 else ""}],
+        }
+
+        # System: where MO runs, the machine, the project map.
+        host_state = str(everywhere.get("state") or "loading")
+        host = {"following": "Online", "available": "Online", "choose": "Online", "offline": "Offline",
+                "none": "None"}.get(host_state, "…")
+        surfaces = metric(operations_projection, "surfaces")
+        provider = item(operations_projection, "runtime", "provider")
+        session = item(operations_projection, "runtime", "session")
+        graph = item(operations_projection, "graph", "structure")
+        care = str(systemcare.get("summary") or systemcare.get("state") or ("ready" if systemcare.get("available") else "—"))
+        system = {
+            "tiles": [tile(host, "MO host", "good" if host == "Online" else "attention" if host == "Offline" else "neutral"),
+                      tile(surfaces.get("value"), "surfaces", tone_of(surfaces)),
+                      tile(care.capitalize(), "PC health", "good" if systemcare.get("available") else "neutral")],
+            "sections": [{"title": "Running on",
+                          "rows": [{"name": "Model", "detail": str(provider.get("value") or "—"), "tone": tone_of(provider)},
+                                   {"name": "Session", "detail": str(session.get("value") or "—"), "tone": tone_of(session)}]},
+                         {"title": "Project map",
+                          "rows": [{"name": "Map", "detail": str(graph.get("value") or "not built"), "tone": tone_of(graph)}]}],
+            "chip": ({"label": "Cancel scan" if systemcare.get("active") else "Scan PC",
+                      "hit": "systemcare:cancel" if systemcare.get("active") else "systemcare:scan"}
+                     if systemcare.get("available") else None),
+        }
+        data = {"views": {"overview": now, "personal": you, "systems": system},
+                "status": str((user_projection.get("status") or {}).get("label") or "Dashboard")}
         return data, actions
 
-    def _dashboard_dispatch_owner_action(self, index: int) -> None:
-        """Delegate one visible Dashboard control without owning its mutation."""
-        bubble = self._dashboard_face()
-        if bubble is None:
-            return
-        data = getattr(bubble, "_dashboard_data", None)
-        view = str(getattr(bubble, "_dashboard_view", "overview") or "overview")
-        views = data.get("views") if isinstance(data, dict) and isinstance(data.get("views"), dict) else {}
-        payload = views.get(view) if isinstance(views.get(view), dict) else {}
-        actions = payload.get("actions") if isinstance(payload.get("actions"), list) else []
-        if not 0 <= int(index) < len(actions):
-            return
-        action = actions[int(index)] if isinstance(actions[int(index)], dict) else {}
+    def _dashboard_run_action(self, action: dict[str, Any]) -> None:
+        """Run one Dashboard action descriptor through its existing owner (a command or request
+        submitted as a turn, or the files surface) without owning its mutation."""
         kind = str(action.get("kind") or "")
         target = str(action.get("target") or "").strip()
-        submits_text = (kind == "command" and target.startswith("/")) or (kind == "request" and bool(target))
-        if submits_text:
+        if (kind == "command" and target.startswith("/")) or (kind == "request" and target):
             self._submit_text_request(target, source="dashboard", hide_input=True)
         elif kind == "surface" and target == "files":
             self._show_files_panel()

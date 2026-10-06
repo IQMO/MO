@@ -2172,7 +2172,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     pass
         elif key.startswith("dash:view:"):
             selected = key[len("dash:view:"):]
-            if selected in {"overview", "work", "personal", "systems"}:
+            if selected in {"overview", "personal", "systems"}:
                 self._dashboard_view = selected
                 self._dashboard_data = dict(getattr(self, "_dashboard_data", None) or {})
                 self._dashboard_data["view"] = selected

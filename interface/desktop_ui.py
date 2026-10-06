@@ -20,6 +20,8 @@ DESKTOP_WINDOW_EFFECT_TYPES = ("none", "shadow", "glow", "hybrid")
 # structure rather than a panel/control skin role. The focused source guard
 # keys every numeric ``radius=`` expression to this documented owner list.
 DESKTOP_STRUCTURAL_RADIUS_WHITELIST = MappingProxyType({
+    ("mo_desktop/dashboard_card.py", "render_dashboard_card", "12 * ss"):
+        "mini Dashboard chips (apps, Scan PC) are pills",
     ("mo_desktop/cube.py", "_bar_sprite", "h // 2"):
         "the writer character's lines of text are pill-shaped",
     ("mo_desktop/cube_panel.py", "_render_glance_pill", "height // 2"):

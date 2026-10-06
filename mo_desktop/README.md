@@ -651,33 +651,23 @@ before) and they settle into a slow ripple in every pause; when MO has heard you
 once. While MO speaks, the level of the audio it is actually playing lifts the cubes and
 opens the cluster a little with each syllable, and they settle between words.
 
-Right-clicking the cube opens the existing cube-attached panel as a fixed
-Home/Work/You/Systems Dashboard. It applies the active Desktop skin and keeps
-the MO Cube mark visible in every view. Home and You adapt the canonical user
-projection; Systems adapts its operations projection; Work focuses the same
-taskboard-owned evidence without becoming a taskboard owner. Each view exposes
-up to four Cube-styled delegated controls for the existing work, goal, schedule,
-profile, learning, skills, project, Files, connection, server, and map owners.
-Home's **Project checks** opens the existing command's evidence detail; Work's
-LSP control toggles only the active project (or opens setup guidance when no
-server is configured). Settings persist through the normal private preferences
-owner. No persistent activity badge or additional Dashboard panel is introduced.
-Commands and natural management requests re-enter the existing request path;
-Files opens its established panel. The Dashboard does not implement CRUD or
-confirmation itself, so destructive work still requires the selected owner's
-fresh evidence and explicit confirmation.
-
-Metrics are compact inline values, not a padded grid of zero-count boxes. All
-four tabs share the height required by their current content, keeping the window
-and terminal-context row stable when switching tabs. Home also exposes up to four
-admitted profile-owned Desktop app shortcuts; the cube launcher retains the complete app list.
+Right-clicking the cube opens the mini Dashboard on the cube's docked face: a glance
+that jumps into MO's main Dashboard app ("Open Dashboard ↗"), never a copy of it. It
+applies the active Desktop skin, keeps the MO Cube mark visible and has three views on
+one fixed-size card. **Now**: open tasks, live MO terminals and unread mail as figures,
+then the terminals running now and what needs you (a signed-out Gmail, learning reviews).
+**You**: profile files, learned skills and learning as figures, then mail and your own
+Desktop apps. **System**: the MO host, surfaces and PC health, then where MO is running
+(model, session) and the project map, with Scan PC when SystemCare is available. Lists
+show "+N" instead of growing, and figures the snapshot does not know show a dash. Every
+row and chip re-enters an existing owner (the terminal switch, the inbox request, the
+learning or work command, Gmail reconnect, SystemCare, the app itself); the Dashboard
+implements no CRUD or confirmation of its own, and no persistent badge or extra panel.
 
 The gesture paints cached bounded data immediately, then performs at most one
-background refresh while the Dashboard remains open. That refresh may read up
-to two recent Gmail subjects for Home through the existing mail owner, with no
-model call or persistent copy. Home keeps its current-work row; You shows the
-Gmail unread count. The Outlook and Gmail quick links submit the corresponding
-inbox request to Agent chat without requiring typed input. The compact card
+background refresh while the Dashboard remains open, with no model call or
+persistent copy. The Outlook and Gmail rows submit the corresponding inbox request
+to Agent chat without requiring typed input. The compact card
 starts no dashboard timer, persistence store, or additional panel. The Dashboard hosts no profile editor —
 personalization stays with the existing terminal `/profile` command — and it
 does not create a raw memory, learning, prompt, rule, or credential editor.
