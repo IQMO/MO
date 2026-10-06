@@ -520,6 +520,12 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         surface = getattr(self, "_ulw", None)
         self._activity_cube_visible = bool(surface and surface.set_click_through(bool(on))
                                            and surface.exclude_from_capture(bool(on)))
+        label = getattr(self, "_label_win", None)     # always click-through; out of captures meanwhile
+        if label is not None:
+            try:
+                label.exclude_from_capture(bool(on))
+            except Exception:
+                pass
         if on and not self._activity_cube_visible:
             self._hide()
         else:
@@ -575,11 +581,11 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self.summon_to(*corner, chase=False)
 
     def _heartbeat_shown(self) -> bool:
-        """The heartbeat shows while MO Terminal is the only one acting (never over Desktop's own)."""
+        """The heartbeat shows while MO Terminal acts and Desktop itself is idle: Desktop's own
+        states (acting, thinking, listening, speaking, a docked face) always show instead."""
         if getattr(self, "_terminal_working", None) is None:
             return False
-        holders = set(getattr(self, "_actuation_yield_holders", ()) or ())
-        return not (holders - {"terminal"})
+        return not (self._desktop_busy() or getattr(self, "_listening", False) or getattr(self, "_speaking", False))
 
     def _empty_corner(self) -> tuple[float, float] | None:
         """The centre for the cubes in the corner of their screen's work area that other windows

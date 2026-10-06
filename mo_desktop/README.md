@@ -232,14 +232,16 @@ screen captures. The panel stays visible too: it lets MO's clicks through and
 stays out of captures. There is no separate computer-use overlay, and ordinary actions ask for no approval (deleting, sending,
 paying or discarding unsaved work still does). If Windows cannot apply click-through
 and capture exclusion, the cube or panel hides as a fail-safe rather than intercepting
-input or appearing in captured pixels. While the bound MO Terminal uses the
-computer there is no overlay either: the cubes beat like a heart (a lub-dub of
-light with a slight swell, distinct from thinking and from Desktop's own acting
-wave), grow, glide to the corner of their screen that windows cover least and stay
-there (yielding input and captures) until it is done, then return to their place
-and size. They take the corner only while Desktop itself is idle (no docked face,
-launcher, expanded Focus, Desktop turn or Desktop acting); otherwise they beat in
-place, and a cube you moved meanwhile stays where you put it. External
+input or appearing in captured pixels. While any local MO Terminal uses the
+computer there is no overlay either: the cubes grow, glide to the corner of their
+screen that windows cover least, beat like a heart (a lub-dub of light with a
+slight swell, distinct from thinking and from Desktop's own acting wave) and carry
+the label "MO Terminal is using your computer · Esc stops it"; cubes and label let
+input through and stay out of captures. When it is done they return to their place
+and size. Desktop's own use comes first: with a docked face, the launcher, expanded
+Focus, a Desktop turn, listening or speaking, the cubes show Desktop's own state in
+place and take the corner, beat and label once Desktop is idle; a cube you moved
+meanwhile stays where you put it. External
 automation that does not publish MO activity has no such signal.
 
 ### Settings
@@ -666,7 +668,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | Mouse wheel over cube | Adjust Windows master volume |
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |
 | **Ctrl+Shift+Alt+Z** (or the Clipboard app) | Open the clipboard history in the one panel: newest first, text, images and file lists; click a row to copy it again, ask MO about it, remove it, or Clear all. Each copy is read a moment later, once per burst, so the app that copied and a paste right after it go first. Kept in memory only, never on disk; a copy an app marks as not for clipboard history (password managers do) is never recorded, and one that looks like a secret is masked and never offered to MO. Windows' own Win+V is untouched |
-| **Esc** while MO acts on the computer | Stop it: a Desktop turn gets Panic Stop; the bound MO Terminal gets its own Esc (the typed stop control). An Esc MO itself presses while acting never stops anything |
+| **Esc** while MO acts on the computer | Stop it: a Desktop turn gets Panic Stop; a local MO Terminal using the computer gets its own Esc (the typed stop control). An Esc MO itself presses while acting, or one pressed in MO Desktop's own window (closing the composer), never stops anything |
 | Drop a file on cube | Attach locally; MO reads it and answers in the one panel. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
 
 Screen selections are saved under the active private profile's ordinary

@@ -101,6 +101,25 @@ def _bound_terminal_computer_activity(
     return "", False
 
 
+def _other_terminal_computer_use(snapshots: list[Any], instance_id: str, *,
+                                 now: float | None = None) -> dict[str, Any] | None:
+    """Any other local MO Terminal using this computer right now (one machine, one pointer)."""
+    current = time.time() if now is None else float(now)
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict) or str(snapshot.get("instance_id") or "") == str(instance_id or ""):
+            continue
+        if str(snapshot.get("surface") or "") != "terminal":
+            continue
+        activity = snapshot.get("computer_activity")
+        if (isinstance(activity, dict) and activity.get("active") and str(activity.get("tool") or "") == "computer_act"
+                and current - float(activity.get("updated_at") or 0.0) <= _COMPUTER_ACTIVITY_ACTIVE_TTL_SECONDS):
+            return snapshot
+    return None
+
+
+TERMINAL_WORKING_LABEL = "MO Terminal is using your computer · Esc stops it"
+
+
 class CubeMotionMixin:
     """Frame and movement behavior mixed into the concrete Desktop cube."""
 
@@ -125,21 +144,23 @@ class CubeMotionMixin:
             from core.runtime.instance import ENV_MO_INSTANCE_ID, recent_instance_snapshots
 
             instance_id = str(os.environ.get(ENV_MO_INSTANCE_ID) or "").strip()
+            snapshots = recent_instance_snapshots(
+                current_pid=os.getpid(),
+                max_age_seconds=_COMPUTER_ACTIVITY_ACTIVE_TTL_SECONDS,
+                limit=32,
+            )
+            acting = None
             if instance_id:
-                snapshots = recent_instance_snapshots(
-                    current_pid=os.getpid(),
-                    max_age_seconds=_COMPUTER_ACTIVITY_ACTIVE_TTL_SECONDS,
-                    limit=32,
-                )
-                label, should_yield = _bound_terminal_computer_activity(
-                    snapshots,
-                    instance_id,
-                )
-                if should_yield:   # who to stop when Esc is pressed (row 45)
-                    snapshot = next((row for row in snapshots if isinstance(row, dict)
-                                     and str(row.get("instance_id") or "") == instance_id), {})
-                    self._working_terminal = {"instance_id": instance_id, "pid": int(snapshot.get("pid") or 0),
-                                              "cwd": str(snapshot.get("cwd") or "")}
+                label, should_yield = _bound_terminal_computer_activity(snapshots, instance_id)
+                if should_yield:
+                    acting = next((row for row in snapshots if isinstance(row, dict)
+                                   and str(row.get("instance_id") or "") == instance_id), {})
+            if not should_yield:
+                acting = _other_terminal_computer_use(snapshots, instance_id)
+                should_yield = acting is not None
+            if should_yield:   # who to stop when Esc is pressed (row 45)
+                self._working_terminal = {"instance_id": str(acting.get("instance_id") or instance_id),
+                                          "pid": int(acting.get("pid") or 0), "cwd": str(acting.get("cwd") or "")}
         except Exception:
             label = ""
             should_yield = False
@@ -153,8 +174,24 @@ class CubeMotionMixin:
             self.hold_actuation_yield("terminal", False)
         elif should_yield:
             self.set_terminal_working(True)       # takes the corner once Desktop is idle
-        if label and not should_yield:
-            self.show_bubble(label, seconds=1.25)
+        if should_yield:
+            self._show_terminal_working_label(current)
+        else:
+            if getattr(self, "_label_value", "") == TERMINAL_WORKING_LABEL:
+                self._hide_label()
+            if label:
+                self.show_bubble(label, seconds=1.25)
+
+    def _show_terminal_working_label(self, current: float) -> None:
+        """Say what the working cubes mean and how to stop them, while Desktop itself is idle
+        (Desktop's own labels and panels own the space otherwise)."""
+        shown = getattr(self, "_heartbeat_shown", None)
+        if not callable(shown) or not shown():
+            return
+        if getattr(self, "_label_value", "") == TERMINAL_WORKING_LABEL and getattr(self, "_label_kind", "") == "bubble":
+            self._label_until = current + 2.0     # already up: keep it, no re-render
+            return
+        self.show_bubble(TERMINAL_WORKING_LABEL, seconds=2.0)
 
     def tick(self, now: float | None = None) -> None:
         current = time.perf_counter() if now is None else float(now)
@@ -178,7 +215,12 @@ class CubeMotionMixin:
         )
         self._last_tick_at = current
         self._expire_app_pulse(current)
-        if bool(getattr(self, "_actuation_yield", False)):
+        terminal_only = (getattr(self, "_terminal_working", None) is not None
+                         and not set(getattr(self, "_actuation_yield_holders", ()) or ()) - {"terminal"})
+        if bool(getattr(self, "_actuation_yield", False)) and not (
+                terminal_only and getattr(self, "_activity_cube_visible", False)):
+            # Desktop's own acting holds the cubes still; for MO Terminal (another process) the
+            # click-through, capture-excluded cubes keep moving: the glide to the working corner.
             if getattr(self, "_activity_cube_visible", False):
                 self._show()
                 self._render(current)

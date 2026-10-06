@@ -287,6 +287,23 @@ def terminal_workspace_request(text: str) -> tuple[int, str] | None:
         return None
     return panes, "host" if _HOST_WORD_RE.search(value) else "local"
 
+
+def _foreground_is_this_process() -> bool:
+    """Whether the window with keyboard focus belongs to this MO Desktop process."""
+    import ctypes
+    import os
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return False
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value == os.getpid()
+
+
 class CompanionSurface(
     CompanionDashboardMixin, CompanionSessionMixin, CompanionVoiceMixin
 ):
@@ -5747,8 +5764,8 @@ class CompanionSurface(
         try:
             from core.desktop.runtime import native_input_held
 
-            if native_input_held():
-                return
+            if native_input_held() or _foreground_is_this_process():
+                return      # MO's own Esc, or an Esc for MO Desktop's own window (closing the composer)
         except Exception:
             return
         if desktop:
