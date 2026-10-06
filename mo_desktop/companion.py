@@ -1217,7 +1217,9 @@ class CompanionSurface(
         """The event-driven clipboard history (memory only); 0 items turns it off."""
         from mo_desktop.clipboard import ClipboardHistory
 
-        self._clipboard = ClipboardHistory(limit=limit, on_change=self._on_clipboard_changed)
+        gui = getattr(self, "_gui", None)
+        self._clipboard = ClipboardHistory(limit=limit, on_change=self._on_clipboard_changed,
+                                           schedule=getattr(gui, "schedule", None))
         if limit and not self._clipboard.start():
             log_event("Clipboard history listener unavailable", config=getattr(self._agent, "config", None))
 

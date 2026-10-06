@@ -1780,6 +1780,13 @@ internal sealed partial class ShellSurface : Control
         try
         {
             var text = Clipboard.GetText(TextDataFormat.UnicodeText);
+            // A clipboard history (Windows', MO Desktop's) reads the clipboard just after a copy;
+            // while it holds it, the read comes back empty although text is there. Retry briefly.
+            for (var attempt = 0; text.Length == 0 && attempt < 6 && IsClipboardFormatAvailable(CfUnicodeText); attempt++)
+            {
+                Thread.Sleep(25);
+                text = Clipboard.GetText(TextDataFormat.UnicodeText);
+            }
             if (text.Length == 0) return;
             // Keep pasted newlines and control characters out of the key stream.
             // The canonical TUI owns normalization, limits and the unsent holder.
@@ -2323,6 +2330,12 @@ internal sealed partial class ShellSurface : Control
 
     [DllImport("user32.dll")]
     private static extern nint SendMessage(nint handle, uint message, nint wParam, nint lParam);
+
+    private const uint CfUnicodeText = 13;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsClipboardFormatAvailable(uint format);
 
     private static Color Pick(Color value, Color fallback) => value.IsEmpty ? fallback : value;
 

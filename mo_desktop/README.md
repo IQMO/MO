@@ -650,7 +650,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | Double-click cube | Expand the four grouped MO app tiles; click one to open or focus it |
 | Mouse wheel over cube | Adjust Windows master volume |
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |
-| **Ctrl+Shift+Alt+Z** (or the Clipboard app) | Open the clipboard history in the one panel: newest first, text, images and file lists; click a row to copy it again, ask MO about it, remove it, or Clear all. Kept in memory only, never on disk; a copy an app marks as not for clipboard history (password managers do) is never recorded, and one that looks like a secret is masked and never offered to MO. Windows' own Win+V is untouched |
+| **Ctrl+Shift+Alt+Z** (or the Clipboard app) | Open the clipboard history in the one panel: newest first, text, images and file lists; click a row to copy it again, ask MO about it, remove it, or Clear all. Each copy is read a moment later, once per burst, so the app that copied and a paste right after it go first. Kept in memory only, never on disk; a copy an app marks as not for clipboard history (password managers do) is never recorded, and one that looks like a secret is masked and never offered to MO. Windows' own Win+V is untouched |
 | Drop a file on cube | Attach locally; MO reads it and answers in the one panel. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
 
 Screen selections are saved under the active private profile's ordinary

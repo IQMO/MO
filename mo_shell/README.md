@@ -156,7 +156,8 @@ without changing its painted width. MO Shell is also an ordinary
 **MO Shell** action in the existing MO Desktop tray; the tray does not become
 another Shell process, renderer, or session owner.
 
-`Ctrl+V` pastes Unicode clipboard text through the existing terminal input route
+`Ctrl+V` pastes Unicode clipboard text (retrying briefly while a clipboard history holds
+the clipboard just after a copy) through the existing terminal input route
 as one bracketed paste, so multiline or large text remains under the canonical
 TUI's unsent composer/holder behavior. Empty or unavailable clipboard text does
 not send a raw control byte. `Ctrl+C` copies a selected terminal range and

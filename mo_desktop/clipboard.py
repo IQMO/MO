@@ -26,6 +26,9 @@ MAX_LIMIT = 200
 _MAX_TEXT_CHARS = 100_000
 _MAX_IMAGE_PIXELS = 40_000_000
 _THUMB_SIZE = (40, 26)
+# Read a moment after Windows reports a change, once per burst: the app that just copied, and a
+# paste right after it, get the clipboard first (an immediate read made MO Shell's Ctrl+V miss).
+CAPTURE_DELAY_MS = 150
 # Formats an app sets to keep its copy out of clipboard histories (Windows convention).
 _EXCLUDE_FORMATS = ("ExcludeClipboardContentFromMonitorProcessing", "Clipboard Viewer Ignore")
 _HISTORY_FORMAT = "CanIncludeInClipboardHistory"
@@ -160,8 +163,11 @@ class ClipboardHistory:
 
     def __init__(self, *, limit: int = DEFAULT_LIMIT, on_change: Callable[[], None] | None = None,
                  reader: Callable[[], ClipItem | None] = read_clipboard,
-                 writer: Callable[[ClipItem], bool] = write_clipboard) -> None:
+                 writer: Callable[[ClipItem], bool] = write_clipboard,
+                 schedule: Callable[[float, Callable[[], None]], Any] | None = None) -> None:
         self._items: list[ClipItem] = []
+        self._schedule = schedule
+        self._capture_pending = False
         self._lock = threading.Lock()
         self.limit = max(0, min(MAX_LIMIT, int(limit)))
         self._on_change = on_change
@@ -183,7 +189,7 @@ class ClipboardHistory:
 
         def wndproc(hwnd: int, message: int, wparam: int, lparam: int) -> int:
             if message == WM_CLIPBOARDUPDATE:
-                self.capture()
+                self._on_update()
                 return 0
             return win32gui.DefWindowProc(hwnd, message, wparam, lparam)
 
@@ -229,6 +235,24 @@ class ClipboardHistory:
         with self._lock:
             del self._items[self.limit:]
         return self.start()
+
+    def _on_update(self) -> None:
+        """Windows reported a change: read it CAPTURE_DELAY_MS later, once for a burst of changes."""
+        if self._schedule is None:
+            self.capture()
+            return
+        if self._capture_pending:
+            return
+        self._capture_pending = True
+
+        def run() -> None:
+            self._capture_pending = False
+            self.capture()
+
+        try:
+            self._schedule(CAPTURE_DELAY_MS, run)
+        except Exception:
+            run()
 
     def capture(self) -> ClipItem | None:
         try:
