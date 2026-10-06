@@ -155,7 +155,8 @@ class FocusBar:
         self._cube_center = (self.cube._x, self.cube._y)
         bx, by = self.cube._bases[3]
         edge = self.cube._cube_edge
-        self._face_offset = (bx-self.cube._size/2-edge/2, by-self.cube._size/2-edge/2)
+        spread = float(getattr(self.cube, "DOCK_SPREAD", 0) or 0)   # room for the wiring (row 42)
+        self._face_offset = (bx-self.cube._size/2-edge/2+spread, by-self.cube._size/2-edge/2+spread)
         self._rows = switchable_windows(limit=WINDOW_LIMIT)
         self._geometry = None
         self._fit_visible_rows()
@@ -555,6 +556,9 @@ class FocusBar:
         return None
 
     def _invoke(self, key: Any) -> None:
+        note = getattr(getattr(self, "cube", None), "note_dock_focus", None)
+        if callable(note) and not getattr(self, "_collapsed", True):
+            note("focus")
         if isinstance(key, tuple):
             if key[0] == "window":
                 self._switch(key[1])
@@ -751,8 +755,12 @@ class FocusBar:
             self.cube.set_home(None)
             self.cube._fade = self.cube._fade_target = 0.0
             bx, by = self.cube._bases[3]
-            self._face_offset = (bx-self.cube._size/2-self.cube._cube_edge/2,
-                                 by-self.cube._size/2-self.cube._cube_edge/2)
+            spread = float(getattr(self.cube, "DOCK_SPREAD", 0) or 0)
+            self._face_offset = (bx-self.cube._size/2-self.cube._cube_edge/2+spread,
+                                 by-self.cube._size/2-self.cube._cube_edge/2+spread)
+            note = getattr(self.cube, "note_dock_focus", None)
+            if callable(note):
+                note("focus")
         self._close_popup()
         self._hover = None
         self._hold_until = time.perf_counter()+.6

@@ -103,6 +103,120 @@ def paint_ink_line(frame: Any, points: Any, *, now: float, origin: tuple[float, 
     frame.alpha_composite(layer)
 
 
+def _filament(start: tuple[float, float], end: tuple[float, float], energy: float, seconds: float,
+              scale: float) -> list[tuple[float, float]]:
+    """MO Shell's electric filament (ShellGroupSurface.ElectricFilament): a wire that ripples
+    more as its energy rises."""
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length = max(.01, math.hypot(dx, dy))
+    amplitude = min(length * .08, 2 * scale)
+    points = []
+    for i in range(25):
+        t = i / 24
+        wave = math.sin(t * math.pi * 2) * .5 + energy * math.sin(t * math.pi) * (
+            math.sin(t * math.pi * 6 - (seconds * 18 % (math.pi * 2)))
+            + .3 * math.sin(t * math.pi * 14 + (seconds * 29 % (math.pi * 2))))
+        bend = wave * amplitude
+        points.append((start[0] + dx * t - dy / length * bend, start[1] + dy * t + dx / length * bend))
+    points[0], points[-1] = start, end
+    return points
+
+
+@lru_cache(maxsize=16)
+def _frame_glow(width: int, height: int, radius: int, color: tuple[int, int, int]) -> Any:
+    """The lit frame of the panel in use: a soft ring just outside its edge (cached per size)."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    from PIL import ImageChops
+
+    pad = 16
+    glow = Image.new("RGBA", (width + 2 * pad, height + 2 * pad), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).rounded_rectangle((pad - 3, pad - 3, pad + width + 2, pad + height + 2), radius=radius + 3,
+                                           outline=(*color, 255), width=6)
+    glow = glow.filter(ImageFilter.GaussianBlur(4))
+    ImageDraw.Draw(glow).rounded_rectangle((pad - 1, pad - 1, pad + width, pad + height), radius=radius + 1,
+                                           outline=(*color, 235), width=1)  # a crisp lit edge
+    inner = Image.new("L", glow.size, 255)
+    ImageDraw.Draw(inner).rounded_rectangle((pad + 1, pad + 1, pad + width - 2, pad + height - 2), radius=radius, fill=0)
+    glow.putalpha(ImageChops.multiply(glow.getchannel("A"), inner))  # never over the panel itself
+    return glow
+
+
+@lru_cache(maxsize=8)
+def _wiring_base(cx: int, cy: int, rects: tuple, focused: str, rgb: tuple[int, int, int], core: bool) -> tuple[Any, int, int]:
+    """The still part of a wiring frame: its bounds, the lit frame of the face in use, the core."""
+    from PIL import Image
+
+    focus_rect = next((rect for name, rect in rects if name == focused), None)
+    xs = [cx - 30, cx + 30] + ([focus_rect[0] - 18, focus_rect[2] + 18] if focus_rect else [])
+    ys = [cy - 30, cy + 30] + ([focus_rect[1] - 18, focus_rect[3] + 18] if focus_rect else [])
+    for _name, (x0, y0, x1, y1) in rects:
+        xs.append(min(max(cx, x0), x1))
+        ys.append(min(max(cy, y0), y1))
+    left, top = math.floor(min(xs)), math.floor(min(ys))
+    width, height = max(1, math.ceil(max(xs)) - left), max(1, math.ceil(max(ys)) - top)
+    base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    if focus_rect is not None:
+        fw, fh = focus_rect[2] - focus_rect[0], focus_rect[3] - focus_rect[1]
+        base.alpha_composite(_frame_glow(fw, fh, 12, rgb), (focus_rect[0] - 16 - left, focus_rect[1] - 16 - top))
+    if core:
+        base.alpha_composite(_core_halo(rgb), (cx - 32 - left, cy - 32 - top))
+    return base, left, top
+
+
+@lru_cache(maxsize=8)
+def _core_halo(color: tuple[int, int, int]) -> Any:
+    from PIL import Image, ImageDraw, ImageFilter
+
+    halo = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(halo).ellipse((16, 16, 48, 48), fill=(*color, 120))
+    return halo.filter(ImageFilter.GaussianBlur(8))
+
+
+def paint_dock_wiring(center: tuple[float, float], faces: Any, focused: str, charge: float | None, *, now: float,
+                      color: Any, core: bool, sprite: Any = None) -> tuple[Any, int, int]:
+    """One frame of the connected companion (row 42) in screen space: returns (image, left, top).
+
+    Wires run from ``center`` to the corner of each face nearest it (three strokes like MO Shell's
+    DrawElectricConnection); the focused face's wire carries ``charge`` (0..1 along it) and its
+    frame glows; when ``core`` is set, MO's mark sits at the centre. The glow and core are cached
+    per layout; each pulse frame redraws only the small wire layer around the centre."""
+    from PIL import Image, ImageDraw
+
+    rgb = tuple(int(v) for v in tuple(color)[:3])
+    cx, cy = center
+    rects = tuple((name, (cx + dx, cy + dy, cx + dx + w, cy + dy + h)) for name, (dx, dy, w, h) in faces)
+    base, left, top = _wiring_base(round(cx), round(cy), tuple((n, tuple(round(v) for v in r)) for n, r in rects),
+                                   focused, rgb, core)
+    frame = base.copy()
+    ends = [(name, (min(max(cx, x0), x1), min(max(cy, y0), y1))) for name, (x0, y0, x1, y1) in rects]
+    reach = max([abs(ex - cx) for _n, (ex, _ey) in ends] + [abs(ey - cy) for _n, (_ex, ey) in ends] + [12.0]) + 8
+    wl, wt = math.floor(cx - reach), math.floor(cy - reach)
+    ws = max(1, math.ceil(2 * reach))
+    ss = 3
+    wires = Image.new("RGBA", (ws * ss, ws * ss), (0, 0, 0, 0))   # only the hub's neighbourhood
+    draw = ImageDraw.Draw(wires)
+    for name, end in ends:                                          # each face's corner nearest the centre
+        energy = 1.0 if name == focused else 0.25
+        points = [((x - wl) * ss, (y - wt) * ss) for x, y in _filament((cx, cy), end, energy, now, 5.0)]
+        for stroke, alpha in ((6, 30 + 50 * energy), (3.5, 55 + 90 * energy), (1.6, 190 + 65 * energy)):
+            draw.line(points, fill=(*rgb, int(alpha)), width=max(1, round(stroke * ss)),
+                      joint="curve" if stroke < 2 else None)   # rounded joints only on the crisp core
+        if name == focused and charge is not None:
+            light = tuple(int(c * .3 + 255 * .7) for c in rgb)
+            segments = len(points) - 1
+            for k in range(segments):
+                strength = max(0.0, 1 - abs(k / segments - charge) / .16)
+                if strength > 0:
+                    draw.line((points[k], points[k + 1]), fill=(*light, int(240 * strength)), width=round(2.6 * ss))
+    frame.alpha_composite(wires.resize((ws, ws), Image.Resampling.LANCZOS), (wl - left, wt - top))
+    if core and sprite is not None:
+        mark = sprite.resize((9, 9), Image.Resampling.LANCZOS)
+        for ox, oy in ((-10, -10), (1, -10), (-10, 1), (1, 1)):
+            frame.alpha_composite(mark, (round(cx) + ox - left, round(cy) + oy - top))
+    return frame, left, top
+
+
 def _time_scaled_ease(per_frame: float, elapsed: float) -> float:
     """Preserve a 30-FPS spring's wall-clock motion at any render cadence."""
     base = max(0.0, min(1.0, float(per_frame)))
@@ -528,6 +642,7 @@ class CubeMotionMixin:
         points = getattr(self, "_trace_points", None)
         summoning = float(now) < float(getattr(self, "_summon_trace_until", 0.0) or 0.0)
         if not points and not self._is_gliding() and not summoning:
+            self._tick_wiring(now)          # docked panels: the connected companion's wiring
             return
         self._maybe_sample_trace(now)
         self._paint_trace(now)

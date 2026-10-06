@@ -38,6 +38,10 @@ DESKTOP_STRUCTURAL_RADIUS_WHITELIST = MappingProxyType({
         "shared cube trace follows each actual piece's size and character radius",
     ("mo_desktop/reply_bubble.py", "_draw_search_brand", "round(2.5 * ss)"):
         "YouTube and Translate marks keep their brand tile rounding",
+    ("mo_desktop/cube_motion.py", "_frame_glow", "radius + 3"):
+        "the lit frame's soft ring sits a few px outside the panel radius",
+    ("mo_desktop/cube_motion.py", "_frame_glow", "radius + 1"):
+        "the lit frame of the docked panel in use rings just outside the panel radius",
     ("mo_desktop/focus_paint.py", "_draw_row", "SS * 1.5"):
         "the active window's accent bar has round ends",
     ("mo_desktop/focus_paint.py", "cube_face", "2 * SS"):

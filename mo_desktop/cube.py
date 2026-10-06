@@ -129,6 +129,11 @@ _CARET_HZ = 0.9
 _INK_DRIFT = 60.0   # below the pen's backward swing, so strokes loop like handwriting
 _INK_FADE_SECONDS = 2.4
 _WRITER_INK = (122, 140, 255)
+# Connected companion (row 42): how much further out docked faces sit (room for the wires), how
+# often the charge runs along the wire in use, and the share of that period it travels.
+DOCK_SPREAD = 11
+_WIRE_PULSE_SECONDS = 1.6
+_WIRE_CHARGE_SHARE = 0.35
 _VOICE_SWELL = 0.10   # speaking: how far a full syllable opens the cluster (heartbeat uses .07)
 # Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
 # _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
@@ -147,6 +152,8 @@ def _heartbeat(elapsed: float) -> float:
 
 class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     """A native sprite-cached cube driven by the resident's existing GUI clock."""
+
+    DOCK_SPREAD = DOCK_SPREAD   # read by the docked faces (reply_bubble, focus)
 
     def __init__(
         self,
@@ -300,6 +307,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self._label = self._label_win
             self._label.set_click_through(True)
             self._trace_win = NativeLayeredWindow()
+            self._trace_win.exclude_from_capture(True)   # decoration: never in MO's own screenshots
             self._trace = self._trace_win
         except Exception:
             self.destroy()
@@ -1474,24 +1482,91 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         offsets = [(float(x)-half, float(y)-half) for x, y in self._bases]
         sizes = [edge]*len(offsets)
         focus = getattr(self, "_focus_controller", None)
-        consumed: set[int] = set()
-        if focus is not None and len(offsets) == 4:
-            if focus._collapsed and focus._layout_motion is None:
-                width, height = focus._target_size
-                dx, dy = focus._face_offset
-                offsets[3], sizes[3] = (dx+width/2, dy+height/2), focus.COLLAPSED_EDGE
-            else:
-                consumed.add(3)
-        if getattr(self, "_composer_controller", None) is not None and len(offsets) > 1:
-            consumed.add(1)
-        if getattr(self, "_dashboard_controller", None) is not None and len(offsets) > 2:
-            consumed.update((0, 2))
-        if self._any_face_docked():
-            consumed.update(range(4, len(offsets)))
+        if focus is not None and len(offsets) == 4 and focus._collapsed and focus._layout_motion is None:
+            width, height = focus._target_size
+            dx, dy = focus._face_offset
+            offsets[3], sizes[3] = (dx+width/2, dy+height/2), focus.COLLAPSED_EDGE
+        consumed = self._consumed_cubes()
         for index in sorted(consumed, reverse=True):   # drop from the end so indices stay valid
             offsets.pop(index)
             sizes.pop(index)
         return offsets, sizes
+
+    def _consumed_cubes(self) -> set[int]:
+        """The cubes that have become docked panels: the composer is cube 1, the expanded Focus
+        cube 3, the Dashboard cubes 0 and 2 (and any extra cubes step out while a face docks)."""
+        count = len(self._bases)
+        consumed: set[int] = set()
+        focus = getattr(self, "_focus_controller", None)
+        if focus is not None and count == 4 and not (focus._collapsed and focus._layout_motion is None):
+            consumed.add(3)
+        if getattr(self, "_composer_controller", None) is not None and count > 1:
+            consumed.add(1)
+        if getattr(self, "_dashboard_controller", None) is not None and count > 2:
+            consumed.update((0, 2))
+        if self._any_face_docked():
+            consumed.update(range(4, count))
+        return consumed
+
+    def note_dock_focus(self, name: str) -> None:
+        """The docked panel in use now ('composer', 'dashboard', 'focus'): its wire carries the
+        charge and its frame lights (row 42)."""
+        self._dock_focus = str(name or "")
+        self._wiring_key = None
+
+    def _dock_wires(self) -> list[tuple[str, tuple[float, float, int, int]]]:
+        """The docked faces as ``(name, (dx, dy, w, h))`` from the cube centre, for the wiring."""
+        faces = []
+        composer = getattr(self, "_composer_controller", None)
+        if composer is not None and getattr(composer, "_visible", False):
+            faces.append(("composer", tuple(composer.cube_extent())))
+        focus = getattr(self, "_focus_controller", None)
+        if focus is not None and not focus._collapsed and focus._layout_motion is None:
+            faces.append(("focus", (*focus._face_offset, *focus._target_size)))
+        dashboard = getattr(self, "_dashboard_controller", None)
+        if dashboard is not None and getattr(dashboard, "_visible", False):
+            faces.append(("dashboard", tuple(dashboard.cube_extent())))
+        return [(name, face) for name, face in faces if face[2] > 0 and face[3] > 0]
+
+    def _tick_wiring(self, now: float) -> bool:
+        """Row 42: the docked block as one connected companion. A live filament runs from the
+        cube group's centre to the nearest corner of each docked panel; the panel in use gets a
+        charge that travels along its wire every few seconds and a lit frame; the others stay
+        faintly live. When every cube has become a panel, MO's core marks the centre. Drawn on
+        the existing trace layer, repainted only when something changed. Returns whether wiring
+        owns the layer."""
+        faces = self._dock_wires()
+        surface = getattr(self, "_trace", None)
+        if not faces or surface is None or not getattr(surface, "available", lambda: False)():
+            if getattr(self, "_wiring_shown", False):
+                self._wiring_shown = False
+                self._wiring_key = None
+                try:
+                    self._trace_win.hide()
+                except Exception:
+                    pass
+            return False
+        names = [name for name, _face in faces]
+        focused = getattr(self, "_dock_focus", "") if getattr(self, "_dock_focus", "") in names else names[0]
+        phase = (now % _WIRE_PULSE_SECONDS) / _WIRE_PULSE_SECONDS
+        charge = phase / _WIRE_CHARGE_SHARE if phase < _WIRE_CHARGE_SHARE else None
+        core = len(self._consumed_cubes() & {0, 1, 2, 3}) == 4
+        key = (round(self._x), round(self._y), tuple((n, tuple(round(v) for v in f)) for n, f in faces), focused,
+               None if charge is None else round(charge * 30), core, self._color_rgb)
+        if key == getattr(self, "_wiring_key", None):
+            return True
+        self._wiring_key = key
+        try:
+            from mo_desktop.cube_motion import paint_dock_wiring
+
+            frame, left, top = paint_dock_wiring((self._x, self._y), faces, focused, charge, now=now,
+                                                 color=self._color_rgb, core=core, sprite=self._sprites[-1])
+            if surface.blit(frame, left, top):
+                self._trace_win.show()
+                self._wiring_shown = True
+        except Exception:
+            pass
+        return True
 
     def _any_face_docked(self) -> bool:
         return any(getattr(self, name, None) is not None
