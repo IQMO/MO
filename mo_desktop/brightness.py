@@ -171,6 +171,9 @@ def apply_dim(rect: tuple[int, int, int, int], *, anchor_hwnd: int = 0) -> bool:
             _layer = NativeLayeredWindow(int(anchor_hwnd or 0), title="MO Desktop — Dim")
             _layer.exclude_from_capture(True)
             _layer_rect = None
+        # Below EVERY visible MO surface (panel, Focus, labels), not only the cube window:
+        # anything of MO's under the cube would otherwise be dimmed too.
+        _layer._target_hwnd = _lowest_own_window(exclude=int(_layer.hwnd)) or int(anchor_hwnd or 0)
         opacity = round(_dim_level * 255)
         left, top, right, bottom = rect
         if rect != _layer_rect:
@@ -178,10 +181,55 @@ def apply_dim(rect: tuple[int, int, int, int], *, anchor_hwnd: int = 0) -> bool:
             if not _layer.blit(black, left, top, premultiplied=True, opacity=opacity):
                 return False
             _layer_rect = rect
-            return True
-        return bool(_layer.set_opacity(opacity)) and bool(_layer.place_behind(left, top, right - left, bottom - top))
+        elif not (_layer.set_opacity(opacity) and _layer.place_behind(left, top, right - left, bottom - top)):
+            return False
+        return _keep_topmost(_layer, rect)
     except Exception:
         return False
+
+
+def _keep_topmost(layer: Any, rect: tuple[int, int, int, int]) -> bool:
+    """The dim must stay in the always-on-top band (or an app clicked to the front would rise
+    above it), yet below MO's own surfaces; re-assert both if the placement did not hold."""
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        if not user32.GetWindowLongW(layer.hwnd, -20) & 0x00000008:
+            from mo_desktop.layered import _winapi
+
+            _winapi().user32.SetWindowPos(layer.hwnd, -1, 0, 0, 0, 0, 0x0013)  # TOPMOST, no move/size/activate
+            left, top, right, bottom = rect
+            layer.place_behind(left, top, right - left, bottom - top)
+        return bool(user32.GetWindowLongW(layer.hwnd, -20) & 0x00000008)
+    except Exception:
+        return True
+
+
+def _lowest_own_window(*, exclude: int = 0) -> int:
+    """The bottom-most visible always-on-top window of this process, or 0."""
+    try:
+        import ctypes
+        import os
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        user32.GetWindow.restype = wintypes.HWND
+        user32.GetTopWindow.restype = wintypes.HWND
+        own, lowest = os.getpid(), 0
+        hwnd = user32.GetTopWindow(None)
+        while hwnd:
+            if not user32.GetWindowLongW(hwnd, -20) & 0x00000008:  # WS_EX_TOPMOST band ends
+                break
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            value = int(hwnd)
+            if pid.value == own and value != exclude and user32.IsWindowVisible(hwnd):
+                lowest = value
+            hwnd = user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
+        return lowest
+    except Exception:
+        return 0
 
 
 def clear_dim() -> None:
