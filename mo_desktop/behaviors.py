@@ -142,7 +142,7 @@ class CompanionModes:
             return
         try:
             if self._dashboard_open():
-                self._close_panel()
+                self._close_dashboard()
                 self._mode = self.FREE
                 self._cube.enable_follow(False)
                 return
@@ -160,7 +160,7 @@ class CompanionModes:
             pass
 
     def _dashboard_open(self) -> bool:
-        bubble = getattr(self._c, "_bubble", None)
+        bubble = getattr(self._c, "_dashboard_bubble", None)
         if not bubble or bubble is False:
             return False
         try:
@@ -179,8 +179,8 @@ class CompanionModes:
         except Exception:
             return False
 
-    def _close_panel(self) -> None:
-        bubble = getattr(self._c, "_bubble", None)
+    def _close_dashboard(self) -> None:
+        bubble = getattr(self._c, "_dashboard_bubble", None)
         if bubble and bubble is not False:
             try:
                 bubble.hide()

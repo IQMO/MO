@@ -25,15 +25,15 @@ SCREEN_GAP = 8
 
 def cube_geometry(center: tuple[float, float], area: tuple[int, int, int, int],
                   cube_size: int, offset: tuple[float, float], size: tuple[int, int],
-                  companion_face: tuple[float, float, int, int] | None = None
+                  other_faces: Any = ()
                   ) -> tuple[tuple[int, int, int, int], tuple[int, int]]:
-    """Clamp the complete three-cube/expanded-face group without snapping to an edge."""
+    """Clamp the whole cube group, this face and every other docked face, without snapping to an
+    edge. ``other_faces`` are ``(dx, dy, w, h)`` from ``DesktopCube.docked_faces``."""
     left, top, right, bottom = area
     width, height = size
     dx, dy = offset
     extents = [(-cube_size/2, -cube_size/2, cube_size, cube_size), (dx, dy, width, height)]
-    if companion_face is not None:
-        extents.append(companion_face)
+    extents.extend(other_faces or ())
     cx = max(left+SCREEN_GAP-min(x for x, y, w, h in extents),
              min(center[0], right-SCREEN_GAP-max(x+w for x, y, w, h in extents)))
     cy = max(top+SCREEN_GAP-min(y for x, y, w, h in extents),
@@ -182,7 +182,7 @@ class FocusBar:
         self._pin_capacity = max(1, (width-16)//37)
         size = (40, 40) if self._collapsed else (width, FACE_SIZE+(40 if self._pins else 0))
         geometry, center = cube_geometry(self._cube_center, self._area, self.cube._size, self._face_offset, size,
-                                        composer.cube_extent() if composer is not None else None)
+                                        self.cube.docked_faces(exclude="focus"))
         if self._layout_motion is not None and not animate and geometry == self._layout_motion[2]:
             return
         if geometry == self._geometry and size == getattr(self, "_target_size", None):
@@ -228,17 +228,18 @@ class FocusBar:
         cube._from = cube._to = (x, y)
         if moved:
             cube._reposition()
-        bubble = getattr(self.owner._companion, "_bubble", None)
-        if moved and bubble and getattr(bubble, "_visible", False):
-            bubble._repaint()
+        if moved:
+            for bubble in (getattr(self.owner._companion, "_bubble", None),
+                           getattr(self.owner._companion, "_dashboard_bubble", None)):
+                if bubble and getattr(bubble, "_visible", False):
+                    bubble._repaint()
 
     def _move_to(self, center: tuple[float, float]) -> None:
         self._close_popup()
         self._layout_motion = None
-        composer = getattr(self.cube, "_composer_controller", None)
         self._geometry, self._cube_center = cube_geometry(center, self._area, self.cube._size,
                                                          self._face_offset, self._target_size,
-                                                         composer.cube_extent() if composer is not None else None)
+                                                         self.cube.docked_faces(exclude="focus"))
         self._position_cube(dragging=True)
         self._place_face()
 
@@ -716,9 +717,7 @@ class FocusBar:
         x, y, width, height = self._geometry
         cx, cy = self._cube_center
         bounds = [(x, y, width, height)]
-        composer = getattr(self.cube, "_composer_controller", None)
-        if composer is not None:
-            dx, dy, cw, ch = composer.cube_extent()
+        for dx, dy, cw, ch in self.cube.docked_faces(exclude="focus"):
             bounds.append((round(cx+dx), round(cy+dy), cw, ch))
         if include_cubes:
             half = self.cube._size/2

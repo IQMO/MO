@@ -310,6 +310,7 @@ class CompanionSurface(
         self._cube: DesktopCube | None = None  # MO's on-screen 4-cube companion
         self._modes = None  # free/lock behavior state machine (mo_desktop.behaviors)
         self._bubble: Any = None    # layered reply/input surface (mo_desktop.reply_bubble)
+        self._dashboard_bubble: Any = None   # the compact Dashboard's own docked face
         self._overlay_compat: Any = None  # configured always-on-top app compatibility
         self._overlay_lift_noticed: set[str] = set()
         self._bubble_render_at = 0.0
@@ -649,7 +650,7 @@ class CompanionSurface(
         value = bool(visible)
         self._visible = value
         self._reply_visible = value
-        if not value and getattr(self, "_held_notices", None):
+        if not value and not self._dashboard_docked() and getattr(self, "_held_notices", None):
             self._release_held_notices()
 
     # ------------------------------------------------------------------
@@ -1550,6 +1551,7 @@ class CompanionSurface(
         targets = [
             ("cube", getattr(self, "_cube", None)),
             ("reply", getattr(self, "_bubble", None)),
+            ("dashboard", getattr(self, "_dashboard_bubble", None)),
             ("files", getattr(self, "_files_window", None)),
             ("phone", getattr(self, "_phone_window", None)),
             ("systemcare", getattr(self, "_systemcare_window", None)),
@@ -2180,10 +2182,11 @@ class CompanionSurface(
             if host is not None:
                 host.close()
                 self._tk_host = None
-            bubble = getattr(self, "_bubble", None)
-            if bubble:
-                bubble.destroy()
-                self._bubble = None
+            for name in ("_bubble", "_dashboard_bubble"):
+                bubble = getattr(self, name, None)
+                if bubble:
+                    bubble.destroy()
+                setattr(self, name, None)
             from mo_desktop import brightness
             brightness.clear_dim()
             if self._cube is not None:
@@ -4067,7 +4070,7 @@ class CompanionSurface(
                 return
             if self._show_status_line(t):
                 return
-            if self._panel_visible():
+            if self._panel_visible() or self._dashboard_docked():
                 return  # the kept card is the one surface; no second label beside it
             cube = getattr(self, "_cube", None)
             if cube is None:
@@ -4479,6 +4482,50 @@ class CompanionSurface(
             self._bubble = False
             return None
 
+    def _get_dashboard_bubble(self) -> Any:
+        """The compact Dashboard's own face, docked over the two left cubes so it stays open
+        beside the composer and Focus (``False`` cached when unavailable). It is a second
+        ReplyBubble: same renderer, hits, tabs and reveal; none of the composer's wiring."""
+        b = getattr(self, "_dashboard_bubble", None)
+        if b is not None:
+            return b if b is not False else None
+        if getattr(self, "_gui", None) is None or getattr(self, "_cube", None) is None:
+            return None
+        try:
+            from interface.desktop_ui import active_desktop_visual_state
+            from mo_desktop.reply_bubble import ReplyBubble
+            bubble = ReplyBubble(self._gui, self._cube, active_desktop_visual_state(), face="dashboard")
+            if not bubble.available():
+                self._bubble_failure = bubble.failure_detail()
+                bubble.destroy()
+                self._dashboard_bubble = False
+                return None
+            bubble._on_visibility_changed = self._on_dashboard_visibility_changed
+            self._dashboard_bubble = bubble
+            return bubble
+        except Exception as exc:
+            self._bubble_failure = f"dashboard face creation failed ({type(exc).__name__})"
+            self._dashboard_bubble = False
+            return None
+
+    def _on_dashboard_visibility_changed(self, visible: bool) -> None:
+        """Only the Dashboard's own state: the panel's reply/status guards never see it."""
+        self._dashboard_visible = bool(visible)
+        if not visible and not self._panel_visible() and getattr(self, "_held_notices", None):
+            self._release_held_notices()
+
+    def _dashboard_face(self) -> Any:
+        bubble = getattr(self, "_dashboard_bubble", None)
+        return bubble if bubble and bubble is not False else None
+
+    def _dashboard_docked(self) -> bool:
+        """Whether the Dashboard face is showing (a panel too, for the one-surface rule)."""
+        bubble = self._dashboard_face()
+        try:
+            return bool(bubble is not None and bubble.visible())
+        except Exception:
+            return False
+
     @staticmethod
     def _reply_surface_failure(bubble: Any, fallback: str = "layered panel unavailable") -> str:
         getter = getattr(bubble, "failure_detail", None)
@@ -4498,12 +4545,16 @@ class CompanionSurface(
                 destroy()
             except Exception:
                 pass
-        if getattr(self, "_bubble", None) is bubble or getattr(self, "_bubble", None) is False:
-            self._bubble = None
+        for name in ("_bubble", "_dashboard_bubble"):
+            if getattr(self, name, None) is bubble or getattr(self, name, None) is False:
+                setattr(self, name, None)
 
-    def _show_on_reply_surface(self, label: str, presenter: Callable[[Any], bool]) -> bool:
-        """Present once, rebuild a failed layered surface, then retry exactly once."""
-        bubble = self._get_reply_bubble()
+    def _show_on_reply_surface(self, label: str, presenter: Callable[[Any], bool], *,
+                               face: str = "panel") -> bool:
+        """Present once, rebuild a failed layered surface, then retry exactly once.
+        ``face="dashboard"`` presents on the Dashboard's own docked face."""
+        get_surface = self._get_dashboard_bubble if face == "dashboard" else self._get_reply_bubble
+        bubble = get_surface()
         if bubble is None:
             detail = redact_sensitive_text(
                 str(getattr(self, "_bubble_failure", "") or "layered panel unavailable")
@@ -4520,7 +4571,7 @@ class CompanionSurface(
 
         log_event(f"{label} surface reset after render failure: {detail}", config=self._config())
         self._discard_reply_surface(bubble)
-        replacement = self._get_reply_bubble()
+        replacement = get_surface()
         if replacement is not None:
             try:
                 if presenter(replacement):
@@ -5191,7 +5242,7 @@ class CompanionSurface(
         from mo_desktop.notify import emit
 
         def announce() -> None:
-            if self._panel_visible():
+            if self._panel_visible() or self._dashboard_docked():
                 # One surface at a time: a notice waits for the open panel to close
                 # instead of opening a second label beside it.
                 key = getattr(notice, "key", None)

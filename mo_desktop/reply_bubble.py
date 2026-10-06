@@ -64,11 +64,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def __init__(self, gui: Any, cube: Any, visuals: DesktopVisualState,
                  design: BubbleDesign | None = None,
-                 panel_design: DesktopPanelDesign | None = None) -> None:
+                 panel_design: DesktopPanelDesign | None = None, *, face: str = "panel") -> None:
         from mo_desktop.layered import NativeLayeredWindow
 
         self._gui = gui
         self._cube = cube
+        # "panel": the one living panel (composer, replies, status). "dashboard": the compact
+        # Dashboard docked as its own face over the two left cubes, beside composer and Focus.
+        self._face = face
         self._panel_design = panel_design or DEFAULT_DESKTOP_PANEL_DESIGN
         self._design = design or self._panel_design.bubble or DEFAULT_BUBBLE_DESIGN
         self._apply_visual_state(visuals)
@@ -1184,6 +1187,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._cube._composer_controller = self
         elif not composer and getattr(self._cube, "_composer_controller", None) is self:
             self._cube._composer_controller = None
+        dashboard_face = (getattr(self, "_face", "panel") == "dashboard"
+                          and getattr(self, "_panel_state", None) == PanelState.DASHBOARD)
+        if dashboard_face and getattr(self._cube, "_dashboard_controller", None) is not self:
+            self._cube._dashboard_controller = self
+        elif not dashboard_face and getattr(self._cube, "_dashboard_controller", None) is self:
+            self._cube._dashboard_controller = None
         progress = 0.0 if starting_transition else self._transition_progress()
         morphing = starting_transition or progress < 1.0
         now = time.perf_counter()
@@ -1227,21 +1236,26 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # offset. Off-screen panels are still handled by the clamp below.
         img_y = int(max(-int(design.shadow_pad), min(cy - H // 2, sh - H + int(design.shadow_pad))))
         focus = getattr(self._cube, "_focus_controller", None)
-        if composer:
+        if dashboard_face:
+            from interface.desktop_widgets import _monitor_work_area
+            from mo_desktop.focus import cube_geometry
+            self._cube_face_size = (card_w, H-2*int(design.shadow_pad))
+            dx, dy, cw, ch = self.cube_extent()
+            area = focus._area if focus is not None else _monitor_work_area(self._cube._win)
+            _, center = cube_geometry((cx, cy), area or (0, 0, sw, sh), self._cube._size, (dx, dy), (cw, ch),
+                                      self._cube.docked_faces(exclude="dashboard"))
+            self._follow_group_center(center, focus)
+            card_left, card_top = round(center[0]+dx), round(center[1]+dy)
+            img_x, img_y = card_left-int(design.shadow_pad), card_top-int(design.shadow_pad)
+        elif composer:
             from interface.desktop_widgets import _monitor_work_area
             from mo_desktop.focus import cube_geometry
             self._cube_face_size = (card_w, H-2*int(design.shadow_pad))
             dx, dy, cw, ch = self.cube_extent()
             area = focus._area if focus is not None else _monitor_work_area(self._cube._win)
             _, center = cube_geometry((cx, cy), area or (0, 0, sw, sh), self._cube._size,
-                                      (dx, dy), (cw, ch),
-                                      (*focus._face_offset, *focus._target_size) if focus is not None else None)
-            self._cube._x, self._cube._y = center
-            self._cube._from = self._cube._to = center
-            if focus is not None and focus._cube_center != center:
-                focus._cube_center = center
-                focus._fit_visible_rows()
-                focus._place_face()
+                                      (dx, dy), (cw, ch), self._cube.docked_faces(exclude="composer"))
+            self._follow_group_center(center, focus)
             card_left, card_top = round(center[0]+dx), round(center[1]+dy)
             img_x, img_y = card_left-int(design.shadow_pad), card_top-int(design.shadow_pad)
         elif focus is not None:
@@ -1306,6 +1320,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         cube = getattr(self, "_cube", None)
         if not value and getattr(cube, "_composer_controller", None) is self:
             cube._composer_controller = None
+        if not value and getattr(cube, "_dashboard_controller", None) is self:
+            cube._dashboard_controller = None   # the two left cubes come back
         callback = getattr(self, "_on_visibility_changed", None)
         if changed and callable(callback):
             try:
@@ -1373,7 +1389,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     position=False,
                 )
             )
-            if published and getattr(self._cube, "_composer_controller", None) is self:
+            if published and self in (getattr(self._cube, "_composer_controller", None),
+                                      getattr(self._cube, "_dashboard_controller", None)):
                 self._cube_published = (frame, position[0], position[1])
             return published
         except Exception:
@@ -2615,16 +2632,48 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 pass
 
     def cube_extent(self) -> tuple[float, float, int, int]:
-        """The existing input card replaces the upper-right cube and grows upward."""
-        width, height = self._cube_face_size
-        bx, by = self._cube._bases[1]
+        """The composer replaces the upper-right cube and grows upward; the Dashboard face
+        replaces the two left cubes: its right edge on theirs, its top on the right column's
+        top (the docked composer, else the upper-right cube)."""
+        width, height = getattr(self, "_cube_face_size", (0, 0))
         half, edge = self._cube._size/2, self._cube._cube_edge
+        if getattr(self, "_face", "panel") == "dashboard":
+            bx0, _by0 = self._cube._bases[0]
+            _bx1, by1 = self._cube._bases[1]
+            top = by1-half-edge/2
+            composer = getattr(self._cube, "_composer_controller", None)
+            if composer is not None:
+                top = min(top, composer.cube_extent()[1])
+            return bx0-half+edge/2-width, top, width, height
+        bx, by = self._cube._bases[1]
         return bx-half-edge/2, by-half+edge/2-height, width, height
 
-    def launch_piece(self) -> tuple[tuple[float, float], Any]:
+    def _follow_group_center(self, center: tuple[int, int], focus: Any) -> None:
+        """Move the cubes to the clamped group centre and re-place the other docked faces."""
+        moved = (self._cube._x, self._cube._y) != tuple(center)
+        self._cube._x, self._cube._y = center
+        self._cube._from = self._cube._to = center
+        if focus is not None and focus._cube_center != center:
+            focus._cube_center = center
+            focus._fit_visible_rows()
+            focus._place_face()
+        if moved:
+            for name in ("_composer_controller", "_dashboard_controller"):
+                other = getattr(self._cube, name, None)
+                if other is not None and other is not self and getattr(other, "_visible", False):
+                    other._repaint()
+
+    def launch_piece(self, *, upper: bool = True) -> tuple[tuple[float, float], Any]:
+        """The published card as source pixels; the Dashboard face gives its upper or lower
+        half, one for each of the two cubes it replaced."""
         from PIL import Image
         image, x, y = self._cube_published
         straight = Image.frombytes("RGBa", image.size, image.tobytes()).convert("RGBA")
+        if getattr(self, "_face", "panel") == "dashboard":
+            half = straight.height // 2
+            box = (0, 0, straight.width, half) if upper else (0, half, straight.width, straight.height)
+            piece = straight.crop(box)
+            return (x+piece.width/2, y+box[1]+piece.height/2), piece
         return (x+image.width/2, y+image.height/2), straight
 
     def set_launcher_active(self, active: bool) -> None:
@@ -2694,7 +2743,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             if mouse_button_held((VK_LBUTTON,)):
                 px, py = pointer_position()
                 x0, y0, x1, y1 = self._bounds
-                inside = (x0 <= px <= x1 and y0 <= py <= y1)
+                inside = (x0 <= px <= x1 and y0 <= py <= y1) or self._inside_docked_group(px, py)
                 near_cube = False
                 if self._cube is not None:
                     try:
@@ -2713,6 +2762,25 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._watch_after = self._gui.schedule(90, self._watch_click_away)
         except Exception:
             self._watch_after = None
+
+    def _inside_docked_group(self, px: int, py: int) -> bool:
+        """A click on another docked face (composer, Dashboard, Focus) is not a click away:
+        the faces docked into the cubes are one block and stay open together."""
+        cube = getattr(self, "_cube", None)
+        for name in ("_composer_controller", "_dashboard_controller"):
+            other = getattr(cube, name, None)
+            if other is not None and other is not self and getattr(other, "_visible", False):
+                bx0, by0, bx1, by1 = getattr(other, "_bounds", (0, 0, -1, -1))
+                if bx0 <= px <= bx1 and by0 <= py <= by1:
+                    return True
+        focus = getattr(cube, "_focus_controller", None)
+        if focus is not None:
+            try:
+                gx, gy, gw, gh = focus.group_bounds()
+            except Exception:
+                return False
+            return gx <= px <= gx + gw and gy <= py <= gy + gh
+        return False
 
     def destroy(self) -> None:
         self._publish_visibility(False)

@@ -704,6 +704,9 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         composer = getattr(self, "_composer_controller", None)
         if index == 1 and composer is not None and not self._launcher_active:
             return composer.launch_piece()
+        dashboard = getattr(self, "_dashboard_controller", None)
+        if index in (0, 2) and dashboard is not None and not self._launcher_active:
+            return dashboard.launch_piece(upper=index == 0)
         cx, cy, brightness, alpha = self._cube_state(index, now)
         level = max(0, min(len(self._sprites) - 1, round(brightness * (len(self._sprites) - 1))))
         sprite = self._sprite_for(index, level, now).copy()
@@ -1049,6 +1052,8 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 alpha = 0.0
             if i == 1 and getattr(self, "_composer_controller", None) is not None and not self._launcher_active:
                 alpha = 0.0
+            if i in (0, 2) and getattr(self, "_dashboard_controller", None) is not None and not self._launcher_active:
+                alpha = 0.0   # the docked Dashboard consumes the two left cubes
         return cx, cy, max(0.0, min(1.0, bright)), max(0.0, min(1.0, alpha))
 
     def _emote_loops(self, fn: Any) -> bool:
@@ -1235,18 +1240,38 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         offsets = [(float(x)-half, float(y)-half) for x, y in self._bases]
         sizes = [edge]*len(offsets)
         focus = getattr(self, "_focus_controller", None)
+        consumed: set[int] = set()
         if focus is not None and len(offsets) == 4:
             if focus._collapsed and focus._layout_motion is None:
                 width, height = focus._target_size
                 dx, dy = focus._face_offset
                 offsets[3], sizes[3] = (dx+width/2, dy+height/2), focus.COLLAPSED_EDGE
             else:
-                offsets.pop(3)
-                sizes.pop(3)
+                consumed.add(3)
         if getattr(self, "_composer_controller", None) is not None and len(offsets) > 1:
-            offsets.pop(1)
-            sizes.pop(1)
+            consumed.add(1)
+        if getattr(self, "_dashboard_controller", None) is not None and len(offsets) > 2:
+            consumed.update((0, 2))
+        for index in sorted(consumed, reverse=True):   # drop from the end so indices stay valid
+            offsets.pop(index)
+            sizes.pop(index)
         return offsets, sizes
+
+    def docked_faces(self, *, exclude: str = "") -> list[tuple[float, float, int, int]]:
+        """Every panel docked into the cube group as ``(dx, dy, w, h)`` from the cube centre:
+        the composer (cube 1), Focus (cube 3) and the Dashboard (cubes 0 and 2). One list, so
+        each owner clamps the same whole block on screen."""
+        faces: list[tuple[float, float, int, int]] = []
+        composer = getattr(self, "_composer_controller", None)
+        if composer is not None and exclude != "composer":
+            faces.append(tuple(composer.cube_extent()))
+        focus = getattr(self, "_focus_controller", None)
+        if focus is not None and exclude != "focus":
+            faces.append((*focus._face_offset, *focus._target_size))
+        dashboard = getattr(self, "_dashboard_controller", None)
+        if dashboard is not None and exclude != "dashboard":
+            faces.append(tuple(dashboard.cube_extent()))
+        return faces
 
     def _trace_bounds(self, points: list[tuple[float, float, float]]) -> tuple[int, int, int, int]:
         offsets, sizes = self._trace_layout()

@@ -644,7 +644,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | **Ctrl, Ctrl** | Toggle Free and Lock movement |
 | Left-click cube | Open input; click again to close it back into the cubes (the draft is kept); while docked at a terminal, sync after selection |
 | Hold the bottom-left cube for two seconds | That cube brightens in the active skin's accent as the hold completes, then opens screen selection; the selected area darkens while dragging, and the full-resolution PNG opens in the existing image preview |
-| Right-click cube | Open the compact Home/Work/You/Systems Dashboard |
+| Right-click cube | Open the compact Home/Work/You/Systems Dashboard, docked over the two left cubes: beside an open composer (upper-right cube) and Focus (lower-right cube) it forms one block, and all stay open together |
 | Double-click cube | Expand the four grouped MO app tiles; click one to open or focus it |
 | Mouse wheel over cube | Adjust Windows master volume |
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |

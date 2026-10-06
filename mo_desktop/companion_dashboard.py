@@ -352,8 +352,8 @@ class CompanionDashboardMixin:
             self._notice_poll_in_flight = False
 
     def _dashboard_sync_terminal(self) -> None:
-        bubble = getattr(self, "_bubble", None)
-        if bubble and bubble is not False:
+        bubble = self._dashboard_face()
+        if bubble is not None:
             bubble.hide()
         self._sync_with_terminal()
 
@@ -400,13 +400,12 @@ class CompanionDashboardMixin:
         if self._show_on_reply_surface(
             "dashboard",
             lambda bubble: bool(bubble.show_dashboard(data, actions)),
+            face="dashboard",
         ):
-            self._visible = True
             # Snapshot gathering and its GUI-side projection must not compete with
             # the short reveal. ReplyBubble owns the transition boundary, so there
             # is no duplicated duration or timer in this adapter.
-            bubble = self._bubble
-            bubble.after_panel_transition(self._refresh_dashboard_snapshot_async)
+            self._dashboard_face().after_panel_transition(self._refresh_dashboard_snapshot_async)
 
     def _refresh_dashboard_snapshot_async(self) -> None:
         """Refresh dashboard evidence without ever making a gesture wait on filesystem work."""
@@ -434,8 +433,8 @@ class CompanionDashboardMixin:
                 self._dashboard_snapshot_refreshing = False
 
             def _apply() -> None:
-                bubble = getattr(self, "_bubble", None)
-                if not bubble or bubble is False:
+                bubble = self._dashboard_face()
+                if bubble is None:
                     return
                 try:
                     visible = bool(bubble.visible())
@@ -448,6 +447,7 @@ class CompanionDashboardMixin:
                 self._show_on_reply_surface(
                     "dashboard refresh",
                     lambda current: bool(current.show_dashboard(data, actions)),
+                    face="dashboard",
                 )
 
             self._post_gui_call(_apply)
@@ -649,8 +649,8 @@ class CompanionDashboardMixin:
 
     def _dashboard_dispatch_owner_action(self, index: int) -> None:
         """Delegate one visible Dashboard control without owning its mutation."""
-        bubble = getattr(self, "_bubble", None)
-        if not bubble or bubble is False:
+        bubble = self._dashboard_face()
+        if bubble is None:
             return
         data = getattr(bubble, "_dashboard_data", None)
         view = str(getattr(bubble, "_dashboard_view", "overview") or "overview")
