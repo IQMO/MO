@@ -1483,7 +1483,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
 
             left, top, width, height = self._trace_bounds(points)
             frame = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(frame)
             base_alpha = max(
                 0,
                 min(
@@ -1495,7 +1494,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             )
             offsets, sizes = self._trace_layout()
             edge = float(self._cube_edge)
-            paint_cube_trace(draw, points, now=now, origin=(left, top), offsets=offsets,
+            paint_cube_trace(frame, points, now=now, origin=(left, top), offsets=offsets,
                              edge=edge, color=self._color_rgb, alpha=base_alpha, sizes=sizes, corner=self._corner)
             if surface.blit(frame, left, top):
                 self._trace_win.show()

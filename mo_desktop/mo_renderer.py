@@ -131,11 +131,10 @@ def _app_entrance_art(source: dict, target: dict) -> dict:
 def _app_entrance_frame(art: dict, elapsed: float) -> Any:
     if art["app"] != "shell":
         return _purpose_entrance_frame(art, elapsed)
-    from PIL import Image, ImageDraw
+    from PIL import Image
     from mo_desktop.cube_motion import paint_cube_trace, _TRACE_SAMPLE_SECONDS, _TRACE_MAX_POINTS
 
     image = Image.new("RGBA", art["size"])
-    draw = ImageDraw.Draw(image)
     left, top = art["position"]
 
     def point(start: Any, end: Any, index: int, at: float) -> tuple[float, float, float]:
@@ -154,7 +153,7 @@ def _app_entrance_frame(art: dict, elapsed: float) -> Any:
                 x, y, _ = point(start, end, index, at)
                 points.append((x, y, at))
         tail = min(1.0, max(0.0, (art["duration"] - elapsed) / .20))
-        paint_cube_trace(draw, points, now=elapsed, origin=(left, top), offsets=((0, 0),),
+        paint_cube_trace(image, points, now=elapsed, origin=(left, top), offsets=((0, 0),),
                          edge=art["edge"], color=art["color"], alpha=round(110 * tail))
     if elapsed >= art["travel"] + (len(art["pieces"]) - 1) * .025:
         image.alpha_composite(art["final"], (art["final_position"][0] - left, art["final_position"][1] - top))

@@ -6,6 +6,7 @@ from mo_desktop.gui_loop import screen_size
 
 import math
 import os
+from functools import lru_cache
 import time
 from typing import Any
 
@@ -33,10 +34,16 @@ _DODGE_MIN_MOVE_PX = 3.0
 _CURSOR_REACTION_EASE = 0.18
 
 
-def paint_cube_trace(draw: Any, points: Any, *, now: float, origin: tuple[float, float],
+def paint_cube_trace(frame: Any, points: Any, *, now: float, origin: tuple[float, float],
                      offsets: Any, edge: float, color: Any, alpha: int = 110,
                      sizes: Any = None, corner: float = .22) -> None:
-    """Paint the shared fading footsteps for a bounded set of cube positions."""
+    """Paint the shared fading footsteps for a bounded set of cube positions onto ``frame``.
+
+    Every footstep is an antialiased shape; overlapping ones keep the stronger of the two (a
+    plain 1x rounded rectangle left stair-stepped, hard edges), and the colour goes on once."""
+    from PIL import Image, ImageChops
+
+    steps = []
     for px, py, stamped_at in points:
         life = max(0.0, min(1.0, 1.0 - (now - stamped_at) / _TRACE_FADE_SECONDS))
         opacity = int(alpha * life ** 1.35)
@@ -44,9 +51,36 @@ def paint_cube_trace(draw: Any, points: Any, *, now: float, origin: tuple[float,
             continue
         for index, (ox, oy) in enumerate(offsets):
             size = max(5.0, (sizes[index] if sizes is not None else edge) * .62) * (.72 + .22 * life)
+            mask = _footstep(max(1, round(size)), round(float(corner) * 100), opacity // 6 * 6)
             cx, cy = px + ox - origin[0], py + oy - origin[1]
-            draw.rounded_rectangle((cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2),
-                                   radius=max(0, size * corner), fill=(*color, opacity))
+            steps.append((mask, round(cx - mask.width / 2), round(cy - mask.height / 2)))
+    if not steps:
+        return
+    margin = max(mask.width for mask, _x, _y in steps)
+    width, height = frame.size
+    combined = Image.new("L", (width + 2 * margin, height + 2 * margin), 0)
+    for mask, x, y in steps:
+        box = (x + margin, y + margin, x + margin + mask.width, y + margin + mask.height)
+        if box[2] <= 0 or box[3] <= 0 or box[0] >= combined.width or box[1] >= combined.height:
+            continue
+        combined.paste(ImageChops.lighter(combined.crop(box), mask), box[:2])
+    layer = Image.new("RGBA", (width, height), (*tuple(int(v) for v in tuple(color)[:3]), 0))
+    layer.putalpha(combined.crop((margin, margin, margin + width, margin + height)))
+    frame.alpha_composite(layer)
+
+
+@lru_cache(maxsize=384)
+def _footstep(size: int, corner_percent: int, opacity: int) -> Any:
+    """One footstep's coverage: the shape drawn as a 4x mask and box-filtered down (smooth edges,
+    no colour fringe), at ``opacity``."""
+    from PIL import Image, ImageDraw
+
+    ss, side = 4, size + 2
+    corner = corner_percent / 100
+    mask = Image.new("L", (side * ss, side * ss), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((ss, ss, (side - 1) * ss - 1, (side - 1) * ss - 1),
+                                           radius=max(0, size * corner) * ss, fill=opacity)
+    return mask.resize((side, side), Image.Resampling.BOX)
 
 
 def _time_scaled_ease(per_frame: float, elapsed: float) -> float:
