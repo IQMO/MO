@@ -62,7 +62,7 @@ from ..worker.registry import WorkerRegistry
 from ..provider.model_limits import resolve_context_budget_tokens, context_budget_source
 from ..session.handoff import build_compact_summary, build_handoff_document, context_pressure, format_handoff_reason, recent_visible_report_messages, seed_session_from_handoff, should_auto_handoff, write_handoff_document
 from ..session.session_momentum import maybe_compact_session
-from ..profile import Profile, is_trackable_project_path
+from ..profile import Profile, is_trackable_project_path, is_user_project_path
 from ..learning.memory import EpisodicMemory
 from ..tasking.agent_taskboard import AgentTaskBoard
 from .agent_slash import AgentSlashCommands
@@ -419,7 +419,7 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
                     break
                 except ValueError:
                     continue
-        if allowed and is_trackable_project_path(cwd):
+        if allowed and is_user_project_path(cwd, runtime_home=mo_home(self.config)):
             self.profile.touch_project(cwd, Path(cwd).name)
 
     def _init_state(self) -> None:
@@ -737,14 +737,10 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
                 return False
             if not path_allowed(str(root), self._effective_allowed_roots()):
                 return False
-            # An invocation in a home/system folder is not consent to crawl it.
-            # The installed product checkout may itself live under runtime home.
-            home = Path.home().resolve()
-            runtime = mo_home(getattr(self, "config", None)).resolve()
-            personal = runtime / "personal"
-            if root == home or root in home.parents or root == personal or personal in root.parents:
-                return False
-            if (root == runtime or runtime in root.parents) and root != Path(repo_root()).resolve():
+            # An invocation in a home/system folder is not consent to crawl it. The installed
+            # product checkout may itself live under runtime home and is still indexed.
+            if (not is_user_project_path(root, runtime_home=mo_home(getattr(self, "config", None)))
+                    and root != Path(repo_root()).resolve()):
                 return False
             return maybe_update_graph_async(root=root, reason=reason, maintain_indexes=True)
         except Exception:

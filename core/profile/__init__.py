@@ -19,7 +19,7 @@ from typing import Any
 import traceback
 
 from ..runtime.lock import file_byte_lock
-from ..state.paths import PROFILE_DB_PATH, PROFILE_PROSE_FILES, PROFILE_PROSE_ROLES
+from ..state.paths import PROFILE_DB_PATH, PROFILE_PROSE_FILES, PROFILE_PROSE_ROLES, mo_home
 from ..utils.atomic_write import atomic_write_json, atomic_write_text
 from ..utils.env_utils import int_env
 
@@ -81,12 +81,27 @@ def is_trackable_project_path(path: str | Path) -> bool:
     return not any(resolved == root or root in resolved.parents for root in map(Path, ("/proc", "/sys", "/dev")))
 
 
+def is_user_project_path(path: str | Path, *, runtime_home: str | Path | None = None) -> bool:
+    """A folder the user works in: trackable, not their home folder (or above it), and not inside
+    MO's own runtime home, where MO's state and its installed checkout live."""
+    if not is_trackable_project_path(path):
+        return False
+    try:
+        resolved = Path(path).expanduser().resolve(strict=False)
+        home = Path.home().resolve(strict=False)
+        runtime = Path(runtime_home or mo_home()).expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return not (resolved == home or resolved in home.parents
+                or resolved == runtime or runtime in resolved.parents)
+
+
 def _trackable_projects(raw: Any) -> dict[str, Any]:
     projects = raw if isinstance(raw, dict) else {}
     return {
         str(key): entry
         for key, entry in projects.items()
-        if isinstance(entry, dict) and is_trackable_project_path(str(entry.get("path") or ""))
+        if isinstance(entry, dict) and is_user_project_path(str(entry.get("path") or ""))
     }
 
 
@@ -452,7 +467,7 @@ class Profile:
                 try:
                     path = path.resolve()
                     if (any(path == root or root in path.parents for root in opaque_roots)
-                            or not is_trackable_project_path(path) or not path.is_dir()):
+                            or not is_user_project_path(path) or not path.is_dir()):
                         continue
                 except (OSError, RuntimeError, ValueError):
                     continue
