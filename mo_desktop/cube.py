@@ -35,6 +35,7 @@ from mo_desktop.cube_motion import (
     _CURSOR_REACTION_BRIGHTNESS as _CURSOR_REACTION_BRIGHTNESS,
     _NOMINAL_ACTIVE_FPS as _NOMINAL_ACTIVE_FPS,
     _TRACE_FADE_SECONDS as _TRACE_FADE_SECONDS,
+    _ease_out as _ease_out,
     _time_scaled_ease as _time_scaled_ease,
 )
 from mo_desktop.cube_panel import (
@@ -122,13 +123,12 @@ _VOICE_TRAIL_SECONDS = 0.5
 _VOICE_LISTEN_STAGGER = 0.07
 _VOICE_SPEAK_STAGGER = 0.03
 _VOICE_LIFT = 2.4
-# Writer character (row 28): pen loops per second (radians), the caret's blink rate, how fast the
-# written line drifts left, how long ink stays, and its colour.
-_PEN_RATE = 9.0
+# Writer character (row 28, pick A): the caret's blink rate, how long a line takes to type, the
+# scroll to the next line, and the lines' widths (share of the cube grid's width) as they come.
 _CARET_HZ = 0.9
-_INK_DRIFT = 60.0   # below the pen's backward swing, so strokes loop like handwriting
-_INK_FADE_SECONDS = 2.4
-_WRITER_INK = (122, 140, 255)
+_LINE_SECONDS = 0.9
+_SCROLL_SECONDS = 0.3
+_LINE_WIDTHS = (1.0, 0.78, 0.92, 0.6, 0.86, 0.7, 0.96, 0.66)
 _VOICE_SWELL = 0.10   # speaking: how far a full syllable opens the cluster (heartbeat uses .07)
 # Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
 # _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
@@ -1015,25 +1015,93 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     def set_role_motion(self, name: str) -> None:
         """A role's own behaviour for the same four cubes ('writer', or '' for none)."""
         self._role_motion = str(name or "")
-        self._ink_points = []
+        self._bar_sprites = {}
 
-    def _writer_pose(self, i: int, bx: float, by: float, now: float) -> tuple[float, float, float]:
-        """The writer character: at rest the last cube in the line blinks like a caret; while MO
-        works the lead cube draws joined-up loops (the pen) and the others nod along the line."""
-        lead = max(range(len(self._bases)), key=lambda k: self._bases[k][0])
+    def _writer_items(self, now: float, off: float, shift_x: float, shift_y: float) -> list:
+        """Writer character (row 28, his pick A): the cubes as three short lines of text and a
+        caret, compact inside the cube grid, in the cube colour with the cubes' glow. At rest the
+        caret blinks; while MO works the last line types itself out, then the lines scroll up."""
         e = self._cube_edge
+        xs = [x for x, _y in self._bases[:4]]
+        ys = [y for _x, y in self._bases[:4]]
+        grid_left, grid_w = min(xs) - e / 2, (max(xs) - min(xs)) + e
+        middle = (min(ys) + max(ys)) / 2
+        line_h, spacing = max(3.0, e * 0.42), e * 0.66
+        caret_w = max(2.0, e * 0.16)
+        max_w = grid_w - caret_w - e * 0.18
+        rows: list[tuple[float, float, float]] = []                # (width, y centre, alpha)
         if self._thinking:
             started = getattr(self, "_thinking_started_at", None)
-            t = (now - float(now if started is None else started)) * _PEN_RATE
-            if i == lead:
-                tall = 0.45 + 0.55 * math.sin(t * 0.31 + 1.3) ** 2
-                return bx - 0.34 * e * math.sin(t), by - 0.62 * e * tall * (1 - math.cos(t)) / 2, 1.0
-            order = sorted(range(len(self._bases)), key=lambda k: self._bases[k][0]).index(i)
-            follow = max(0.0, math.sin(t * 0.5 - (len(self._bases) - 1 - order) * 0.9))
-            return bx, by - self._bob_amp * 0.5 * follow, 0.88
-        if i == lead:
-            return bx, by, 0.55 + 0.45 * (0.5 + 0.5 * math.cos(now * 2 * math.pi * _CARET_HZ))
-        return bx, by, 0.92
+            elapsed = max(0.0, now - (now if started is None else started))
+            cycle = _LINE_SECONDS + _SCROLL_SECONDS
+            index, phase = int(elapsed // cycle), elapsed % cycle
+            widths = [_LINE_WIDTHS[(index + k) % len(_LINE_WIDTHS)] * max_w for k in range(4)]
+            if phase < _LINE_SECONDS:
+                grow = _ease_out(phase / _LINE_SECONDS)
+                rows = [(widths[0], middle - spacing, 1.0), (widths[1], middle, 1.0),
+                        (widths[2] * grow, middle + spacing, 1.0)]
+                caret = (widths[2] * grow, middle + spacing, 1.0)
+            else:
+                lift = _ease_out((phase - _LINE_SECONDS) / _SCROLL_SECONDS) * spacing
+                rows = [(widths[0], middle - spacing - lift, 1.0 - lift / spacing),
+                        (widths[1], middle - lift, 1.0), (widths[2], middle + spacing - lift, 1.0)]
+                caret = (0.0, middle + 2 * spacing - lift, lift / spacing)
+        else:
+            rows = [(max_w * 1.0, middle - spacing, 1.0), (max_w * 0.8, middle, 1.0), (max_w * 0.55, middle + spacing, 1.0)]
+            blink = 0.5 + 0.5 * math.cos(now * 2 * math.pi * _CARET_HZ)
+            caret = (max_w * 0.55, middle + spacing, 0.25 + 0.75 * blink * blink)
+        items = []
+        for width, y, alpha in rows:
+            if width >= 1.0 and alpha > 0.01:
+                items.append(self._bar_item(grid_left, y, width, line_h, alpha, off, shift_x, shift_y))
+        cwidth, cy, calpha = caret
+        if calpha > 0.01:
+            items.append(self._bar_item(grid_left + cwidth + e * 0.14, cy, caret_w, line_h * 1.7, calpha, off,
+                                        shift_x, shift_y))
+        return items
+
+    def _bar_item(self, x: float, y: float, width: float, height: float, alpha: float, off: float,
+                  shift_x: float, shift_y: float) -> tuple:
+        """One line (or the caret) as a cached sprite placed at sub-pixel precision."""
+        sprite = self._bar_sprite(max(1, int(round(width))), max(1, int(round(height))))
+        pad = (sprite.width - round(width)) / 2.0
+        (dx, qx), (dy, qy) = (_subpixel(x + off - pad + shift_x), _subpixel(y + off - sprite.height / 2 + shift_y))
+        return ((dx, dy), self._subpixel_sprite(sprite, qx, qy), alpha)
+
+    def _bar_sprite(self, width: int, height: int) -> Any:
+        """A rounded line in the cube's colour with the cube sprites' glow and keyline (cached per
+        size, so a line typing out costs one small render per new pixel of width)."""
+        cache = getattr(self, "_bar_sprites", None)
+        if cache is None:
+            cache = self._bar_sprites = {}
+        key = (width, height, self._color_rgb, round(self._glow, 3))
+        sprite = cache.get(key)
+        if sprite is not None:
+            return sprite
+        from PIL import Image, ImageDraw, ImageFilter
+
+        ss = 3
+        w, h = width * ss, height * ss
+        pad = int(max(h, self._cube_edge * ss) * (0.30 * self._glow + 0.12))
+        img = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+        col = tuple(min(255, int(c * _MAX_BRIGHT)) for c in self._color_rgb)
+        ImageDraw.Draw(img).rounded_rectangle((pad, pad, pad + w - 1, pad + h - 1), radius=h // 2, fill=(*col, 255))
+        body = img.split()[3]
+        if self._glow > 0:
+            blur = float(getattr(getattr(self, "_form", DEFAULT_CUBE_FORM), "glow_blur_ratio", 0.10) or 0.10)
+            halo = img.filter(ImageFilter.GaussianBlur(self._cube_edge * ss * blur * (0.3 + self._glow)))
+            glow = Image.new("RGBA", img.size, (*col, 0))
+            glow.putalpha(halo.split()[3])
+            img = Image.alpha_composite(glow, img)
+        ring = body.filter(ImageFilter.MaxFilter(5)).point(lambda value: max(0, value - 145))
+        outline = Image.new("RGBA", img.size, (*_contrast_outline_rgb(self._color_rgb), 0))
+        outline.putalpha(ring)
+        img = Image.alpha_composite(outline, img)
+        sprite = img.resize((img.width // ss, img.height // ss), Image.LANCZOS)
+        if len(cache) > 160:
+            cache.pop(next(iter(cache)))
+        cache[key] = sprite
+        return sprite
 
     def set_speaking(self, on: bool) -> None:
         """MO's own voice moves the cubes while it is audible (see ``_voice_lift``)."""
@@ -1163,9 +1231,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             wave = .5+.5*math.sin(now*3-i*math.pi/2)
             bright, alpha = .72+.28*wave, .78+.22*wave
             cx, cy = bx, by-self._bob_amp*.25*wave
-        elif (getattr(self, "_role_motion", "") == "writer" and not self._listening
-              and not getattr(self, "_speaking", False)):
-            cx, cy, bright = self._writer_pose(i, bx, by, now)
         elif self._thinking:
             from mo_desktop.emotes import get, sample
             emote, duration = get("thinking")
@@ -1396,7 +1461,12 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             shift_x, shift_y = self._x - W / 2.0 - left, self._y - W / 2.0 - top
             items: list[tuple[tuple[int, int], Any, float]] = []
             signature_items: list[tuple[int, int, int, float]] = []
-            for i in range(self._cube_count()):
+            writing = (getattr(self, "_role_motion", "") == "writer" and not self._any_face_docked()
+                       and not self._listening and not getattr(self, "_speaking", False))
+            if writing:      # the writer character draws lines of text instead of the cubes
+                items = self._writer_items(now, off, shift_x, shift_y)
+                signature_items = [(dx, dy, id(placed), round(a, 6)) for (dx, dy), placed, a in items]
+            for i in range(0 if writing else self._cube_count()):
                 cx, cy, b, a = self._cube_state(i, now)
                 idx = max(0, min(_LEVELS - 1, int(round(b * (_LEVELS - 1)))))
                 sprite = self._sprite_for(i, idx, now)
@@ -1546,45 +1616,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         right = math.ceil(max(xs) + pad)
         bottom = math.ceil(max(ys) + pad)
         return left, top, max(1, right - left), max(1, bottom - top)
-
-    def _tick_ink(self, now: float) -> None:
-        """Writer character: the pen leaves ink that drifts left like paper under a pen and fades;
-        drawn on the existing trace layer (the cubes stay inside their own window)."""
-        points = getattr(self, "_ink_points", None)
-        if points is None:
-            points = self._ink_points = []
-        if self._thinking:
-            lead = max(range(len(self._bases)), key=lambda k: self._bases[k][0])
-            cx, cy, _bright, _alpha = self._cube_state(lead, now)
-            # The pen writes on the line just under the cubes, so the ink shows beneath the others.
-            points.append((self._x - self._size / 2 + cx, self._y - self._size / 2 + cy + self._cube_edge * 1.25, now))
-        while points and now - points[0][2] > _INK_FADE_SECONDS:
-            points.pop(0)
-        surface = getattr(self, "_trace", None)
-        if surface is None or not getattr(surface, "available", lambda: False)():
-            return
-        if len(points) < 2:
-            try:
-                self._trace_win.hide()
-            except Exception:
-                pass
-            return
-        try:
-            from PIL import Image
-
-            from mo_desktop.cube_motion import paint_ink_line
-
-            shifted = [(x - _INK_DRIFT * (now - t), y, t) for x, y, t in points]
-            left = math.floor(min(p[0] for p in shifted) - 6)
-            top = math.floor(min(p[1] for p in shifted) - 6)
-            width = math.ceil(max(p[0] for p in shifted) + 6) - left
-            height = math.ceil(max(p[1] for p in shifted) + 6) - top
-            frame = Image.new("RGBA", (max(1, width), max(1, height)), (0, 0, 0, 0))
-            paint_ink_line(frame, shifted, now=now, origin=(left, top), color=_WRITER_INK, fade=_INK_FADE_SECONDS)
-            if surface.blit(frame, left, top):
-                self._trace_win.show()
-        except Exception:
-            pass
 
     def _paint_trace(self, now: float) -> None:
         """Draw passive fading cube footsteps for explicit point glides only."""

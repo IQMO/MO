@@ -66,17 +66,12 @@ def apply_reviewer_character(cube: Any, visuals: Any = None) -> None:
     )
 
 
-# ── writer character (row 28: the same four cubes, a writer's behaviour) ─────────────────────
-WRITER_PARCHMENT = "#f0e6d2"
-
-
+# ── writer character (row 28, his pick A: lines of text with a caret) ─────────────────────
 def apply_writer_character(cube: Any, visuals: Any = None) -> None:
-    """Writer roles: the four cubes in a parchment tone stand in a line like letters, the last one
-    blinking like a caret; while MO works the lead cube writes joined-up strokes in ink."""
+    """Writer roles: the four cubes become three short lines of text and a caret, in the skin's
+    own cube colour; at rest the caret blinks, while MO works the last line types itself out."""
     if cube is None:
         return
-    _safe(cube, "set_character", color_mode=WRITER_PARCHMENT)
-    _safe(cube, "set_formation", "row")
     _safe(cube, "set_role_motion", "writer")
 
 

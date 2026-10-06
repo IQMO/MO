@@ -83,26 +83,6 @@ def _footstep(size: int, corner_percent: int, opacity: int) -> Any:
     return mask.resize((side, side), Image.Resampling.BOX)
 
 
-def paint_ink_line(frame: Any, points: Any, *, now: float, origin: tuple[float, float], color: Any,
-                   fade: float, width: float = 2.2) -> None:
-    """Antialiased ink along the pen's path onto ``frame``: a 4x coverage mask, box-filtered down,
-    each segment fading with its age (row 28, the writer character)."""
-    from PIL import Image, ImageDraw
-
-    ss = 4
-    mask = Image.new("L", (frame.width * ss, frame.height * ss), 0)
-    draw = ImageDraw.Draw(mask)
-    ox, oy = origin
-    for (xa, ya, _ta), (xb, yb, tb) in zip(points, points[1:]):
-        life = max(0.0, 1.0 - (now - tb) / max(0.1, fade))
-        if life > 0:
-            draw.line(((xa - ox) * ss, (ya - oy) * ss, (xb - ox) * ss, (yb - oy) * ss),
-                      fill=int(235 * life ** 1.4), width=max(1, round(width * ss)))
-    layer = Image.new("RGBA", frame.size, (*tuple(int(v) for v in tuple(color)[:3]), 0))
-    layer.putalpha(mask.resize(frame.size, Image.Resampling.BOX))
-    frame.alpha_composite(layer)
-
-
 def _time_scaled_ease(per_frame: float, elapsed: float) -> float:
     """Preserve a 30-FPS spring's wall-clock motion at any render cadence."""
     base = max(0.0, min(1.0, float(per_frame)))
@@ -522,9 +502,6 @@ class CubeMotionMixin:
         return active
 
     def _update_trace(self, now: float) -> None:
-        if getattr(self, "_role_motion", "") == "writer" and (self._thinking or getattr(self, "_ink_points", None)):
-            self._tick_ink(now)             # the writer's ink owns the trace layer while it writes
-            return
         points = getattr(self, "_trace_points", None)
         summoning = float(now) < float(getattr(self, "_summon_trace_until", 0.0) or 0.0)
         if not points and not self._is_gliding() and not summoning:

@@ -888,10 +888,11 @@ interaction clock must not become an always-running background animation.
   from a verified PDF, EPUB or print export.
 - A role's cube character follows its name (`characters.character_for_role`, matched by
   neutral kind, never a profile-specific name): coach/reviewer roles get the watching face;
-  writer roles get the writing line - the same four cubes in parchment standing in a row, the
-  last one blinking like a caret, and while MO works the lead cube writes joined-up strokes
-  whose ink drifts left and fades on the existing trace layer. Dismissing the role restores
-  the configured character (`clear_role_character`).
+  writer roles turn the four cubes into three short lines of text and a caret, in the skin's
+  cube colour with the cubes' glow, compact inside the cube grid: at rest the caret blinks
+  (a continuous fade), and while MO works the last line types itself out and the lines scroll
+  up. Lines are cached glowing sprites per pixel width placed at sub-pixel precision (~0.5 ms
+  a frame). Dismissing the role restores the configured character (`clear_role_character`).
 - Project Architect specialists are project-bound skill packs. `role_work`
   reuses the skill writer and worker runtime, with existing concurrency and
   evidence limits. Worker records carry their project identity; another
