@@ -732,6 +732,9 @@ class CompanionSurface(
         value = bool(visible)
         self._visible = value
         self._reply_visible = value
+        if not value and getattr(self, "_spotlight_held", False):
+            self._spotlight_held = False           # the question card closed unanswered
+            self._show_spotlight(None, seconds=0, zoom=False)
         if not value and not self._dashboard_docked() and getattr(self, "_held_notices", None):
             self._release_held_notices()
 
@@ -4643,8 +4646,22 @@ class CompanionSurface(
         self._pending_walkthrough_recap_speech = ""
         self._clear_activity()
         self._display_reply_dialog(text, controls=True)
+        self._hold_spotlight_for_question(text)
         if speech and not self._speak_reply(speech):
             self._resume_voice_chat_after_turn()
+
+    def _hold_spotlight_for_question(self, text: str) -> None:
+        """A pointing turn that ends in a choice ("Yes, this one / No, another one") keeps its
+        outline on until he answers (the next turn resets it) or closes the card; by now the
+        point's own timer may have run out, so the outline is shown again, held."""
+        from mo_desktop.options import parse_options
+
+        target = getattr(self, "_walkthrough_spotlight", None)
+        if target is None or parse_options(str(text or ""))[1] is None:
+            return
+        box, zoom = target
+        self._show_spotlight(box, seconds=None, zoom=zoom)
+        self._spotlight_held = True
 
     def _walkthrough_recap_must_wait(self, now: float | None = None) -> bool:
         """Keep the one recap off-screen until every point has had its turn."""
@@ -5607,9 +5624,12 @@ class CompanionSurface(
                 pass
         setattr(self, attribute, None)
 
-    def _show_spotlight(self, box: Any, *, seconds: float, zoom: bool) -> None:
-        """Outline the pointed window or control and dim the rest (row 34); no box clears it."""
+    def _show_spotlight(self, box: Any, *, seconds: float | None, zoom: bool) -> None:
+        """Outline the pointed window or control and dim the rest (row 34); no box clears it.
+        ``seconds`` None holds it until hidden: the target stays outlined while MO asks about it."""
         spotlight = getattr(self, "_spotlight", None)
+        if box is not None:
+            self._walkthrough_spotlight = (box, zoom)
         if box is None:
             if spotlight is not None:
                 spotlight.hide()
@@ -5629,6 +5649,8 @@ class CompanionSurface(
         spotlight = getattr(self, "_spotlight", None)
         if spotlight is not None:
             spotlight.hide()
+        self._walkthrough_spotlight = None
+        self._spotlight_held = False
         self._cancel_walkthrough_timer("_walkthrough_recap_after")
         self._cancel_walkthrough_timer("_walkthrough_point_after")
         self._pending_walkthrough_recap = ""

@@ -22,8 +22,9 @@ class Spotlight:
         return self._layer is not None
 
     def show(self, box: tuple[int, int, int, int], *, accent: str, radius: int = 8,
-             seconds: float = 4.0, zoom: bool = False) -> bool:
-        """Outline ``box`` (screen x, y, width, height) for ``seconds``; a newer point replaces it."""
+             seconds: float | None = 4.0, zoom: bool = False) -> bool:
+        """Outline ``box`` (screen x, y, width, height) for ``seconds``, or until ``hide()`` when
+        ``seconds`` is None (held while MO asks "this one?"); a newer point replaces it."""
         from mo_desktop import brightness
         from mo_desktop.layered import NativeLayeredWindow
 
@@ -47,7 +48,7 @@ class Spotlight:
             return False
         self._generation += 1
         generation = self._generation
-        if self._schedule is not None:
+        if self._schedule is not None and seconds is not None:
             try:
                 self._schedule(max(0.5, float(seconds or 4.0)) * 1000, lambda: self._expire(generation))
             except Exception:

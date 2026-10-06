@@ -563,7 +563,12 @@ A point may carry the target's `box` (the whole window or control from
 accent and dims the rest of that screen with one click-through, capture-excluded
 layer below the cubes, which clears when the point ends or the turn stops. A
 `number` prefixes a walkthrough step's label, and `zoom` shows a small control
-enlarged beside its outline.
+enlarged beside its outline. When MO is unsure which window or part is meant
+("capture the Chrome window" with two open, "this part of the screen"), it
+outlines its best candidate and asks with a single choice (Yes, this one / No,
+another one); the outline stays on until that question is answered, by click,
+typing or voice, or its card is closed. On "no" MO outlines the next candidate;
+when it stays unclear MO asks for the cube's screen selection instead.
 These paths do not spend a provider round rediscovering the same tools. Each
 action returns its own fresh evidence, and MO reads it to decide the next step;
 no extra verification round is forced. If the last action's result is still
