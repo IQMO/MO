@@ -185,6 +185,7 @@ def terminal_session_candidates(config: dict[str, Any] | None, sessions_dir: str
             "mologrthim_available": "mologrthim_control" in snapshot,
             "intent": event.intent if event is not None else _session_focus(path),
             "outcome": event.outcome if event is not None else "",
+            "taskboard": snapshot.get("taskboard") if isinstance(snapshot.get("taskboard"), dict) else {},
             "updated_at": max(float(snapshot.get("created_at") or 0.0), event.created_at if event is not None else 0.0),
             "path": path,
         })

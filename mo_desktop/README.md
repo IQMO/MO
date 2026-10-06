@@ -670,9 +670,10 @@ Desktop discovers live terminals from their real heartbeats and remembers one
 selected binding. One live terminal can be selected automatically; multiple
 terminals produce an explicit choice. An offline selection stays visibly
 offline instead of silently changing to another process. When asked how many
-terminals are live or what each is doing, Desktop injects a bounded current
-count and focus summary from that same native route. One immediate detail
-follow-up reuses the route; shell parsing, screenshots, and window counts do not.
+terminals are live, what each is doing, or whether one is stuck or done, Desktop
+injects a bounded current count, focus and board progress ("1/2 tasks done; now:
+...") from that same native route. One immediate detail follow-up reuses the
+route; shell parsing, screenshots, and window counts do not.
 
 Sync transfers bounded current focus into the Desktop conversation as context.
 It does not copy a terminal transcript or taskboard and does not invent a
@@ -683,7 +684,9 @@ request as one normal turn to a heartbeat-proven Terminal in the same project.
 If no such Terminal is live, Desktop opens one visible Terminal with that
 request, in MO Shell (MO's own window for the same Terminal) when it is built,
 else in a console. The handoff does not make Desktop a taskboard worker and does
-not copy Terminal progress back into the companion conversation. Asked to "open
+not copy Terminal progress back into the companion conversation; for an hour
+after it, a question about that work without naming the Terminal ("is mo stuck
+with that goal?", "is it done?") gets the same native status. Asked to "open
 one terminal with 4 panes" (or "run mo in 4 splits", "... on the server"),
 Desktop opens MO Terminal the same way, already split with
 `/workspace open N local|host`.
