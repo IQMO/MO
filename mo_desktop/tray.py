@@ -891,6 +891,8 @@ class CubeLauncher:
                                                 fill=(*cube_rgb, 105))
         cube_face = halo.filter(ImageFilter.GaussianBlur(8))
         ImageDraw.Draw(cube_face).rounded_rectangle(face, radius=radius, fill=cube_hex)
+        # The bare face (no titles) the opening and closing grow from: a crisp shape at any size.
+        self._face_art = cube_face.resize((self._TILE_WIDTH, self._TILE_HEIGHT), Image.Resampling.LANCZOS)
         self._tile_images = []
         self._dimmed_tiles = []
         self._row_sprites = {}
@@ -1711,8 +1713,11 @@ class CubeLauncher:
             center_x = origin_x * (1 - progress) + (target_x + self._TILE_WIDTH / 2) * progress
             center_y = origin_y * (1 - progress) + (target_y + self._TILE_HEIGHT / 2) * progress
             size = max(1, round(width)), max(1, round(height))
-            sprite = Image.blend(source.resize(size, Image.Resampling.BILINEAR),
-                                 tile.resize(size, Image.Resampling.BILINEAR), progress)
+            # Grow the tile's own face, drawn full size and scaled down, with the titles fading
+            # in. Stretching the small cube sprite (and its soft halo) 7x was the grainy ring.
+            face = getattr(self, "_face_art", None) or source
+            sprite = Image.blend(face.resize(size, Image.Resampling.LANCZOS),
+                                 tile.resize(size, Image.Resampling.LANCZOS), progress)
             image.alpha_composite(sprite, (round(center_x - size[0] / 2),
                                            round(center_y - size[1] / 2)))
         return image
