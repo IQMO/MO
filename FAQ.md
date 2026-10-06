@@ -221,7 +221,9 @@ MO's provider abstraction supports:
 - OpenAI/Codex OAuth through the local Codex auth file; a machine without the Codex
   CLI (a server) gets its own sign-in with `python -m core.provider.codex_login start`
   (open the link, enter the code) and then `finish`. Give each machine its own
-  sign-in: a copied auth file breaks once another machine refreshes the session;
+  sign-in: a copied auth file breaks once another machine refreshes the session.
+  When a session ends anyway, MO starts that sign-in itself: its reply shows only
+  the link and code, and MO finishes signing in by itself once you approve;
 - Ollama and other local OpenAI-compatible servers;
 - custom OpenAI-compatible chat endpoints.
 

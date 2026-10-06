@@ -481,9 +481,11 @@ class AgentTurnRecoveryMixin:
     )
     _PROVIDER_AUTH_GUIDANCE = (
         "\n\nThe selected provider rejected its authentication. Refresh or re-authenticate that "
-        "provider (sign in again for OAuth) before retrying, or choose another model with `/model`. "
-        "For Codex, give this machine its own sign-in (a copied one breaks when another machine "
-        "refreshes): run `python -m core.provider.codex_login start`, open the link, then `finish`."
+        "provider (sign in again for OAuth) before retrying, or choose another model with `/model`."
+    )
+    _CODEX_SIGN_IN_COMMAND = (
+        " For Codex, give this machine its own sign-in: run "
+        "`python -m core.provider.codex_login start`, open the link, then `finish`."
     )
     _PROVIDER_QUOTA_GUIDANCE = (
         "\n\nThe selected provider's usage or billing allowance is exhausted. "
@@ -497,7 +499,7 @@ class AgentTurnRecoveryMixin:
         details = dict(context or {})
         if details.get("kind") == "provider_error" and details.get("reason") not in {None, "", "error"}:
             if details.get("error_kind") == "auth":
-                return message + self._PROVIDER_AUTH_GUIDANCE
+                return message + self._provider_auth_guidance(details)
             if details.get("error_kind") in {"quota", "balance"}:
                 return message + self._PROVIDER_QUOTA_GUIDANCE
             return message + self._PROVIDER_FAILURE_GUIDANCE
@@ -507,6 +509,24 @@ class AgentTurnRecoveryMixin:
             session._pending_error_report.setdefault("session_id", getattr(session, "session_id", ""))
             session._pending_error_report.setdefault("timestamp", time.time())
         return message + self._ERROR_REPORT_PROMPT
+
+    def _provider_auth_guidance(self, details: dict) -> str:
+        """For Codex the only step that needs the operator is approving a sign-in: MO starts it,
+        finishes it by itself once approved, and the reply carries just the link and code."""
+        if str(details.get("provider") or "") != "openai-codex":
+            return self._PROVIDER_AUTH_GUIDANCE
+        auth_path = next((getattr(provider, "auth_path", None) for provider in getattr(self, "providers", None) or ()
+                          if getattr(provider, "name", "") == "openai-codex"), None)
+        try:
+            from core.provider.codex_login import ensure_device_login
+
+            login = ensure_device_login(auth_path)
+        except Exception:
+            return self._PROVIDER_AUTH_GUIDANCE + self._CODEX_SIGN_IN_COMMAND
+        minutes = max(1, round((login.expires_at - time.time()) / 60))
+        return (f"\n\nThis machine's Codex sign-in has ended. Open {login.verification_url} and enter "
+                f"the code **{login.user_code}** (valid {minutes} minutes). MO finishes signing in by itself; "
+                "then ask again. Or choose another model with `/model`.")
 
     @staticmethod
     def _boundary_has_done_claim_conflict(boundary_report: object | None) -> bool:

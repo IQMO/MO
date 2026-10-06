@@ -5,6 +5,9 @@ own. A machine signed in this way is never broken by another machine's token ref
 ``auth.json`` shares one refresh chain, so whichever side refreshes first kills the other's copy).
 Same protocol as ``codex login --device-auth``.
 
+When the session ends anyway, MO starts the sign-in itself (``ensure_device_login``) and finishes
+it in the background; the operator only opens the link and enters the code shown in MO's reply.
+
     python -m core.provider.codex_login start  [--auth-path PATH]   # prints the link and code
     python -m core.provider.codex_login finish [--auth-path PATH]   # waits until approved, saves
 """
@@ -13,6 +16,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -25,6 +29,8 @@ from ..utils.atomic_write import atomic_write_json
 ISSUER = "https://auth.openai.com"
 VERIFICATION_URL = f"{ISSUER}/codex/device"
 LOGIN_SECONDS = 15 * 60
+_pending_lock = threading.Lock()
+_pollers: dict[str, threading.Thread] = {}
 
 
 @dataclass(frozen=True)
@@ -129,6 +135,48 @@ def _state_path(auth_path: Path) -> Path:
     return auth_path.with_name(auth_path.name + ".device-login.json")
 
 
+def _saved_login(state: Path) -> DeviceLogin | None:
+    try:
+        return DeviceLogin(**json.loads(state.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def ensure_device_login(auth_path: str | Path | None = None) -> DeviceLogin:
+    """Keep one device sign-in ready for this machine and finish it in the background.
+
+    Reuses a pending code that still has a minute left (every failed reply shows the same code),
+    otherwise starts a new one. Once the operator approves it the session is saved where the
+    provider reads it, and the next request simply works."""
+    path = Path(auth_path or codex_auth_path(None)).expanduser()
+    state = _state_path(path)
+    with _pending_lock:
+        login = _saved_login(state)
+        if login is None or login.expires_at - time.time() < 60:
+            login = start_device_login()
+            state.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(state, asdict(login), indent=2)
+        poller = _pollers.get(login.device_auth_id)
+        if poller is None or not poller.is_alive():
+            poller = threading.Thread(target=_finish_in_background, args=(login, path), daemon=True,
+                                      name="mo-codex-sign-in")
+            _pollers.clear()
+            _pollers[login.device_auth_id] = poller
+            poller.start()
+    return login
+
+
+def _finish_in_background(login: DeviceLogin, auth_path: Path) -> None:
+    try:
+        finish_device_login(login, auth_path=auth_path)
+    except Exception:
+        pass
+    with _pending_lock:
+        saved = _saved_login(_state_path(auth_path))
+        if saved is not None and saved.device_auth_id == login.device_auth_id:
+            _state_path(auth_path).unlink(missing_ok=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Sign MO in to Codex with a device code.")
     parser.add_argument("step", choices=("start", "finish"))
@@ -142,9 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         atomic_write_json(state, asdict(login), indent=2)
         print(f"Open {login.verification_url} and enter the code {login.user_code} (valid 15 minutes).")
         return 0
-    try:
-        login = DeviceLogin(**json.loads(state.read_text(encoding="utf-8")))
-    except (OSError, ValueError, TypeError):
+    login = _saved_login(state)
+    if login is None:
         print("No sign-in in progress; run the start step first.")
         return 2
     problem = finish_device_login(login, auth_path=auth_path)
