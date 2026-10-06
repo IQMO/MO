@@ -1127,7 +1127,7 @@ class CubeLauncher:
                 hovered = self._hovered_control[0] == key
                 width = 24 + round(draw.textlength(label, font=chip_font)) + 10
                 chip = (cx, cy, cx + width, cy + 22)
-                draw.rounded_rectangle(chip, radius=11, fill=(*ImageColor.getrgb(p.card), round((255 if hovered else 230) * amount)),
+                draw.rounded_rectangle(chip, radius=radius, fill=(*ImageColor.getrgb(p.card), round((255 if hovered else 230) * amount)),
                                        outline=(*ImageColor.getrgb(p.accent), round((255 if hovered else 0) * amount)))
                 mark = make_glyph_icon(glyph, 12, color=p.accent)
                 mark.putalpha(mark.getchannel("A").point(lambda value: round(value * amount)))

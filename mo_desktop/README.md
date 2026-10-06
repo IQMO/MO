@@ -167,7 +167,7 @@ preference, automatic activation, or new hotkey.
 
 The lower-right cube expands into a compact icon-and-title window list. The
 composer similarly expands upward from the upper-right cube, using its existing
-input card, draft, controls and transition clock. Roles come from the current profile catalog and are selected in a compact opaque dropdown at the role control. Google, YouTube and Google Translate reuse the same text and default-browser action; their selected static edge uses the service colors, while ordinary conversation follows the active theme. With both open, the two left
+input card, draft, controls and transition clock. Roles come from the current profile catalog and are selected in a compact opaque dropdown at the role control. One search icon beside the role control switches, one at a time, from MO chat to Google, YouTube and Google Translate (the same text and default-browser action; the selected service colors the edge) and the composer returns to MO chat each time it opens. Its controls are icons without strokes: history on the left, attach (Windows' file picker, imported like a drop) next to Send, and three dots above Send. Up/Down or the dots show MO's earlier replies in the composer itself, cross-faded, with the rest of the screen dimmed behind it; typing, Enter, Escape or Down past the newest returns to the draft. With both open, the two left
 cubes remain visible. Its small cube control folds the composer back. The single
 cube at the top of Focus folds the list
 back into the four-cube form. Its lower-right cube is then slightly larger and
@@ -664,7 +664,7 @@ the screen visually unchanged.
 The card supports mouse and keyboard operation. Tab/Shift+Tab and arrow keys
 move through visible controls, Enter/Space activates, and Escape closes. In the
 composer, common selection, edit, paste, Home/End, and navigation keys behave
-normally. The reply card's arrows browse MO replies; the clock opens only the
+normally. The reply card's arrows browse MO replies (the composer browses in place); the clock opens only the
 isolated Desktop conversation namespace. `/new` archives a non-empty Desktop
 conversation and never clears a terminal session.
 

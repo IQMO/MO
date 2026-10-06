@@ -59,6 +59,12 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # affordance, which swaps the preview slot to this quick-tool grid; each tile is a drawn
 
 
+# The composer's earlier-message browse: room kept for the three dots above Send, the dim behind
+# the composer, and the cross-fade between messages.
+_COMPOSER_DOTS_RESERVE = 16
+_BROWSE_VEIL_ALPHA = 110
+_BROWSE_FADE_SECONDS = 0.15
+
 class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     """MO's reply/input, rendered as a smooth floating card on a layered window."""
 
@@ -88,7 +94,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._on_submit: Callable[[str], None] | None = None
         self._reply_history: list[dict[str, Any]] = []  # canonical replies, oldest->newest
         self._reply_idx = 0
-        self._recall_from_composer = False   # browsing reply history opened from the input composer
+        self._browse_idx: int | None = None   # an earlier reply shown IN the composer (Up/Down, dots)
+        self._browse_veil: Any = None         # the dim behind the composer while it shows one
         self._controls_enabled = True
         self._copied = False
         self._hover = ""            # which footer control the pointer is over
@@ -475,7 +482,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         is_input = self._mode == "input"
         caret_rect: tuple[int, int, int, int] | None = None
         shown = self._body if (self._body or not is_input) else ""
-        placeholder = is_input and not self._body
+        # Browsing MO's earlier replies happens IN the composer (Up/Down, the three dots).
+        reply_history = list(getattr(self, "_reply_history", None) or []) if is_input else []
+        browse_idx = getattr(self, "_browse_idx", None) if is_input else None
+        browsing = browse_idx is not None and 0 <= browse_idx < len(reply_history)
+        if browsing:
+            shown = str(reply_history[browse_idx].get("content") or "")
+        placeholder = is_input and not shown
+        dots = is_input and bool(reply_history)
         attachment_caption = (
             not is_input
             and not bool(getattr(self, "_controls_enabled", False))
@@ -489,11 +503,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         rich_text = (not is_input) and (not placeholder) and not attachment_caption
         wrap_text = shown if not placeholder else "Type a message…"
         mail_reply = rich_text and shown.startswith(("**Gmail / ", "**Outlook / "))
+        # The three dots sit above Send, so the composer's text wraps short of them.
+        wrap_width = (self._content_width(probe, wrap_text, rich=rich_text) - _COMPOSER_DOTS_RESERVE) if dots else None
         wrap_key = (wrap_text, rich_text, ss, self._content_width(probe, wrap_text, rich=rich_text),
-                    id(self._font), id(self._bfont))
+                    id(self._font), id(self._bfont), wrap_width)
         cached = getattr(self, "_wrapped_body", None)
         if cached is None or cached[0] != wrap_key:
-            cached = (wrap_key, self._wrap_spans(probe, wrap_text, rich=rich_text))
+            cached = (wrap_key, self._wrap_spans(probe, wrap_text, rich=rich_text, width=wrap_width))
             self._wrapped_body = cached
         all_lines = cached[1]
         content_width = self._content_width(probe, shown if not placeholder else "Type a message…",
@@ -541,9 +557,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             str(getattr(self, "_footer_action_label", "") or "").strip()
             and callable(getattr(self, "_on_footer_action", None))
         )
-        nav_controls = bool(getattr(self, "_controls_enabled", True)) and (
-            not is_input or bool(getattr(self, "_reply_history", None))
-        )
+        # Replies keep ↑ n/n ↓; the composer browses with the three dots above Send instead.
+        nav_controls = bool(getattr(self, "_controls_enabled", True)) and not is_input
         # Options always retain their Submit footer, including while scrolling.
         footer = is_input or bool(option_rows) or (bool(self._body) and (nav_controls or has_footer_action))
         frame_h = (
@@ -568,7 +583,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         elif cursor == len(shown) and not placeholder and not rich_text:
             caret_lines = all_lines  # the same text and settings the body was just wrapped with
         else:
-            caret_lines = self._wrap_spans(probe, shown[:cursor], rich=False)
+            caret_lines = self._wrap_spans(probe, shown[:cursor], rich=False, width=wrap_width)
         caret_line = max(0, len(caret_lines) - 1)
         if is_input:
             if caret_line < self._scroll_line:
@@ -640,6 +655,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
         if is_input:
             _set_hit("collapse", (int(ax/ss)-6, int(ay/ss)-7, int(ax/ss)+18, int(ay/ss)+12))
+            search_x = ax + 21 * ss
             if callable(getattr(self, "_on_role_select", None)):
                 label = card.fit_text(d, getattr(self, "_role_label", "") or "Default role",
                                       (content_width-34)*ss, self._sfont)
@@ -649,6 +665,25 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 d.text((ax+28*ss, ay-5*ss), label, font=self._sfont,
                        fill=(*(self._cyan if self._hovering("role") else self._muted), 255))
                 _set_hit("role", (int(ax/ss)+21, int(ay/ss)-8, int(role_right/ss), int(ay/ss)+12))
+                search_x = int(role_right) + 6 * ss
+            if callable(getattr(self, "_on_web_search", None)):
+                # One icon at a time: click switches MO chat -> Google -> YouTube -> Translate;
+                # the composer returns to MO chat each time it opens.
+                provider = self._composer_search_provider()
+                color = self._cyan if provider or self._hovering("search_cycle") else self._muted
+                hex_color = "#%02x%02x%02x" % tuple(color)
+                from interface.desktop_brand import make_glyph_icon
+                icon_y = ay - 6 * ss
+                if provider == "google":
+                    glyph_w = int(d.textlength("G", font=self._bfont))
+                    d.text((search_x + (16 * ss - glyph_w) // 2, ay - 8 * ss), "G", font=self._bfont, fill=(*color, 255))
+                elif provider == "youtube":
+                    d.polygon([(search_x + 4 * ss, icon_y + 2 * ss), (search_x + 4 * ss, icon_y + 14 * ss),
+                               (search_x + 14 * ss, icon_y + 8 * ss)], fill=(*color, 255))
+                else:
+                    glyph = make_glyph_icon("translate" if provider == "translate" else "search", 15 * ss, color=hex_color)
+                    img.alpha_composite(glyph, (int(search_x), int(icon_y)))
+                _set_hit("search_cycle", (int(search_x / ss) - 3, int(ay / ss) - 8, int(search_x / ss) + 19, int(ay / ss) + 12))
 
         if not is_input and not image_card:
             # Copy MO's message. Two offset rounded squares — the universal copy mark. The old
@@ -747,7 +782,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     lx += float(d.textlength(piece, font=font))
             if idx < len(lines) - 1:
                 ty += int(design.line_height) * ss
-        if is_input and not bool(getattr(self, "_select_all", False)):
+        if is_input and not browsing and not bool(getattr(self, "_select_all", False)):
             caret_spans = caret_lines[-1] if caret_lines else [("", False)]
             caret_plain = plain_spans(caret_spans)
             caret_display, caret_rtl = shape_line(caret_plain)
@@ -889,13 +924,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 hovered = self._hovering(key)
                 fill = self._cyan if active else getattr(self, "_entry", self._edge)
                 outline = self._cyan if active or hovered else self._edge
-                d.rounded_rectangle(
-                    [x0, cyy - 4 * ss, x1, cyy + 15 * ss],
-                    radius=button_radius,
-                    fill=(*fill, 255),
-                    outline=(*outline, 255),
-                    width=max(1, ss),
-                )
+                if not is_input:   # the composer's controls are icons only, no strokes
+                    d.rounded_rectangle(
+                        [x0, cyy - 4 * ss, x1, cyy + 15 * ss],
+                        radius=button_radius,
+                        fill=(*fill, 255),
+                        outline=(*outline, 255),
+                        width=max(1, ss),
+                    )
                 _set_hit(
                     key,
                     (
@@ -928,41 +964,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     width=max(1, ss),
                 )
                 left_control_x = hx1 + 9 * ss
-
-            if is_input and callable(getattr(self, "_on_web_search", None)):
-                search_provider = self._composer_search_provider()
-                gx1, icon_col = _footer_icon_button(
-                    "search_google",
-                    left_control_x,
-                    active=search_provider == "google",
-                )
-                glyph = "G"
-                glyph_w = int(d.textlength(glyph, font=self._bfont))
-                d.text(
-                    (left_control_x + (25 * ss - glyph_w) // 2, cyy - 4 * ss),
-                    glyph,
-                    font=self._bfont,
-                    fill=(*icon_col, 255),
-                )
-                left_control_x = gx1 + 9 * ss
-
-                yx1, icon_col = _footer_icon_button(
-                    "search_youtube",
-                    left_control_x,
-                    active=search_provider == "youtube",
-                )
-                d.polygon(
-                    [(left_control_x + 9 * ss, cyy),
-                     (left_control_x + 9 * ss, cyy + 10 * ss),
-                     (left_control_x + 18 * ss, cyy + 5 * ss)],
-                    fill=(*icon_col, 255),
-                )
-                left_control_x = yx1+9*ss
-                _tx1, icon_col = _footer_icon_button("search_translate", left_control_x,
-                                                    active=search_provider == "translate")
-                from interface.desktop_brand import make_glyph_icon
-                glyph = make_glyph_icon("translate", 15*ss, color="#%02x%02x%02x" % icon_col)
-                img.alpha_composite(glyph, (left_control_x+5*ss, cyy-2*ss))
 
             right_edge = box[2] - panel_padding * ss
             if has_footer_action:
@@ -1035,6 +1036,30 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     min_width=48,
                     min_height=28,
                 )
+                if callable(getattr(self, "_on_attach", None)):
+                    from interface.desktop_brand import make_glyph_icon
+                    color = self._cyan if self._hovering("attach") else self._muted
+                    clip_x = rx0 - 8 * ss - 15 * ss
+                    img.alpha_composite(make_glyph_icon("file", 15 * ss, color="#%02x%02x%02x" % tuple(color)),
+                                        (int(clip_x), int(cyy - 2 * ss)))
+                    _set_hit("attach", (int(clip_x / ss) - 4, int((cyy - 5 * ss) / ss), int(clip_x / ss) + 19,
+                                        int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
+                if dots:
+                    # Three dots above Send: the bottom one is your draft, the middle one MO's last
+                    # reply, the top one anything older. Click above or below the middle to move.
+                    lit = 2 if not browsing else (1 if browse_idx == len(reply_history) - 1 else 0)
+                    dot_x = (rx0 + rx1) // 2
+                    bottom_y = cyy - 4 * ss - 8 * ss
+                    for index in range(3):
+                        dot_y = bottom_y - (2 - index) * 6 * ss
+                        hot = (index < 2 and self._hovering("dots_up")) or (index == 2 and self._hovering("dots_down"))
+                        alpha = 255 if index == lit or hot else 130
+                        color = self._cyan if index == lit or hot else self._muted
+                        d.ellipse([dot_x - 2 * ss, dot_y - 2 * ss, dot_x + 2 * ss, dot_y + 2 * ss], fill=(*color, alpha))
+                    mid_y = int((bottom_y - 6 * ss) / ss)
+                    _set_hit("dots_up", (int(dot_x / ss) - 10, mid_y - 12, int(dot_x / ss) + 10, mid_y))
+                    _set_hit("dots_down", (int(dot_x / ss) - 10, mid_y, int(dot_x / ss) + 10,
+                                           min(mid_y + 12, self._hit["send"][1] - 1)))   # never over Send
             elif bool(getattr(self, "_controls_enabled", True)):
                 # Reply: icon only (a drawn return arrow on the accent fill).
                 px = button_pad; ic = 13 * ss
@@ -1089,6 +1114,18 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 d.rounded_rectangle((menu_right-3*ss, ty, menu_right-2*ss, ty+thumb), radius=ss, fill=(*self._muted, 180))
             caret_rect = None
         finished = card.finish(img, ss)   # premultiply-then-downscale (shared primitive)
+        fade_from = getattr(self, "_browse_from", None) if is_input else None
+        if fade_from is not None:
+            amount = (time.perf_counter() - float(getattr(self, "_browse_started", 0.0))) / _BROWSE_FADE_SECONDS
+            if amount < 1 and fade_from.size == finished.size and fade_from.mode == finished.mode:
+                from PIL import Image as _Image
+                finished = _Image.blend(fade_from, finished, max(0.0, amount))
+                try:
+                    self._gui.schedule(16, self._repaint)
+                except Exception:
+                    self._browse_from = None
+            else:
+                self._browse_from = None
         if is_input:
             # The resting card is expensive to build (shadow, fonts, RTL, wrapping) but
             # the blinking caret is only a tiny opaque rectangle. Cache the caret-free
@@ -1436,6 +1473,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def _prepare_panel_show(self, mode: str, state: PanelState, *, controls: bool = False) -> bool:
         """Set the shared panel state and report whether it needs a new reveal."""
+        if mode != "input":
+            self._end_browse(repaint=False)   # a reply, status or list replaces the composer browse
         transition = (
             not bool(getattr(self, "_visible", False))
             or getattr(self, "_mode", "reply") != mode
@@ -1687,7 +1726,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         itself."""
         self._keyboard_hit = ""
         self._stash_input_draft()   # a reply arriving mid-compose must not drop the draft
-        self._recall_from_composer = False   # a genuine new reply ends any composer browse
         state = PanelState.FOOTERLESS if not controls else PanelState.REPLY
         transition = self._prepare_panel_show("reply", state, controls=controls)
         self._footer_action_label = str(action_label or "").strip()[:24]
@@ -1773,6 +1811,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         on_role_select: Callable[[str], None] | None = None,
         role_label: str | None = None,
         history: list[dict[str, Any]] | None = None,
+        on_attach: Callable[[], None] | None = None,
     ) -> bool:
         already_composing = bool(getattr(self, "_visible", False)) and self._mode == "input"
         if history is not None:
@@ -1784,6 +1823,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         transition = self._prepare_panel_show("input", PanelState.INPUT, controls=True)
         self._on_session_history = on_session_history if callable(on_session_history) else None
         self._on_web_search = on_web_search if callable(on_web_search) else None
+        if on_attach is not None:
+            self._on_attach = on_attach if callable(on_attach) else None
         if role_options is not None:
             self._role_options = role_options
         if on_role_select is not None:
@@ -1792,7 +1833,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._role_label = role_label
         if self._on_web_search is None:
             self._search_provider = ""
-        self._recall_from_composer = False
+        self._end_browse(repaint=False)
         # A repeated summon keeps the live edit. Only reopening a closed composer
         # or returning from another panel consumes its stashed draft.
         if not already_composing:
@@ -1864,6 +1905,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         return self._repaint_for_panel_show(transition)
 
     def hide(self) -> None:
+        self._end_browse(repaint=False)
         self._role_menu_open = False
         self._cube_closing = False
         self._cancel_panel_transition()
@@ -1894,7 +1936,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._clear_options()
         self._attachment_preview_paths = []
         self._attachment_tools_allowed = True
-        self._recall_from_composer = False
+        self._end_browse(repaint=False)
         self._hold(False)
         try:
             self._win.hide()
@@ -1941,6 +1983,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return "break"
         control = bool(int(getattr(event, "state", 0) or 0) & 0x4)
         shift = bool(int(getattr(event, "state", 0) or 0) & 0x1)
+        if getattr(self, "_browse_idx", None) is not None and ks not in {"Up", "Down", "Tab", "ISO_Left_Tab"}:
+            self._end_browse()           # any other key returns to the draft first
+            if ks in {"Return", "KP_Enter", "Escape"}:
+                return "break"
         if ks in {"Tab", "ISO_Left_Tab"}:
             self._move_keyboard_hit(-1 if shift or ks == "ISO_Left_Tab" else 1)
             return "break"
@@ -2098,12 +2144,22 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     callback()
                 except Exception:
                     pass
-        elif key in {"search_google", "search_youtube", "search_translate"}:
-            provider = key.removeprefix("search_")
-            self._search_provider = (
-                "" if self._composer_search_provider() == provider else provider
-            )
+        elif key == "search_cycle":
+            order = ("", "google", "youtube", "translate")
+            current = self._composer_search_provider()
+            self._search_provider = order[(order.index(current) + 1) % len(order)]
             self._repaint()
+        elif key == "dots_up":
+            self._browse(-1)
+        elif key == "dots_down":
+            self._browse(+1)
+        elif key == "attach":
+            callback = getattr(self, "_on_attach", None)
+            if callable(callback):
+                try:
+                    callback()
+                except Exception:
+                    pass
         elif key == "session:back":
             callback = getattr(self, "_on_session_back", None)
             if callable(callback):
@@ -2251,7 +2307,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         elif self._mode == "reply" and bool(getattr(self, "_controls_enabled", True)):
             self._recall_reply(step)
         elif self._mode == "input":
-            self._recall_from_input()   # either arrow in the composer opens MO's reply history
+            self._browse(step)          # MO's earlier replies, in place in the composer
 
     def _stash_input_draft(self) -> None:
         """Preserve an in-progress composer draft so closing or replacing the input panel
@@ -2328,31 +2384,82 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _recall_reply(self, step: int) -> None:
         """↑ (step -1) / ↓ (step +1) through MO's previous replies, shown in the card. When
         the browse was opened from the composer, ↓ past the newest returns to the draft."""
-        from_composer = bool(getattr(self, "_recall_from_composer", False))
-        if step > 0 and from_composer and self._reply_idx >= len(self._reply_history) - 1:
-            self._return_to_composer()
-            return
         if len(self._reply_history) < 2:
             return
         self._reply_idx = max(0, min(len(self._reply_history) - 1, self._reply_idx + step))
         self._restore_history_reply()
         self._repaint()
 
-    def _recall_from_input(self) -> None:
-        """↑ in the composer opens MO's reply history using the SAME card as a reply (same
-        ↑/↓ arrows + Reply). The unsent draft is stashed and restored on the way back."""
-        if self._mode != "input" or not self._reply_history:
+    def _browse(self, step: int) -> None:
+        """Up (step -1) / Down (+1) in the composer: MO's earlier replies shown IN the composer,
+        everything around it dimmed; Down past the newest returns to the draft."""
+        history = list(getattr(self, "_reply_history", None) or [])
+        if self._mode != "input" or not history:
             return
-        self._stash_input_draft()
-        self._recall_from_composer = True
-        self._mode = "reply"
-        self._panel_state = PanelState.REPLY
-        self._controls_enabled = True
-        self._reply_idx = len(self._reply_history) - 1
-        self._restore_history_reply()
-        self._select_all = False
-        self._stop_blink()
+        current = getattr(self, "_browse_idx", None)
+        if current is None:
+            if step > 0:
+                return
+            index = len(history) - 1
+        else:
+            index = current + step
+            if index >= len(history):
+                self._end_browse()
+                return
+            index = max(0, index)
+            if index == current:
+                return
+        self._browse_idx = index
+        self._show_browse_veil(True)
+        self._wrapped_body = None
+        self._browse_fade(time.perf_counter())
+
+    def _end_browse(self, *, repaint: bool = True) -> None:
+        """Back to the draft (typing, Enter, Esc, Down past the newest, the panel closing)."""
+        if getattr(self, "_browse_idx", None) is None and getattr(self, "_browse_veil", None) is None:
+            return
+        self._browse_idx = None
+        self._show_browse_veil(False)
+        self._wrapped_body = None
+        if repaint:
+            self._browse_fade(time.perf_counter())
+
+    def _browse_fade(self, started: float) -> None:
+        """Cross-fade the composer from the message it showed to the next (about 150 ms)."""
+        previous = getattr(self, "_input_base_image", None)
+        self._browse_from = previous
+        self._browse_started = started
         self._repaint()
+
+    def _show_browse_veil(self, on: bool) -> None:
+        veil = getattr(self, "_browse_veil", None)
+        if not on:
+            if veil is not None:
+                self._browse_veil = None
+                try:
+                    veil.destroy()
+                except Exception:
+                    pass
+            return
+        if veil is not None:
+            return
+        try:
+            from PIL import Image
+            from mo_desktop import brightness
+            from mo_desktop.layered import NativeLayeredWindow
+
+            x0, y0, x1, y1 = self._bounds
+            display = brightness.display_at((x0 + x1) // 2, (y0 + y1) // 2)
+            target = int(getattr(getattr(self, "_layered", None), "_native_hwnd", 0) or 0)
+            if display is None or not target:
+                return
+            left, top, right, bottom = display[1]
+            veil = NativeLayeredWindow(target, title="MO Desktop — Composer dim")
+            veil.exclude_from_capture(True)
+            veil.blit(Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, _BROWSE_VEIL_ALPHA)), left, top)
+            self._browse_veil = veil
+        except Exception:
+            self._browse_veil = None
 
     def _apply_reply_presentation(self, presentation: dict[str, Any]) -> None:
         self._attachment_preview_paths = list(presentation.get("attachments") or [])
@@ -2385,17 +2492,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._panel_state = PanelState.REPLY
         self._apply_reply_presentation(message.get("_mo_presentation", {}))
         self._scroll_line = 0
-
-    def _return_to_composer(self) -> None:
-        """Leave the reply-history browse and reopen the composer with the stashed draft."""
-        self._recall_from_composer = False
-        cb = getattr(self, "_on_submit", None)
-        if callable(cb):
-            self.show_input(
-                cb,
-                on_session_history=getattr(self, "_on_session_history", None),
-                on_web_search=getattr(self, "_on_web_search", None),
-            )   # show_input restores + consumes the stashed draft
 
     def _fire_reply(self, step: int) -> None:
         cb = self._on_reply

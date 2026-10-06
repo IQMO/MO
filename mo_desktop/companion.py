@@ -4598,6 +4598,7 @@ class CompanionSurface(
                     history=self._reply_history,
                     on_session_history=self._display_desktop_session_history,
                     on_web_search=self._search_from_input,
+                    on_attach=self._attach_from_composer,
                     role_options=self.conversation_role_options,
                     on_role_select=self.set_voice_role,
                     role_label=self._active_skill_role_label() or (
@@ -4606,6 +4607,20 @@ class CompanionSurface(
             ),
         ):
             self._visible = True
+
+    def _attach_from_composer(self) -> None:
+        """The composer's attach button: Windows' file picker, then the same import as a drop."""
+        from pathlib import Path
+        from mo_desktop.native_files import choose_path
+
+        bubble = getattr(self, "_bubble", None)
+        owner = int(getattr(getattr(bubble, "_layered", None), "_native_hwnd", 0) or 0)
+        try:
+            selected = choose_path(owner, folder=False)
+        except Exception:
+            selected = None
+        if selected:
+            self._attach_dropped_files([Path(selected)])
 
     def _search_from_input(self, provider: str, text: str) -> bool:
         """Open the current composer text through the existing default-browser owner."""

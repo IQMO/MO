@@ -382,7 +382,6 @@ class ReplySecondaryViewsMixin:
     def _accessible_hit_label(self, key: str) -> str:
         if key.startswith("role:"):
             return self._role_choices[int(key.split(":", 1)[1])] or "Default role"
-        provider = self._composer_search_provider()
         provider_label = self._composer_search_label()
         names = {
             "collapse": "Collapse composer",
@@ -394,18 +393,11 @@ class ReplySecondaryViewsMixin:
             "up": "Previous reply",
             "down": "Next reply",
             "sessions": "Historical conversations",
-            "search_google": (
-                "Google search selected; activate for MO chat"
-                if provider == "google" else "Use Google search"
-            ),
-            "search_youtube": (
-                "YouTube search selected; activate for MO chat"
-                if provider == "youtube" else "Use YouTube search"
-            ),
-            "search_translate": (
-                "Google Translate selected; activate for MO chat"
-                if provider == "translate" else "Use Google Translate"
-            ),
+            "search_cycle": (f"Searching {provider_label}; switch search" if provider_label
+                             else "MO chat; switch to a search"),
+            "dots_up": "Earlier message",
+            "dots_down": "Later message, or back to your draft",
+            "attach": "Attach a file",
             "session:back": "Back",
             "session:new": "New conversation",
             "session:prev": "Previous conversations",
