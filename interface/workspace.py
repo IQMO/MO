@@ -31,6 +31,7 @@ _DONE_STATES = frozenset({"completed"})
 _BLOCKED_STATES = frozenset({"blocked"})
 _IDLE_STATES = frozenset({"paused", "offered"})
 _HEALTH_BASELINE_SECONDS = 1.0
+_HEALTH_REFRESH_SECONDS = 2.0
 # A local PTY only owns raw keystrokes once it can actually receive them. MO-host
 # text is a semantic submit boundary, not a byte stream: those panes retain the
 # outer composer and send one complete message on Enter.
@@ -781,43 +782,57 @@ class WorkspaceController:
                 return self._health_cached
             self._health_refresh_pending = False
             self._health_loading = True
-            terminals = dict(self._terminals)
+
+        def roots() -> dict[str, int | None]:
+            with self._lock:
+                terminals = dict(self._terminals)
+            found: dict[str, int | None] = {"main": os.getpid()}
+            for pane_id, terminal in terminals.items():
+                try:
+                    pid = getattr(terminal, "root_pid", None)
+                    found[pane_id] = int(pid) if pid else None
+                except (TypeError, ValueError):
+                    found[pane_id] = None
+            return found
 
         def collect() -> None:
             from core.runtime.resources import ResourceSampler, ResourceSnapshot
 
+            first = True
             try:
-                if self._health_sampler is None:
-                    self._health_sampler = ResourceSampler()
-                roots = {"main": os.getpid()}
-                for pane_id, terminal in terminals.items():
+                # One worker while Health is open: a reading, one repaint, then the next reading
+                # _HEALTH_REFRESH_SECONDS later; it ends as soon as Health closes.
+                while True:
                     try:
-                        pid = getattr(terminal, "root_pid", None)
-                        roots[pane_id] = int(pid) if pid else None
-                    except (TypeError, ValueError):
-                        roots[pane_id] = None
-                snapshot = self._health_sampler.sample(roots)
-                # CPU percentages require two readings. Complete that baseline in
-                # this bounded worker so an open Health view does not need a timer.
-                if getattr(snapshot, "state", "") == "warming":
-                    time.sleep(_HEALTH_BASELINE_SECONDS)
-                    snapshot = self._health_sampler.sample(roots)
-                with self._lock:
-                    self._health_cached = snapshot
-                agent = getattr(self.tui, "agent", None)
-                read_status = getattr(agent, "health_status", None)
-                if callable(read_status):
-                    try:
-                        rows = read_status()
+                        if self._health_sampler is None:
+                            self._health_sampler = ResourceSampler()
+                        snapshot = self._health_sampler.sample(roots())
+                        # CPU percentages require two readings; complete the baseline here.
+                        if getattr(snapshot, "state", "") == "warming":
+                            time.sleep(_HEALTH_BASELINE_SECONDS)
+                            snapshot = self._health_sampler.sample(roots())
+                        with self._lock:
+                            self._health_cached = snapshot
+                        agent = getattr(self.tui, "agent", None)
+                        read_status = getattr(agent, "health_status", None)
+                        if first and callable(read_status):
+                            try:
+                                rows = read_status()
+                            except Exception:
+                                rows = (("Runtime", "Observation unavailable"),)
+                            with self._lock:
+                                self._health_runtime = {"observed_at": time.monotonic(), "rows": rows}
                     except Exception:
-                        rows = (("Runtime", "Observation unavailable"),)
+                        with self._lock:
+                            self._health_cached = ResourceSnapshot(
+                                time.monotonic(), None, None, None, None, {}, "local", "unavailable",
+                            )
+                    first = False
+                    self.invalidate()
+                    time.sleep(_HEALTH_REFRESH_SECONDS)
                     with self._lock:
-                        self._health_runtime = {"observed_at": time.monotonic(), "rows": rows}
-            except Exception:
-                with self._lock:
-                    self._health_cached = ResourceSnapshot(
-                        time.monotonic(), None, None, None, None, {}, "local", "unavailable",
-                    )
+                        if not self._health_open or self._shutting_down:
+                            return
             finally:
                 with self._lock:
                     self._health_loading = False

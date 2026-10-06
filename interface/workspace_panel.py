@@ -537,10 +537,6 @@ def health_panel_fragments(
         fragments = [(style, text)] if isinstance(text, str) else text
         _append_health_row(output, [("", " "), *fragments], width=width)
 
-    def heading(text: str) -> None:
-        row("")
-        row(text, "class:response-heading")
-
     def age_text(age: float) -> str:
         seconds = max(0, int(age))
         if seconds < 60:
@@ -558,41 +554,6 @@ def health_panel_fragments(
         if state in {"warming", "collecting"}:
             return "class:info"
         return "class:dim"
-
-    def resources_row(cpu, memory, count) -> None:
-        if cpu is None and memory is None and count is None:
-            return
-        processes = "—" if count is None else str(count)
-        unit = "process" if count == 1 else "processes"
-        row([
-            ("class:dim", "  CPU "),
-            ("class:mo-response", _health_percent(cpu)),
-            ("class:dim", " · "),
-            ("class:mo-response", _health_bytes(memory)),
-            ("class:dim", " · "),
-            ("class:mo-response", f"{processes} {unit}"),
-        ])
-
-    def machine_resources_row(data: Any) -> None:
-        getter = data.get if isinstance(data, dict) else lambda key: getattr(data, key, None)
-        values = (
-            getter("system_cpu_percent"),
-            getter("memory_percent"),
-            getter("memory_used_bytes"),
-            getter("memory_total_bytes"),
-        )
-        if all(value is None for value in values):
-            return
-        row([
-            ("class:dim", "  CPU "),
-            ("class:mo-response", _health_percent(values[0])),
-            ("class:dim", " · Memory "),
-            ("class:mo-response", _health_percent(values[1])),
-            ("class:dim", " · "),
-            ("class:mo-response", (
-                f"{_health_bytes(values[2])} / {_health_bytes(values[3])}"
-            )),
-        ])
 
     def host_age(host: Any) -> float:
         sample = getattr(host, "resources", None) or {}
@@ -623,37 +584,41 @@ def health_panel_fragments(
             "collecting": "Collecting",
         }.get(state, state)
 
-    def machine(name: str, data: Any, state: str, age: float | None) -> None:
+    def load_cell(data: Any, state: str, age: float | None) -> tuple[str, str]:
         getter = data.get if isinstance(data, dict) else lambda key: getattr(data, key, None)
-        cpu, memory = getter("system_cpu_percent"), getter("memory_percent")
-        load_state, glyph, load = health_load_status(cpu, memory)
+        load_state, glyph, load = health_load_status(getter("system_cpu_percent"), getter("memory_percent"))
         note = observation_note(state)
         label = note or f"{glyph} {load}"
         if age is not None:
-            label += f" · {age_text(age)}"
+            label += f" \u00b7 {age_text(age)}"
         if note:
-            style = observation_style(state)
-        elif load_state == "pressure":
-            style = "class:workspace-error"
-        elif load_state == "working":
-            style = "class:task-active"
-        else:
-            style = "class:dim"
-        row([
-            ("class:response-bullet-head", name),
-            ("class:dim", " · "),
-            (style, label),
-        ])
-        machine_resources_row(data)
+            return label, observation_style(state)
+        return label, {"pressure": "class:workspace-error", "working": "class:task-active"}.get(load_state, "class:dim")
 
-    row([("class:response-heading", "Health"), ("class:dim", " · snapshot")])
+    def machine_cells(name: str, data: Any, state: str, age: float | None) -> list[tuple[str, str]]:
+        getter = data.get if isinstance(data, dict) else lambda key: getattr(data, key, None)
+        used, total = getter("memory_used_bytes"), getter("memory_total_bytes")
+        memory = "\u2014" if used is None and total is None else f"{_health_bytes(used)} / {_health_bytes(total)}"
+        return [(name, "class:response-bullet-head"),
+                (_health_percent(getter("system_cpu_percent")), "class:mo-response"),
+                (_health_percent(getter("memory_percent")), "class:mo-response"),
+                (memory, "class:mo-response"), load_cell(data, state, age)]
+
+    def resource_cells(cpu, memory, count) -> list[tuple[str, str]]:
+        return [(_health_percent(cpu), "class:mo-response"), (_health_bytes(memory), "class:mo-response"),
+                ("\u2014" if count is None else str(count), "class:mo-response")]
+
     local_age = max(0.0, now - snapshot.sampled_at) if snapshot is not None else None
     local_state = getattr(snapshot, "state", "collecting")
     if local_age is not None and local_age > 5.0:
         local_state = "stale"
-    heading("Machines")
-    machine("This machine", snapshot, local_state, local_age if local_state == "stale" else None)
+    updated = "reading\u2026" if local_age is None else f"updated {age_text(local_age)}"
+    heading_pad = max(1, width - 1 - len("Health") - len(updated))
+    _append_health_row(output, [("", " "), ("class:response-heading", "Health"), ("", " " * heading_pad),
+                                ("class:dim", updated)], width=width)
 
+    machines: list[Any] = [("row", machine_cells("This machine", snapshot, local_state,
+                                                 local_age if local_state == "stale" else None))]
     hosts = tuple(health_hosts)
     by_instance = {host.instance_id: host for host in hosts}
     groups: dict[str, Any] = {}
@@ -672,49 +637,48 @@ def health_panel_fragments(
             member_key = getattr(member, "machine_key", "") or getattr(member, "host_id", "") or member.instance_id
             if member_key == key:
                 locations[member.instance_id] = name
-        row("")
         platform = getattr(host, "platform_family", "")
-        machine(name + (f" · {platform}" if platform else ""),
-                getattr(host, "resources", None), host_state(host),
-                host_age(host) if getattr(host, "resources", None) else None)
+        machines.append(("row", machine_cells(name + (f" \u00b7 {platform}" if platform else ""),
+                                              getattr(host, "resources", None) or {}, host_state(host),
+                                              host_age(host) if getattr(host, "resources", None) else None)))
     if running_error:
-        row(f"Host refresh failed · {running_error}", "class:workspace-error")
+        machines.append(("note", [("class:workspace-error", f"Host refresh failed \u00b7 {running_error}")]))
+    row("")
+    for line in _health_table(
+            (("MACHINE", 0, "<", 0), ("CPU", 5, ">", 1), ("MEM", 5, ">", 3),
+             ("MEMORY", 16, ">", 4), ("STATE", 28, "<", 2)), machines, width):
+        _append_health_row(output, line, width=width)
 
-    heading("Terminals")
     samples = getattr(snapshot, "trees", {}) or {}
+    terminals: list[Any] = []
     for tile in tiles:
         location = locations.get(tile.worker_id, tile.destination.label)
         _, state_label = workspace_terminal_state(tile.state)
         lifecycle_style = _STATUS_STYLE.get(state_label, "class:mo-response")
         if state_label in {"error", "failed"}:
             lifecycle_style = "class:workspace-error"
-        row([
-            ("class:response-bullet-head", f"{tile.position} {workspace_terminal_name(tile)}"),
-            ("class:dim", f" · {tile.project_name}" if tile.project_name else ""),
-            ("class:dim", f" · {location} · "),
-            (lifecycle_style, state_label),
-        ])
         if tile.destination.value == "host":
             host = by_instance.get(tile.worker_id)
             sample = (getattr(host, "resources", None) or {}).get("process", {})
             state = host_state(host) if host is not None else "no reading"
             if state == "ready":
                 state = sample.get("state", "unavailable")
-            resources_row(sample.get("cpu_percent"), sample.get("memory_bytes"), sample.get("process_count"))
+            values = resource_cells(sample.get("cpu_percent"), sample.get("memory_bytes"), sample.get("process_count"))
             note = observation_note(state)
             if note and host is not None and getattr(host, "resources", None):
-                note = (note + " · " if note else "") + age_text(host_age(host))
+                note = (note + " \u00b7 " if note else "") + age_text(host_age(host))
         else:
             sample = samples.get(tile.pane_id)
             state = "stale" if local_state == "stale" else getattr(sample, "state", "collecting")
-            resources_row(getattr(sample, "cpu_percent", None),
-                          getattr(sample, "memory_bytes", None),
-                          getattr(sample, "process_count", None))
+            values = resource_cells(getattr(sample, "cpu_percent", None), getattr(sample, "memory_bytes", None),
+                                    getattr(sample, "process_count", None))
             note = observation_note(state)
+        terminals.append(("row", [(f"{tile.position}  {workspace_terminal_name(tile)}", "class:response-bullet-head"),
+                                  (location, "class:dim"), *values, (state_label, lifecycle_style)]))
         if note:
-            row(f"  {note}", "class:dim" if state == "ready" else observation_style(state))
+            terminals.append(("note", [("class:dim" if state == "ready" else observation_style(state), note)]))
         if tile.error:
-            row(tile.error, "class:workspace-error")
+            terminals.append(("note", [("class:workspace-error", tile.error)]))
 
     local = [samples.get(tile.pane_id) for tile in tiles if tile.destination.value == "local"]
 
@@ -724,29 +688,58 @@ def health_panel_fragments(
 
     if len(local) > 1:
         totals = (total("cpu_percent"), total("memory_bytes"), total("process_count"))
-        total_state = "ready" if all(value is not None for value in totals) else "partial"
-        row([("class:response-bullet-head", "Local total"),
-             ("class:dim", " · includes child processes")])
-        resources_row(*totals)
-        note = observation_note(total_state)
-        if note:
-            row(f"  {note}", observation_style(total_state))
+        terminals.append(("row", [("   Local total", "class:dim"), ("", ""),
+                                  *[(text, "class:dim") for text, _style in resource_cells(*totals)], ("", "")]))
+        note = "includes child processes" + ("" if all(value is not None for value in totals)
+                                             else " \u00b7 " + observation_note("partial"))
+        terminals.append(("note", [("class:dim", note)]))
+    if terminals:
+        row("")
+        for line in _health_table(
+                (("TERMINAL", 0, "<", 0), ("WHERE", 14, "<", 4), ("CPU", 5, ">", 1), ("MEMORY", 8, ">", 2),
+                 ("PROCS", 6, ">", 5), ("STATE", 10, "<", 3)), terminals, width):
+            _append_health_row(output, line, width=width)
 
+    row("")
     if runtime and runtime.get("rows"):
-        heading("Runtime")
         rows = tuple(runtime["rows"])
-        label, detail = next(
-            (item for item in rows if item[0] == "Selected provider"),
-            rows[0],
-        )
-        row([("class:response-bullet-head", f"{label} · "),
-             ("class:mo-response", detail)])
-    row([("class:dim", "More detail · "),
-         ("class:palette-command", "/status"),
-         ("class:dim", " · "),
-         ("class:palette-command", "/doctor"),
-         ("class:dim", " · "),
-         ("class:palette-command", "/everywhere status")])
+        _label, detail = next((item for item in rows if item[0] == "Selected provider"), rows[0])
+        row([("class:workspace-title bold", "PROVIDER  "), ("class:mo-response", detail)])
+    row([("class:workspace-title bold", "DETAILS   "), ("class:palette-command", "/status"), ("", "   "),
+         ("class:palette-command", "/doctor"), ("", "   "), ("class:palette-command", "/everywhere status")])
+    return output
+
+
+def _health_table(columns: tuple[tuple[str, int, str, int], ...], rows: list[Any],
+                  width: int) -> list[list[tuple[str, str]]]:
+    """Aligned Health table. ``columns`` are (title, cells or 0 for the flexible name column,
+    "<"/">" alignment, drop priority); the least important columns drop until the rest fit.
+    ``rows`` are ("row", [(text, style), ...]) or ("note", fragments) indented under the row."""
+    keep = list(range(len(columns)))
+    gap, flex_min, flex_max = 2, 12, 30
+
+    def needed(indexes: list[int]) -> int:
+        return sum(columns[i][1] for i in indexes if columns[i][1]) + gap * (len(indexes) - 1) + flex_min
+
+    while needed(keep) > width - 1 and len(keep) > 1:
+        keep.remove(max((i for i in keep if columns[i][1]), key=lambda i: columns[i][3]))
+    flex = max(4, min(flex_max, width - 1 - (needed(keep) - flex_min)))
+    sizes = {i: (columns[i][1] or flex) for i in keep}
+
+    def line(cells: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = [("", " ")]
+        for position, i in enumerate(keep):
+            text, style = cells[i] if i < len(cells) else ("", "")
+            text = fit_cells(text, sizes[i]).rstrip() if cell_width(text) > sizes[i] else text
+            padding = " " * max(0, sizes[i] - cell_width(text))
+            if position:
+                out.append(("", " " * gap))
+            out.extend([(style, text), ("", padding)] if columns[i][2] == "<" else [("", padding), (style, text)])
+        return out
+
+    output = [line([(title, "class:workspace-title bold") for title, *_rest in columns])]
+    for kind, content in rows:
+        output.append(line(content) if kind == "row" else [("", "    "), *content])
     return output
 
 
@@ -975,7 +968,7 @@ def build_workspace_grid(tui: Any, composer: Any = None, composer_rows: Any = 1)
                     lines.append([])
                 else:
                     lines[-1].append((style, text))
-            height = max(1, rows - 1)
+            height = max(1, rows)
             set_limit = getattr(controller, "set_pane_scroll_limit", None)
             offset = 0
             if callable(set_limit):
@@ -986,8 +979,6 @@ def build_workspace_grid(tui: Any, composer: Any = None, composer_rows: Any = 1)
                 if visible:
                     visible.append(("", "\n"))
                 visible.extend(line or [("", "")])
-            if rows > 1:
-                visible.extend([("", "\n"), ("class:dim", fit_cells(" Alt+↑/↓ scroll · Alt+Home/End", grid_columns))])
             return FormattedText(visible)
 
         grid = Window(
