@@ -24,6 +24,12 @@ _ACTIVE_POINTER_GRACE_SECONDS = 0.35
 _CURSOR_REACTION_RADIUS_RATIO = 0.90
 _CURSOR_REACTION_SHIFT_RATIO = 0.18
 _CURSOR_REACTION_BRIGHTNESS = 0.12
+# Chase-mode sidestep (row 33): a short glide one cube-size across the pointer's path,
+# at most once per approach; a pointer that follows the cubes there is aiming at them.
+_DODGE_SECONDS = 0.2
+_DODGE_REACH = 0.9
+_DODGE_QUIET_SECONDS = 1.5
+_DODGE_MIN_MOVE_PX = 3.0
 _CURSOR_REACTION_EASE = 0.18
 
 
@@ -455,7 +461,10 @@ class CubeMotionMixin:
         # the cursor closes in, and only resume trailing when it moves back out past the
         # zone. This is what makes lock-mode clickable.
         catch = self._follow_distance
+        previous = getattr(self, "_dodge_last_ptr", None)
+        self._dodge_last_ptr = (px, py)
         if dist <= catch:
+            self._maybe_step_aside(px, py, previous, now, sw, sh)
             return
         ux, uy = dx / dist, dy / dist
         margin = self._size * 0.5 + 8.0
@@ -468,6 +477,68 @@ class CubeMotionMixin:
         self._x += (tx - self._x) * ease
         self._y += (ty - self._y) * ease
         self._from = self._to = (self._x, self._y)
+
+    def _maybe_step_aside(self, px: float, py: float, previous: tuple[float, float] | None,
+                          now: float, sw: int, sh: int) -> bool:
+        """Chase only: step aside once when the pointer comes at the cubes over TEXT (the
+        system cursor is the text I-beam), with no button held: it is heading for the text
+        under them, not for MO. An arrow-cursor approach still catches them (aiming at MO); a
+        held button (a file dragged to MO, a selection under way) never moves them; and the
+        cubes catching up to a resting pointer never count. Following them there within the
+        quiet time keeps them put."""
+        if not getattr(self, "_follow_enabled", False) or previous is None:
+            return False
+        if now < float(getattr(self, "_dodge_quiet_until", 0.0) or 0.0):
+            return False
+        if getattr(self, "_drag", False) or getattr(self, "_drag_armed", False):
+            return False
+        mx, my = px - previous[0], py - previous[1]
+        moved = math.hypot(mx, my)
+        if moved < _DODGE_MIN_MOVE_PX or mx * (self._x - px) + my * (self._y - py) <= 0:
+            return False   # resting, or moving away: only a pointer coming at the cubes counts
+        if not self._pointer_over_text():
+            return False
+        try:
+            from core.desktop.win32 import mouse_button_held
+            if mouse_button_held():
+                return False
+        except Exception:
+            return False
+        nx, ny = -my / moved, mx / moved                 # across the pointer's path
+        if (self._x - px) * nx + (self._y - py) * ny < 0:
+            nx, ny = -nx, -ny                            # the side away from the pointer
+        reach = self._size * _DODGE_REACH
+        margin = self._size * 0.5 + 8.0
+        target = (min(max(margin, self._x + nx * reach), sw - margin),
+                  min(max(margin, self._y + ny * reach), sh - margin))
+        self._from = (self._x, self._y)
+        self._to = target
+        self._glide_start = now
+        self._glide_dur = _DODGE_SECONDS
+        self._follow_pause_until = now + _DODGE_SECONDS
+        self._dodge_quiet_until = now + _DODGE_QUIET_SECONDS
+        return True
+
+    @staticmethod
+    def _pointer_over_text() -> bool:
+        """Whether the system cursor is the text I-beam (the pointer is over selectable text)."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class CURSORINFO(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD), ("flags", wintypes.DWORD),
+                            ("hCursor", wintypes.HANDLE), ("ptScreenPos", wintypes.POINT)]
+
+            user32 = ctypes.windll.user32
+            user32.LoadCursorW.restype = wintypes.HANDLE
+            info = CURSORINFO()
+            info.cbSize = ctypes.sizeof(info)
+            if not user32.GetCursorInfo(ctypes.byref(info)) or not info.hCursor:
+                return False
+            return int(info.hCursor) == int(user32.LoadCursorW(None, 32513) or 0)   # IDC_IBEAM
+        except Exception:
+            return False
 
     def _advance_home(self, home: tuple[float, float]) -> None:
         """Ease to the dock above the terminal's gauge and settle there, recharging.

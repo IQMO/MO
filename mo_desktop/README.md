@@ -641,7 +641,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | --- | --- |
 | **Win+Alt+M** | Summon and open input |
 | **Alt**, then hold **Alt** | Tap Alt once, press and hold Alt a second time to listen, then release that second press to transcribe and send. This also resumes a paused Voice Chat |
-| **Ctrl, Ctrl** | Toggle Free and Lock movement |
+| **Ctrl, Ctrl** | Toggle Free and Lock movement. While chasing, the cubes step aside once when the pointer comes at them over text (the I-beam cursor) with no button held, so text under them stays selectable; an arrow-cursor approach still catches them |
 | Left-click cube | Open input; click again to close it back into the cubes (the draft is kept); while docked at a terminal, sync after selection |
 | Hold the bottom-left cube for two seconds | That cube brightens in the active skin's accent as the hold completes, then opens screen selection; the selected area darkens while dragging, and the full-resolution PNG opens in the existing image preview |
 | Right-click cube | Open the compact Home/Work/You/Systems Dashboard, docked over the two left cubes: beside an open composer (upper-right cube) and Focus (lower-right cube) it forms one block, and all stay open together; it keeps one height (the column beside it with Focus open) and scrolls its content; right-click again to close it back into the cubes |
