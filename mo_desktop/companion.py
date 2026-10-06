@@ -276,6 +276,8 @@ _HOST_WORD_RE = re.compile(r"\b(?:server|host|vps|remote)\b", re.I)
 # "... on the server", "send it to the MO host": the request names WHERE to run, not a server topic
 # ("fix the server timeout" stays local).
 _ON_HOST_RE = re.compile(r"\b(?:on|to|in|via)\s+(?:the\s+|my\s+)?(?:mo\s+)?(?:server|host|vps)\b", re.I)
+_ON_LOCAL_RE = re.compile(r"\b(?:on\s+(?:this|my)\s+(?:pc|computer|machine)|locally)\b", re.I)
+_ROUTE_CHOICES = {"this pc": "local", "mo host": "host"}
 # "run mo for me please", "open a new MO Terminal on the server": the whole message asks only to
 # open MO, nothing else (anything more - "run mo tests", "open mo design" - stays with the model).
 _PLAIN_TERMINAL_RE = re.compile(
@@ -3459,6 +3461,68 @@ class CompanionSurface(
 
         if _ON_HOST_RE.search(user_input):
             return self._host_implementation_handoff(user_input, project, raw_project)
+        route = "local" if _ON_LOCAL_RE.search(user_input) else self._remembered_terminal_route(config, project)
+        if route == "host":
+            return self._host_implementation_handoff(user_input, project, raw_project)
+        if route is None and self._host_terminals_paired(config):
+            return self._offer_terminal_route(user_input, project, raw_project)
+        return self._local_implementation_handoff(user_input, project, raw_project)
+
+    @staticmethod
+    def _remembered_terminal_route(config: dict, project: str) -> str | None:
+        try:
+            from core.state.preferences import project_terminal_route
+
+            return project_terminal_route(config, project)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _host_terminals_paired(config: dict) -> bool:
+        """This PC holds the controller identity the MO Shell host pane uses (no network call)."""
+        try:
+            from mo_everywhere.client import credential_path, files_client_config
+
+            return credential_path(files_client_config(config)).is_file()
+        except Exception:
+            return False
+
+    def _offer_terminal_route(self, user_input: str, project: str, raw_project: str) -> str:
+        """Ask once per project where its work runs; the choice is remembered (row 40)."""
+        from mo_desktop.options import OPTIONS_MARKER
+
+        self._pending_terminal_route = (user_input, project, raw_project)
+        choices = {"mode": "single", "options": [
+            {"label": "This PC", "detail": "a MO Terminal here"},
+            {"label": "MO host", "detail": "a MO Terminal on the server, shown in MO Shell"}]}
+        return (f"Run this on this PC or on the MO host? I'll remember it for {Path(project).name or 'this project'}."
+                f"\n{OPTIONS_MARKER}:{json.dumps(choices, separators=(',', ':'))}")
+
+    def _terminal_route_answer(self, user_input: str, selected_options: tuple[str, ...] = ()) -> str | None:
+        """His pick on the route offer runs the waiting request there and remembers it; any
+        other message lets the offer lapse and is handled normally."""
+        pending = getattr(self, "_pending_terminal_route", None)
+        if not pending:
+            return None
+        self._pending_terminal_route = None
+        choice = str(selected_options[0] if selected_options else user_input).strip().casefold()
+        route = _ROUTE_CHOICES.get(choice)
+        if route is None:
+            return None
+        request, project, raw_project = pending
+        try:
+            from core.state.preferences import persist_project_terminal_route
+
+            persist_project_terminal_route(getattr(self._agent, "config", {}) or {}, project, route)
+        except Exception:
+            pass   # the handoff still runs; it will simply ask again next time
+        if route == "host":
+            return self._host_implementation_handoff(request, project, raw_project)
+        return self._local_implementation_handoff(request, project, raw_project)
+
+    def _local_implementation_handoff(self, user_input: str, project: str, raw_project: str) -> str:
+        """The newest live Terminal for this project on this PC, or a new one."""
+        config = getattr(self._agent, "config", {}) or {}
         try:
             from core.design.terminal_handoff import queue_terminal_turn
             from mo_desktop.design_studio.routing import (
@@ -3980,7 +4044,8 @@ class CompanionSurface(
                     self._present_activity(f"{requested_role.name} active…")
             # SystemCare asks for a reviewable plan in this conversation: never a Terminal handoff.
             implementation_reply = None if source == "systemcare" else (
-                self._terminal_workspace_handoff(user_input)
+                self._terminal_route_answer(user_input, selected_options)
+                or self._terminal_workspace_handoff(user_input)
                 or self._project_implementation_handoff(user_input))
             if implementation_reply is not None:
                 self._record_direct_desktop_exchange(

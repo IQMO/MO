@@ -25,6 +25,7 @@ from .paths import (
 )
 
 _VERSION = 1
+_TERMINAL_ROUTES = ("local", "host")   # where MO Desktop hands this project's implementation work
 _THREAD_LOCK = threading.Lock()
 _UNSET = object()
 
@@ -82,12 +83,18 @@ def _normalized(raw: dict[str, Any]) -> dict[str, Any]:
             target[key] = terminal[key]
     projects = raw.get("projects")
     if isinstance(projects, dict):
-        result["projects"] = {
-            key: {"lsp_enabled": row["lsp_enabled"]}
-            for key, row in projects.items()
-            if isinstance(key, str) and isinstance(row, dict)
-            and isinstance(row.get("lsp_enabled"), bool)
-        }
+        kept: dict[str, dict[str, Any]] = {}
+        for key, row in projects.items():
+            if not isinstance(key, str) or not isinstance(row, dict):
+                continue
+            entry: dict[str, Any] = {}
+            if isinstance(row.get("lsp_enabled"), bool):
+                entry["lsp_enabled"] = row["lsp_enabled"]
+            if row.get("terminal_route") in _TERMINAL_ROUTES:
+                entry["terminal_route"] = row["terminal_route"]
+            if entry:
+                kept[key] = entry
+        result["projects"] = kept
     mail = raw.get("mail")
     if isinstance(mail, dict) and isinstance(mail.get("enabled"), bool):
         result["mail"] = {"enabled": mail["enabled"]}
@@ -122,12 +129,43 @@ def persist_project_lsp_preference(config: dict[str, Any], root: str | Path, ena
     path = _preference_path(config)
     with file_byte_lock(_preference_lock_path(config), _THREAD_LOCK):
         raw = _normalized(_read_raw(path))
-        projects = raw.setdefault("projects", {})
-        key = project_preference_key(root)
-        if enabled is None:
-            projects.pop(key, None)
-        else:
-            projects[key] = {"lsp_enabled": enabled}
+        _set_project_field(raw, root, "lsp_enabled", enabled)
+        atomic_write_json(path, raw, indent=2, sort_keys=True)
+
+
+def _set_project_field(raw: dict[str, Any], root: str | Path, field: str, value: Any) -> None:
+    """Set or (with None) clear one field of a project's row, keeping its other fields."""
+    projects = raw.setdefault("projects", {})
+    key = project_preference_key(root)
+    row = dict(projects.get(key) or {})
+    if value is None:
+        row.pop(field, None)
+    else:
+        row[field] = value
+    if row:
+        projects[key] = row
+    else:
+        projects.pop(key, None)
+
+
+def project_terminal_route(config: dict[str, Any], root: str | Path) -> str | None:
+    """'local' or 'host' once chosen for this project in MO Desktop; None until then."""
+    if not runtime_config_path(config):
+        return None
+    row = load_runtime_preferences(config).get("projects", {}).get(project_preference_key(root), {})
+    return row.get("terminal_route")
+
+
+def persist_project_terminal_route(config: dict[str, Any], root: str | Path, route: str | None) -> None:
+    """Remember where this project's handed-off work runs; None forgets the choice."""
+    if route is not None and route not in _TERMINAL_ROUTES:
+        raise RuntimePreferenceError("terminal route must be local, host, or unset")
+    if not runtime_config_path(config):
+        return
+    path = _preference_path(config)
+    with file_byte_lock(_preference_lock_path(config), _THREAD_LOCK):
+        raw = _normalized(_read_raw(path))
+        _set_project_field(raw, root, "terminal_route", route)
         atomic_write_json(path, raw, indent=2, sort_keys=True)
 
 

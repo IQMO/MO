@@ -735,7 +735,13 @@ running Terminal for the project the host lists under the same folder name, or
 starts one there, hands it the request as one normal turn
 (`/api/mo/terminals/{id}/turn`, see `mo_everywhere/README.md`) and opens MO Shell
 with a pane on that exact Terminal. A local path is never sent; when the host
-lists no such project, Desktop says so and names the projects it has. The handoff does not make Desktop a taskboard worker and does
+lists no such project, Desktop says so and names the projects it has. On a PC
+paired with an MO host, the first request for a project that names neither side
+asks once, **This PC** or **MO host**, runs it there and remembers the pick for
+that project in the private runtime preferences (keyed by a hash of the project
+path, beside its language-server choice); later requests go straight there, and
+"... on this PC" or "... on the server" in a request still wins. Any other reply
+lets the question lapse. An unpaired PC never asks. The handoff does not make Desktop a taskboard worker and does
 not copy Terminal progress back into the companion conversation; for an hour
 after it, a question about that work without naming the Terminal ("is mo stuck
 with that goal?", "is it done?") gets the same native status. Asked to "open
