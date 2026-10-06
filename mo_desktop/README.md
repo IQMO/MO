@@ -301,7 +301,9 @@ and selected projects retain separate evidence. Selected native maintenance
 requires a fresh exact catalog plan, captured-state revalidation, applicable
 Windows permission and explicit permanent-action acknowledgment. Receipts and
 typed originals provide actual results and eligible restoration. Optional
-automation uses MO's existing scheduler. Dashboard Scan/Open/Cancel route to the
+automation uses MO's existing scheduler. An advice request from SystemCare is
+answered in the Desktop conversation as a reviewable plan; it is never handed to
+MO Terminal as implementation. Dashboard Scan/Open/Cancel route to the
 same service/window. Game Session reuses the global Game Mode recovery journal,
 shows a compact start/current resource projection in SystemCare, and uses the
 launcher cube as a low-overhead active/recovery control without adding another

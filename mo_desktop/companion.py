@@ -2431,7 +2431,7 @@ class CompanionSurface(
         # is the thinking indicator.
         self._turn_thread = threading.Thread(
             target=self._run_turn,
-            args=(text, str(lane or "").strip(), tuple(selected_options)),
+            args=(text, str(lane or "").strip(), tuple(selected_options), source),
             name="mo-desktop-turn", daemon=True,
         )
         self._turn_thread.start()
@@ -3649,6 +3649,7 @@ class CompanionSurface(
         user_input: str,
         lane_override: str = "",
         selected_options: tuple[str, ...] = (),
+        source: str = "",
     ) -> None:
         from core.mail.intent import is_mail_sensitive_request
 
@@ -3731,8 +3732,10 @@ class CompanionSurface(
                 self._set_active_skill_role(requested_role, reveal=True)
                 if role_started:
                     self._present_activity(f"{requested_role.name} active…")
-            implementation_reply = (self._terminal_workspace_handoff(user_input)
-                                    or self._project_implementation_handoff(user_input))
+            # SystemCare asks for a reviewable plan in this conversation: never a Terminal handoff.
+            implementation_reply = None if source == "systemcare" else (
+                self._terminal_workspace_handoff(user_input)
+                or self._project_implementation_handoff(user_input))
             if implementation_reply is not None:
                 self._record_direct_desktop_exchange(
                     desktop_session,
