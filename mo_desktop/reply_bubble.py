@@ -62,7 +62,8 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # The composer's earlier-message browse: room kept for the three dots above Send, the dim behind
 # the composer, and the cross-fade between messages.
 _COMPOSER_DOTS_RESERVE = 16
-_BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
+_BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
+BLUR_CARD_ALPHA = 226    # row 32: the card's see-through over Windows' blur (text stays crisp)
 _BROWSE_FADE_SECONDS = 0.15
 
 class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
@@ -618,14 +619,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         colors = SEARCH_SERVICE_COLORS.get(provider, ((*self._edge, 255), (*self._cyan, 110), (*self._edge, 255)))
         # The shadow, fill and edge depend only on geometry and palette, so typing and
         # scrolling inside one card size reuse them; the cached base is never drawn on.
+        blur = self._blur_enabled()     # row 32: Windows blurs the screen under a see-through card
         base_key = (W, H, tuple(box), rad, tuple(self._card), tuple(self._edge), ss,
-                    int(design.shadow_alpha), int(design.shadow_blur), colors)
+                    int(design.shadow_alpha), int(design.shadow_blur), colors, blur)
         base = getattr(self, "_card_base", None)
         if base is None or base[0] != base_key:
             canvas = card.draw_card(
-                card.new_canvas(W, H), tuple(box), radius=rad, fill=(*self._card, 255),
+                card.new_canvas(W, H), tuple(box), radius=rad, fill=(*self._card, BLUR_CARD_ALPHA if blur else 255),
                 edge=(*self._edge, 255), edge_width=max(1, ss),
-                shadow_alpha=int(design.shadow_alpha),
+                shadow_alpha=0 if blur else int(design.shadow_alpha),
                 shadow_blur=int(design.shadow_blur) * ss, shadow_dy=6 * ss)
             card.gradient_edge(canvas, tuple(box), radius=rad, width=max(1, ss), colors=colors)
             base = self._card_base = (base_key, canvas)
@@ -1293,6 +1295,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         except Exception:
             pass
         self._publish_visibility(ok)
+        self._place_blur_backdrop(bool(ok and not morphing))
         if starting_transition:
             self._transition_pending_start = False
             if ok:
@@ -1303,9 +1306,32 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._last_input_blit_position = (img_x, img_y) if ok and self._mode == "input" else None
         return ok
 
+    def _blur_enabled(self) -> bool:
+        """The approved blur-behind hybrid applies with the default 'hybrid' window effect."""
+        import os
+
+        effects = getattr(getattr(self, "_visuals", None), "effects", None)
+        return os.name == "nt" and str(getattr(effects, "style", "")) == "hybrid" and int(getattr(effects, "intensity", 0) or 0) > 0
+
+    def _place_blur_backdrop(self, settled: bool) -> None:
+        """Keep Windows' blur under the settled card; hide it while the card moves or animates."""
+        backdrop = getattr(self, "_blur_backdrop", None)
+        if not self._blur_enabled() or not settled:
+            if backdrop is not None:
+                backdrop.hide()
+            return
+        if backdrop is None:
+            from interface.desktop_widgets import PanelBlurBackdrop
+
+            backdrop = self._blur_backdrop = PanelBlurBackdrop()
+        hwnd = int(getattr(self._layered, "_native_hwnd", 0) or 0)
+        backdrop.place(hwnd, self._bounds, int(self._visuals.metrics.panel_corner_radius))
+
     def _publish_visibility(self, visible: bool) -> None:
         """Set native panel visibility and notify its coordinator on real changes."""
         value = bool(visible)
+        if not value and getattr(self, "_blur_backdrop", None) is not None:
+            self._blur_backdrop.hide()
         changed = value != bool(getattr(self, "_visible", False))
         self._visible = value
         cube = getattr(self, "_cube", None)
@@ -2890,6 +2916,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         return False
 
     def destroy(self) -> None:
+        if getattr(self, "_blur_backdrop", None) is not None:
+            self._blur_backdrop.destroy()
+            self._blur_backdrop = None
         self._publish_visibility(False)
         self._cancel_panel_transition()
         self._transition_callbacks = []

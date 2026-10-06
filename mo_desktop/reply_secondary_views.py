@@ -15,6 +15,7 @@ _SS = card.SS
 
 # The docked Dashboard face keeps one height: the column beside it with Focus open, else this.
 from mo_desktop.dashboard_card import FACE_HEIGHT as _DASHBOARD_FACE_HEIGHT  # one owner: the card
+_BLUR_CARD_ALPHA = 226     # row 32: matches reply_bubble.BLUR_CARD_ALPHA
 _DASHBOARD_MIN_HEIGHT = 200
 
 def _plain_card_row(img: Any, below: int, pad: int) -> Any:
@@ -304,7 +305,8 @@ class ReplySecondaryViewsMixin:
             data=dict(getattr(self, "_dashboard_data", None) or {}), palette=palette,
             fonts=(self._font, self._bfont, self._sfont, self._ifont), ss=ss,
             visuals=self._visuals, shadow_pad=int(design.shadow_pad),
-            shadow_alpha=int(design.shadow_alpha), shadow_blur=int(design.shadow_blur))
+            shadow_alpha=0 if self._blur_enabled() else int(design.shadow_alpha), shadow_blur=int(design.shadow_blur),
+            fill_alpha=_BLUR_CARD_ALPHA if self._blur_enabled() else 255)
         img, hits = self._fit_dashboard_face(img, hits, int(design.shadow_pad))
         self._hit = hits
         return self._draw_keyboard_focus(img, hits)

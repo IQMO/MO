@@ -39,6 +39,7 @@ def render_dashboard_card(
     shadow_pad: int = 28,
     shadow_alpha: int = 150,
     shadow_blur: int = 8,
+    fill_alpha: int = 255,
 ) -> tuple:
     """Render the selected mini view and its hit regions (``dash:view:*``, ``dash:open`` and each
     row's or chip's ``dash:<hit>``)."""
@@ -71,7 +72,7 @@ def render_dashboard_card(
     W, H = (card_w + 2 * shadow_pad) * ss, (card_h + 2 * shadow_pad) * ss
     pad = shadow_pad * ss
     box = [pad, pad, W - pad, H - pad]
-    image = card.draw_card(card.new_canvas(W, H), tuple(box), radius=panel_radius * ss, fill=(*C["card"], 255),
+    image = card.draw_card(card.new_canvas(W, H), tuple(box), radius=panel_radius * ss, fill=(*C["card"], int(fill_alpha)),
                            edge=(*C["edge"], 255), edge_highlight=(*C["cyan"], 110), edge_width=max(1, ss),
                            shadow_alpha=shadow_alpha, shadow_blur=shadow_blur * ss, shadow_dy=6 * ss)
     draw = ImageDraw.Draw(image)

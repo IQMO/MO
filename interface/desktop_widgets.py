@@ -261,6 +261,159 @@ def render_desktop_window_effect(
     return image, pad
 
 
+class PanelBlurBackdrop:
+    """The screen under one MO panel, blurred by Windows itself (row 32, the approved blur-behind
+    hybrid): a plain topmost popup with the DWM blur accent, clipped to the card's rounded shape
+    and kept directly beneath the panel's window. Windows composites the blur, so it stays live
+    and smooth at no cost to MO's GUI thread. Click-through and out of screen captures; the panel
+    hides it while it moves or animates and places it again once settled. It follows its panel in
+    and out of screen captures, so a capture never shows one without the other."""
+
+    _class_name = "MOPanelBlurBackdrop"
+    _registered = False
+    _wndproc = None
+
+    def __init__(self) -> None:
+        self._hwnd = 0
+        self._shape: tuple[int, int, int] | None = None
+        self._shown = False
+        self._affinity = -1
+
+    @classmethod
+    def _api(cls):
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+        dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
+        user32.CreateWindowExW.restype = wintypes.HWND
+        user32.CreateWindowExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+                                           ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.HWND,
+                                           wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID]
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                        ctypes.c_int, wintypes.UINT]
+        user32.SetWindowRgn.argtypes = [wintypes.HWND, wintypes.HRGN, wintypes.BOOL]
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.DestroyWindow.argtypes = [wintypes.HWND]
+        user32.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
+        user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        user32.DefWindowProcW.restype = ctypes.c_ssize_t
+        gdi32.CreateRoundRectRgn.restype = wintypes.HRGN
+        return ctypes, wintypes, user32, gdi32, dwmapi
+
+    def _create(self, x: int, y: int, width: int, height: int) -> int:
+        ctypes, wintypes, user32, gdi32, dwmapi = self._api()
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+        instance = kernel32.GetModuleHandleW(None)
+        cls = type(self)
+        if not cls._registered:
+            wndproc_type = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
+                                              wintypes.LPARAM)
+
+            def proc(hwnd, message, wparam, lparam):
+                if message == 0x0014:          # WM_ERASEBKGND: stay black, DWM draws the blur
+                    return 1
+                if message == 0x0084:          # WM_NCHITTEST: clicks go through
+                    return -1
+                return user32.DefWindowProcW(hwnd, message, wparam, lparam)
+
+            cls._wndproc = wndproc_type(proc)
+
+            class WNDCLASS(ctypes.Structure):
+                _fields_ = [("style", wintypes.UINT), ("lpfnWndProc", wndproc_type), ("cbClsExtra", ctypes.c_int),
+                            ("cbWndExtra", ctypes.c_int), ("hInstance", wintypes.HINSTANCE), ("hIcon", wintypes.HICON),
+                            ("hCursor", wintypes.HANDLE), ("hbrBackground", wintypes.HBRUSH),
+                            ("lpszMenuName", wintypes.LPCWSTR), ("lpszClassName", wintypes.LPCWSTR)]
+
+            gdi32.GetStockObject.restype = wintypes.HGDIOBJ
+            wc = WNDCLASS(0, cls._wndproc, 0, 0, instance, None, None, gdi32.GetStockObject(4), None, cls._class_name)
+            user32.RegisterClassW(ctypes.byref(wc))
+            cls._registered = True
+        exstyle = 0x00000080 | 0x08000000 | 0x00000020 | 0x00000008   # TOOLWINDOW|NOACTIVATE|TRANSPARENT|TOPMOST
+        hwnd = user32.CreateWindowExW(exstyle, cls._class_name, "MO Desktop panel blur", 0x80000000,
+                                      x, y, width, height, None, None, instance, None)
+        if not hwnd:
+            return 0
+
+        class MARGINS(ctypes.Structure):
+            _fields_ = [("l", ctypes.c_int), ("r", ctypes.c_int), ("t", ctypes.c_int), ("b", ctypes.c_int)]
+
+        class ACCENT(ctypes.Structure):
+            _fields_ = [("AccentState", ctypes.c_int), ("AccentFlags", ctypes.c_int),
+                        ("GradientColor", ctypes.c_uint), ("AnimationId", ctypes.c_int)]
+
+        class WCAD(ctypes.Structure):
+            _fields_ = [("Attribute", ctypes.c_int), ("Data", ctypes.POINTER(ACCENT)), ("SizeOfData", ctypes.c_size_t)]
+
+        margins = MARGINS(-1, -1, -1, -1)
+        dwmapi.DwmExtendFrameIntoClientArea(wintypes.HWND(hwnd), ctypes.byref(margins))
+        policy = ACCENT(3, 0, 0, 0)                                      # ACCENT_ENABLE_BLURBEHIND
+        data = WCAD(19, ctypes.pointer(policy), ctypes.sizeof(policy))  # WCA_ACCENT_POLICY
+        user32.SetWindowCompositionAttribute(wintypes.HWND(hwnd), ctypes.byref(data))
+        return int(hwnd)
+
+    def place(self, owner_hwnd: int, rect: tuple[float, float, float, float], radius: int) -> bool:
+        """Show the blur under ``rect`` (screen px), just beneath ``owner_hwnd``."""
+        import os
+
+        if os.name != "nt" or not owner_hwnd:
+            return False
+        x0, y0, x1, y1 = (int(round(value)) for value in rect)
+        width, height = x1 - x0, y1 - y0
+        if width <= 0 or height <= 0:
+            self.hide()
+            return False
+        try:
+            ctypes, wintypes, user32, gdi32, _dwmapi = self._api()
+            first = not self._hwnd
+            if first:
+                # Created at its real size with the blur on before it is first shown: Windows
+                # does not apply the blur to a window resized up from nothing.
+                self._hwnd = self._create(x0, y0, width, height)
+                if not self._hwnd:
+                    return False
+            affinity = wintypes.DWORD()
+            user32.GetWindowDisplayAffinity.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+            if user32.GetWindowDisplayAffinity(int(owner_hwnd), ctypes.byref(affinity)) and affinity.value != self._affinity:
+                user32.SetWindowDisplayAffinity(self._hwnd, affinity.value)   # in captures exactly as its panel
+                self._affinity = affinity.value
+            shape = (width, height, int(radius))
+            if shape != self._shape:
+                # A window region is pixel-hard (no antialiasing): keep its edge 2 px inside the
+                # card, under the card's opaque stroke and fill, so its stair-steps never show
+                # past the card's smooth rounded edge.
+                inner = max(0, 2 * int(radius) - 2)
+                region = gdi32.CreateRoundRectRgn(2, 2, width - 1, height - 1, inner, inner)
+                user32.SetWindowRgn(self._hwnd, region, True)
+                self._shape = shape
+            if not self._shown:
+                user32.ShowWindow(self._hwnd, 4)                              # SW_SHOWNOACTIVATE
+            flags = 0x0010                                                 # NOACTIVATE
+            ok = bool(user32.SetWindowPos(self._hwnd, int(owner_hwnd), x0, y0, width, height, flags))
+            self._shown = ok
+            return ok
+        except Exception:
+            return False
+
+    def hide(self) -> None:
+        if self._hwnd and self._shown:
+            try:
+                self._api()[2].ShowWindow(self._hwnd, 0)
+            except Exception:
+                pass
+        self._shown = False
+
+    def destroy(self) -> None:
+        if self._hwnd:
+            try:
+                self._api()[2].DestroyWindow(self._hwnd)
+            except Exception:
+                pass
+        self._hwnd, self._shape, self._shown, self._affinity = 0, None, False, -1
+
+
 class DesktopWindowEffectLayer:
     """One passive native layer kept directly behind one MO-owned HWND."""
 

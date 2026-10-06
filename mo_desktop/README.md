@@ -154,7 +154,7 @@ currently available.
 | Explainer video | The existing `mo --explainer` workflow produces narrated explainers and product videos, with local rendering/voice dependencies and final-media verification |
 | MO Shell | Each launch opens an independent floating Shell with one canonical terminal and one explicitly selected window; running-app rows focus each Shell, and attached titles supply availability context, not observed contents |
 | Focus mode | Resident tray toggle that expands the lower-right cube into a freely movable window list with hover previews, Explorer tray and clock; click the cube to collapse the list, double-click to exit, and restore prior taskbar visibility on exit |
-| Window appearance | Settings selects None, Shadow, Glow, or Hybrid for every MO-owned window and controls them with one shared intensity slider; glow color follows the active skin |
+| Window appearance | Settings selects None, Shadow, Glow, or Hybrid for every MO-owned window and controls them with one shared intensity slider; glow color follows the active skin. With Hybrid (the default) Desktop's panels are slightly see-through over the screen blurred by Windows itself (one click-through backdrop per panel, clipped inside the card, shown once the panel settles, in or out of captures like its panel) instead of a drop shadow |
 | Continuity | Follow one live terminal, import bounded current focus on request, show Everywhere state, and display lifecycle notices |
 | Live Control | Advertise the running primary display to a paired Android controller through the native, short-lease MO Live Control protocol |
 
