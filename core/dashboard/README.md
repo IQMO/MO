@@ -244,7 +244,9 @@ a second native launch.
 The read-only HTML export uses the same four-cube mark with per-cube glow; it has
 no circular entrance backdrop or ring overlay.
 Reduced-motion skips the animation. The entrance and initial window are centred on the selected
-monitor; the four cubes hold still until the first state response arrives.
+monitor; the four cubes hold still until the first state response arrives. That
+first state is built when the launch starts, alongside the window start, so the
+page's first request takes it at once; later polls build fresh.
 Rounded regions, skin edges and effects reuse the same native
 visual controller as MO Design, with the same resolved radius and border colour
 also painted by the HTML shell so WebView repaints preserve the curved edge.

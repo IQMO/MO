@@ -21,6 +21,10 @@ from typing import Any
 _MAX_REQUEST_BYTES = 1_100_000
 
 
+# A first state built at launch serves the page only while this fresh (the window takes 2-3 s).
+_PREFETCH_FRESH_SECONDS = 15.0
+
+
 class DashboardServer:
     def __init__(self, agent: Any):
         self.agent = agent
@@ -30,6 +34,7 @@ class DashboardServer:
         self._mail_setup_lock = threading.Lock()
         self._graph_cache: dict[str, tuple[float, str]] = {}
         self._snapshot_graph = None
+        self._prefetched = None
         self._renderer = None
         from ..runtime.resources import ResourceSampler
         self._resources = ResourceSampler()
@@ -132,6 +137,7 @@ class DashboardServer:
                 on_ready(True)
             return
         options = {"on_source": on_source, "on_started": on_started, "on_ready": on_ready} if on_source else {}
+        self._prefetch_state()
         self._renderer = launch_dashboard(self.origin + "/#" + self.token,
                                           config_path=runtime_config_path(self.agent.config), **options)
 
@@ -181,34 +187,66 @@ class DashboardServer:
         return result
 
     def handle(self, path, body, *, post=False):
-        from .projection import build_dashboard_projection
         if path == "/api/usage" and not post:
             sessions = getattr(self.agent, "_sessions", None)
             return sessions.usage_activity() if sessions is not None else {
                 "available": False, "days": [], "scope": "Saved usage is unavailable in this host"}
         if path == "/api/state" and not post:
-            snap = self.snapshot()
-            projection = build_dashboard_projection(snap, surface="html")
-            projects = self.projects()
-            from dataclasses import asdict
-            from .render import _collect_user_sections
-            resources = asdict(self._resources.sample({"terminal": os.getpid()}))
-            from interface.command_registry import slash_command_spec, slash_command_with_desc
-            controls = [{"id": "command:" + spec.name, "label": spec.name.lstrip("/"),
-                         "detail": spec.description} for spec in (slash_command_spec(name) for name, _ in slash_command_with_desc())
-                        if spec.palette and spec.name not in {"/dashboard", "/exit", "/quit"}]
-            health = getattr(self.agent, "health_status", None)
-            from ..tooling.sandbox import redact_sensitive_text
-            observations = [{"label": str(label), "detail": redact_sensitive_text(str(detail))}
-                            for label, detail in health()] if callable(health) else []
-            return {"snapshot": snap, "projection": projection,
-                    "projects": [{k: row[k] for k in ("id", "name", "source", "available")} for row in projects.values()],
-                    "controls": controls, "resources": resources,
-                    "terminals": self.terminals(projects, snap), "health": observations,
-                    "terminal_host": callable(getattr(self.agent, "_dashboard_dispatch", None)),
-                    "evidence": [{"title": section.title, "rows": [{"text": row.text, "sub": row.sub, "meta": row.meta} for row in section.rows]} for section in _collect_user_sections(snap)]}
+            return self._first_or_current_state()
         if not post:
             raise ValueError("Unknown dashboard route")
+        return self._handle_post(path, body)
+
+    def _prefetch_state(self):
+        """Build the first state while the window starts (1.9-2.7 s), so the page that waits on it
+        reveals as soon as it loads instead of waiting again for this build."""
+        holder = {"started": time.monotonic()}
+
+        def build():
+            try:
+                holder["state"] = self._state_payload()
+            except Exception as exc:
+                holder["error"] = exc
+
+        thread = threading.Thread(target=build, name="mo-dashboard-first-state", daemon=True)
+        holder["thread"] = thread
+        with self._lock:
+            self._prefetched = holder
+        thread.start()
+
+    def _first_or_current_state(self):
+        with self._lock:
+            holder, self._prefetched = self._prefetched, None
+        if holder is not None and time.monotonic() - holder["started"] < _PREFETCH_FRESH_SECONDS:
+            holder["thread"].join(timeout=30)
+            if "state" in holder:
+                return holder["state"]
+        return self._state_payload()
+
+    def _state_payload(self):
+        from .projection import build_dashboard_projection
+        snap = self.snapshot()
+        projection = build_dashboard_projection(snap, surface="html")
+        projects = self.projects()
+        from dataclasses import asdict
+        from .render import _collect_user_sections
+        resources = asdict(self._resources.sample({"terminal": os.getpid()}))
+        from interface.command_registry import slash_command_spec, slash_command_with_desc
+        controls = [{"id": "command:" + spec.name, "label": spec.name.lstrip("/"),
+                     "detail": spec.description} for spec in (slash_command_spec(name) for name, _ in slash_command_with_desc())
+                    if spec.palette and spec.name not in {"/dashboard", "/exit", "/quit"}]
+        health = getattr(self.agent, "health_status", None)
+        from ..tooling.sandbox import redact_sensitive_text
+        observations = [{"label": str(label), "detail": redact_sensitive_text(str(detail))}
+                        for label, detail in health()] if callable(health) else []
+        return {"snapshot": snap, "projection": projection,
+                "projects": [{k: row[k] for k in ("id", "name", "source", "available")} for row in projects.values()],
+                "controls": controls, "resources": resources,
+                "terminals": self.terminals(projects, snap), "health": observations,
+                "terminal_host": callable(getattr(self.agent, "_dashboard_dispatch", None)),
+                "evidence": [{"title": section.title, "rows": [{"text": row.text, "sub": row.sub, "meta": row.meta} for row in section.rows]} for section in _collect_user_sections(snap)]}
+
+    def _handle_post(self, path, body):
         if path == "/api/life/items":
             from ..life.items import add_case_update, create_item, forget_item, list_items, update_item
 
