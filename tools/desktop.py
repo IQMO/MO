@@ -118,6 +118,22 @@ def _resolve_capture_coords(x: int, y: int, arguments: dict[str, Any]) -> tuple[
         return (x, y)
 
 
+def _point_box(arguments: dict[str, Any]) -> tuple[int, int, int, int] | None:
+    """The optional ``box`` {x, y, width, height} to outline, in screen pixels."""
+    raw = arguments.get("box")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        bx, by, bw, bh = (int(raw[key]) for key in ("x", "y", "width", "height"))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if bw <= 0 or bh <= 0:
+        return None
+    x0, y0 = _resolve_capture_coords(bx, by, arguments)
+    x1, y1 = _resolve_capture_coords(bx + bw, by + bh, arguments)
+    return (x0, y0, max(1, x1 - x0), max(1, y1 - y0))
+
+
 def execute_point_on_screen(arguments: dict[str, Any]) -> str:
     """Guided mode: show the MO arrow + bubble at (x, y). Actuates nothing."""
     try:
@@ -128,10 +144,17 @@ def execute_point_on_screen(arguments: dict[str, Any]) -> str:
     x, y = _resolve_capture_coords(x, y, arguments)
     label = str(arguments.get("label", "") or "here")
     seconds = float(arguments.get("seconds", 4) or 4)
+    box = _point_box(arguments)
+    try:
+        number = max(0, min(99, int(arguments.get("number") or 0)))
+    except (TypeError, ValueError):
+        number = 0
     try:
         from mo_desktop.desktop_pointer import point_with_desktop_cube
-        if point_with_desktop_cube(x, y, label, seconds):
-            return f"Pointing with MO Desktop cube at ({x},{y}): {label}"
+        if point_with_desktop_cube(x, y, label, seconds, box=box, number=number,
+                                   zoom=_as_bool(arguments.get("zoom"))):
+            outlined = " (outlined)" if box else ""
+            return f"Pointing with MO Desktop cube at ({x},{y}){outlined}: {label}"
     except Exception:
         pass
     try:

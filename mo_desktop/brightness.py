@@ -183,7 +183,7 @@ def apply_dim(rect: tuple[int, int, int, int], *, anchor_hwnd: int = 0) -> bool:
             _layer_rect = None
         # Below EVERY visible MO surface (panel, Focus, labels), not only the cube window:
         # anything of MO's under the cube would otherwise be dimmed too.
-        _layer._target_hwnd = _lowest_own_window(exclude=int(_layer.hwnd)) or int(anchor_hwnd or 0)
+        _layer._target_hwnd = lowest_own_window(exclude=int(_layer.hwnd)) or int(anchor_hwnd or 0)
         opacity = round(_dim_level * 255)
         left, top, right, bottom = rect
         if rect != _layer_rect:
@@ -193,14 +193,15 @@ def apply_dim(rect: tuple[int, int, int, int], *, anchor_hwnd: int = 0) -> bool:
             _layer_rect = rect
         elif not (_layer.set_opacity(opacity) and _layer.place_behind(left, top, right - left, bottom - top)):
             return False
-        return _keep_topmost(_layer, rect)
+        return keep_in_top_band(_layer, rect)
     except Exception:
         return False
 
 
-def _keep_topmost(layer: Any, rect: tuple[int, int, int, int]) -> bool:
-    """The dim must stay in the always-on-top band (or an app clicked to the front would rise
-    above it), yet below MO's own surfaces; re-assert both if the placement did not hold."""
+def keep_in_top_band(layer: Any, rect: tuple[int, int, int, int]) -> bool:
+    """An MO backdrop (the dim layer, the pointing spotlight) must stay in the always-on-top band
+    (or an app clicked to the front would rise above it), yet below MO's own surfaces; re-assert
+    both if the placement did not hold."""
     try:
         import ctypes
 
@@ -216,7 +217,7 @@ def _keep_topmost(layer: Any, rect: tuple[int, int, int, int]) -> bool:
         return True
 
 
-def _lowest_own_window(*, exclude: int = 0) -> int:
+def lowest_own_window(*, exclude: int = 0) -> int:
     """The bottom-most visible always-on-top window of this process, or 0."""
     try:
         import ctypes

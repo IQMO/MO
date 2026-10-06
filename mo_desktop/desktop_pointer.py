@@ -12,23 +12,28 @@ from __future__ import annotations
 
 from typing import Callable
 
-# Signature: (x, y, label, seconds) -> handled?
-_POINTER: Callable[[int, int, str, float], bool] | None = None
+# Signature: (x, y, label, seconds, *, box, number, zoom) -> handled?
+_POINTER: Callable[..., bool] | None = None
 
 
-def set_desktop_pointer(fn: Callable[[int, int, str, float], bool] | None) -> None:
+def set_desktop_pointer(fn: Callable[..., bool] | None) -> None:
     """Register (or clear, with ``None``) the live desktop pointer."""
     global _POINTER
     _POINTER = fn
 
 
-def point_with_desktop_cube(x: int, y: int, label: str = "here", seconds: float = 4.0) -> bool:
-    """Drive the live desktop pointer (the cube companion) to ``(x, y)``."""
+def point_with_desktop_cube(x: int, y: int, label: str = "here", seconds: float = 4.0, *,
+                            box: tuple[int, int, int, int] | None = None, number: int = 0,
+                            zoom: bool = False) -> bool:
+    """Drive the live desktop pointer (the cube companion) to ``(x, y)``; ``box`` also outlines
+    the whole window or control and dims the rest, ``number`` numbers a walkthrough step and
+    ``zoom`` enlarges a tiny control beside it."""
     fn = _POINTER
     if fn is None:
         return False
     try:
-        return bool(fn(int(x), int(y), str(label or "here"), float(seconds or 4.0)))
+        return bool(fn(int(x), int(y), str(label or "here"), float(seconds or 4.0),
+                       box=box, number=int(number or 0), zoom=bool(zoom)))
     except Exception:
         return False
 

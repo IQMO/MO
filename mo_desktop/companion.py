@@ -2332,6 +2332,9 @@ class CompanionSurface(
                 setattr(self, name, None)
             from mo_desktop import brightness
             brightness.clear_dim()
+            spotlight = getattr(self, "_spotlight", None)
+            if spotlight is not None:
+                spotlight.hide()
             clipboard = getattr(self, "_clipboard", None)
             if clipboard is not None:
                 clipboard.stop()
@@ -5496,7 +5499,9 @@ class CompanionSurface(
             except Exception:
                 _write_stderr(traceback.format_exc())
 
-    def _point_with_cube(self, x: int, y: int, label: str = "here", seconds: float = 4.0) -> bool:
+    def _point_with_cube(self, x: int, y: int, label: str = "here", seconds: float = 4.0, *,
+                         box: tuple[int, int, int, int] | None = None, number: int = 0,
+                         zoom: bool = False) -> bool:
         """MO's desktop pointer: glide the cube to a target. Called from the
         Gateway/tool thread, so it marshals the move onto the GUI thread. Returns
         True once queued (the cube owns the point); False lets the caller fall back
@@ -5510,7 +5515,8 @@ class CompanionSurface(
             if queue_ is None:
                 queue_ = []
                 self._walkthrough_point_queue = queue_
-            target = (int(x), int(y), str(label or "here"), float(seconds or 4.0))
+            target = (int(x), int(y), str(label or "here"), float(seconds or 4.0),
+                      {"box": tuple(box) if box else None, "number": int(number or 0), "zoom": bool(zoom)})
             key = target[:3]
             if queue_ and queue_[-1][:3] == key:
                 return True
@@ -5536,8 +5542,28 @@ class CompanionSurface(
                 pass
         setattr(self, attribute, None)
 
+    def _show_spotlight(self, box: Any, *, seconds: float, zoom: bool) -> None:
+        """Outline the pointed window or control and dim the rest (row 34); no box clears it."""
+        spotlight = getattr(self, "_spotlight", None)
+        if box is None:
+            if spotlight is not None:
+                spotlight.hide()
+            return
+        if spotlight is None:
+            from mo_desktop.spotlight import Spotlight
+
+            gui = getattr(self, "_gui", None)
+            spotlight = self._spotlight = Spotlight(getattr(gui, "schedule", None))
+        from interface.desktop_ui import active_desktop_visual_state
+
+        spotlight.show(box, accent=str(getattr(self._visual_palette, "accent", "#00d0d0")), seconds=seconds, zoom=zoom,
+                       radius=int(active_desktop_visual_state().metrics.button_corner_radius))
+
     def _reset_walkthrough_runtime(self) -> None:
         """Cancel and clear every visual that belongs to the previous turn."""
+        spotlight = getattr(self, "_spotlight", None)
+        if spotlight is not None:
+            spotlight.hide()
         self._cancel_walkthrough_timer("_walkthrough_recap_after")
         self._cancel_walkthrough_timer("_walkthrough_point_after")
         self._pending_walkthrough_recap = ""
@@ -5572,8 +5598,9 @@ class CompanionSurface(
         if wait_until > now:
             self._schedule_walkthrough_point_drain(wait_until - now)
             return
-        x, y, label, seconds = queue_.pop(0)
-        if self._perform_walkthrough_point(x, y, label, seconds):
+        entry = queue_.pop(0)
+        x, y, label, seconds = entry[:4]
+        if self._perform_walkthrough_point(x, y, label, seconds, entry[4] if len(entry) > 4 else None):
             self._walkthrough_point_busy_until = max(
                 float(getattr(self, "_walkthrough_point_busy_until", 0.0) or 0.0),
                 time.time() + max(
@@ -5586,7 +5613,8 @@ class CompanionSurface(
                 max(0.0, self._point_wait_until() - time.time())
             )
 
-    def _perform_walkthrough_point(self, x: int, y: int, label: str, seconds: float) -> bool:
+    def _perform_walkthrough_point(self, x: int, y: int, label: str, seconds: float,
+                                   extras: dict | None = None) -> bool:
         # Pointer labels are the walkthrough body. Any larger reply panel is a
         # competing presentation surface, so hide it without replaying its
         # partial text between numbered points.
@@ -5602,7 +5630,10 @@ class CompanionSurface(
         cube = getattr(self, "_cube", None)
         if cube is None:
             return False
-        ok = bool(cube.point_to(x, y, label, seconds))
+        extras = extras or {}
+        number = int(extras.get("number") or 0)
+        ok = bool(cube.point_to(x, y, f"{number}  {label}" if number else label, seconds))
+        self._show_spotlight(extras.get("box") if ok else None, seconds=seconds, zoom=bool(extras.get("zoom")))
         if ok:
             self._last_walkthrough_point_key = (int(x), int(y), str(label))
             self._last_walkthrough_point_until = time.time() + max(

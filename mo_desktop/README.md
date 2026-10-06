@@ -536,6 +536,12 @@ An admitted native-action turn directly exposes `computer_targets`,
 `computer_observe`, and `computer_act`; an ordinary visual read starts with the
 first two. A visual walkthrough starts with `computer_observe` and
 `point_on_screen`; an explicitly compound request may add its admitted action.
+A point may carry the target's `box` (the whole window or control from
+`computer_targets`/`computer_observe`): MO Desktop then outlines it in the skin
+accent and dims the rest of that screen with one click-through, capture-excluded
+layer below the cubes, which clears when the point ends or the turn stops. A
+`number` prefixes a walkthrough step's label, and `zoom` shows a small control
+enlarged beside its outline.
 These paths do not spend a provider round rediscovering the same tools. Each
 action returns its own fresh evidence, and MO reads it to decide the next step;
 no extra verification round is forced. If the last action's result is still
