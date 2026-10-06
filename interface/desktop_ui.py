@@ -20,6 +20,8 @@ DESKTOP_WINDOW_EFFECT_TYPES = ("none", "shadow", "glow", "hybrid")
 # structure rather than a panel/control skin role. The focused source guard
 # keys every numeric ``radius=`` expression to this documented owner list.
 DESKTOP_STRUCTURAL_RADIUS_WHITELIST = MappingProxyType({
+    ("mo_desktop/cube_panel.py", "_render_glance_pill", "height // 2"):
+        "notifier glance pill: fully rounded ends, half its own height",
     ("interface/desktop_brand.py", "make_four_cube_icon", "max(4, round(7 * scale))"):
         "circular tray-icon backplate",
     ("interface/desktop_brand.py", "make_four_cube_icon", "max(1, round(2 * scale))"):

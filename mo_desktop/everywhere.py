@@ -83,7 +83,8 @@ class EverywhereNoticeSource:
             if signature == self._last_profile_notice_signature:
                 return []
             self._last_profile_notice_signature = signature
-            return [Notice("everywhere:profile:blocked", "Sync blocked", _summary(profile.get("detail", "Profile reconciliation required")), "notify", 3.0)]
+            return [Notice("everywhere:profile:blocked", "Sync blocked", _summary(profile.get("detail", "Profile reconciliation required")),
+                           "notify", 3.0, tone="warn")]
         self._last_profile_notice_signature = ""
         if profile.get("state") == "clean" and any(profile.get(key) for key in ("changed", "pulled", "pushed")):
             return [Notice(

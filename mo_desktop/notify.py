@@ -26,8 +26,8 @@ class Notice:
     """One thing worth a glance.
 
     ``title`` is what the cube says (keep it to a couple of words — "synced"). ``detail`` is the
-    short summary revealed only if the operator glances at the bubble; it is never the full
-    context, because the bubble has to stay in shape and in position.
+    short summary shown inline in the notifier pill after the title; it is never the full context,
+    because the pill has to stay one line, in shape and in position. ``tone`` "warn" marks it.
     """
 
     key: str
@@ -36,6 +36,7 @@ class Notice:
     emote_event: str = "notice"
     seconds: float = 3.0
     activate: Callable[[], None] | None = field(default=None, repr=False, compare=False)
+    tone: str = ""        # "warn" turns the glance's status dot to the skin's warning colour
 
 
 _SOURCES: list[tuple[int, str, Source]] = []
@@ -72,10 +73,10 @@ def emit(cube: Any, notice: Notice) -> bool:
     show = getattr(cube, "show_notice", None)
     if callable(show):
         try:
-            if notice.activate is None:
-                show(notice.title, notice.detail, notice.seconds)
-            else:
-                show(notice.title, notice.detail, notice.seconds, activate=notice.activate)
+            extra = {"activate": notice.activate} if notice.activate is not None else {}
+            if notice.tone:
+                extra["tone"] = notice.tone
+            show(notice.title, notice.detail, notice.seconds, **extra)
             shown = True
         except Exception:
             pass

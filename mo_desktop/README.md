@@ -612,8 +612,12 @@ what MO heard and what it is doing ("got it…", "opening Paint…"), then the
 answer in the same place. The same card carries input, choices, files and
 Dashboard, with icon controls. Only one surface shows at a time: while a card
 is open, MO's progress stays off the screen (the cubes show it is working) and
-new notices wait until the card closes. The cube-side glance label keeps volume,
-sync and notices when no panel is open.
+new notices wait until the card closes. The cube-side glance keeps volume, sync
+and notices when no panel is open: a compact notifier pill in the skin's card
+colour (never tinted by the cubes' shade, so not green while listening) with a
+status dot (the accent; the warning colour for a warn notice), the title and a
+notice's short detail inline. A glance never shows over the open launcher; it
+waits, or steps aside, and appears when the launcher closes.
 
 Simple requests receive concise final replies; requested detail remains intact.
 During a walkthrough the larger reply card stays hidden while the pointer shows

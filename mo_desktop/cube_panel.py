@@ -206,14 +206,16 @@ class CubePanelMixin:
         seconds: float = 3.0,
         *,
         activate: Any = None,
+        tone: str = "",
     ) -> None:
-        """A glance: the short title now, the detail only if the operator looks at it.
+        """A glance: the notifier pill beside the cubes, the title with its short detail inline.
 
         The label window is click-through, so it can never receive <Enter>. The cube already ticks
-        every frame, so the pointer is polled there instead — one call, no new window, no new surface.
+        every frame, so the pointer is polled there instead (looking at it keeps it up a little).
         """
         now = time.perf_counter()
         duration = max(0.5, float(seconds or 3.0))
+        self._notice_tone = str(tone or "")
         if self._guidance_owns_label(now):
             self._pending_glance = (str(title or ""), duration, None, str(detail or ""), "notice")
             self._pending_notice_action = activate if callable(activate) else None
@@ -324,9 +326,9 @@ class CubePanelMixin:
                 self._notice_detail = ""  # let the label expire on its own timer
             return
         if now < getattr(self, "_notice_until", 0.0) and self._pointer_over_label():
+            # The detail is already inline in the pill: being looked at keeps it up a little longer.
             self._notice_expanded = True
-            self._label_variant = "glance"
-            self._set_label(detail, until=min(now + 2.4, self._notice_hard_until), side=self._label_side(None))
+            self._label_until = max(float(getattr(self, "_label_until", 0.0) or 0.0), min(now + 2.4, self._notice_hard_until))
 
     def clear_bubble(self) -> None:
         """Hide the floating label bubble (e.g. when a turn's activity readout ends)."""
@@ -395,6 +397,8 @@ class CubePanelMixin:
         from mo_desktop.fonts import load_font
 
         guidance = getattr(self, "_label_variant", "glance") == "guidance"
+        if not guidance:
+            return self._render_glance_pill(text)
         faces = (
             ("seguisb.ttf", "segoeuib.ttf", "arialbd.ttf", "segoeui.ttf", "arial.ttf")
             if guidance
@@ -449,6 +453,58 @@ class CubePanelMixin:
             if guidance and index == 0:
                 ink = self._color_rgb
             d.text((pad + px, top + index * line_height), line, font=font, fill=(*ink, 255))
+        return card.finish(img, ss)
+
+    def _render_glance_pill(self, text: str) -> Any:
+        """The notifier glance (approved 2026-10-06): one compact pill in the skin's neutral card
+        colour, never tinted by the cubes' current shade, with a status dot, the title, and a
+        notice's short detail inline in the muted tone. Drawn with the shared card primitive."""
+        from PIL import Image, ImageColor, ImageDraw
+        from mo_desktop.fonts import load_font
+
+        ss = card.SS
+        design = getattr(self, "_label_design", DEFAULT_LABEL_BUBBLE_DESIGN)
+        palette = self._visuals.palette
+        size = int(design.font_size) * ss
+        bold = load_font(("seguisb.ttf", "segoeuib.ttf", "segoeui.ttf", "arial.ttf"), size)
+        regular = load_font(("segoeui.ttf", "arial.ttf"), size)
+        detail = str(getattr(self, "_notice_detail", "") or "") if getattr(self, "_label_kind", "") == "notice" else ""
+        title = shape_line(str(text or ""))[0]
+        detail = shape_line(detail)[0] if detail else ""
+        measure = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+        limit = max(80, int(getattr(design, "max_width", 280) or 280)) * ss
+        title_w = int(measure.textlength(title, font=bold))
+        gap = 6 * ss
+        if detail:
+            room = limit - title_w - gap
+            while detail and measure.textlength(detail, font=regular) > room:
+                detail = detail[:-2].rstrip() + "\u2026" if len(detail) > 2 else ""
+        detail_w = int(measure.textlength(detail, font=regular)) if detail else 0
+        dot_r = 3 * ss
+        pad_x = int(self._visuals.metrics.panel_padding) * ss
+        height = max(int(getattr(design, "line_height", 17) or 17) + 9, int(design.font_size) + 14) * ss
+        width = pad_x + 2 * dot_r + 8 * ss + title_w + (gap + detail_w if detail else 0) + pad_x
+        pad = int(design.shadow_pad) * ss
+        img = card.new_canvas(width + 2 * pad, height + 2 * pad)
+        border = ImageColor.getrgb(palette.border)
+        img = card.draw_card(
+            img, (pad, pad, pad + width, pad + height), radius=height // 2,
+            fill=(*ImageColor.getrgb(palette.card), 238), edge=(*border, 150), edge_highlight=(*border, 190),
+            edge_width=ss, shadow_alpha=int(design.shadow_alpha), shadow_blur=int(design.shadow_blur) * ss,
+            shadow_dy=2 * ss,
+        )
+        draw = ImageDraw.Draw(img)
+        warn = getattr(self, "_label_kind", "") == "notice" and getattr(self, "_notice_tone", "") == "warn"
+        tone = palette.warn if warn else palette.accent
+        cx, cy = pad + pad_x + dot_r, pad + height // 2
+        draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), fill=ImageColor.getrgb(tone))
+        # Centre the INK of what is written (as the label always did), not a reference glyph.
+        boxes = [bold.getbbox(title)] + ([regular.getbbox(detail)] if detail else [])
+        top = cy - (min(b[1] for b in boxes) + max(b[3] for b in boxes)) // 2
+        x = cx + dot_r + 8 * ss
+        draw.text((x, top), title, font=bold, fill=(*ImageColor.getrgb(palette.text), 255))
+        if detail:
+            draw.text((x + title_w + gap, top), detail, font=regular, fill=(*ImageColor.getrgb(palette.muted), 255))
         return card.finish(img, ss)
 
     def _hide_label(self) -> None:
