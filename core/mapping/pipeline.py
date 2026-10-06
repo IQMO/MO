@@ -158,7 +158,30 @@ def _maybe_remap(
     return slice_results, verifications
 
 
-def run_project_map(
+def run_project_map(gateway: Any, *, root: str | None = None, **options: Any) -> str:
+    """One map of a project at a time across MO terminals: a second terminal asking for the
+    same project's map while one is being made gets who is making it, not a second swarm of
+    mapper agents. Otherwise runs the pipeline below."""
+    import hashlib
+    import os
+
+    from ..graph.structural_graph import project_root
+    from ..runtime.lock import acquire_runtime_lock, release_runtime_lock, runtime_lock_holder
+
+    key = hashlib.sha1(os.path.normcase(str(project_root(root))).encode("utf-8")).hexdigest()[:12]
+    lock_name = f"mo-map-{key}.lock"
+    lock = acquire_runtime_lock(lock_name=lock_name, label="MO project map", quiet=True)
+    if lock is None:
+        who = runtime_lock_holder(lock_name) or "another process"
+        return (f"[project map] Another MO terminal ({who}) is mapping this project right now; did not "
+                "start a second map. Wait for it, then read its map instead of mapping again.")
+    try:
+        return _run_project_map(gateway, root=root, **options)
+    finally:
+        release_runtime_lock(lock)
+
+
+def _run_project_map(
     gateway: Any,
     *,
     root: str | None = None,

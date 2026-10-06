@@ -138,6 +138,18 @@ def release_runtime_lock(lock: RuntimeLock | None) -> None:
         return
 
 
+def runtime_lock_holder(lock_name: str) -> str:
+    """Who holds a singleton lock, for a busy message ("pid 123 since 14:05"), or ""."""
+    owner = runtime_lock_owner(lock_name)
+    if not owner:
+        return ""
+    try:
+        started = (Path(tempfile.gettempdir()) / Path(str(lock_name)).name).stat().st_mtime
+    except OSError:
+        return f"pid {owner}"
+    return f"pid {owner} since {time.strftime('%H:%M', time.localtime(started))}"
+
+
 def runtime_lock_owner(lock_name: str) -> int | None:
     """Return a live singleton owner without acquiring or changing the lock."""
     clean_name = Path(str(lock_name or "")).name

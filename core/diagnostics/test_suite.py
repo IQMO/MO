@@ -198,19 +198,11 @@ SUITE_BUSY_EXIT_CODE = 3
 
 
 def _suite_busy_message() -> str:
-    import tempfile
-    import time as _time
+    from core.runtime.lock import runtime_lock_holder
 
-    from core.runtime.lock import runtime_lock_owner
-
-    owner = runtime_lock_owner(SUITE_LOCK_NAME)
-    try:
-        started = _time.strftime("%H:%M", _time.localtime((Path(tempfile.gettempdir()) / SUITE_LOCK_NAME).stat().st_mtime))
-    except OSError:
-        started = "earlier"
-    who = f"pid {owner}" if owner else "another process"
-    return (f"[suite] another MO terminal ({who}) has been running the complete test suite on this machine since "
-            f"{started}; did not start a second run. Wait for it and reuse its result for the same candidate. "
+    who = runtime_lock_holder(SUITE_LOCK_NAME) or "another process"
+    return (f"[suite] another MO terminal ({who}) is running the complete test suite on this machine; "
+            "did not start a second run. Wait for it and reuse its result for the same candidate. "
             f"[exit code {SUITE_BUSY_EXIT_CODE}]")
 
 
