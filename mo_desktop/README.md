@@ -672,8 +672,10 @@ terminals produce an explicit choice. An offline selection stays visibly
 offline instead of silently changing to another process. When asked how many
 terminals are live, what each is doing, or whether one is stuck or done, Desktop
 injects a bounded current count, focus and board progress ("1/2 tasks done; now:
-...") from that same native route. One immediate detail follow-up reuses the
-route; shell parsing, screenshots, and window counts do not.
+...") from that same native route. With no Terminal open, "what was my last
+Terminal work?" is answered from the newest saved Terminal conversation's last
+request and its age. One immediate detail follow-up reuses the route; shell
+parsing, screenshots, and window counts do not.
 
 Sync transfers bounded current focus into the Desktop conversation as context.
 It does not copy a terminal transcript or taskboard and does not invent a
