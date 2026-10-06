@@ -322,7 +322,7 @@ It can:
 - accept optional double-Alt voice input and local speech output;
 - follow one explicitly selected terminal;
 - host native Android Live Control;
-- show one fixed Cube-branded Home/Work/You/Systems Dashboard and present
+- show one fixed Cube-branded mini Dashboard (Now, You, System) that links to the full Dashboard, and present
   bounded structured choices and images.
 
 Explanation or pointing alone does not authorize state-changing actions.
