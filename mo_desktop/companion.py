@@ -3423,7 +3423,8 @@ class CompanionSurface(
         except Exception as exc:
             detail = redact_sensitive_text(str(exc) or type(exc).__name__)
             return f"I couldn't hand that to the MO host: {detail}."
-        self._terminal_handoff_until = time.monotonic() + _TERMINAL_HANDOFF_FOLLOW_SECONDS
+        # No local follow-up window: this PC's terminal evidence cannot speak for the host's
+        # Terminal; its progress shows in the MO Shell pane opened on it.
         return (
             f"I sent that to the MO Terminal on the MO host ({host_project}) and opened it in MO Shell. "
             "I’ll stay here as your companion while that Terminal owns the work."
