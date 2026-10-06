@@ -1054,6 +1054,8 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 alpha = 0.0
             if i in (0, 2) and getattr(self, "_dashboard_controller", None) is not None and not self._launcher_active:
                 alpha = 0.0   # the docked Dashboard consumes the two left cubes
+            if i >= 4 and self._any_face_docked() and not self._launcher_active:
+                alpha = 0.0   # a 5-cube form's centre cube would sit inside the docked block
         return cx, cy, max(0.0, min(1.0, bright)), max(0.0, min(1.0, alpha))
 
     def _emote_loops(self, fn: Any) -> bool:
@@ -1252,10 +1254,16 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             consumed.add(1)
         if getattr(self, "_dashboard_controller", None) is not None and len(offsets) > 2:
             consumed.update((0, 2))
+        if self._any_face_docked():
+            consumed.update(range(4, len(offsets)))
         for index in sorted(consumed, reverse=True):   # drop from the end so indices stay valid
             offsets.pop(index)
             sizes.pop(index)
         return offsets, sizes
+
+    def _any_face_docked(self) -> bool:
+        return any(getattr(self, name, None) is not None
+                   for name in ("_composer_controller", "_focus_controller", "_dashboard_controller"))
 
     def relayout_docked_faces(self, source: Any = None) -> None:
         """A docked face opened, closed or changed size: place the others again, so the
