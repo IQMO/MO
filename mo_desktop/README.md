@@ -616,8 +616,9 @@ new notices wait until the card closes. The cube-side glance keeps volume, sync
 and notices when no panel is open: a compact notifier pill in the skin's card
 colour (never tinted by the cubes' shade, so not green while listening) with a
 status dot (the accent; the warning colour for a warn notice), the title and a
-notice's short detail inline. A glance never shows over the open launcher; it
-waits, or steps aside, and appears when the launcher closes.
+notice's short detail inline. A glance never shows over the open launcher: it
+sits beside the launcher on the side with room, and returns beside the cubes when
+the launcher closes.
 
 Simple requests receive concise final replies; requested detail remains intact.
 During a walkthrough the larger reply card stays hidden while the pointer shows

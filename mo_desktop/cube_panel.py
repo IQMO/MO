@@ -225,35 +225,12 @@ class CubePanelMixin:
         )
 
     def _guidance_owns_label(self, now: float | None = None) -> bool:
-        """The label is taken: pointed guidance is showing, or the launcher is open (a glance
-        then waits and appears when it closes, never over the four app cubes)."""
-        if getattr(self, "_launcher_active", False):
-            return True
         current = time.perf_counter() if now is None else float(now)
         return (
             getattr(self, "_label_variant", "glance") == "guidance"
             and bool(getattr(self, "_label_value", ""))
             and current < float(getattr(self, "_label_until", 0.0) or 0.0)
         )
-
-    def stash_glance_for_launcher(self) -> None:
-        """The launcher is opening over the cubes: a glance already showing steps aside and comes
-        back for its remaining time when the launcher closes."""
-        now = time.perf_counter()
-        value = str(getattr(self, "_label_value", "") or "")
-        remaining = float(getattr(self, "_label_until", 0.0) or 0.0) - now
-        if (value and remaining > 0.3 and getattr(self, "_label_kind", "bubble") != "running"
-                and getattr(self, "_label_variant", "glance") == "glance"):
-            kind = "notice" if getattr(self, "_label_kind", "") == "notice" else "bubble"
-            title = (getattr(self, "_notice_title", "") or value) if kind == "notice" else value
-            detail = str(getattr(self, "_notice_detail", "") or "") if kind == "notice" else ""
-            action = getattr(self, "_notice_action", None) if kind == "notice" else None
-            self._hide_label()
-            self._pending_glance = (title, remaining, None, detail, kind)
-            self._pending_notice_action = action
-            return
-        if value and getattr(self, "_label_kind", "bubble") != "running":
-            self._hide_label()
 
     def _show_glance(
         self,
@@ -555,6 +532,13 @@ class CubePanelMixin:
             x = int(round(self._x + offset)) - pad
             if side != "right" and x + w > sw:
                 x = int(round(self._x - offset - card_w)) - pad
+        launcher = getattr(self, "_launcher_rect", None) if getattr(self, "_launcher_active", False) else None
+        if launcher is not None:
+            # The open launcher holds the cubes' space: the glance shows beside it, on the side
+            # with room, instead of over the four app cubes.
+            lx, _ly, lw, _lh = launcher
+            right_x, left_x = lx + lw + 8 - pad, lx - 8 - card_w - pad
+            x = right_x if right_x + w <= sw or left_x < 0 else left_x
         y = int(round(self._y - (h / 2.0) + self._size * float(design.offset_y_ratio)))
         y = max(0, min(y, sh - h))
         x = max(0, min(x, max(0, sw - w)))
