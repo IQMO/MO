@@ -18,21 +18,6 @@ _CUBE_HOLD_MS = 2000
 class CubeInteractionMixin:
     """Input behavior mixed into :class:`mo_desktop.cube.DesktopCube`."""
 
-    def set_hover_handler(self, callback: Any) -> None:
-        self._hover_handler = callback
-
-    def _update_hover_presence(self, hovered: bool, *, now: float | None = None) -> None:
-        active = bool(hovered)
-        current = time.perf_counter() if now is None else now
-        same = active == bool(getattr(self, "_hovering_cube", False))
-        if same and (not active or current < getattr(self, "_hover_refresh_at", 0.0)):
-            return
-        self._hovering_cube = active
-        self._hover_refresh_at = current + 0.75 if active else 0.0
-        callback = getattr(self, "_hover_handler", None)
-        if callable(callback):
-            callback(active)
-
     def _on_native_event(self, kind: str, event: Any) -> None:
         if self._launcher_active and self._launcher_input is not None:
             self._launcher_input(kind, event)

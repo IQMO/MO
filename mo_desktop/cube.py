@@ -238,9 +238,6 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._focus_hold: Callable[[], None] | None = None
         self._cube_hold_after: Any = None
         self._cube_hold_started_at = 0.0
-        self._hover_handler: Callable[[bool], None] | None = None
-        self._hovering_cube = False
-        self._hover_refresh_at = 0.0
         self._pressed_cube_index: int | None = None
         self._last_click = ("", 0.0)
         self._double_at = 0.0

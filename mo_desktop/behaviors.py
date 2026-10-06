@@ -49,9 +49,6 @@ class CompanionModes:
             left=self._on_left, right=self._on_right, left_double=self._on_left_double,
             escape=lambda: self._c.hide(),
         )
-        set_hover = getattr(self._cube, "set_hover_handler", None)
-        if callable(set_hover):
-            set_hover(self._on_cube_hover)
         try:
             self._cube.set_resident(True)  # the companion is always on screen, not a transient pointer
         except Exception:
@@ -230,13 +227,6 @@ class CompanionModes:
 
     def _open_launcher(self) -> None:
         self._call(self._c, "show_cube_launcher")
-
-    def _on_cube_hover(self, hovered: bool) -> None:
-        game_active = getattr(self._cube, "game_session_active", None)
-        if callable(game_active) and game_active():
-            return
-        if not bool(getattr(self._cube, "_focus_mode", False)):
-            self._call(self._c, "show_running_apps" if hovered else "hide_running_apps")
 
     @staticmethod
     def _call(obj: Any, name: str) -> None:

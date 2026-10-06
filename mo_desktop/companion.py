@@ -670,12 +670,6 @@ class CompanionSurface(
     def show_cube_launcher(self) -> None:
         self._app_catalog().show_cube_launcher()
 
-    def show_running_apps(self) -> None:
-        self._app_catalog().show_running_apps()
-
-    def hide_running_apps(self) -> None:
-        if self._tray is not None:
-            self._tray.hide_running_apps()
 
 
 
@@ -1510,44 +1504,6 @@ class CompanionSurface(
 
     def _pulse_desktop_app(self, app_id: str) -> None:
         self._post_gui_call(lambda: self._app_catalog().pulse_app(app_id))
-
-    def running_desktop_app_ids(self) -> tuple[str, ...]:
-        """Only windows/processes owned by this Desktop instance are switch targets."""
-        def switchable(window: Any) -> bool:
-            return (window is not None and window.winfo_exists()
-                    and window.state() != "withdrawn")
-
-        active: list[str] = []
-        dashboard = getattr(self._agent, "_dashboard_server", None)
-        renderer = getattr(dashboard, "_renderer", None)
-        if renderer is not None and renderer.poll() is None:
-            active.append("dashboard")
-        if any(process.poll() is None for process in getattr(self, "_shell_processes", ())):
-            active.append("shell")
-        if any(process.poll() is None for process in self._design_processes.values()):
-            active.append("design")
-        files = getattr(self, "_files_window", None)
-        if files is not None and files.is_visible():
-            active.append("files")
-        for app_id, attr in (("phone", "_phone_window"),
-                             ("systemcare", "_systemcare_window")):
-            app = getattr(self, attr, None)
-            if app is not None and app.is_visible():
-                active.append(app_id)
-        phone = getattr(self, "_phone_window", None)
-        if phone is not None and bool(phone.trackpad_running):
-            active.append("trackpad")
-        settings = getattr(self, "_settings_panel", None)
-        if settings is not None and settings.is_visible():
-            active.append("settings")
-        workroom = getattr(self, "_role_workspace", None)
-        if switchable(getattr(workroom, "window", None)):
-            active.append("mologrthim")
-        for app_id, app in self._private_desktop_apps.items():
-            window = getattr(app, "window", None)
-            if switchable(window):
-                active.append("private_app:" + app_id)
-        return tuple(active)
 
     def _show_log_popup(self, root: Any) -> None:
         """Display recent actions through the one cube-attached panel."""

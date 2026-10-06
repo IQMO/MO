@@ -646,7 +646,6 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | Hold the bottom-left cube for two seconds | That cube brightens in the active skin's accent as the hold completes, then opens screen selection; the selected area darkens while dragging, and the full-resolution PNG opens in the existing image preview |
 | Right-click cube | Open the compact Home/Work/You/Systems Dashboard |
 | Double-click cube | Expand the four grouped MO app tiles; click one to open or focus it |
-| Hover cube | Show only running MO-owned apps for window switching |
 | Mouse wheel over cube | Adjust Windows master volume |
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |
 | Drop a file on cube | Attach locally; MO reads it and answers in the one panel. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |

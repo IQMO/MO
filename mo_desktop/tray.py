@@ -223,13 +223,6 @@ class CompanionTray:
         return tuple(rows)
 
     def invoke(self, spec: dict[str, Any]) -> None:
-        process = spec.get("shell_process")
-        if process is not None:
-            if process.poll() is None:
-                from mo_desktop.mo_renderer import focus_renderer
-                focus_renderer(process)
-                self.pulse_app("shell")
-            return
         app_id = str(spec.get("private_app_id") or "").strip()
         if app_id:
             opener = getattr(self._companion, "open_private_desktop_app", None)
@@ -329,22 +322,6 @@ class CompanionTray:
         role = APP_COLOR_ROLES.get(app_id, "accent")
         return str(getattr(self._visuals.palette, role))
 
-    def running_app_specs(self) -> tuple[dict[str, Any], ...]:
-        getter = getattr(self._companion, "running_desktop_app_ids", None)
-        running = set(getter() if callable(getter) else ())
-        rows = []
-        for spec in self.item_specs():
-            if spec["id"] not in running:
-                continue
-            if spec["id"] == "shell":
-                processes = [process for process in self._companion._shell_processes if process.poll() is None]
-                rows.extend({**spec, "shell_process": process,
-                             "label": spec["label"] if len(processes) == 1 else f"{spec['label']} {index + 1}"}
-                            for index, process in enumerate(processes))
-            else:
-                rows.append(spec)
-        return tuple(rows)
-
     def show_cube_launcher(self) -> None:
         root = getattr(self._companion, "_gui", None)
         if root is None:
@@ -355,26 +332,6 @@ class CompanionTray:
         if cube is not None and getattr(cube, "_label_kind", "") == "running":
             cube._hide_label()
         self._launcher.show_full()
-
-    def show_running_apps(self) -> None:
-        if self._focus is not None:
-            return
-        cube = getattr(self._companion, "_cube", None)
-        if cube is None:
-            return
-        specs = self.running_app_specs()
-        if not specs:
-            cube.hide_running_apps()
-            return
-        rows = tuple({**spec, "color": self.app_color(str(spec["id"])),
-                      "glyph": APP_GLYPHS.get(str(spec["id"]), "open")}
-                     for spec in specs)
-        cube.show_running_apps(rows, self.invoke)
-
-    def hide_running_apps(self) -> None:
-        cube = getattr(self._companion, "_cube", None)
-        if cube is not None:
-            cube.hide_running_apps()
 
     def pulse_app(self, app_id: str) -> None:
         pulse = getattr(getattr(self._companion, "_cube", None), "pulse_app_color", None)

@@ -171,7 +171,6 @@ class CubeMotionMixin:
         self._last_tick_at = current
         self._expire_app_pulse(current)
         if bool(getattr(self, "_actuation_yield", False)):
-            self._update_hover_presence(False, now=current)
             if getattr(self, "_activity_cube_visible", False):
                 self._show()
                 self._render(current)
@@ -184,13 +183,8 @@ class CubeMotionMixin:
         if (self._follow_enabled or self._resident) and not self._visible:
             self._show()
         if not self._visible:
-            self._update_hover_presence(False, now=current)
             return
         self._sample_frame_pointer(current)
-        pointer = self._frame_pointer(current)
-        self._update_hover_presence(pointer is not None and
-                                    self.cube_at_screen(*pointer, now=current) is not None,
-                                    now=current)
         self._poll_drag_arm()
         game_session_active = bool(getattr(self, "game_session_active", lambda: False)())
         if game_session_active:
