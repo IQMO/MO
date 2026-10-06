@@ -242,9 +242,10 @@ input or appearing in captured pixels. While any local MO Terminal uses the
 computer there is no overlay either: the cubes grow, glide to the freest of the
 four corners of their screen (one the window MO is working in leaves free, then
 the least covered, then the farthest from the pointer MO is moving; re-checked
-every few seconds, so they move on calmly when the work reaches them), beat like a heart (a lub-dub of light with a
-slight swell, distinct from thinking and from Desktop's own acting wave) and carry
-the label "MO Terminal is using your computer · Esc stops it"; cubes and label let
+every few seconds, so they move on calmly when the work reaches them) and show MO
+Terminal's rhythm in light only: the four cubes light in reading order like
+characters printing, then the last one blinks like a block cursor (no bubble, no
+movement, distinct from thinking and from Desktop's own acting wave); the cubes let
 input through and stay out of captures. When it is done they return to their place
 and size. Desktop's own use comes first: with a docked face, the launcher, expanded
 Focus, a Desktop turn, listening or speaking, the cubes go back to their normal size

@@ -151,7 +151,6 @@ def _other_terminal_computer_use(snapshots: list[Any], instance_id: str, *,
     return None
 
 
-TERMINAL_WORKING_LABEL = "MO Terminal is using your computer · Esc stops it"
 
 
 class CubeMotionMixin:
@@ -208,24 +207,8 @@ class CubeMotionMixin:
             self.hold_actuation_yield("terminal", False)
         elif should_yield:
             self.set_terminal_working(True)       # takes the corner once Desktop is idle
-        if should_yield:
-            self._show_terminal_working_label(current)
-        else:
-            if getattr(self, "_label_value", "") == TERMINAL_WORKING_LABEL:
-                self._hide_label()
-            if label:
-                self.show_bubble(label, seconds=1.25)
-
-    def _show_terminal_working_label(self, current: float) -> None:
-        """Say what the working cubes mean and how to stop them, while Desktop itself is idle
-        (Desktop's own labels and panels own the space otherwise)."""
-        shown = getattr(self, "_heartbeat_shown", None)
-        if not callable(shown) or not shown():
-            return
-        if getattr(self, "_label_value", "") == TERMINAL_WORKING_LABEL and getattr(self, "_label_kind", "") == "bubble":
-            self._label_until = current + 2.0     # already up: keep it, no re-render
-            return
-        self.show_bubble(TERMINAL_WORKING_LABEL, seconds=2.0)
+        if not should_yield and label:
+            self.show_bubble(label, seconds=1.25)
 
     def tick(self, now: float | None = None) -> None:
         current = time.perf_counter() if now is None else float(now)
@@ -365,8 +348,8 @@ class CubeMotionMixin:
             return True
         if bool(getattr(self, "_launcher_active", False)):
             return bool(getattr(self, "_launcher_interacting", False))
-        if bool(getattr(self, "_visible", False)) and self._heartbeat_shown():
-            return True       # MO Terminal acts in another process; the heartbeat stays smooth
+        if bool(getattr(self, "_visible", False)) and self._terminal_motion_shown():
+            return True       # MO Terminal acts in another process; its rhythm stays smooth
         if not bool(getattr(self, "_visible", False)) or bool(getattr(self, "_actuation_yield", False)):
             return False
         if any(

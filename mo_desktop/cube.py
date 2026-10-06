@@ -129,21 +129,24 @@ _CARET_HZ = 0.9
 _LINE_SECONDS = 0.9
 _SCROLL_SECONDS = 0.3
 _LINE_WIDTHS = (1.0, 0.78, 0.92, 0.6, 0.86, 0.7, 0.96, 0.66)
-_VOICE_SWELL = 0.10   # speaking: how far a full syllable opens the cluster (heartbeat uses .07)
-# Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
-# _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
-_HEARTBEAT_SECONDS = 1.1
-_HEARTBEAT_SWELL = .07
+_VOICE_SWELL = 0.10   # speaking: how far a full syllable opens the cluster
+# MO Terminal's rhythm on the working cubes (light only, no movement): the four cubes light one after
+# another in reading order like characters printing, then the last one blinks like a block cursor.
+_TERMINAL_CYCLE_SECONDS = 2.4
+_TERMINAL_PRINT_STEP = 0.18
+_TERMINAL_CURSOR_HZ = 1.6
 
 
-def _heartbeat(elapsed: float) -> float:
-    """0..1: a strong beat, a softer one 0.22 s later, then rest (one heart cycle)."""
-    phase = (max(0.0, elapsed) % _HEARTBEAT_SECONDS) / _HEARTBEAT_SECONDS
+def _terminal_print(index: int, elapsed: float) -> float:
+    """0..1 light for cube ``index`` (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right)."""
+    t = max(0.0, elapsed) % _TERMINAL_CYCLE_SECONDS
+    printed = math.exp(-((t - (0.12 + index * _TERMINAL_PRINT_STEP)) / 0.08) ** 2)
+    cursor_from = 0.12 + 4 * _TERMINAL_PRINT_STEP
+    if index != 3 or t < cursor_from:
+        return printed
+    blink = 0.5 + 0.5 * math.cos((t - cursor_from) * 2 * math.pi * _TERMINAL_CURSOR_HZ)
+    return max(printed, blink * blink)
 
-    def bump(centre: float, width: float) -> float:
-        return math.exp(-((phase - centre) / width) ** 2)
-
-    return min(1.0, bump(.08, .055) + .62 * bump(.28, .06))
 
 class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     """A native sprite-cached cube driven by the resident's existing GUI clock."""
@@ -614,8 +617,8 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         else:
             self.summon_to(*corner, chase=False)
 
-    def _heartbeat_shown(self) -> bool:
-        """The heartbeat shows while MO Terminal acts and Desktop itself is idle: Desktop's own
+    def _terminal_motion_shown(self) -> bool:
+        """The Terminal rhythm shows while MO Terminal acts and Desktop itself is idle: Desktop's own
         states (acting, thinking, listening, speaking, a docked face) always show instead."""
         if getattr(self, "_terminal_working", None) is None:
             return False
@@ -1219,14 +1222,12 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         phase = i * 0.62
         alpha = 1.0
         holds_still = self._emote_holds_still()
-        if self._heartbeat_shown():
-            # MO Terminal is using the computer: one heart for all four cubes, a lub-dub of
-            # light with a slight outward swell, unlike Desktop's own acting wave or thinking.
-            beat = _heartbeat(now - float(self._terminal_working.get("since", now)))
-            center = self._size / 2.0
-            bright, alpha = .68 + .32 * beat, .86 + .14 * beat
-            cx = bx + (bx - center) * _HEARTBEAT_SWELL * beat
-            cy = by + (by - center) * _HEARTBEAT_SWELL * beat
+        if self._terminal_motion_shown():
+            # MO Terminal is using the computer: its rhythm in light only (no movement, nothing
+            # to read): the cubes print in reading order, then the last one blinks as a cursor.
+            light = _terminal_print(i % 4, now - float(self._terminal_working.get("since", now)))
+            bright, alpha = .6 + .4 * light, 1.0
+            cx, cy = bx, by
         elif getattr(self, "_actuation_yield", False):
             wave = .5+.5*math.sin(now*3-i*math.pi/2)
             bright, alpha = .72+.28*wave, .78+.22*wave
