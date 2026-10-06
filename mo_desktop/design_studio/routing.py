@@ -247,6 +247,68 @@ def launch_terminal_workspace(
     return {"route": "terminal", "panes": str(count), "where": side, "host": host}
 
 
+def hand_host_terminal_turn(
+    prompt: str,
+    *,
+    config: dict[str, Any] | None = None,
+    project_root: str = "",
+    client: Any = None,
+) -> tuple[str, str]:
+    """Queue one normal turn into the MO host's terminal for this project, starting one when none
+    runs there. Only a project the host advertises is used (matched by folder name; a local path
+    is never sent). Returns (terminal id, host project name)."""
+    import uuid
+    from pathlib import PurePosixPath
+
+    if client is None:
+        from mo_everywhere.client import ContinuityClient, files_client_config
+
+        # The Hub waits up to 15 s for a just-started terminal's heartbeat before queueing.
+        client = ContinuityClient(files_client_config(config or {}), timeout=30.0)
+    listing = client.hub_terminals()
+    if not listing.get("supported"):
+        raise RuntimeError("the MO host cannot run MO terminals")
+    local_name = Path(str(project_root or "")).name
+    projects = [item for item in listing.get("projects") or [] if isinstance(item, dict) and item.get("path")]
+    match = next((item for item in projects if local_name and local_name.casefold() in {
+        PurePosixPath(str(item["path"])).name.casefold(), str(item.get("name") or "").casefold()}), None)
+    if match is None:
+        names = ", ".join(str(item.get("name") or "") for item in projects[:4])
+        raise RuntimeError(f"the MO host has no project named {local_name or 'this'}"
+                           + (f" (it has {names})" if names else ""))
+    path = str(match["path"])
+    running = next((item for item in listing.get("terminals") or []
+                    if isinstance(item, dict) and item.get("project_path") == path and item.get("terminal_id")), None)
+    if running is not None:
+        terminal_id = str(running["terminal_id"])
+    else:
+        created = client.start_hub_terminal(uuid.uuid4().hex, project_path=path)
+        terminal_id = str(created.get("terminal_id") or "")
+        if not terminal_id or created.get("project_path") != path:
+            raise RuntimeError("the MO host did not start a terminal in that project")
+    client.queue_hub_terminal_turn(terminal_id, prompt)
+    return terminal_id, str(match.get("name") or PurePosixPath(path).name)
+
+
+def attach_host_terminal(
+    terminal_id: str,
+    *,
+    config: dict[str, Any] | None = None,
+    project_root: str = "",
+    fallback_workspace: str = "",
+) -> dict[str, str]:
+    """Open MO Terminal (in MO Shell) with a pane on that exact MO host terminal."""
+    clean = str(terminal_id or "")
+    if not clean or len(clean) > 64 or not all(ch.isalnum() or ch in "-_" for ch in clean):
+        raise ValueError("MO host terminal id is invalid")
+    workspace = _handoff_workspace(project_root, fallback_workspace=fallback_workspace)
+    environment = dict(os.environ)
+    environment["MO_PROJECT_CWD"] = str(workspace)
+    host = _open_mo_terminal(("--startup-panes", f"host:{clean}"), config=config,
+                             workspace=workspace, environment=environment)
+    return {"route": "terminal", "terminal_id": clean, "host": host}
+
+
 def _open_mo_terminal(startup: tuple[str, ...], *, config: dict[str, Any] | None,
                       workspace: Path, environment: dict[str, str]) -> str:
     """Open MO Terminal in MO Shell, MO's own window for it, when built; else in a console."""

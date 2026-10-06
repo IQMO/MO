@@ -273,6 +273,9 @@ _PANES_RE = re.compile(r"\b([1-6]|one|two|three|four|five|six)\s*(?:panes?|split
 _TERMINAL_WORD_RE = re.compile(r"\b(?:mo|terminal|temrinal|termianl|terminl|shell)\b", re.I)
 _OPEN_WORD_RE = re.compile(r"\b(?:open|run|start|launch|give\s+me|split)\b", re.I)
 _HOST_WORD_RE = re.compile(r"\b(?:server|host|vps|remote)\b", re.I)
+# "... on the server", "send it to the MO host": the request names WHERE to run, not a server topic
+# ("fix the server timeout" stays local).
+_ON_HOST_RE = re.compile(r"\b(?:on|to|in|via)\s+(?:the\s+|my\s+)?(?:mo\s+)?(?:server|host|vps)\b", re.I)
 # "run mo for me please", "open a new MO Terminal on the server": the whole message asks only to
 # open MO, nothing else (anything more - "run mo tests", "open mo design" - stays with the model).
 _PLAIN_TERMINAL_RE = re.compile(
@@ -3406,6 +3409,24 @@ class CompanionSurface(
         side = "on the MO host" if where == "host" else "on this PC"
         return f"Opening MO Terminal with {panes} panes {side}."
 
+    def _host_implementation_handoff(self, user_input: str, project: str, raw_project: str) -> str:
+        """Row 40: the request names the MO host. Hand it to the host's MO Terminal for this
+        project (starting one there when none runs) and open MO Shell on that terminal."""
+        config = getattr(self._agent, "config", {}) or {}
+        try:
+            from mo_desktop.design_studio.routing import attach_host_terminal, hand_host_terminal_turn
+
+            terminal_id, host_project = hand_host_terminal_turn(user_input, config=config, project_root=project)
+            attach_host_terminal(terminal_id, config=config, project_root=project, fallback_workspace=raw_project)
+        except Exception as exc:
+            detail = redact_sensitive_text(str(exc) or type(exc).__name__)
+            return f"I couldn't hand that to the MO host: {detail}."
+        self._terminal_handoff_until = time.monotonic() + _TERMINAL_HANDOFF_FOLLOW_SECONDS
+        return (
+            f"I sent that to the MO Terminal on the MO host ({host_project}) and opened it in MO Shell. "
+            "I’ll stay here as your companion while that Terminal owns the work."
+        )
+
     def _project_implementation_handoff(self, user_input: str) -> str | None:
         """Keep project implementation out of the resident companion turn.
 
@@ -3436,6 +3457,8 @@ class CompanionSurface(
         except Exception:
             project = str(Path(raw_project).expanduser().resolve(strict=False))
 
+        if _ON_HOST_RE.search(user_input):
+            return self._host_implementation_handoff(user_input, project, raw_project)
         try:
             from core.design.terminal_handoff import queue_terminal_turn
             from mo_desktop.design_studio.routing import (

@@ -728,7 +728,14 @@ request as one normal turn to a heartbeat-proven Terminal in the same project.
 If no such Terminal is live, Desktop opens one visible Terminal with that
 request as its first normal turn (as a live Terminal gets it; MO Design's Build
 starts a goal instead), in MO Shell (MO's own window for the same Terminal) when
-it is built, else in a console. The handoff does not make Desktop a taskboard worker and does
+it is built, else in a console. A request that names where to run it ("... on
+the server", "... on the MO host"; a server topic such as "fix the server
+timeout" stays local) goes to the paired MO host instead: Desktop uses the host's
+running Terminal for the project the host lists under the same folder name, or
+starts one there, hands it the request as one normal turn
+(`/api/mo/terminals/{id}/turn`, see `mo_everywhere/README.md`) and opens MO Shell
+with a pane on that exact Terminal. A local path is never sent; when the host
+lists no such project, Desktop says so and names the projects it has. The handoff does not make Desktop a taskboard worker and does
 not copy Terminal progress back into the companion conversation; for an hour
 after it, a question about that work without naming the Terminal ("is mo stuck
 with that goal?", "is it done?") gets the same native status. Asked to "open
