@@ -1747,11 +1747,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._attachment_preview_paths = []
         return self._repaint_for_panel_show(transition)
 
-    def _note_dock_focus(self) -> None:
-        note = getattr(getattr(self, "_cube", None), "note_dock_focus", None)
-        if callable(note):
-            note("dashboard" if getattr(self, "_face", "panel") == "dashboard" else "composer")
-
     def show_input(
         self,
         on_submit: Callable[[str], None],
@@ -2036,7 +2031,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
             return
         key = self._hit_key_at(x, y)
-        self._note_dock_focus()
         if getattr(self, "_browse_idx", None) is not None and key != "sessions":
             # While browsing, the darkened panel is not clickable: a click there only brings the
             # composer back to normal. The lit message line opens that message in full; the
@@ -2750,17 +2744,16 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         top (the docked composer, else the upper-right cube)."""
         width, height = getattr(self, "_cube_face_size", (0, 0))
         half, edge = self._cube._size/2, self._cube._cube_edge
-        spread = float(getattr(self._cube, "DOCK_SPREAD", 0) or 0)   # room for the wiring (row 42)
         if getattr(self, "_face", "panel") == "dashboard":
             bx0, _by0 = self._cube._bases[0]
             _bx1, by1 = self._cube._bases[1]
-            top = by1-half-edge/2-spread
+            top = by1-half-edge/2
             composer = getattr(self._cube, "_composer_controller", None)
             if composer is not None:
                 top = min(top, composer.cube_extent()[1])
-            return bx0-half+edge/2-width-spread, top, width, height
+            return bx0-half+edge/2-width, top, width, height
         bx, by = self._cube._bases[1]
-        return bx-half-edge/2+spread, by-half+edge/2-height-spread, width, height
+        return bx-half-edge/2, by-half+edge/2-height, width, height
 
     def _follow_group_center(self, center: tuple[int, int], focus: Any) -> None:
         """Move the cubes to the clamped group centre and re-place the other docked faces."""
