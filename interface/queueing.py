@@ -69,7 +69,7 @@ class QueueingMixin:
     def _run_goal_command_now(self, text: str):
         self._run_palette_command(text, bypass_work_gate=True)
 
-    def _queue_input(self, text: str, *, worker_id: str | None = None, source: str = "user", note: str = "queued for MO", notice: str | None = None, owner_bound: bool = False):
+    def _queue_input(self, text: str, *, worker_id: str | None = None, source: str = "user", note: str = "queued for MO", notice: str | None = None, owner_bound: bool = False, echo: bool = True):
         if source == "user" and self.busy and direct_interrupt_action(text):
             self._handle_busy_interrupt()
             return
@@ -91,19 +91,21 @@ class QueueingMixin:
         ):
             last["text"] = (str(last.get("text") or "") + "\n" + text).strip()
             self._last_queue_at = now
-            self._add_line("reasoning", [("class:reasoning", f"Pending continuation · {text}")])
+            if echo:
+                self._add_user_echo(text)
             return
         registry = ensure_worker_registry(self.agent)
         if not worker_id:
             record = registry.create(kind="queue", source=source, route="queue", objective=text, state="accepted", note=note)
             worker_id = record.id
-        item = {"text": text, "worker_id": worker_id, "steer": False, "source": source}
+        item = {"text": text, "worker_id": worker_id, "steer": False, "source": source, "echo": False}
         if owner_bound:
             item["owner_bound"] = True
         self._last_queued_input = item
         self._last_queue_at = now
         self._pending_inputs.put(item)
-        self._add_line("reasoning", [("class:reasoning", f"Pending · {text}")])
+        if echo:
+            self._add_user_echo(text)
         set_notice = getattr(self, "_set_notice", None)
         if callable(set_notice):
             live_tool = bool(getattr(self, "_live_tool_label", ""))
@@ -163,13 +165,9 @@ class QueueingMixin:
         worker_id = str(item.get("worker_id") or "")
         if worker_id:
             ensure_worker_registry(self.agent).update(worker_id, "running", "waiting for current MO provider checkpoint")
-        self._add_line(
-            "system",
-            [("class:pending-steer", "Steer pending · next safe provider checkpoint")],
-        )
         set_notice = getattr(self, "_set_notice", None)
         if callable(set_notice):
-            set_notice("Steer pending · Alt+Up or Up restores it", ttl=8.0)
+            set_notice("Steer submitted · Alt+Up or Up edits", ttl=8.0)
         return True
 
     def _request_current_turn_stop(self) -> bool:
@@ -382,7 +380,9 @@ class QueueingMixin:
         self._restore_pending_inputs(requeued + pending)
         if self._last_queued_input is None:
             self._last_queued_input = requeued[-1]
-        self._add_line("system", [("class:activity", "Late steer preserved · running it as the next request")])
+        set_notice = getattr(self, "_set_notice", None)
+        if callable(set_notice):
+            set_notice("Late steer preserved for the next request", ttl=4.0)
 
     def _queue_goal_command(self, text: str):
         raw_result = self.agent.process_slash_command(text)
@@ -437,8 +437,8 @@ class QueueingMixin:
         if worker_id:
             ensure_worker_registry(self.agent).update(worker_id, "running", "queued item promoted to MO")
             self._active_main_worker_id = worker_id
-        self._add_line("system", [("class:dim", "Running queued request")])
+        echo = bool(item.get("echo", True)) if isinstance(item, dict) else True
         if isinstance(item, dict) and item.get("owner_bound"):
-            self._handle_input(queued, owner_bound=True)
+            self._handle_input(queued, owner_bound=True, echo=echo)
         else:
-            self._handle_input(queued)
+            self._handle_input(queued, echo=echo)

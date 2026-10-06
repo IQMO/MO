@@ -112,12 +112,14 @@ See [`interface/README.md`](interface/README.md).
 
 ## How do queue and steer work while MO is busy?
 
-The first message sent during an active turn is queued and appears in the
-transcript as a dim reasoning-style row. Press Enter again to steer that exact
-message into the running turn at its next safe provider checkpoint; steering
-does not stop the turn or switch its selected model. A provider call already in
-flight cannot be interrupted, so the visual acknowledgement is immediate but
-application waits for the next checkpoint.
+A message sent during an active turn is queued and appears once in the
+transcript as your message, without a permanent pending label. The existing
+footer shows live queue/steer counts, and transient notices explain the controls.
+Press Enter again to steer that exact message into the running turn at its next
+safe provider checkpoint; steering does not stop the turn or switch its selected
+model. A provider call already in flight cannot be interrupted, so the visual
+acknowledgement is immediate but application waits for the next checkpoint.
+Starting a queued message or preserving a late steer does not echo its text again.
 
 At most three not-yet-consumed steer updates of 12,000 characters each are held
 for one running turn, matching the existing terminal paste/remote-input boundary.

@@ -663,7 +663,7 @@ class InputDispatchMixin:
             raise RuntimeError(result["error"])
         return result
 
-    def _handle_input(self, text: str, *, owner_bound: bool = False):
+    def _handle_input(self, text: str, *, owner_bound: bool = False, echo: bool = True):
         """Dispatch composer input, or a normal turn bound to this MO instance."""
         if (
             not owner_bound
@@ -691,15 +691,15 @@ class InputDispatchMixin:
             self._run_palette_command(text)
             return
 
-        self._start_turn_thread(text, echo=True, owner_bound=owner_bound)
+        self._start_turn_thread(text, echo=echo, owner_bound=owner_bound)
 
     def _start_turn_thread(self, text: str, *, echo: bool = False, owner_bound: bool = False) -> None:
         with self._ui_lock:
             if self._work_active():
                 if owner_bound:
-                    self._queue_input(text, source="handoff", owner_bound=True)
+                    self._queue_input(text, source="handoff", owner_bound=True, echo=echo)
                 else:
-                    self._queue_input(text)
+                    self._queue_input(text, echo=echo)
                 return
             self.busy = True
             self._current_turn_cancel_event = threading.Event()

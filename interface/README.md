@@ -173,10 +173,11 @@ Provider-reported prefix-cache counts remain independent accounting.
   can survive submission. Transient notices render without a spinner; actual
   foreground work keeps its existing activity animation.
 - `keybindings.py` + `turn_runner.py` + `core/context/prompt_enhancer.py` — **Ctrl+E** prompt enhancement rewrites the typed message in place: the instant preview only corrects the operator's text, then an off-thread refinement uses the currently selected provider/model with bounded profile, workflow, work-pattern, and current-project guidance without canned boilerplate; **Esc** reverts. Never sends.
-- `queueing.py` — pending input queue/steer mixin. The request has one transcript
-  echo; queue/steer controls use one transient notice that changes with state,
-  while promotion adds only an italic, skin-highlighted status line and never repeats the request. Enter promotes the latest queued item to
-  a live steer, while Alt+Up/Up removes an unconsumed queue/steer and restores its
+- `queueing.py` — pending input queue/steer mixin. The request has one normal user
+  transcript echo; queue/steer controls use transient notices, while the existing
+  footer owns live pending counts. Promotion and queued execution do not append
+  permanent pending-status rows or repeat the request. Enter promotes the latest
+  queued item to a live steer, while Alt+Up/Up removes an unconsumed queue/steer and restores its
   exact text to the composer; an already-consumed steer is copied back as an
   explicit corrective follow-up.
   Once current-turn cancellation is pending, repeated Esc/Ctrl+C does not
@@ -402,8 +403,8 @@ Do not guess. Do not call something dead unless imports/tests prove it.
   answers (`›`) sit at the outer edge; one deduplicated blank row separates each
   submitted message from MO's live status, interim prose, tools, or final answer.
   A turn's chrome (tools, reasoning, notices) nests on one `│` rail; queued
-  request controls use a separate dim rail line while the footer mirrors only
-  the transient notice. ANSI visuals are full-bleed blocks with room around
+  messages use the normal user gutter, with controls in transient notices and
+  live queue/steer counts in the footer. ANSI visuals are full-bleed blocks with room around
   them. Interim assistant prose that accompanies tool calls uses one restrained
   activity mark on that rail, emphasizes its opening two-word lead (including
   colon-led text), and keeps the remaining body muted. Inline emphasis reuses
@@ -538,13 +539,13 @@ Do not guess. Do not call something dead unless imports/tests prove it.
   fresh review and failed retirement stays visibly active. Other profile rules
   and authored skills retain their existing `/profile` and `/skills` views.
 - Ctrl+E prompt enhancement must replace the input buffer only (Esc reverts to the original). Its instant preview only corrects and shapes the operator's text; provider refinement must use the currently selected provider/model and may use bounded operator-profile, approved workflow, MO work-pattern, and canonical current-project guidance for a genuine rewrite, but must not add generic boilerplate, send, create taskboards, or mark progress.
-- Ordinary busy input queues and appears once
-  as a dim reasoning-style transcript row, with one transient footer notice for
-  the available controls. A second Enter offers that exact message to the running
-  turn as a saved user correction at its next safe checkpoint on the same model;
-  the same notice changes to steer state and one status-only transcript line,
-  italicized on the active skin's existing user-message background, confirms
-  promotion without echoing the request again.
+- Ordinary busy input queues and appears once as a normal user message, with
+  transient notices for the available controls and live pending counts in the
+  existing footer. A second Enter offers that exact message to the running turn
+  as a saved user correction at its next safe checkpoint on the same model;
+  a transient notice confirms submission without a permanent pending-status row.
+  Starting the queued turn, including an unconsumed late steer, suppresses a
+  second user echo while preserving the existing input-routing owner.
   Alt+Up, or plain Up on an empty editor, removes and restores an unconsumed
   queue/steer for editing; if MO already consumed the steer, it copies the text
   into the editor as a corrective follow-up instead of claiming an undo. The
