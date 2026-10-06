@@ -167,6 +167,9 @@ class FocusBar:
         self.cube._show()
         self._position_cube()
         self._paint_page()
+        relayout = getattr(self.cube, "relayout_docked_faces", None)
+        if callable(relayout):
+            relayout(self)   # a docked Dashboard now spans down to Focus
 
 
     def _work_area(self) -> tuple[int, int, int, int]:
@@ -757,7 +760,7 @@ class FocusBar:
         self._popup_geometry = (*self._popup_position(self._popup_anchor(anchor), image.size, below=kind == "tray", side=kind == "preview"), *image.size)
         self._popup_image = image
         self._popup_amount = 0.0
-        self._popup_until = time.perf_counter()+.25
+        self._popup_until = time.perf_counter()+DEFAULT_DESKTOP_PANEL_DESIGN.transition_ms/1000
         import win32api
         self._popup_mouse_down = bool(win32api.GetAsyncKeyState(1) & 0x8000)
         x, y, _w, _h = self._popup_geometry
@@ -1128,6 +1131,9 @@ class FocusBar:
         self.cube._focus_mode = False
         self.cube._focus_opacity = 1.0
         self.cube._focus_controller = None
+        relayout = getattr(self.cube, "relayout_docked_faces", None)
+        if callable(relayout):
+            relayout(self)
         for key, value in self._saved.items():
             setattr(self.cube, key, value)
         self.cube._last_geometry = ""

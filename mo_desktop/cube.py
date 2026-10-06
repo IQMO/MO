@@ -1257,6 +1257,24 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             sizes.pop(index)
         return offsets, sizes
 
+    def relayout_docked_faces(self, source: Any = None) -> None:
+        """A docked face opened, closed or changed size: place the others again, so the
+        composer, Focus and Dashboard always form the same block."""
+        if getattr(self, "_relayout_active", False):
+            return
+        self._relayout_active = True
+        try:
+            for name in ("_composer_controller", "_dashboard_controller"):
+                face = getattr(self, name, None)
+                if face is not None and face is not source and getattr(face, "_visible", False):
+                    face._repaint()
+            focus = getattr(self, "_focus_controller", None)
+            if focus is not None and focus is not source:
+                focus._fit_visible_rows()
+                focus._place_face()
+        finally:
+            self._relayout_active = False
+
     def docked_faces(self, *, exclude: str = "") -> list[tuple[float, float, int, int]]:
         """Every panel docked into the cube group as ``(dx, dy, w, h)`` from the cube centre:
         the composer (cube 1), Focus (cube 3) and the Dashboard (cubes 0 and 2). One list, so

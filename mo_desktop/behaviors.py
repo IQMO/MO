@@ -183,7 +183,7 @@ class CompanionModes:
         bubble = getattr(self._c, "_dashboard_bubble", None)
         if bubble and bubble is not False:
             try:
-                bubble.hide()
+                bubble.collapse_to_cube()
             except Exception:
                 pass
 
@@ -223,6 +223,10 @@ class CompanionModes:
         self._call(self._c, "_display_input_dialog")
 
     def _open_dashboard(self) -> None:
+        # A second right-click closes the docked Dashboard, as a second click closes the composer.
+        if self._dashboard_open():
+            self._close_dashboard()
+            return
         self._call(self._c, "_display_dashboard")
 
     def _open_launcher(self) -> None:

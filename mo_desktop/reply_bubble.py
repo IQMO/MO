@@ -1181,15 +1181,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         starting_transition = bool(getattr(self, "_transition_pending_start", False))
         composer = self._mode == "input" and callable(getattr(self._cube, "launch_piece", None))
         if composer and getattr(self._cube, "_composer_controller", None) is not self:
-            self._cube_source_center, source = self._cube.launch_piece(1, time.perf_counter())
-            from PIL import Image
-            self._cube_source_image = Image.frombytes("RGBA", source.size, source.convert("RGBa").tobytes())
+            self._capture_cube_source(1)
             self._cube._composer_controller = self
         elif not composer and getattr(self._cube, "_composer_controller", None) is self:
             self._cube._composer_controller = None
         dashboard_face = (getattr(self, "_face", "panel") == "dashboard"
                           and getattr(self, "_panel_state", None) == PanelState.DASHBOARD)
         if dashboard_face and getattr(self._cube, "_dashboard_controller", None) is not self:
+            self._capture_cube_source(0)
             self._cube._dashboard_controller = self
         elif not dashboard_face and getattr(self._cube, "_dashboard_controller", None) is self:
             self._cube._dashboard_controller = None
@@ -1210,7 +1209,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             if getattr(self, "_transition_base", None) is None or getattr(self, "_transition_base_key", None) != key:
                 self._transition_base = self._render()   # rendered ONCE, crisp
                 self._transition_base_key = key
-            img = self._transition_base if composer else self._apply_panel_transition(self._transition_base)
+            img = self._transition_base
         else:
             finish_base = bool(getattr(self, "_transition_finish_base", False))
             cached_base = getattr(self, "_transition_base", None)
@@ -1264,7 +1263,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             img_y = card_top-int(design.shadow_pad)
         self._bounds = (card_left, img_y + int(design.shadow_pad),
                         card_left + card_w, img_y + H - int(design.shadow_pad))
-        if composer and morphing:
+        if morphing and starting_transition and not composer and not dashboard_face:
+            # A reply, status or file panel grows out of the cube on its docking side.
+            self._capture_cube_source(1 if side == "right" else 0)
+        if morphing and getattr(self, "_cube_source_image", None) is not None:
             from PIL import Image
             source = self._cube_source_image
             source_x = self._cube_source_center[0]-source.width/2
@@ -1278,6 +1280,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             W, H = size
         if composer or dashboard_face:   # the source pixels its cubes are launched from
             self._cube_published = (img, img_x, img_y)
+            extent = tuple(self.cube_extent()) if not morphing else getattr(self, "_last_face_extent", None)
+            if extent is not None and extent != getattr(self, "_last_face_extent", None):
+                self._last_face_extent = extent
+                relayout = getattr(self._cube, "relayout_docked_faces", None)
+                if callable(relayout):
+                    relayout(self)
         # Paint at the correct position WHILE still hidden, THEN show. Deiconifying first
         # flashed the window at its previous (stale) geometry for a frame before blit
         # repositioned it — the "loads at a stale spot then snaps into place" glitch.
@@ -1322,6 +1330,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             cube._composer_controller = None
         if not value and getattr(cube, "_dashboard_controller", None) is self:
             cube._dashboard_controller = None   # the two left cubes come back
+        if changed and getattr(self, "_last_face_extent", None) is not None:
+            self._last_face_extent = None
+            relayout = getattr(cube, "relayout_docked_faces", None)
+            if callable(relayout):
+                relayout(self)
         callback = getattr(self, "_on_visibility_changed", None)
         if changed and callable(callback):
             try:
@@ -1620,36 +1633,19 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._repaint()
         self._schedule_panel_transition()
 
-    def _apply_panel_transition(self, img: Any) -> Any:
-        """Grow the panel OUT of the cube. This runs on the FINISHED 1x card, so a morph
-        frame is a cheap scale + fade instead of rebuilding the whole supersampled card:
-        the expand used to schedule a frame every 16ms while a render cost 30-120ms and
-        simply could not keep up. The card is premultiplied, so the opacity ramp must
-        scale ALL FOUR channels — scaling alpha alone would leave the colours too bright."""
-        progress = self._transition_progress()
-        if progress >= 1.0:
-            return img
+    def _capture_cube_source(self, index: int) -> None:
+        """The real pixels of cube ``index``: every panel reveal grows out of them (one effect
+        for composer, replies, status, history, files and the Dashboard)."""
+        launch = getattr(self._cube, "launch_piece", None)
+        if not callable(launch):
+            self._cube_source_image = None
+            return
         try:
             from PIL import Image
-            w, h = img.size
-            # A smaller scale delta reduces resize work and removes the heavy
-            # first-frame "pop" while preserving the cube-edge reveal.
-            scale = 0.72 + 0.28 * progress          # 72% -> 100%, anchored at the cube edge
-            sw, sh = max(1, int(w * scale)), max(1, int(h * scale))
-            scaled = img.resize((sw, sh), Image.BILINEAR)
-            canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            # dock_side "right" = panel right of the cube -> grow from the LEFT edge (cube side)
-            x = (w - sw) if str(getattr(self, "_dock_side", "right") or "right") == "left" else 0
-            y = (h - sh) // 2
-            canvas.paste(scaled, (x, y))            # empty canvas: a copy preserves premultiplication
-            opacity = int(70 + 185 * progress)
-            # One LUT pass is materially cheaper on tall panels than splitting,
-            # multiplying, and merging four full-size channels. Scaling every
-            # channel preserves the premultiplied-alpha contract.
-            lut = [value * opacity // 255 for value in range(256)]
-            return canvas.point(lut * 4)
+            self._cube_source_center, source = launch(index, time.perf_counter())
+            self._cube_source_image = Image.frombytes("RGBA", source.size, source.convert("RGBa").tobytes())
         except Exception:
-            return img
+            self._cube_source_image = None
 
     def _schedule_settle(self) -> None:
         """Motion renders at a lower supersample; once it stops, repaint once at full
@@ -2021,15 +2017,17 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._activate_hit(self._hit_key_at(x, y))
 
     def collapse_to_cube(self) -> None:
-        """Close the composer back into its cube, keeping the half-typed draft.
-
-        Its collapse control and a second click on the cubes both close it this way."""
+        """Close a docked face back into its cube: the composer into the upper-right cube
+        (keeping the half-typed draft), the Dashboard into the upper-left one. Same reverse
+        morph for both, so they open and close alike."""
         if getattr(self, "_cube_closing", False):
             return
         self._stash_input_draft()
         self._cancel_panel_transition()
         self._stop_blink()
-        if self._transition_seconds() <= 0 or getattr(self._cube, "_composer_controller", None) is not self:
+        index = (1 if getattr(self._cube, "_composer_controller", None) is self
+                 else 0 if getattr(self._cube, "_dashboard_controller", None) is self else None)
+        if self._transition_seconds() <= 0 or index is None:
             self.hide()
             return
         now = time.perf_counter()
@@ -2038,7 +2036,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         opened_for = (0.0 if self._transition_pending_start else
                       min(duration, max(0.0, now-started)) if started > 0 else duration)
         if opened_for >= duration:
-            bx, by = self._cube._bases[1]
+            bx, by = self._cube._bases[index]
             self._cube_source_center = (self._cube._x+bx-self._cube._size/2,
                                         self._cube._y+by-self._cube._size/2)
         self._cube_closing = True

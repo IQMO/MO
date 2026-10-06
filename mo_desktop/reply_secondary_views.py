@@ -13,6 +13,10 @@ _SS = card.SS
 
 
 
+# The docked Dashboard face keeps one height: the column beside it with Focus open, else this.
+_DASHBOARD_FACE_HEIGHT = 360
+_DASHBOARD_MIN_HEIGHT = 200
+
 def _plain_card_row(img: Any, below: int, pad: int) -> Any:
     """A one-pixel row of the card with nothing drawn inside its borders, at or above ``below``
     (a glyph's descender must not be repeated down the grown card)."""
@@ -286,17 +290,18 @@ class ReplySecondaryViewsMixin:
             return 0
         focus = getattr(self._cube, "_focus_controller", None)
         if focus is None or getattr(focus, "_collapsed", False):
-            return 0
+            # No Focus column: one steady height, so data and tab changes never resize it.
+            return _DASHBOARD_FACE_HEIGHT
         top = self.cube_extent()[1]
         bottom = focus._face_offset[1] + focus._target_size[1]
-        return max(0, int(round(bottom - top)))
+        return max(_DASHBOARD_MIN_HEIGHT, int(round(bottom - top)))
 
     def _fit_dashboard_face(self, img: Any, hits: dict, pad: int) -> tuple[Any, dict]:
         """Fit the docked Dashboard to the column beside it: keep the card's own rounded top
         and bottom, show the scrolled middle, fade the cut, and drop controls scrolled away."""
         target = self._dashboard_column_height()
         card_h = img.height - 2 * pad
-        if not target or card_h == target or target < 140:
+        if not target or card_h == target:
             self._dashboard_scroll = self._dashboard_max_scroll = 0
             return img, hits
         from PIL import Image
@@ -315,33 +320,37 @@ class ReplySecondaryViewsMixin:
                 out.paste(plain, (0, y))
             out.paste(img.crop((0, split, width, img.height)), (0, pad + target - cap))
             return out, hits
-        middle = target - 2 * cap
+        # The header (mark, title, Home/Work/You/Systems) stays put; only what is below it
+        # scrolls, so the cut never runs through the tabs.
+        tabs = [box[3] for key, box in hits.items() if str(key).startswith("dash:view:")]
+        header = min(pad + card_h - cap - 40, (max(tabs) + 8) if tabs else pad + cap)
+        middle = pad + target - cap - header
         maximum = card_h - target
         scroll = max(0, min(maximum, int(getattr(self, "_dashboard_scroll", 0) or 0)))
         self._dashboard_scroll, self._dashboard_max_scroll = scroll, maximum
         width = img.width
         out = Image.new("RGBA", (width, target + 2 * pad), (0, 0, 0, 0))
-        out.paste(img.crop((0, 0, width, pad + cap)), (0, 0))
-        out.paste(img.crop((0, pad + cap + scroll, width, pad + cap + scroll + middle)), (0, pad + cap))
+        out.paste(img.crop((0, 0, width, header)), (0, 0))
+        out.paste(img.crop((0, header + scroll, width, header + scroll + middle)), (0, header))
         out.paste(img.crop((0, img.height - pad - cap, width, img.height)), (0, pad + target - cap))
         fade = Image.new("RGBA", out.size, (0, 0, 0, 0))
         steps = 18
         inner = (pad + 2, width - pad - 2)
         for row in range(steps):
             alpha = int(235 * (steps - row) / steps)
-            if scroll > 0:      # more above: soften the top seam
-                fade.paste((*self._card, alpha), (inner[0], pad + cap + row, inner[1], pad + cap + row + 1))
-            if scroll < maximum:  # more below: soften the bottom seam
+            if scroll > 0:      # more above: soften the edge under the header
+                fade.paste((*self._card, alpha), (inner[0], header + row, inner[1], header + row + 1))
+            if scroll < maximum:  # more below: soften the bottom edge
                 y = pad + target - cap - 1 - row
                 fade.paste((*self._card, alpha), (inner[0], y, inner[1], y + 1))
         out.alpha_composite(fade)
-        low, high = pad + cap + scroll, pad + cap + scroll + middle
+        low, high = header + scroll, header + scroll + middle
         kept = {}
         for key, (x0, y0, x1, y1) in hits.items():
-            if y0 >= low and y1 <= high:
-                kept[key] = (x0, y0 - scroll, x1, y1 - scroll)
-            elif y1 <= pad + cap:
+            if y1 <= header:
                 kept[key] = (x0, y0, x1, y1)
+            elif y0 >= low and y1 <= high:
+                kept[key] = (x0, y0 - scroll, x1, y1 - scroll)
         return out, kept
 
     def _accessible_hit_label(self, key: str) -> str:

@@ -566,7 +566,15 @@ class CubeLauncher:
     _TILE_POSITIONS = ((14, 8), (216, 8), (14, 210), (216, 210))
     _ROW_HEIGHT = 31
     _VISIBLE_ROWS = 4
-    _EXPAND_SECONDS = 0.18
+
+    def _motion_seconds(self) -> float:
+        """The one panel transition duration (``DesktopPanelDesign.transition_ms``): the
+        launcher's expand, tile moves and menus move at the same pace as every panel."""
+        from mo_desktop.design import DEFAULT_DESKTOP_PANEL_DESIGN
+
+        cube = getattr(getattr(self.owner, "_companion", None), "_cube", None)
+        design = getattr(cube, "_panel_design", None) or DEFAULT_DESKTOP_PANEL_DESIGN
+        return max(0.001, float(design.transition_ms) / 1000)
 
     def __init__(self, root: Any, owner: CompanionTray) -> None:
         self.gui, self.owner = root, owner
@@ -780,7 +788,7 @@ class CubeLauncher:
             return
         elapsed = time.perf_counter() - self._animation_started
         distance = abs(self._animation_target - self._animation_from)
-        phase = min(1.0, elapsed / max(0.001, self._EXPAND_SECONDS * distance))
+        phase = min(1.0, elapsed / max(0.001, self._motion_seconds() * distance))
         ease = _ease_out(phase)
         self._progress = self._animation_from + (self._animation_target - self._animation_from) * ease
         frame_started = time.perf_counter()
@@ -1031,13 +1039,13 @@ class CubeLauncher:
                         if self._entry_motion:
                             started, starts = self._entry_motion
                             origin = starts.get(str(spec["id"]), (rx, ry))
-                            ease = _ease_out(min(1., max(0., (now-started)/.23)))
+                            ease = _ease_out(min(1., max(0., (now-started)/self._motion_seconds())))
                             rx, ry = round(origin[0]+(rx-origin[0])*ease), round(origin[1]+(ry-origin[1])*ease)
                         animated_rows.append((sprite, (rx, ry)))
             tx, ty = x, y
             if self._group_motion:
                 started, starts = self._group_motion
-                phase = min(1., max(0., (now-started)/.23))
+                phase = min(1., max(0., (now-started)/self._motion_seconds()))
                 if index in starts:
                     origin = starts[index]
                     ease = _ease_out(phase)
@@ -1219,14 +1227,13 @@ class CubeLauncher:
     def _composite_menu(self, image: Any, menu_image: Any, menu: dict[str, Any], now: float | None) -> Any:
         from PIL import Image
         from mo_desktop.cube_motion import _ease_out
-        from mo_desktop.design import DEFAULT_DESKTOP_PANEL_DESIGN
 
         current = time.perf_counter() if now is None else now
         x, y, _right, bottom = menu["bounds"]
         closing = bool(menu.get("closing"))
         layout_key = closing
         if menu.get("motion_key") != layout_key:
-            duration = getattr(self.owner._companion._cube, "_panel_design", DEFAULT_DESKTOP_PANEL_DESIGN).transition_ms / 1000
+            duration = self._motion_seconds()
             if "motion_key" in menu:
                 old_duration = max(.001, menu["motion_until"]-menu["motion_started"])
                 phase = min(1.0, max(0.0, (current-menu["motion_started"])/old_duration))
@@ -1597,10 +1604,10 @@ class CubeLauncher:
             if not self._editing:
                 self._editing = True
                 self._render()
-        finished_move = bool(self._group_motion and now-self._group_motion[0] >= .23)
+        finished_move = bool(self._group_motion and now-self._group_motion[0] >= self._motion_seconds())
         if finished_move:
             self._group_motion = None
-        finished_entry = bool(self._entry_motion and now-self._entry_motion[0] >= .23)
+        finished_entry = bool(self._entry_motion and now-self._entry_motion[0] >= self._motion_seconds())
         if finished_entry:
             self._entry_motion = None
         dt = max(0.0, min(.1, now - self._hover_tick_at))
