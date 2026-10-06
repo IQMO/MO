@@ -239,17 +239,22 @@ def _read_startup_file(path: str, what: str) -> str:
 
 def _startup_panes_input(args: list[str]) -> str:
     """``--startup-panes N[:local|host]`` from a trusted launcher (MO Desktop) becomes the
-    Terminal's first command, ``/workspace open N local|host``; "" when absent."""
+    Terminal's first command, ``/workspace open N local|host``; ``host:<terminal id>`` attaches
+    a pane to that running hub terminal (``/workspace attach <id>``); "" when absent."""
     import re
 
     flag = "--startup-panes"
     if flag not in args:
         return ""
     index = args.index(flag)
-    value = args[index + 1].strip().lower() if index + 1 < len(args) else ""
+    raw = args[index + 1].strip() if index + 1 < len(args) else ""
+    attach = re.fullmatch(r"host:([A-Za-z0-9_-]{1,64})", raw)
+    if attach:
+        return f"/workspace attach {attach.group(1)}"
+    value = raw.lower()
     match = re.fullmatch(r"([1-6])(?::(local|host))?", value)
     if not match:
-        raise ValueError("startup panes must be 1-6, optionally :local or :host")
+        raise ValueError("startup panes must be 1-6, optionally :local or :host, or host:<terminal id>")
     return f"/workspace open {match.group(1)} {match.group(2) or 'local'}"
 
 

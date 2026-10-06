@@ -1276,6 +1276,17 @@ class WorkspaceController:
                 return result
         return self.status_text()
 
+    def attach_host_terminal(self, terminal_id: str) -> str:
+        """Attach a pane to one exact hub terminal by id (MO Desktop's "on the MO host" handoff).
+        The pane leases it by id, so this need not wait for the running-terminal discovery."""
+        clean = str(terminal_id or "").strip()
+        if not clean or len(clean) > 64 or not all(ch.isalnum() or ch in "-_" for ch in clean):
+            return self.usage()
+        with self._lock:
+            known = next((item for item in self._running_terminals if item.instance_id == clean), None)
+        return self.new_terminal(PaneDestination.MO_HOST, attached_instance_id=clean,
+                                 attached_label=str(getattr(known, "label", "") or ""))
+
     def attach_running_terminal(self, instance_id: str) -> str:
         """Attach one discovered live MO terminal as a normal host pane."""
         instance_id = str(instance_id or "").strip()
@@ -1475,6 +1486,8 @@ class WorkspaceController:
             return self.usage()
         if action == "open" and len(parts) in {2, 3} and parts[1].isdigit():
             return self.open_panes(int(parts[1]), parts[2].lower() if len(parts) == 3 else "local")
+        if action == "attach" and len(parts) == 2:
+            return self.attach_host_terminal(parts[1])
         if action in {"next", "prev"} and len(parts) == 1:
             return self.move_focus(1 if action == "next" else -1)
         if action == "focus" and len(parts) == 2 and parts[1].isdigit():
