@@ -153,7 +153,7 @@ def tile_title_fragments(
     parts = (
         (owner, "main")
         if tile.pane_id == "main"
-        else (owner, tile.worker_id or tile.pane_id, tile.detail)
+        else (owner, _short_id(tile.worker_id or tile.pane_id), tile.detail)
     )
     text = " " + " · ".join(part for part in parts if part)
     return [(style, fit_cells(text, max(1, int(width))))]
@@ -177,9 +177,20 @@ def _tile_body_rows(
             for visual_row in wrap_fragment_line(list(row), max(8, int(width)))
         ]
     if not rows:
-        message = "  terminal ready" if tile.pane_id != "main" else "  MO ready"
-        rows = [(("class:dim", message),)]
+        if tile.destination.value == "host" and tile.state in {"starting", "working"}:
+            # The host MO takes a few seconds to start; say so instead of "ready".
+            rows = [(("class:activity", f"  {brand_spinner_frame()} "),
+                     ("class:dim", "Starting MO on the MO host\u2026 this takes a few seconds"),)]
+        else:
+            message = "  terminal ready" if tile.pane_id != "main" else "  MO ready"
+            rows = [(("class:dim", message),)]
     return rows
+
+
+def _short_id(value: str) -> str:
+    """An instance id names a terminal; its first 8 characters are enough to tell them apart."""
+    value = str(value or "")
+    return value[:8] if len(value) > 12 and all(ch in "0123456789abcdef" for ch in value.lower()) else value
 
 
 def tile_body_fragments(
@@ -492,7 +503,7 @@ def workspace_terminal_name(tile: WorkspaceTile) -> str:
     if tile.pane_id == "main":
         return "MO · main"
     if tile.title == "MO":
-        parts = ["MO", str(tile.worker_id or "").strip(), detail]
+        parts = ["MO", _short_id(str(tile.worker_id or "").strip()), detail]
         return " · ".join(part for part in parts if part)
     return tile.title or "Terminal"
 

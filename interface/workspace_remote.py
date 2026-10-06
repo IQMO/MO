@@ -183,6 +183,7 @@ class RemoteMoTerminalProcess(WorkspaceChangeNotifier):
         self._session_id = ""
         self._lines: tuple[str, ...] = ()
         self._notice_text = ""
+        self._activity = ""
         self._host_sequence = 0
         self._client_sequence = 0
         self._stream_snapshot_received = False
@@ -440,6 +441,7 @@ class RemoteMoTerminalProcess(WorkspaceChangeNotifier):
                 self.state = "running"
             elif kind in {"terminal_snapshot", "terminal_update"}:
                 self._lines = tuple(message["lines"])
+                self._activity = " ".join(str(message.get("activity") or "").split())[:160]
                 self._notice_text = ""
                 self._stream_snapshot_received = True
                 self.state = "working" if message["busy"] else (
@@ -561,7 +563,12 @@ class RemoteMoTerminalProcess(WorkspaceChangeNotifier):
             return lines
 
     def screen_fragments(self) -> tuple[tuple[tuple[str, str], ...], ...]:
-        return tuple((("", line),) for line in self.screen_lines())
+        rows = tuple((("", line),) for line in self.screen_lines())
+        with self._lock:
+            activity = self._activity if not self._notice_text else ""
+        # The host MO's own activity line (what it is doing now), as a normal MO Terminal shows
+        # under its transcript; the host sends it with every snapshot.
+        return rows + ((("class:dim", f"  {activity}"),),) if activity else rows
 
     def close(self, *, timeout: float = 0.75) -> None:
         with self._lock:
