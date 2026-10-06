@@ -225,9 +225,12 @@ def operator_holds_computer(*, desktop_pids: set[int] | None = None) -> str:
 
 def wait_for_operator(cancel_event: Any = None, *, timeout: float = OPERATOR_WAIT_SECONDS,
                       poll: float = 0.2) -> str | None:
-    """Before native input, give way while the operator uses the computer; None to go ahead."""
+    """Before native input, give way while the operator uses the computer; None to go ahead.
+    Once MO had to wait, the screen may have changed under its last look, so it is told to
+    observe again instead of acting on old coordinates."""
     deadline = time.monotonic() + max(0.0, float(timeout))
     desktop_pids: set[int] | None = None
+    waited = ""
     while True:
         if cancel_event is not None and cancel_event.is_set():
             return "Error: computer operation cancelled."
@@ -238,7 +241,11 @@ def wait_for_operator(cancel_event: Any = None, *, timeout: float = OPERATOR_WAI
                 desktop_pids = set()
         reason = operator_holds_computer(desktop_pids=desktop_pids)
         if not reason:
+            if waited:
+                return (f"Paused: the operator used {waited} while MO waited, so nothing was done; "
+                        "observe the target again before acting.")
             return None
+        waited = reason
         if time.monotonic() >= deadline:
             return (f"Paused: the operator is using {reason}, so MO did not act. Nothing changed; "
                     "say that you are waiting for them, then try again.")
