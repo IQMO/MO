@@ -37,6 +37,9 @@ _HEALTH_BASELINE_SECONDS = 1.0
 _TERMINAL_INPUT_READY_STATES = frozenset({"running", "working", "blocked", "idle"})
 
 
+# /workspace open N fills one window to at most this many panes (main MO pane included).
+_OPEN_PANES_LIMIT = 6
+
 def _adjust_host_terminal_zoom(step: int) -> None:
     """Send one standard font-zoom shortcut to the focused Windows terminal."""
     if os.name != "nt" or step == 0:
@@ -1127,6 +1130,26 @@ class WorkspaceController:
         verb = "Opening" if is_host else "Opened"
         return f"{verb} workspace pane {opened_position} · {destination.label}."
 
+    def open_panes(self, total: int, where: str = "local") -> str:
+        """Fill this window to ``total`` panes (the main MO pane counts as one), each a new
+        terminal on this machine or on the MO host. Stops with the reason if one cannot open."""
+        total = max(1, min(_OPEN_PANES_LIMIT, int(total)))
+        host = str(where or "").lower() in {"host", "mo-host", "server"}
+        destination = PaneDestination.MO_HOST if host else PaneDestination.THIS_MACHINE
+        if host and self.selected_project.destination is not PaneDestination.MO_HOST:
+            with self._lock:
+                key = next((key for key, project in self._projects.items()
+                            if project.destination is PaneDestination.MO_HOST and project.path), "")
+            if not key:
+                return "No MO host project is listed yet; open the side panel (Ctrl+B) once the host connects."
+            self.select_project(key)
+        while self.count < total:
+            before = self.count
+            result = self.new_terminal(destination)
+            if self.count == before:
+                return result
+        return self.status_text()
+
     def attach_running_terminal(self, instance_id: str) -> str:
         """Attach one discovered live MO terminal as a normal host pane."""
         instance_id = str(instance_id or "").strip()
@@ -1325,6 +1348,8 @@ class WorkspaceController:
             if len(parts) == 2 and parts[1].lower() in {"host", "mo-host"}:
                 return self.new_terminal(PaneDestination.MO_HOST)
             return self.usage()
+        if action == "open" and len(parts) in {2, 3} and parts[1].isdigit():
+            return self.open_panes(int(parts[1]), parts[2].lower() if len(parts) == 3 else "local")
         if action in {"next", "prev"} and len(parts) == 1:
             return self.move_focus(1 if action == "next" else -1)
         if action == "focus" and len(parts) == 2 and parts[1].isdigit():

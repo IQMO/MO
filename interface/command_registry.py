@@ -542,6 +542,7 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         category="Sessions",
         subcommands=(
             ("new", "choose This machine or MO host"),
+            ("open <n> [local|host]", "fill this window to n panes"),
             ("status", "list terminal panes and states"),
             ("focus <number>", "focus a pane number"),
             ("next", "focus the next pane"),
@@ -554,6 +555,7 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
             "/workspace        manage the selected project's terminal panes",
             "                  /workspace new choose This machine or MO host",
             "                  /workspace new local add a local blank terminal",
+            "                  /workspace open N [local|host] fill this window to N panes",
             "                  /workspace status list terminal panes",
             "                  /workspace focus N focus pane N",
             "                  /workspace next|prev move focus",
