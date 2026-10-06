@@ -134,6 +134,7 @@ _WRITER_INK = (122, 140, 255)
 DOCK_SPREAD = 11
 _WIRE_PULSE_SECONDS = 1.6
 _WIRE_CHARGE_SHARE = 0.35
+_WIRE_SWEEP_SHARE = 0.40
 _VOICE_SWELL = 0.10   # speaking: how far a full syllable opens the cluster (heartbeat uses .07)
 # Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
 # _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
@@ -1550,9 +1551,12 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         focused = getattr(self, "_dock_focus", "") if getattr(self, "_dock_focus", "") in names else names[0]
         phase = (now % _WIRE_PULSE_SECONDS) / _WIRE_PULSE_SECONDS
         charge = phase / _WIRE_CHARGE_SHARE if phase < _WIRE_CHARGE_SHARE else None
+        after = (phase - _WIRE_CHARGE_SHARE) / _WIRE_SWEEP_SHARE
+        sweep = after if 0.0 <= after < 1.0 else None          # the charge runs on around the frame
         core = len(self._consumed_cubes() & {0, 1, 2, 3}) == 4
         key = (round(self._x), round(self._y), tuple((n, tuple(round(v) for v in f)) for n, f in faces), focused,
-               None if charge is None else round(charge * 30), core, self._color_rgb)
+               None if charge is None else round(charge * 30), None if sweep is None else round(sweep * 30),
+               core, self._color_rgb)
         if key == getattr(self, "_wiring_key", None):
             return True
         self._wiring_key = key
@@ -1560,7 +1564,8 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             from mo_desktop.cube_motion import paint_dock_wiring
 
             frame, left, top = paint_dock_wiring((self._x, self._y), faces, focused, charge, now=now,
-                                                 color=self._color_rgb, core=core, sprite=self._sprites[-1])
+                                                 color=self._color_rgb, core=core, sprite=self._sprites[-1],
+                                                 sweep=sweep)
             if surface.blit(frame, left, top):
                 self._trace_win.show()
                 self._wiring_shown = True

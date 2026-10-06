@@ -122,6 +122,52 @@ def _filament(start: tuple[float, float], end: tuple[float, float], energy: floa
     return points
 
 
+def _touch_point(center: tuple[float, float], rect: tuple[float, float, float, float]) -> tuple[float, float]:
+    """Where the line from ``center`` toward the panel's middle meets the panel's border: the wire
+    ends exactly on the panel's stroke."""
+    cx, cy = center
+    x0, y0, x1, y1 = rect
+    dx, dy = (x0 + x1) / 2 - cx, (y0 + y1) / 2 - cy
+    hits = []
+    for edge_x in (x0, x1):
+        if dx:
+            t = (edge_x - cx) / dx
+            if 0 <= t <= 1 and y0 - 0.5 <= cy + t * dy <= y1 + 0.5:
+                hits.append(t)
+    for edge_y in (y0, y1):
+        if dy:
+            t = (edge_y - cy) / dy
+            if 0 <= t <= 1 and x0 - 0.5 <= cx + t * dx <= x1 + 0.5:
+                hits.append(t)
+    t = min(hits) if hits else 1.0
+    return cx + t * dx, cy + t * dy
+
+
+def _perimeter_point(rect: tuple[float, float, float, float], s: float) -> tuple[float, float]:
+    """The point ``s`` px along the rectangle's border, clockwise from its top-left corner."""
+    x0, y0, x1, y1 = rect
+    w, h = x1 - x0, y1 - y0
+    s %= 2 * (w + h)
+    if s < w:
+        return x0 + s, y0
+    s -= w
+    if s < h:
+        return x1, y0 + s
+    s -= h
+    if s < w:
+        return x1 - s, y1
+    return x0, y1 - (s - w)
+
+
+def _perimeter_offset(rect: tuple[float, float, float, float], point: tuple[float, float]) -> float:
+    x0, y0, x1, y1 = rect
+    w, h = x1 - x0, y1 - y0
+    px, py = point
+    sides = [(abs(py - y0), px - x0), (abs(px - x1), w + (py - y0)), (abs(py - y1), w + h + (x1 - px)),
+             (abs(px - x0), 2 * w + h + (y1 - py))]
+    return min(sides)[1]
+
+
 @lru_cache(maxsize=16)
 def _frame_glow(width: int, height: int, radius: int, color: tuple[int, int, int]) -> Any:
     """The lit frame of the panel in use: a soft ring just outside its edge (cached per size)."""
@@ -164,6 +210,17 @@ def _wiring_base(cx: int, cy: int, rects: tuple, focused: str, rgb: tuple[int, i
     return base, left, top
 
 
+@lru_cache(maxsize=48)
+def _frame_glow_scaled(width: int, height: int, color: tuple[int, int, int], tenths: int) -> Any:
+    """The lit frame at ``tenths``/10 strength, for the flare when the charge arrives."""
+    glow = _frame_glow(width, height, 12, color)
+    if tenths >= 10:
+        return glow
+    scaled = glow.copy()
+    scaled.putalpha(glow.getchannel("A").point(lambda v, k=tenths / 10: int(v * k)))
+    return scaled
+
+
 @lru_cache(maxsize=8)
 def _core_halo(color: tuple[int, int, int]) -> Any:
     from PIL import Image, ImageDraw, ImageFilter
@@ -174,13 +231,15 @@ def _core_halo(color: tuple[int, int, int]) -> Any:
 
 
 def paint_dock_wiring(center: tuple[float, float], faces: Any, focused: str, charge: float | None, *, now: float,
-                      color: Any, core: bool, sprite: Any = None) -> tuple[Any, int, int]:
+                      color: Any, core: bool, sprite: Any = None, sweep: float | None = None) -> tuple[Any, int, int]:
     """One frame of the connected companion (row 42) in screen space: returns (image, left, top).
 
     Wires run from ``center`` to the corner of each face nearest it (three strokes like MO Shell's
     DrawElectricConnection); the focused face's wire carries ``charge`` (0..1 along it) and its
-    frame glows; when ``core`` is set, MO's mark sits at the centre. The glow and core are cached
-    per layout; each pulse frame redraws only the small wire layer around the centre."""
+    frame glows; when ``core`` is set, MO's mark sits at the centre. Each wire ends on its panel's
+    stroke, and once the charge arrives (``sweep`` 0..1) it runs on around that panel's frame from
+    the contact point both ways while the frame flares, so wire and panel read as one current.
+    The glow and core are cached per layout; each pulse frame redraws only what moves."""
     from PIL import Image, ImageDraw
 
     rgb = tuple(int(v) for v in tuple(color)[:3])
@@ -189,14 +248,14 @@ def paint_dock_wiring(center: tuple[float, float], faces: Any, focused: str, cha
     base, left, top = _wiring_base(round(cx), round(cy), tuple((n, tuple(round(v) for v in r)) for n, r in rects),
                                    focused, rgb, core)
     frame = base.copy()
-    ends = [(name, (min(max(cx, x0), x1), min(max(cy, y0), y1))) for name, (x0, y0, x1, y1) in rects]
+    ends = [(name, _touch_point((cx, cy), rect)) for name, rect in rects]
     reach = max([abs(ex - cx) for _n, (ex, _ey) in ends] + [abs(ey - cy) for _n, (_ex, ey) in ends] + [12.0]) + 8
     wl, wt = math.floor(cx - reach), math.floor(cy - reach)
     ws = max(1, math.ceil(2 * reach))
     ss = 3
     wires = Image.new("RGBA", (ws * ss, ws * ss), (0, 0, 0, 0))   # only the hub's neighbourhood
     draw = ImageDraw.Draw(wires)
-    for name, end in ends:                                          # each face's corner nearest the centre
+    for name, end in ends:                                          # each wire ends on its panel's stroke
         energy = 1.0 if name == focused else 0.25
         points = [((x - wl) * ss, (y - wt) * ss) for x, y in _filament((cx, cy), end, energy, now, 5.0)]
         for stroke, alpha in ((6, 30 + 50 * energy), (3.5, 55 + 90 * energy), (1.6, 190 + 65 * energy)):
@@ -210,6 +269,30 @@ def paint_dock_wiring(center: tuple[float, float], faces: Any, focused: str, cha
                 if strength > 0:
                     draw.line((points[k], points[k + 1]), fill=(*light, int(240 * strength)), width=round(2.6 * ss))
     frame.alpha_composite(wires.resize((ws, ws), Image.Resampling.LANCZOS), (wl - left, wt - top))
+    focus_rect = next((rect for name, rect in rects if name == focused), None)
+    if sweep is not None and focus_rect is not None:
+        # The charge continues into the panel: a light runs from the contact point around the
+        # frame both ways, fading, while the whole lit frame flares and settles.
+        touch = next(end for name, end in ends if name == focused)
+        x0, y0, x1, y1 = focus_rect
+        ring = (x0 - 1, y0 - 1, x1 + 1, y1 + 1)
+        start = _perimeter_offset(ring, touch)
+        half_way = (ring[2] - ring[0]) + (ring[3] - ring[1])
+        flare = (1.0 - sweep) ** 1.5
+        frame.alpha_composite(_frame_glow_scaled(round(x1 - x0), round(y1 - y0), rgb, round(flare * 10)),
+                              (round(x0) - 16 - left, round(y0) - 16 - top))
+        light = tuple(int(c * .3 + 255 * .7) for c in rgb)
+        lead = sweep * half_way
+        sweep_draw = ImageDraw.Draw(frame)
+        for direction in (1, -1):
+            for k in range(14):
+                s0 = start + direction * (lead - k * 4)
+                s1 = start + direction * (lead - (k + 1) * 4)
+                if direction * (s1 - start) < 0:
+                    break
+                a, b = _perimeter_point(ring, s0), _perimeter_point(ring, s1)
+                sweep_draw.line(((a[0] - left, a[1] - top), (b[0] - left, b[1] - top)),
+                                fill=(*light, int(235 * (1 - k / 14) * (1 - sweep * 0.6))), width=2)
     if core and sprite is not None:
         mark = sprite.resize((9, 9), Image.Resampling.LANCZOS)
         for ox, oy in ((-10, -10), (1, -10), (-10, 1), (1, 1)):
