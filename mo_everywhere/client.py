@@ -432,6 +432,15 @@ class ContinuityClient:
             payload["project_path"] = project_path
         return self._authorized_json("POST", "/api/mo/terminals", payload)
 
+    def queue_hub_terminal_turn(self, terminal_id: str, text: str) -> dict[str, Any]:
+        """Hand one normal turn to a running hub-owned MO terminal."""
+        terminal_id = _id(terminal_id, 64)
+        return self._authorized_json(
+            "POST",
+            f"/api/mo/terminals/{urllib.parse.quote(terminal_id, safe='')}/turn",
+            {"text": str(text or "")},
+        )
+
     def start_desktop_terminal(
         self,
         host_id: str,

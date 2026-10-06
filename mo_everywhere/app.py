@@ -84,7 +84,7 @@ from .notifications import (
     SCHEDULE_EVENTS,
     WORKER_EVENTS,
 )
-from .terminals import MAX_HUB_TERMINALS, HubTerminalSupervisor, TerminalError
+from .terminals import MAX_HUB_TERMINALS, HubTerminalSupervisor, TerminalError, TerminalNotRunning
 from .overview import build_overview
 from .pairing_qr import (
     ANDROID_PAIRING_SCOPES,
@@ -2454,6 +2454,28 @@ def create_app(
             return terminal.as_dict()
         except TerminalError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    @app.post("/api/mo/terminals/{terminal_id}/turn", status_code=202)
+    async def queue_hub_terminal_turn(
+        terminal_id: str,
+        request: Request,
+        principal: DevicePrincipal = Depends(require_capability_scope("control", CONTROLLER_SCOPE)),
+    ) -> dict[str, Any]:
+        # One normal turn into a running hub terminal (MO Desktop's "on the MO host" handoff).
+        limiter.check(f"{_client_key(request)}:{principal.device_id}", "hub_terminal_turn", limit=12)
+        body = await _json_body(request)
+        if set(body) - {"text"}:
+            raise HTTPException(status_code=422, detail="unsupported terminal turn option")
+        text = body.get("text")
+        if not isinstance(text, str) or not text.strip() or len(text) > MAX_TURN_CHARS:
+            raise HTTPException(status_code=422, detail=f"text must contain 1-{MAX_TURN_CHARS} characters")
+        try:
+            await asyncio.to_thread(terminals.queue_turn, terminal_id, text.strip())
+        except TerminalNotRunning as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        except TerminalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        return {"queued": True, "terminal_id": terminal_id}
 
     @app.delete("/api/mo/terminals/{terminal_id}")
     async def stop_hub_terminal(

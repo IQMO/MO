@@ -51,6 +51,11 @@ _START_TIMEOUT_SECONDS = 20
 _MULTIPLEXER = "tmux"
 _PORTABLE_CONVERSATION_RE = re.compile(r"conv_[0-9a-f]{32}")
 _HANDOFF_READY_TIMEOUT_SECONDS = 10
+_TURN_READY_TIMEOUT_SECONDS = 15   # a just-started terminal publishes its heartbeat a moment after tmux lists it
+
+
+class TerminalNotRunning(LookupError):
+    """The named hub terminal has no running session."""
 
 
 class TerminalError(RuntimeError):
@@ -368,6 +373,33 @@ class HubTerminalSupervisor:
         except OSError:
             pass
         return True
+
+    def queue_turn(self, terminal_id: str, text: str, *, wait_seconds: float | None = None) -> None:
+        """Hand one normal turn to a running hub terminal: the same heartbeat-proven file
+        handoff MO Desktop uses for a local Terminal, so the terminal claims it as its own."""
+        from core.design.terminal_handoff import queue_terminal_turn
+        from core.runtime.instance import recent_instance_snapshots
+
+        clean = str(terminal_id or "")
+        if not clean or len(clean) > 64 or not all(ch.isalnum() or ch in "-_" for ch in clean):
+            raise TerminalError("terminal id is invalid")
+        if not any(item.terminal_id == clean for item in self.list()):
+            raise TerminalNotRunning("that terminal is not running")
+        wait = _TURN_READY_TIMEOUT_SECONDS if wait_seconds is None else float(wait_seconds)
+        deadline = time.monotonic() + max(0.0, wait)
+        while True:
+            pid = next((int(row.get("pid") or 0) for row in recent_instance_snapshots(
+                self.config, max_age_seconds=600, limit=64)
+                if str(row.get("instance_id") or "") == clean and row.get("pid_alive")), 0)
+            if pid > 0 or time.monotonic() >= deadline:
+                break
+            time.sleep(0.5)
+        if pid <= 0:
+            raise TerminalError("that terminal is still starting; try again in a moment")
+        try:
+            queue_terminal_turn(text, {"instance_id": clean, "pid": pid}, config=self.config)
+        except (RuntimeError, ValueError) as exc:
+            raise TerminalError(str(exc)) from None
 
     def _forget_session_slot(self, terminal_id: str) -> None:
         """Drop the stopped terminal's conversation snapshot.

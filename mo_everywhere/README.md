@@ -588,6 +588,15 @@ that association. Attaching a terminal with unknown project evidence uses a sepa
 group and never assigns it the selected local project's identity. The host's
 terminal resource cap remains independent of the UI's pane count.
 
+`POST /api/mo/terminals/{terminal_id}/turn` with `{"text": ...}` hands one
+normal turn to a running hub terminal (MO Desktop's "on the MO host" handoff).
+The hub finds that terminal's live heartbeat (its instance id is the terminal
+id) and queues the text through the same heartbeat-proven file handoff a local
+Terminal claims, so the terminal runs it as its own next turn. An unknown or
+stopped terminal answers 404; one still publishing its heartbeat after start,
+or one that already holds a pending handoff, answers 409. The body accepts no
+other field, and the same exact `remote_control` scope applies.
+
 Terminal hosts advertise command-menu support in their registration; the
 `mo_session` lease response carries that capability to the workspace.
 The workspace's slash input and `F4` request bounded host-owned choices; arrows
