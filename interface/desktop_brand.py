@@ -279,6 +279,14 @@ def make_glyph_icon(
             radius=s * 0.055,
             fill=color,
         )
+    elif name == "clip":
+        # A paperclip: two nested rounded loops open at the top.
+        draw.line([pt(0.62, 0.28), pt(0.62, 0.70)], fill=color, width=stroke)
+        draw.arc([pt(0.30, 0.56), pt(0.62, 0.86)], 0, 180, fill=color, width=stroke)
+        draw.line([pt(0.30, 0.71), pt(0.30, 0.22)], fill=color, width=stroke)
+        draw.arc([pt(0.30, 0.08), pt(0.70, 0.36)], 180, 360, fill=color, width=stroke)
+        draw.line([pt(0.70, 0.22), pt(0.70, 0.30)], fill=color, width=stroke)
+        draw.line([pt(0.46, 0.30), pt(0.46, 0.66)], fill=color, width=stroke)
     elif name == "file":
         outline = [
             pt(0.22, 0.1),

@@ -62,7 +62,7 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # The composer's earlier-message browse: room kept for the three dots above Send, the dim behind
 # the composer, and the cross-fade between messages.
 _COMPOSER_DOTS_RESERVE = 16
-_BROWSE_VEIL_ALPHA = 110
+_BROWSE_DIM_ALPHA = 150    # row 31: how far the panel dims around the browsed message's line
 _BROWSE_FADE_SECONDS = 0.15
 
 class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
@@ -486,8 +486,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         reply_history = list(getattr(self, "_reply_history", None) or []) if is_input else []
         browse_idx = getattr(self, "_browse_idx", None) if is_input else None
         browsing = browse_idx is not None and 0 <= browse_idx < len(reply_history)
-        if browsing:
-            shown = str(reply_history[browse_idx].get("content") or "")
+        # Browsing earlier messages keeps the composer exactly as the draft sized it: the message's
+        # head takes the first line and the panel dims around it (row 31, his correction).
+        browse_head = (" ".join(str(reply_history[browse_idx].get("content") or "").split()) or "…") if browsing else ""
         placeholder = is_input and not shown
         dots = is_input and bool(reply_history)
         attachment_caption = (
@@ -591,6 +592,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             elif caret_line >= self._scroll_line + visible_count:
                 self._scroll_line = caret_line - visible_count + 1
         lines = all_lines[self._scroll_line:self._scroll_line + visible_count] or [""]
+        if browse_head:
+            head = card.fit_text(probe, browse_head, max(1, int(wrap_width or content_width)) * ss, self._font)
+            lines = [[(head, False)]] + [[] for _line in lines[1:]]
         text_h = max(int(design.min_text_height),
                      min(int(design.max_text_height), visible_count * line_h))
         panel_radius = int(self._visuals.metrics.panel_corner_radius)
@@ -629,10 +633,16 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         d = ImageDraw.Draw(img)
         ax, ay = pad + panel_padding * ss, pad + int(design.accent_top) * ss
         if is_input:
-            edge = 10*ss
-            radius = round(edge*float(getattr(self._cube, "_corner", .15)))
-            d.rounded_rectangle((ax, ay-3*ss, ax+edge, ay+7*ss), radius=radius,
-                                fill=(*getattr(self._cube, "_color_rgb", self._cyan), 255))
+            # The composer's single cube is also its search switch: a click turns it into Google,
+            # YouTube or Translate (their brand marks) and back to MO's cube.
+            provider = self._composer_search_provider() if callable(getattr(self, "_on_web_search", None)) else ""
+            if provider:
+                self._draw_search_brand(img, d, provider, ax, ay, ss)
+            else:
+                edge = 10*ss
+                radius = round(edge*float(getattr(self._cube, "_corner", .15)))
+                d.rounded_rectangle((ax, ay-3*ss, ax+edge, ay+7*ss), radius=radius,
+                                    fill=(*getattr(self._cube, "_color_rgb", self._cyan), 255))
         elif not image_card:
             d.rounded_rectangle([ax, ay, ax + 26 * ss, ay + 3 * ss], radius=ss, fill=(*self._cyan, 255))
         self._hit = {}
@@ -654,8 +664,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             )
 
         if is_input:
-            _set_hit("collapse", (int(ax/ss)-6, int(ay/ss)-7, int(ax/ss)+18, int(ay/ss)+12))
-            search_x = ax + 21 * ss
+            _set_hit("search_cycle" if callable(getattr(self, "_on_web_search", None)) else "collapse",
+                     (int(ax/ss)-6, int(ay/ss)-7, int(ax/ss)+18, int(ay/ss)+12))
             if callable(getattr(self, "_on_role_select", None)):
                 label = card.fit_text(d, getattr(self, "_role_label", "") or "Default role",
                                       (content_width-34)*ss, self._sfont)
@@ -665,25 +675,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 d.text((ax+28*ss, ay-5*ss), label, font=self._sfont,
                        fill=(*(self._cyan if self._hovering("role") else self._muted), 255))
                 _set_hit("role", (int(ax/ss)+21, int(ay/ss)-8, int(role_right/ss), int(ay/ss)+12))
-                search_x = int(role_right) + 6 * ss
-            if callable(getattr(self, "_on_web_search", None)):
-                # One icon at a time: click switches MO chat -> Google -> YouTube -> Translate;
-                # the composer returns to MO chat each time it opens.
-                provider = self._composer_search_provider()
-                color = self._cyan if provider or self._hovering("search_cycle") else self._muted
-                hex_color = "#%02x%02x%02x" % tuple(color)
-                from interface.desktop_brand import make_glyph_icon
-                icon_y = ay - 6 * ss
-                if provider == "google":
-                    glyph_w = int(d.textlength("G", font=self._bfont))
-                    d.text((search_x + (16 * ss - glyph_w) // 2, ay - 8 * ss), "G", font=self._bfont, fill=(*color, 255))
-                elif provider == "youtube":
-                    d.polygon([(search_x + 4 * ss, icon_y + 2 * ss), (search_x + 4 * ss, icon_y + 14 * ss),
-                               (search_x + 14 * ss, icon_y + 8 * ss)], fill=(*color, 255))
-                else:
-                    glyph = make_glyph_icon("translate" if provider == "translate" else "search", 15 * ss, color=hex_color)
-                    img.alpha_composite(glyph, (int(search_x), int(icon_y)))
-                _set_hit("search_cycle", (int(search_x / ss) - 3, int(ay / ss) - 8, int(search_x / ss) + 19, int(ay / ss) + 12))
 
         if not is_input and not image_card:
             # Copy MO's message. Two offset rounded squares — the universal copy mark. The old
@@ -712,7 +703,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # body / input text
         ty = pad + body_top * ss
         tx = ax
-        fill = self._muted if placeholder or attachment_caption else self._text
+        fill = self._muted if (placeholder and not browse_head) or attachment_caption else self._text
         body_font = self._sfont if attachment_caption else self._font
         content_r = pad + panel_padding * ss + int(content_width) * ss
         if preview is not None:
@@ -949,8 +940,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     icon = self._cyan if hovered else self._muted
                 return x1, icon
 
-            if callable(getattr(self, "_on_session_history", None)):
-                # A compact clock button is shared by reply and composer states. Keeping
+            if callable(getattr(self, "_on_session_history", None)) and not is_input:
+                # A compact clock button in reply states (the composer shows it at its top while
+                # the dots browse earlier messages). Keeping
                 # this independent from reply recall makes history reachable even before
                 # the first message, without spending the narrow footer on a text label.
                 hx1, icon_col = _footer_icon_button("sessions", left_control_x)
@@ -1040,7 +1032,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     from interface.desktop_brand import make_glyph_icon
                     color = self._cyan if self._hovering("attach") else self._muted
                     clip_x = rx0 - 8 * ss - 15 * ss
-                    img.alpha_composite(make_glyph_icon("file", 15 * ss, color="#%02x%02x%02x" % tuple(color)),
+                    img.alpha_composite(make_glyph_icon("clip", 15 * ss, color="#%02x%02x%02x" % tuple(color)),
                                         (int(clip_x), int(cyy - 2 * ss)))
                     _set_hit("attach", (int(clip_x / ss) - 4, int((cyy - 5 * ss) / ss), int(clip_x / ss) + 19,
                                         int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
@@ -1053,7 +1045,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     for index in range(3):
                         dot_y = bottom_y - (2 - index) * 6 * ss
                         hot = (index < 2 and self._hovering("dots_up")) or (index == 2 and self._hovering("dots_down"))
-                        alpha = 255 if index == lit or hot else 130
+                        alpha = 210 if index == lit or hot else 95
                         color = self._cyan if index == lit or hot else self._muted
                         d.ellipse([dot_x - 2 * ss, dot_y - 2 * ss, dot_x + 2 * ss, dot_y + 2 * ss], fill=(*color, alpha))
                     mid_y = int((bottom_y - 6 * ss) / ss)
@@ -1113,6 +1105,18 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 ty = menu_top+4*ss+(track-thumb)*self._role_scroll/max(1, len(self._role_choices)-self._role_capacity)
                 d.rounded_rectangle((menu_right-3*ss, ty, menu_right-2*ss, ty+thumb), radius=ss, fill=(*self._muted, 180))
             caret_rect = None
+        if browse_head:
+            self._dim_around_browse_line(img, box, panel_radius * ss, pad + body_top * ss, line_h * ss, ss)
+            if callable(getattr(self, "_on_session_history", None)):
+                hx = box[2] - panel_padding * ss - 18 * ss
+                hy = ay - 6 * ss
+                col = self._cyan if self._hovering("sessions") else self._text
+                d2 = ImageDraw.Draw(img)
+                d2.ellipse([hx + 3 * ss, hy + 2 * ss, hx + 14 * ss, hy + 13 * ss], outline=(*col, 255), width=max(1, ss))
+                d2.line([(hx + 8.5 * ss, hy + 4 * ss), (hx + 8.5 * ss, hy + 8 * ss), (hx + 11.5 * ss, hy + 10 * ss)],
+                        fill=(*col, 255), width=max(1, ss))
+                _set_hit("sessions", (int(hx / ss), int(hy / ss) - 2, int(hx / ss) + 18, int(hy / ss) + 16),
+                         min_width=26, min_height=26)
         finished = card.finish(img, ss)   # premultiply-then-downscale (shared primitive)
         fade_from = getattr(self, "_browse_from", None) if is_input else None
         if fade_from is not None:
@@ -2415,16 +2419,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             if index == current:
                 return
         self._browse_idx = index
-        self._show_browse_veil(True)
         self._wrapped_body = None
         self._browse_fade(time.perf_counter())
 
     def _end_browse(self, *, repaint: bool = True) -> None:
         """Back to the draft (typing, Enter, Esc, Down past the newest, the panel closing)."""
-        if getattr(self, "_browse_idx", None) is None and getattr(self, "_browse_veil", None) is None:
+        if getattr(self, "_browse_idx", None) is None:
             return
         self._browse_idx = None
-        self._show_browse_veil(False)
         self._wrapped_body = None
         if repaint:
             self._browse_fade(time.perf_counter())
@@ -2436,35 +2438,32 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._browse_started = started
         self._repaint()
 
-    def _show_browse_veil(self, on: bool) -> None:
-        veil = getattr(self, "_browse_veil", None)
-        if not on:
-            if veil is not None:
-                self._browse_veil = None
-                try:
-                    veil.destroy()
-                except Exception:
-                    pass
-            return
-        if veil is not None:
-            return
-        try:
-            from PIL import Image
-            from mo_desktop import brightness
-            from mo_desktop.layered import NativeLayeredWindow
+    def _dim_around_browse_line(self, img: Any, box: Any, radius: int, line_top: int, line_h: int, ss: int) -> None:
+        """Dim this panel, not the screen: everything but a band around the browsed message's line."""
+        from PIL import Image as _Image, ImageDraw as _ImageDraw
 
-            x0, y0, x1, y1 = self._bounds
-            display = brightness.display_at((x0 + x1) // 2, (y0 + y1) // 2)
-            target = int(getattr(getattr(self, "_layered", None), "_native_hwnd", 0) or 0)
-            if display is None or not target:
-                return
-            left, top, right, bottom = display[1]
-            veil = NativeLayeredWindow(target, title="MO Desktop — Composer dim")
-            veil.exclude_from_capture(True)
-            veil.blit(Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, _BROWSE_VEIL_ALPHA)), left, top)
-            self._browse_veil = veil
-        except Exception:
-            self._browse_veil = None
+        veil = _Image.new("RGBA", img.size, (0, 0, 0, 0))
+        vd = _ImageDraw.Draw(veil)
+        vd.rounded_rectangle(tuple(box), radius=radius, fill=(*self._card, _BROWSE_DIM_ALPHA))
+        vd.rectangle((box[0] + ss, line_top - 4 * ss, box[2] - ss, line_top + line_h + 4 * ss), fill=(0, 0, 0, 0))
+        img.alpha_composite(veil)
+
+    def _draw_search_brand(self, img: Any, d: Any, provider: str, ax: int, ay: int, ss: int) -> None:
+        """The composer cube's search modes, in each service's own colours."""
+        if provider == "google":
+            glyph_w = int(d.textlength("G", font=self._bfont))
+            d.text((ax + (10 * ss - glyph_w) // 2, ay - 8 * ss), "G", font=self._bfont, fill=(66, 133, 244, 255))
+        elif provider == "youtube":
+            d.rounded_rectangle((ax - 2 * ss, ay - 2 * ss, ax + 12 * ss, ay + 7 * ss), radius=round(2.5 * ss),
+                                fill=(255, 0, 0, 255))
+            d.polygon([(ax + 3.5 * ss, ay - 0.2 * ss), (ax + 3.5 * ss, ay + 5.2 * ss), (ax + 8 * ss, ay + 2.5 * ss)],
+                      fill=(255, 255, 255, 255))
+        else:
+            from interface.desktop_brand import make_glyph_icon
+
+            d.rounded_rectangle((ax - 1 * ss, ay - 4 * ss, ax + 11 * ss, ay + 8 * ss), radius=round(2.5 * ss),
+                                fill=(66, 133, 244, 255))
+            img.alpha_composite(make_glyph_icon("translate", 10 * ss, color="#ffffff"), (int(ax), int(ay - 3 * ss)))
 
     def _apply_reply_presentation(self, presentation: dict[str, Any]) -> None:
         self._attachment_preview_paths = list(presentation.get("attachments") or [])
