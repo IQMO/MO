@@ -178,9 +178,40 @@ def main(argv: list[str] | None = None) -> int:
         help="Timeout for each execution lane.",
     )
     args = parser.parse_args(argv)
-    result = run_suite(args.root or None, workers=args.workers, timeout=args.timeout)
+    from core.runtime.lock import acquire_runtime_lock, release_runtime_lock
+
+    # One complete gate per machine: a second MO terminal reuses the running one's result.
+    lock = acquire_runtime_lock(lock_name=SUITE_LOCK_NAME, label="MO complete test suite", quiet=True)
+    if lock is None:
+        print(_suite_busy_message(), flush=True)
+        return SUITE_BUSY_EXIT_CODE
+    try:
+        result = run_suite(args.root or None, workers=args.workers, timeout=args.timeout)
+    finally:
+        release_runtime_lock(lock)
     print(result.message, flush=True)
     return result.exit_code
+
+
+SUITE_LOCK_NAME = "mo-test-suite.lock"
+SUITE_BUSY_EXIT_CODE = 3
+
+
+def _suite_busy_message() -> str:
+    import tempfile
+    import time as _time
+
+    from core.runtime.lock import runtime_lock_owner
+
+    owner = runtime_lock_owner(SUITE_LOCK_NAME)
+    try:
+        started = _time.strftime("%H:%M", _time.localtime((Path(tempfile.gettempdir()) / SUITE_LOCK_NAME).stat().st_mtime))
+    except OSError:
+        started = "earlier"
+    who = f"pid {owner}" if owner else "another process"
+    return (f"[suite] another MO terminal ({who}) has been running the complete test suite on this machine since "
+            f"{started}; did not start a second run. Wait for it and reuse its result for the same candidate. "
+            f"[exit code {SUITE_BUSY_EXIT_CODE}]")
 
 
 if __name__ == "__main__":

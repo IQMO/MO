@@ -28,7 +28,9 @@ direct broad pytest sweep, first run `python -m core.diagnostics.test_preflight
 --workers 2` once on the stable candidate WITHOUT that separate collection:
 the gate owns preflight and parallel/serial collection. Never default to
 `-n auto`; other projects use their own declared dependencies and worker bounds.
-Follow existing pending test work instead of starting a duplicate suite.
+Follow existing pending test work instead of starting a duplicate suite. The gate
+holds one machine-wide lock: if another MO terminal is already running it, it exits
+with code 3 naming that run, so wait for it and reuse its result.
 
 Reproduce a regression before fixing it, then verify the corrected interaction;
 a passing mock proves only its modeled boundary. Keep fixtures deterministic
