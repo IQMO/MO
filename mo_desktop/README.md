@@ -297,7 +297,9 @@ model, with confirmation from that instance and no draft/focus change.
 
 Replies stay concise by default but retain requested detail in the existing scrollable card. There is no Desktop-only first-response token ceiling, reply-character cap, or rolling conversation-message cap; normal provider output, context-pressure, safety, and evidence limits still apply. Read-only answers and honest tool limitations do not trigger compulsory action retries.
 
-Replies retain their own choices and attachment presentation when recalled or
+A reply card uses the composer's icon language: the history button sits at the top beside
+Copy, and the same three dots (left of Reply) step through earlier replies; there are no
+arrows, counter or boxed buttons. Replies retain their own choices and attachment presentation when recalled or
 restored after restart. Independent choices support multi-selection; exclusive
 destinations and approvals remain single-select. Long choice lists scroll inside
 the card with Submit still visible; selecting a row preserves its full detail,

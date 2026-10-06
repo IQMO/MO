@@ -676,6 +676,16 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                        fill=(*(self._cyan if self._hovering("role") else self._muted), 255))
                 _set_hit("role", (int(ax/ss)+21, int(ay/ss)-8, int(role_right/ss), int(ay/ss)+12))
 
+        if not is_input and not image_card and callable(getattr(self, "_on_session_history", None)):
+            hcol = self._cyan if self._hovering("sessions") else self._muted
+            hps = max(10, int(getattr(getattr(self, "_panel_design", DEFAULT_DESKTOP_PANEL_DESIGN), "pin_icon_size", 14) or 14)) * ss
+            hx = box[2] - panel_padding * ss - hps - 22 * ss
+            hy = box[1] + int(design.accent_top) * ss - 4 * ss
+            d.ellipse([hx + 2 * ss, hy + 2 * ss, hx + 13 * ss, hy + 13 * ss], outline=(*hcol, 255), width=max(1, ss))
+            d.line([(hx + 7.5 * ss, hy + 4 * ss), (hx + 7.5 * ss, hy + 8 * ss), (hx + 10.5 * ss, hy + 10 * ss)],
+                   fill=(*hcol, 255), width=max(1, ss))
+            _set_hit("sessions", (int(hx / ss) - 2, int(hy / ss) - 2, int(hx / ss) + 17, int(hy / ss) + 17),
+                     min_width=26, min_height=26)
         if not is_input and not image_card:
             # Copy MO's message. Two offset rounded squares — the universal copy mark. The old
             # control here was a pin drawn from four strokes, which read as the letter "t".
@@ -869,94 +879,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if footer:
             fy = box[3] - int(design.footer_height) * ss
             cyy = fy + 9 * ss
-
-            if nav_controls:
-                base = self._cyan if is_input else self._muted
-                up_col = self._cyan if self._hovering("up") else base
-                dn_col = self._cyan if self._hovering("down") else base
-                d.line([(ax, cyy + 5 * ss), (ax + 4 * ss, cyy), (ax + 8 * ss, cyy + 5 * ss)],
-                       fill=(*up_col, 255), width=ss)                                # up chevron
-                # The visible reply itself is the single current item even
-                # before persisted recall history exists; never paint 1/0.
-                history_count = max(1, len(getattr(self, "_reply_history", None) or []))
-                history_index = max(0, min(history_count - 1, int(getattr(self, "_reply_idx", 0) or 0)))
-                position = f"{history_index + 1}/{history_count}"
-                position_w = int(d.textlength(position, font=self._sfont))
-                d.text((ax + 29 * ss - position_w // 2, cyy - 3 * ss), position,
-                       font=self._sfont, fill=(*base, 255))
-                dnx = ax + 50 * ss
-                d.line([(dnx, cyy), (dnx + 4 * ss, cyy + 5 * ss), (dnx + 8 * ss, cyy)],
-                       fill=(*dn_col, 255), width=ss)                                # down chevron
-                _set_hit(
-                    "up",
-                    (int((ax - 4 * ss) / ss), int((cyy - 5 * ss) / ss),
-                     int((ax + 12 * ss) / ss), int((cyy + 10 * ss) / ss)),
-                    min_width=28,
-                    min_height=28,
-                )
-                _set_hit(
-                    "down",
-                    (int((dnx - 4 * ss) / ss), int((cyy - 5 * ss) / ss),
-                     int((dnx + 12 * ss) / ss), int((cyy + 10 * ss) / ss)),
-                    min_width=28,
-                    min_height=28,
-                )
-
-            left_control_x = ax + (74 * ss if nav_controls else 0)
-
-            def _footer_icon_button(
-                key: str,
-                x0: int,
-                *,
-                active: bool = False,
-            ) -> tuple[int, tuple[int, int, int]]:
-                """Paint one compact footer control with the shared button treatment."""
-                x1 = x0 + 25 * ss
-                hovered = self._hovering(key)
-                fill = self._cyan if active else getattr(self, "_entry", self._edge)
-                outline = self._cyan if active or hovered else self._edge
-                if not is_input:   # the composer's controls are icons only, no strokes
-                    d.rounded_rectangle(
-                        [x0, cyy - 4 * ss, x1, cyy + 15 * ss],
-                        radius=button_radius,
-                        fill=(*fill, 255),
-                        outline=(*outline, 255),
-                        width=max(1, ss),
-                    )
-                _set_hit(
-                    key,
-                    (
-                        int(x0 / ss),
-                        int((cyy - 5 * ss) / ss),
-                        int(x1 / ss),
-                        int((cyy + 16 * ss) / ss),
-                    ),
-                    min_width=32,
-                    min_height=28,
-                )
-                if active:
-                    icon = getattr(self, "_accent_ink", self._card)
-                else:
-                    icon = self._cyan if hovered else self._muted
-                return x1, icon
-
-            if callable(getattr(self, "_on_session_history", None)) and not is_input:
-                # A compact clock button in reply states (the composer shows it at its top while
-                # the dots browse earlier messages). Keeping
-                # this independent from reply recall makes history reachable even before
-                # the first message, without spending the narrow footer on a text label.
-                hx1, icon_col = _footer_icon_button("sessions", left_control_x)
-                clock = [left_control_x + 7 * ss, cyy - ss, left_control_x + 18 * ss, cyy + 10 * ss]
-                d.ellipse(clock, outline=(*icon_col, 255), width=max(1, ss))
-                d.line(
-                    [(left_control_x + 12.5 * ss, cyy + 1 * ss),
-                     (left_control_x + 12.5 * ss, cyy + 5 * ss),
-                     (left_control_x + 15.5 * ss, cyy + 7 * ss)],
-                    fill=(*icon_col, 255),
-                    width=max(1, ss),
-                )
-                left_control_x = hx1 + 9 * ss
-
             right_edge = box[2] - panel_padding * ss
             if has_footer_action:
                 # Icon only; the label remains the control's accessible name.
@@ -1073,6 +995,23 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     min_width=48,
                     min_height=28,
                 )
+                if nav_controls and len(getattr(self, "_reply_history", None) or []) > 1:
+                    # The composer's three dots, just left of Reply: the lit one is where you are
+                    # (top = older replies, middle = the newest). Click above or below to move.
+                    history_count = len(self._reply_history)
+                    at_newest = int(getattr(self, "_reply_idx", 0) or 0) >= history_count - 1
+                    dot_x = rx0 - 10 * ss
+                    mid_y = cyy + 5 * ss
+                    for index, dot_y in enumerate((mid_y - 6 * ss, mid_y, mid_y + 6 * ss)):
+                        lit = index == (1 if at_newest else 0)
+                        hot = (index == 0 and self._hovering("up")) or (index == 2 and self._hovering("down"))
+                        color = self._cyan if lit or hot else self._muted
+                        d.ellipse([dot_x - 2 * ss, dot_y - 2 * ss, dot_x + 2 * ss, dot_y + 2 * ss],
+                                  fill=(*color, 210 if lit or hot else 95))
+                    _set_hit("up", (int(dot_x / ss) - 10, int((mid_y - 14 * ss) / ss), int(dot_x / ss) + 8, int(mid_y / ss)),
+                             min_width=28)
+                    _set_hit("down", (int(dot_x / ss) - 10, int(mid_y / ss), int(dot_x / ss) + 8, int((mid_y + 14 * ss) / ss)),
+                             min_width=28)
 
         if role_menu:
             # An opaque dropdown at the selector; never resize or replace the composer.
