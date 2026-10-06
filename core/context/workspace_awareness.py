@@ -115,6 +115,10 @@ def working_sibling_instances(agent: Any, cwd: str, *, limit: int = 3) -> list[s
             continue
 
         details: list[str] = []
+        turn = item.get("turn") if isinstance(item.get("turn"), dict) else {}
+        if turn.get("busy"):
+            request = str(turn.get("request") or "").strip()
+            details.append(f"working on: {redact_monitor_text(request, 120)}" if request else "turn running")
         board = item.get("taskboard") if isinstance(item.get("taskboard"), dict) else {}
         try:
             open_tasks = max(0, int(board.get("open") or 0))
@@ -131,10 +135,11 @@ def working_sibling_instances(agent: Any, cwd: str, *, limit: int = 3) -> list[s
                 focus_label = "active" if active_title else "next"
                 details.append(f"{focus_label}: {redact_monitor_text(focus_title, 180)}")
 
-        active_workers = _active_worker_count(item.get("workers"))
+        active_workers, objectives = _active_workers(item.get("workers"))
         if active_workers:
             worker_noun = "registered worker" if active_workers == 1 else "registered workers"
-            details.append(f"{active_workers} active {worker_noun}")
+            doing = f" ({'; '.join(objectives[:2])})" if objectives else ""
+            details.append(f"{active_workers} active {worker_noun}{doing}")
         if _goal_is_running(item.get("goal")):
             details.append("goal running")
         activity = item.get("computer_activity") if isinstance(item.get("computer_activity"), dict) else {}
@@ -149,15 +154,21 @@ def working_sibling_instances(agent: Any, cwd: str, *, limit: int = 3) -> list[s
     return rows
 
 
-def _active_worker_count(value: Any) -> int:
+def _active_workers(value: Any) -> tuple[int, list[str]]:
+    """Active rows of a sibling's worker registry (its tests, workers, PRT, goals) and what each
+    is doing, from the shared ``- kind/route: state · objective`` row format."""
     rows = value if isinstance(value, list) else []
     terminal_states = {"completed", "blocked", "cancelled", "paused"}
-    count = 0
+    count, objectives = 0, []
     for row in rows:
-        state = str(row or "").partition(":")[2].partition("·")[0].strip().lower()
+        state, _dot, rest = str(row or "").partition(":")[2].partition("·")
+        state = state.strip().lower()
         if state and state not in terminal_states:
             count += 1
-    return count
+            objective = rest.partition(" — ")[0].partition(" => ")[0].strip()
+            if objective:
+                objectives.append(redact_monitor_text(objective, 80))
+    return count, objectives
 
 
 def _goal_is_running(value: Any) -> bool:

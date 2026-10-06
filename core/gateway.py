@@ -11,11 +11,11 @@ import threading
 import time
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 import traceback
 
 from . import local_extensions
-from .runtime.backend_monitor import BackendMonitor, active_monitor, monitor_context
+from .runtime.backend_monitor import BackendMonitor, active_monitor, monitor_context, redact_monitor_text
 from .runtime.heartbeat import record_heartbeat
 from .runtime.surface_identity import DESKTOP_SURFACES, normalize_runtime_surface
 from .runtime.turn_intent import BOARD_MODEL_PLAN, BOARD_NONE, BOARD_PROCEDURE, BOARD_RESUME, TurnIntent, classify_turn
@@ -74,6 +74,13 @@ def _mail_turn(user_input: str) -> bool:
     from .mail.intent import is_mail_sensitive_request
 
     return is_mail_sensitive_request(user_input, include_approval=True)
+
+
+def _heartbeat_turn(ts: Any) -> dict[str, Any]:
+    """What this turn is about, published on every heartbeat while it runs so sibling terminals
+    and the Ctrl+B rail can tell (short and redacted; a mail turn stays omitted)."""
+    text = "[Mail turn omitted]" if _mail_turn(ts.user_input) else " ".join(str(ts.user_input or "").split())
+    return {"turn_id": ts.turn_id, "request": redact_monitor_text(text, 100), "started_at": time.time()}
 
 
 def _safe_setattr(obj: object, name: str, value: object) -> None:
@@ -576,6 +583,7 @@ class Gateway:
                     getattr(ts.desktop_action_admission, "reason", "") or ""
                 ),
             })
+            _safe_call(lambda: setattr(self.agent, "_heartbeat_turn", _heartbeat_turn(ts)))
             _safe_call(lambda: record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_start"))
 
             try:
@@ -848,6 +856,9 @@ class Gateway:
             "provider_slot": ts.model_slot,
             "instance_id": ts.instance_id,
         })
+        current_turn = getattr(self.agent, "_heartbeat_turn", None)
+        if isinstance(current_turn, dict) and current_turn.get("turn_id") == ts.turn_id:
+            _safe_call(lambda: setattr(self.agent, "_heartbeat_turn", None))
         _safe_call(lambda: record_heartbeat(self.agent, gateway=self, surface=route_source, event="turn_end",
                          extra={"status": status, "duration_ms": elapsed_ms}))
         if str(ts.user_input or "").strip() and not _mail_turn(ts.user_input):

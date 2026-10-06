@@ -279,6 +279,7 @@ def build_heartbeat_snapshot(
             else _git_state()
         ),
         "computer_activity": _computer_activity_state(getattr(agent, "_computer_activity", None)),
+        "turn": _turn_state(getattr(agent, "_heartbeat_turn", None)),
         "extra": _safe_extra(extra),
     }
 
@@ -621,6 +622,17 @@ def _taskboard_state(board: Any, *, session_id: str = "") -> dict[str, Any]:
         "next_task_title": "" if active_id else _taskboard_task_title(tasks, ready_id),
         "graph_valid": bool((context.get("graph") or {}).get("valid", True)),
     }
+
+
+def _turn_state(value: Any) -> dict[str, Any]:
+    """The running turn (set by the Gateway for its duration), or {} when idle."""
+    if not isinstance(value, dict):
+        return {}
+    try:
+        started = float(value.get("started_at") or 0.0)
+    except (TypeError, ValueError):
+        started = 0.0
+    return {"busy": True, "request": redact_monitor_text(value.get("request") or "", 100), "started_at": started}
 
 
 def _worker_state(agent: Any) -> list[str]:
