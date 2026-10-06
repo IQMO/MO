@@ -2143,7 +2143,11 @@ def provider_error_kind(error_msg: str) -> str | None:
         r"|authentication(?:[_\s-]+(?:failed|error|required|token))"
         r"|invalid[_\s-]*(?:access[_\s-]*)?token"
         r"|expired[_\s-]*(?:access[_\s-]*)?token"
-        r"|(?:access[_\s-]*)?token[_\s-]*(?:is[_\s-]*)?(?:expired|invalid|revoked))",
+        r"|(?:access[_\s-]*)?token[_\s-]*(?:is[_\s-]*)?(?:expired|invalid|revoked)"
+        # A sign-in whose scopes or auth context the backend rejects (Codex sends this as a
+        # server_error event: "native turn auth context mismatch: scopes", 2026-10-06).
+        r"|auth(?:entication|orization)?[_\s-]+context[_\s-]+mismatch"
+        r"|(?:missing|insufficient)[_\s-]+scopes?|scopes?[_\s-]+mismatch)",
         e,
     ):
         return "auth"
