@@ -253,13 +253,14 @@ def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = N
     prefix = f"{project} · " if project else ""
     token_part = f"↑{format_k(status.input_tokens)} ↓{format_k(status.output_tokens)}"
     saved_part = format_context_reduction(status)
-    base = f"{prefix}{token_part}{saved_part} · {model_label}{reasoning_text}"
+    base = f"{prefix}{model_label}{reasoning_text}"
+    details = f" · {token_part}{saved_part}"
     # Official DeepSeek API only: show live account balance (cached, non-blocking).
     try:
         from core.provider.deepseek_balance import balance_text as _ds_balance
         _bal = _ds_balance(getattr(agent, "active_provider", None))
         if _bal:
-            base = f"{base} · {_bal}"
+            details = f"{details} · {_bal}"
     except Exception:
         pass
     # OpenAI Codex OAuth has no balance for this auth, so show live quota usage
@@ -268,10 +269,10 @@ def footer_left_fragments(agent: Any, *, notice_frag: tuple[str, str] | None = N
         from core.provider.codex_usage import usage_text as _codex_usage
         _use = _codex_usage(getattr(agent, "active_provider", None))
         if _use:
-            base = f"{base} · {_use}"
+            details = f"{details} · {_use}"
     except Exception:
         pass
-    frags = [("class:footer", base)]
+    frags = [("class:footer", base), ("class:dim", details)]
     # Live self-update notice — cached + non-blocking, same render-safe pattern as
     # the balance above. Surfaces "N commits behind upstream" with no user action.
     try:

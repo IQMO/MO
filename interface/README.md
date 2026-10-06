@@ -14,6 +14,10 @@ Interface renders truth only
 ```
 
 Any interface cleanup that lets provider prose, callback markup, or display code create/complete/block tasks is wrong.
+Explicitly excluded delivery actions do not become execute-row requirements;
+positive commit, push and deploy requirements still need their matching evidence.
+Completed-board summaries abbreviate redundant done/open counts while retaining
+task rows, duration, edit counts and the existing scroll controls.
 
 The active tool's catalog identity and executing runtime phase drive the warm activity pulse.
 During a Codex Responses request, the same transient activity line shows sampled
@@ -47,6 +51,13 @@ The footer labels result-cap text estimates as `capped ~…t` and serialized
 momentum reduction as `compacted …ch`; it does not combine them into a saved-token
 percentage. `/usage` and `/status` identify serialized characters explicitly.
 Provider-reported prefix-cache counts remain independent accounting.
+The footer prioritizes the project and model; token, context-reduction and provider
+usage details remain visible in a secondary style. Final responses emphasize the
+opening result line; exact `[Verification scope]` disclosures remain visible in
+a secondary style without changing verification decisions or their wording.
+Exact consecutive successful inspection rows coalesce in the managed viewport
+and are emitted once in native scrollback. Intervening messages, failures and
+mutation rows remain visible; execution receipts and live activity are unchanged.
 
 ## Current composition
 

@@ -510,6 +510,7 @@ class TurnRunnerMixin:
         key = (
             str(tool_name or "").strip()
             if (not has_target or verb in _REPEATABLE_TOOL_TARGETS)
+            and outcome in {"", "done", "passed"}
             else ""
         )
         if key and key == getattr(self, "_last_tool_activity_key", ""):
@@ -517,10 +518,19 @@ class TurnRunnerMixin:
             self._last_tool_activity_count = count
             replace = getattr(self, "_replace_last_transcript_fragments", None)
             if callable(replace) and replace(
-                self._tool_line_fragments(tool_name, repeat_count=count),
+                self._tool_line_fragments(
+                    tool_name, repeat_count=count, outcome=outcome, elapsed_text=elapsed_text,
+                ),
                 required_style="class:tool-chip",
             ):
                 return
+            native = getattr(self, "_scrollback_transcript_enabled", None)
+            # Native output is append-only. Suppress only an exact consecutive
+            # successful display row; tool receipts and live activity stay intact.
+            if callable(native) and native():
+                canonical = list(getattr(self, "_lines", []) or [])
+                if canonical[-len(fragments):] == fragments:
+                    return
         self._last_tool_activity_key = key
         self._last_tool_activity_count = 1
         self._add_fragments_line(fragments)

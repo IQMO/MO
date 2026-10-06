@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 try:
     from rich.markup import escape as rich_escape
 except ImportError:
@@ -63,8 +65,11 @@ def task_board_fragments_from_text(
         completion_details.append(f"+{added} -{removed}")
     if completion_details and lines and not skip_summary:
         first = lines[0]
+        completed = re.fullmatch(r"(\d+) tasks \(\1 done, 0 open\)", first.strip())
         close = first.rfind(")")
-        if "tasks" in first and "(" in first and close >= 0:
+        if completed:
+            lines[0] = f"{completed.group(1)} tasks complete · {' · '.join(completion_details)}"
+        elif "tasks" in first and "(" in first and close >= 0:
             lines[0] = f"{first[:close]}, {', '.join(completion_details)}{first[close:]}"
     if skip_summary and lines:
         first = lines[0].strip()

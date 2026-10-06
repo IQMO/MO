@@ -98,6 +98,10 @@ def response_line_fragments(line: str, *, inline_only: bool = False) -> list[tup
     stripped = detect.strip()
     if not stripped:
         return [("class:mo-response", text)]
+    if stripped.startswith("[Verification scope]"):
+        # Keep the exact disclosure, but distinguish coverage limits from the
+        # main result. This is typography only, never a verification verdict.
+        return [("class:dim", text)]
     code_like = text.startswith("      ") or text.startswith("\t")
     section = _section_label_fragments(detect)
     if section and (not code_like or stripped.startswith(("-", "*", "•"))):
@@ -451,7 +455,12 @@ def response_block_fragment_lines(text: str, *, columns: int = DEFAULT_RESPONSE_
             continue
         table_border_count = 0
         if position == 0:
-            rendered.append([("class:mo-marker", marker)] + response_line_fragments(line.lstrip()))
+            lead = response_line_fragments(line.lstrip())
+            lead = [
+                ("class:response-heading" if style == "class:mo-response" else style, body)
+                for style, body in lead
+            ]
+            rendered.append([("class:mo-marker", marker)] + lead)
         elif line.startswith(("    ", "\t")):
             stripped = line.lstrip()
             if stripped.startswith(("- ", "* ", "• ")):
