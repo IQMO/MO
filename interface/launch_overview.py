@@ -40,7 +40,6 @@ def _row(label: str, text: str, command: str, columns: int, *, style: str = "") 
 def startup_overview_fragment_lines(agent: Any, *, columns: int) -> list[list[tuple[str, str]]]:
     """Return compact launch rows over the existing status owners."""
     from core.learning.status import launch_learning_summary
-    from core.profile.server_aliases import configured_server_aliases
 
     profile = getattr(agent, "profile", None)
     config = getattr(agent, "config", {}) or {}
@@ -71,16 +70,6 @@ def startup_overview_fragment_lines(agent: Any, *, columns: int) -> list[list[tu
         rows.append(_row("Folders", projects, "/projects", columns))
     except (OSError, ValueError, TypeError, AttributeError):
         rows.append(_row("Folders", "Unavailable", "/projects", columns))
-
-    try:
-        aliases = configured_server_aliases()
-        if aliases:
-            overflow = f" +{len(aliases) - 1}" if len(aliases) > 1 else ""
-            suffix = overflow + " · Not checked"
-            name = clip_text_to_cells(aliases[0], max(2, columns - 21 - len(suffix)))
-            rows.append(_row("Servers", name + suffix, "/status", columns))
-    except (OSError, ValueError, UnicodeError):
-        rows.append(_row("Servers", "Configuration unavailable", "", columns))
 
     try:
         learning = launch_learning_summary(profile, config=config)

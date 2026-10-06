@@ -8,10 +8,19 @@ from __future__ import annotations
 
 import time
 
-from ._git_utils import _git
+from ..utils.git_files import head_commit
+from ._git_utils import _repo_root
 
 _BASE = "MO v1.0"
 _cache: dict[str, object] = {"text": None, "at": 0.0}
+
+
+def build_id() -> str:
+    """The checkout's short commit (8 characters), read from git's files; "" outside git."""
+    try:
+        return head_commit(_repo_root())[:8]
+    except Exception:
+        return ""
 
 
 def current_version() -> str:
@@ -22,8 +31,7 @@ def current_version() -> str:
     cached = _cache.get("text")
     if isinstance(cached, str) and now - float(_cache.get("at") or 0.0) < 30:
         return cached
-    out = _git(["rev-parse", "--short", "HEAD"], timeout=5)
-    short = out.stdout.strip() if out and out.returncode == 0 else ""
+    short = build_id()
     text = f"{_BASE} ({short})" if short else _BASE
     _cache["text"] = text
     _cache["at"] = now

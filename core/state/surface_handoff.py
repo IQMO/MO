@@ -18,6 +18,7 @@ from .continuity_events import (
     opaque_id,
     validate_continuity_source,
 )
+from ..utils.git_files import clean_commit as _clean_commit, git_dirs as _git_dirs, head_from_dirs as _git_head
 from .device import device_identity
 from .paths import resolve_state_path
 
@@ -308,27 +309,6 @@ def _project_evidence(agent: Any) -> tuple[str, str, str]:
     return project_id, repo_id, commit_id
 
 
-def _git_dirs(root: Path) -> tuple[Path | None, Path | None]:
-    marker = root / ".git"
-    if marker.is_dir():
-        return marker, marker
-    try:
-        raw = marker.read_text(encoding="utf-8", errors="strict").strip()
-    except OSError:
-        return None, None
-    if not raw.lower().startswith("gitdir:"):
-        return None, None
-    git_dir = Path(raw.split(":", 1)[1].strip()).expanduser()
-    if not git_dir.is_absolute():
-        git_dir = (root / git_dir).resolve(strict=False)
-    try:
-        relative = (git_dir / "commondir").read_text(encoding="utf-8", errors="strict").strip()
-        common_dir = (git_dir / relative).resolve(strict=False)
-    except OSError:
-        common_dir = git_dir
-    return git_dir, common_dir
-
-
 def _origin_url(common_dir: Path | None) -> str:
     if common_dir is None:
         return ""
@@ -399,40 +379,6 @@ def _canonical_git_host(value: Any) -> str:
         if host.startswith(prefix + "-") or host.startswith(prefix + "_"):
             return canonical
     return host
-
-
-def _git_head(git_dir: Path, common_dir: Path) -> str:
-    try:
-        head = (git_dir / "HEAD").read_text(encoding="utf-8", errors="strict").strip()
-    except OSError:
-        return ""
-    if not head.startswith("ref: "):
-        return _clean_commit(head)
-    ref = head[5:].strip()
-    for base in (git_dir, common_dir):
-        try:
-            value = (base / ref).read_text(encoding="utf-8", errors="strict").strip()
-        except OSError:
-            continue
-        clean = _clean_commit(value)
-        if clean:
-            return clean
-    try:
-        packed = (common_dir / "packed-refs").read_text(encoding="utf-8", errors="strict").splitlines()
-    except OSError:
-        return ""
-    for line in packed:
-        value, _, name = line.partition(" ")
-        if name.strip() == ref:
-            return _clean_commit(value)
-    return ""
-
-
-def _clean_commit(value: Any) -> str:
-    commit = str(value or "").strip().lower()
-    if len(commit) not in {40, 64} or any(ch not in "0123456789abcdef" for ch in commit):
-        return ""
-    return commit
 
 
 def _environment(config: dict[str, Any], surface: str) -> str:

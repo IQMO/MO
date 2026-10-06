@@ -28,11 +28,14 @@ from .terminal_host import (
 )
 from .theme import build_tui_color_depth, build_tui_style
 
+# MO's mark: four square cubes on the cell grid (each 4 columns x 2 rows, one-cell gaps),
+# drawn with half blocks so the vertical gap is half a row and the cubes stay square.
 LOGO_LINES: tuple[str, ...] = (
-    "  █   █   ███ ",
-    "  ██ ██  █   █",
-    "  █ █ █  █   █",
-    "  █   █   ███ ",
+    "  ████ ████ ",
+    "  ████ ████ ",
+    "  ▄▄▄▄ ▄▄▄▄ ",
+    "  ████ ████ ",
+    "  ▀▀▀▀ ▀▀▀▀ ",
 )
 
 # Windows Terminal can drop a session-scoped OSC 11 color when its renderer is
@@ -188,6 +191,23 @@ def _active_provider_key_missing(agent) -> str:
     return ""
 
 
+def _startup_terminal_count(agent) -> int:
+    """This terminal plus the other live MO terminals the heartbeats report (any folder)."""
+    try:
+        import os
+
+        from core.runtime.instance import recent_instance_snapshots
+
+        config = getattr(agent, "config", None)
+        config = config if isinstance(config, dict) else {}
+        snapshots = recent_instance_snapshots(config, current_pid=os.getpid(), max_age_seconds=180.0, limit=16)
+        others = sum(1 for item in snapshots
+                     if item.get("pid_alive") and str(item.get("surface") or "").strip().lower() == "terminal")
+        return 1 + others
+    except Exception:
+        return 1
+
+
 def startup_header_fragment_lines(agent, gateway, *, columns: int | None = None) -> list[list[tuple[str, str]]]:
     """Return the cell-bounded launch overview through native scrollback."""
     from .activity import fit_fragments_to_cells
@@ -202,24 +222,31 @@ def startup_header_fragment_lines(agent, gateway, *, columns: int | None = None)
     # The persistent footer owns project/model metadata, while the OSC title
     # retains host discovery identity. Startup stays a compact launch overview
     # with one command-discovery row instead of restating either owner.
-    info: tuple[tuple[str, str], ...] = (
-        ("class:response-heading", "MO v1.0"),
-        ("class:dim", runtime if runtime else "clear"),
-    )
-    rows: list[list[tuple[str, str]]] = []
+    from core.update.version import build_id
+
+    build = build_id()
+    terminals = _startup_terminal_count(agent)
+    status = runtime if runtime else "clear"
+    if terminals > 1:
+        status += f" · {terminals} terminals open"
     hint_line = [
         ("class:info", "/help"), ("class:dim", "  ·  "),
         ("class:info", "/status"), ("class:dim", "  ·  "),
-        ("class:info", "/dashboard"),
+        ("class:info", "/dashboard"), ("class:dim", "  ·  "),
+        ("class:info", "Ctrl+B"), ("class:dim", " workspace"),
     ]
+    beside: list[list[tuple[str, str]]] = [
+        [("class:response-heading", "MO v1.0")] + ([("class:dim", f" · {build}")] if build else []),
+        [("class:dim", status)],
+        [],
+        hint_line,
+    ]
+    rows: list[list[tuple[str, str]]] = []
     for index, logo in enumerate(LOGO_LINES):
         fragments: list[tuple[str, str]] = [("class:logo", logo)]
-        if index < len(info):
-            style, text = info[index]
-            fragments.extend([("", "  "), (style, text)])
-        elif index == len(info):
+        if index < len(beside) and beside[index]:
             fragments.append(("", "  "))
-            fragments.extend(hint_line)
+            fragments.extend(beside[index])
         rows.append(fragments)
     rows.extend(startup_overview_fragment_lines(agent, columns=columns))
     attention = _startup_attention_summary(agent)

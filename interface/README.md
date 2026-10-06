@@ -324,13 +324,15 @@ Do not guess. Do not call something dead unless imports/tests prove it.
   selectable learned skills, with cell-bounded rows and existing slash commands.
   The footer remains the persistent project/provider/model owner and the OSC
   title remains the host-discovery identity, so startup restates neither. Its one
-  `/help`/`/status`/`/dashboard` discovery row owns command orientation; the empty
-  composer placeholder only invites a message.
-  OpenSSH configuration supplies navigation aliases only: `Not checked` is not
-  a health result, startup performs no network probe, and `/status` lists aliases.
+  `/help`/`/status`/`/dashboard`/`Ctrl+B` discovery row owns command orientation;
+  the empty composer placeholder only invites a message.
+  The logo is MO's four-cube mark in half blocks. Beside it: the build id (read from
+  git's files, no git process) and, when others run, how many live MO terminals the
+  heartbeats report. Server aliases stay off the start screen: startup performs no
+  network probe and `/status` lists them.
   Unavailable learning reads remain unknown rather than reporting zero skills.
-  The logo, active skin, composer, native scrollback and resume/session owners
-  remain unchanged; launch rendering creates no additional persisted state.
+  The active skin, composer, native scrollback and resume/session owners remain
+  unchanged; launch rendering creates no additional persisted state.
 - The existing backend monitor records terminal size transitions before and after
   rendering as `session_event` / `terminal_geometry`, correlated with the current
   session. Records include the previous and rendered dimensions plus renderer and
