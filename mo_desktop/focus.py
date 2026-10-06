@@ -19,6 +19,7 @@ WINDOW_LIMIT = 256
 IDLE_OPACITY = .42
 FADE_EASE = .42
 SCAN_SECONDS = 1.0
+GLIDE_SECONDS = 0.08      # row 20: the hover plate's glide to the next row
 FACE_SIZE = 208
 SCREEN_GAP = 8
 
@@ -337,15 +338,22 @@ class FocusBar:
             raise LookupError
 
         try:
-            indexes = tuple(index for index in (row_of(getattr(self, "_painted_hover", None)), row_of(self._hover))
-                            if index is not None)
+            before, after = row_of(getattr(self, "_painted_hover", None)), row_of(self._hover)
         except LookupError:
             return False
+        indexes = tuple(index for index in (before, after) if index is not None)
         if not indexes:
             return False
+        plate_y = None
+        if before is not None and after is not None and abs(before - after) == 1:
+            # Moving to the next row: the plate glides there (~80 ms) instead of jumping.
+            plate_y = 35.0 + before * 30
+            self._glide = (plate_y, 35.0 + after * 30, time.perf_counter(), list(rows), row_kind, indexes)
+        else:
+            self._glide = None
         self._image, patch_hits = row_hover_patch(
             self._image, self._target_size, self._visuals, rows, self._result_icons if self._query else self._icons,
-            hover=self._hover, failed=self._failed_handle, row_kind=row_kind, indexes=indexes)
+            hover=self._hover, failed=self._failed_handle, row_kind=row_kind, indexes=indexes, plate_y=plate_y)
         affected = {rows[index][0] for index in indexes}
         hits = {name: box for name, box in self._hits.items()
                 if not (isinstance(name, tuple) and len(name) == 2 and name[0] in {row_kind, "close"} and name[1] in affected)}
@@ -353,8 +361,28 @@ class FocusBar:
         self._hits = hits
         return True
 
+    def _tick_glide(self) -> None:
+        """Advance the hover plate between two neighbouring rows: ease-out over GLIDE_SECONDS,
+        redrawing only those two rows each frame, ending on the normal hovered-row paint."""
+        glide = getattr(self, "_glide", None)
+        if not glide or self._image is None:
+            return
+        from mo_desktop.focus_paint import row_hover_patch
+        start_y, end_y, started, rows, row_kind, indexes = glide
+        progress = min(1.0, (time.perf_counter() - started) / GLIDE_SECONDS)
+        eased = 1.0 - (1.0 - progress) ** 3
+        final = progress >= 1.0
+        self._image, _hits = row_hover_patch(
+            self._image, self._target_size, self._visuals, rows, self._result_icons if self._query else self._icons,
+            hover=self._hover, failed=self._failed_handle, row_kind=row_kind, indexes=indexes,
+            plate_y=None if final else start_y + (end_y - start_y) * eased)
+        if final:
+            self._glide = None
+        self._place_face()
+
     def _paint_full_face(self, rows: list, row_kind: str, pins: tuple, stamp: Any, sprite: Any) -> None:
         from mo_desktop.focus_paint import cube_face
+        self._glide = None                      # a full repaint ends any glide on the old rows
         self._image, self._hits = cube_face(self._target_size, self._visuals, rows, self._result_icons if self._query else self._icons,
             collapsed=self._collapsed, hover=self._hover, failed=self._failed_handle,
             tray_failed=self._tray_failed, now=stamp, total=len(self._rows),
@@ -1048,6 +1076,7 @@ class FocusBar:
             self.cube._focus_opacity = 1.0 if self._collapsed or self.cube._launcher_active else opacity
             self._refresh_effect()
         self._tick_popup(now, ease)
+        self._tick_glide()
         self._tick_tray(now)
         if not self._collapsed:
             self._tick_search(now)

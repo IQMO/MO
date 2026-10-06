@@ -203,7 +203,10 @@ below its button when space permits. Icons and actions come from Explorer's live
 notification controls, including MO's original tray menu. XAML shells use their
 native notification flyout. Focus never moves, crops or reparents the taskbar.
 
-Rows retain their order when the foreground changes. Scroll for overflow; click
+Rows retain their order when the foreground changes. The active window carries an
+accent bar and full-strength title; the hovered row has its own plate, which glides
+to a neighbouring row (about 80 ms) instead of jumping; other titles are muted.
+Scroll for overflow; click
 a row to switch, or click the active window again to minimize it. A close button appears on hover and requests the application's normal close flow, retaining its unsaved-work prompts. A brief hover opens an aspect-aware Windows DWM preview beside
 the list when space permits, avoiding the full cube group and aligning with the
 top and bottom of the expanded Focus and composer faces. Attachment preview

@@ -36,6 +36,8 @@ DESKTOP_STRUCTURAL_RADIUS_WHITELIST = MappingProxyType({
         "delete action glyph detail",
     ("mo_desktop/cube_motion.py", "_footstep", "max(0, size * corner) * ss"):
         "shared cube trace follows each actual piece's size and character radius",
+    ("mo_desktop/focus_paint.py", "_draw_row", "SS * 1.5"):
+        "the active window's accent bar has round ends",
     ("mo_desktop/focus_paint.py", "cube_face", "2 * SS"):
         "thin dimming slider track has circular end caps",
     ("mo_desktop/mo_renderer.py", "panel", "radius * 2"):

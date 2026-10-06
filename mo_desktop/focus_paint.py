@@ -285,8 +285,12 @@ def calendar_image(visuals: Any, year: int, month: int, today: datetime) -> tupl
 
 def _draw_row(image: Any, draw: Any, visuals: Any, width: int, index: int, handle: Any, title: str,
               active: bool, *, row_kind: str, hover: Any, failed: Any, icons: dict, hits: dict,
-              top: int = 0) -> None:
-    """One window (or search result) row at its slot; ``top`` is the 1x row a band canvas starts at."""
+              top: int = 0, plate: bool = True) -> None:
+    """One window (or search result) row at its slot; ``top`` is the 1x row a band canvas starts at.
+
+    Row 20: the active window carries an accent bar and full-strength text; the hovered row has
+    its own plate (drawn here unless a gliding plate is drawn by the caller, ``plate=False``);
+    every other row's title is muted, so hover and active never look alike."""
     p = visuals.palette
     radius = visuals.metrics.button_corner_radius*SS
     x, y, w, h = 7, 35+index*30, width-14, 29
@@ -297,16 +301,17 @@ def _draw_row(image: Any, draw: Any, visuals: Any, width: int, index: int, handl
         hits[close] = (width-34, y+3, 23, 23)
     hits[key] = (x, y, w, h)
     y -= top
-    if active or row_hover or handle == failed:
+    if (row_hover and plate) or handle == failed:
         draw.rounded_rectangle((x*SS, y*SS, (x+w)*SS, (y+h)*SS), radius=radius,
             fill=p.entry, outline=p.error if handle == failed else None, width=SS)
     icon = icons.get(handle)
     if icon is not None:
         image.alpha_composite(_scaled(icon, 18*SS), (14*SS, (y+6)*SS))
     if active:
-        draw.ellipse((8*SS, (y+13)*SS, 10*SS, (y+15)*SS), fill=p.accent)
+        draw.rounded_rectangle((x*SS, (y+7)*SS, (x+3)*SS, (y+h-7)*SS), radius=SS*1.5, fill=p.accent)
     label = card.fit_text(draw, title, (width-(78 if row_hover and row_kind == "window" else 56))*SS, card.role_font("small"))
-    draw.text((40*SS, (y+15)*SS), label, font=card.role_font("small"), fill=p.text, anchor="lm")
+    draw.text((40*SS, (y+15)*SS), label, font=card.role_font("small"),
+              fill=p.text if (active or row_hover) else p.muted, anchor="lm")
     if close in hits:
         cx, cy, cw, ch = hits[close]
         cy -= top
@@ -322,9 +327,12 @@ _BAND_MARGIN = 4
 
 
 def row_hover_patch(base: Any, size: tuple[int, int], visuals: Any, rows: list, icons: dict, *,
-                    hover: Any, failed: Any, row_kind: str, indexes: tuple[int, ...]) -> tuple[Any, dict]:
+                    hover: Any, failed: Any, row_kind: str, indexes: tuple[int, ...],
+                    plate_y: float | None = None) -> tuple[Any, dict]:
     """The finished face ``base`` with only the rows at ``indexes`` redrawn for ``hover`` (row 20:
-    hovering windows repainted the whole face, 30 ms each). Returns the image and those rows' hits."""
+    hovering windows repainted the whole face, 30 ms each). With ``plate_y`` the hover plate is
+    drawn once at that 1x height (gliding between two rows) instead of on the hovered row.
+    Returns the image and those rows' hits."""
     from PIL import ImageDraw
 
     width, height = size
@@ -342,12 +350,16 @@ def row_hover_patch(base: Any, size: tuple[int, int], visuals: Any, rows: list, 
         top, bottom = max(0, first_top - _BAND_MARGIN), min(height, last_top + 29 + _BAND_MARGIN)
         band = surface.crop((0, top*SS, width*SS, bottom*SS))
         draw = ImageDraw.Draw(band)
+        if plate_y is not None:
+            y0 = (plate_y - top) * SS
+            draw.rounded_rectangle((7*SS, y0, (width-7)*SS, y0 + 29*SS),
+                                   radius=visuals.metrics.button_corner_radius*SS, fill=visuals.palette.entry)
         for other, (handle, title, active) in enumerate(rows):
             other_top = 35 + other*30
             if other_top + 29 >= top and other_top <= bottom:      # neighbours that reach the band
                 _draw_row(band, draw, visuals, width, other, handle, title, active, row_kind=row_kind,
                           hover=hover, failed=failed, icons=icons,
-                          hits=hits if first <= other <= last else {}, top=top)
+                          hits=hits if first <= other <= last else {}, top=top, plate=plate_y is None)
         finished = card.finish(band)
         inner_top, inner_bottom = first_top - 1, last_top + 30       # the rows and their 1 px gaps
         out.paste(finished.crop((0, inner_top - top, width, inner_bottom - top)), (0, inner_top))
