@@ -153,7 +153,7 @@ def ensure_device_login(auth_path: str | Path | None = None) -> DeviceLogin:
     with _pending_lock:
         login = _saved_login(state)
         if login is None or login.expires_at - time.time() < 60:
-            login = start_device_login()
+            login = start_device_login(timeout=5.0)   # a failed reply never waits long on it
             state.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_json(state, asdict(login), indent=2)
         poller = _pollers.get(login.device_auth_id)
