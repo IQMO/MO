@@ -42,6 +42,16 @@ def dim_level() -> float:
     return _dim_level
 
 
+def set_dim_level(level: float, x: int, y: int, *, anchor_hwnd: int = 0) -> bool:
+    """Settings: a new dim level, shown at once on the display at ``x, y`` (never a panel)."""
+    global _dim_level
+    _dim_level = max(0.0, min(DIM_MAX, float(level or 0.0)))
+    if _dim_level <= 0:
+        clear_dim()
+        return True
+    return restore(x, y, anchor_hwnd=anchor_hwnd)
+
+
 def display_at(x: int, y: int) -> tuple[str, tuple[int, int, int, int]] | None:
     """The display (device name, monitor rect) holding screen point ``x, y``."""
     try:

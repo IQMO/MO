@@ -66,6 +66,7 @@ class BehaviorSettings:
     keep_above_apps: list[str] = field(default_factory=list)
     # Exact executable basenames whose topmost overlays MO may rise above. Empty = normal Z-order.
     dim_level: float = 0.0         # MO's dim layer on displays without hardware brightness, 0..0.9
+    clipboard_items: int = 50      # clipboard history kept in memory only; 0 turns it off
 
 
 @dataclass
@@ -171,6 +172,7 @@ def _normalize(settings: DesktopSettings) -> None:
     behavior.follow_ease = _bounded_float(behavior.follow_ease, defaults.behavior.follow_ease, 0.04, 0.4)
     behavior.keep_above_apps = normalize_keep_above_apps(behavior.keep_above_apps)
     behavior.dim_level = _bounded_float(behavior.dim_level, defaults.behavior.dim_level, 0.0, 0.9)
+    behavior.clipboard_items = _bounded_int(behavior.clipboard_items, defaults.behavior.clipboard_items, 0, 200)
     panel = settings.panel
     metrics = desktop_visual_metrics(panel)
     panel.padding = metrics.panel_padding

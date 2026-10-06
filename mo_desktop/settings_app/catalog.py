@@ -26,6 +26,8 @@ FIELDS = (
     ("behavior.follow_distance", "general", "Movement", "Follow distance", "Space between MO and the pointer.", "range", (20, 140, 2, "px")),
     ("behavior.follow_ease", "general", "Movement", "Follow response", "Lower values follow more gently.", "range", (.04, .4, .02, "")),
     ("behavior.keep_above_apps", "general", "Movement", "Keep above selected apps", "Exact executable names, separated by commas.", "text", ()),
+    ("behavior.dim_level", "general", "Screen & clipboard", "Screen dim", "MO's dim layer on screens without hardware brightness; Shift + wheel over the cubes too.", "range", (0, .9, .05, "")),
+    ("behavior.clipboard_items", "general", "Screen & clipboard", "Clipboard history", "Copies kept in memory only, opened with Ctrl+Shift+Alt+Z; 0 turns it off.", "range", (0, 200, 10, "")),
     ("voice.stt_enabled", "voice", "Listening & speech", "Hold to talk", "Press Alt, then hold Alt to speak.", "switch", ()),
     ("voice.chat_enabled", "voice", "Listening & speech", "Continuous voice chat", "Listen again after each spoken reply.", "switch", ()),
     ("voice.tts_enabled", "voice", "Listening & speech", "Speak typed replies", "Read replies to your typed messages aloud.", "switch", ()),

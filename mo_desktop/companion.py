@@ -352,6 +352,8 @@ class CompanionSurface(
         self._desktop_follow_ups: list[dict[str, Any]] = []
         self._desktop_follow_up_dispatch_pending = False
         self._hotkey_listener: Any = None
+        self._clipboard_hotkey: Any = None
+        self._clipboard: Any = None   # mo_desktop.clipboard.ClipboardHistory, memory only
         self._tap_hook: Any = None             # one global hook for Ctrl,Ctrl and Alt,Alt+hold
         self._last_ctrl_release_at = 0.0
         self._ctrl_tap_armed = False           # a clean Ctrl tap (no other key) is in progress
@@ -1211,6 +1213,78 @@ class CompanionSurface(
             if callable(notifier):
                 notifier(message)
 
+    def _start_clipboard(self, limit: int) -> None:
+        """The event-driven clipboard history (memory only); 0 items turns it off."""
+        from mo_desktop.clipboard import ClipboardHistory
+
+        self._clipboard = ClipboardHistory(limit=limit, on_change=self._on_clipboard_changed)
+        if limit and not self._clipboard.start():
+            log_event("Clipboard history listener unavailable", config=getattr(self._agent, "config", None))
+
+    def open_clipboard(self) -> None:
+        """Ctrl+Shift+Alt+Z or the launcher: the clipboard history in the one panel."""
+        self._post_gui_call(self._show_clipboard)
+
+    def _show_clipboard(self) -> None:
+        history = getattr(self, "_clipboard", None)
+        if history is None or not history.listening:
+            self._set_status("Clipboard history is off (mo_desktop.behavior.clipboard_items)",
+                             self._visual_palette.warn)
+            return
+
+        def present(bubble: Any) -> bool:
+            show = getattr(bubble, "show_clipboard", None)
+            return bool(callable(show) and show(
+                history.view_rows(), on_restore=self._restore_clip, on_action=self._clip_action,
+                on_clear=history.clear, on_back=self.hide))
+
+        self._reply_visible = self._show_on_reply_surface("clipboard", present)
+
+    def _on_clipboard_changed(self) -> None:
+        """A new copy, a removal or Clear all refreshes the list while it is open."""
+        bubble = getattr(self, "_bubble", None)
+        if (bubble is not None and getattr(bubble, "_list_view", "") == "clipboard"
+                and getattr(getattr(bubble, "_panel_state", None), "value", "") == "history"
+                and bubble.visible()):
+            self._post_gui_call(self._show_clipboard)
+
+    def _restore_clip(self, ident: str) -> None:
+        if self._clipboard.restore(ident):
+            self.hide()
+            if self._cube is not None:
+                self._cube.show_bubble("copied", seconds=1.2)
+        else:
+            self._set_status("Could not put that back on the clipboard", self._visual_palette.warn)
+
+    def _clip_action(self, action: str, ident: str) -> None:
+        from pathlib import Path
+
+        history = self._clipboard
+        item = history.get(ident)
+        if item is None:
+            return
+        if action == "remove":
+            history.remove(ident)
+            return
+        if action != "ask" or item.masked:
+            return   # a masked item never reaches MO
+        if item.kind == "files":
+            self._display_input_dialog()
+            self._attach_dropped_files([Path(path) for path in item.text.split("\n") if path])
+        elif item.kind == "image":
+            from mo_desktop.desktop_launch import desktop_transient_dir
+
+            path = desktop_transient_dir() / f"mo-clipboard-{item.ident}.png"
+            item.image.save(path)
+            self._display_input_dialog()
+            self._attach_dropped_files([path], cleanup=(path,))
+        else:
+            bubble = getattr(self, "_bubble", None)
+            if bubble is not None:
+                draft = str(getattr(bubble, "_input_draft", "") or "")
+                bubble._input_draft = (draft + "\n" if draft else "") + item.text[:4000]
+            self._display_input_dialog()
+
     def open_files_panel(self) -> None:
         """Launch or focus the separate MO Files WebView from the GUI lane."""
         self._post_gui_call(self._show_files_panel)
@@ -1816,6 +1890,17 @@ class CompanionSurface(
                         compat.set_executable_names(names)
                     self._overlay_lift_noticed = set()
                     self._update_overlay_compat(force=True)
+                elif key == "dim_level" and cube is not None:
+                    from mo_desktop import brightness
+                    from mo_desktop.focus_native import native_handle
+
+                    brightness.set_dim_level(float(value), *cube.center(), anchor_hwnd=native_handle(cube._win))
+                elif key == "clipboard_items":
+                    history = getattr(self, "_clipboard", None)
+                    if history is None:
+                        self._start_clipboard(int(value))
+                    elif not history.set_limit(int(value)):
+                        return False
                 else:
                     return False
             elif section == "voice":
@@ -2073,6 +2158,7 @@ class CompanionSurface(
             set_desktop_pointer(self._point_with_cube)
             set_desktop_sync(self.sync_for_tool)
             self._start_brightness(root, settings.behavior.dim_level)
+            self._start_clipboard(settings.behavior.clipboard_items)
         except Exception:
             self._cube = None
             self._modes = None
@@ -2240,6 +2326,9 @@ class CompanionSurface(
                 setattr(self, name, None)
             from mo_desktop import brightness
             brightness.clear_dim()
+            clipboard = getattr(self, "_clipboard", None)
+            if clipboard is not None:
+                clipboard.stop()
             if self._cube is not None:
                 try:
                     self._cube.destroy()
@@ -3055,8 +3144,10 @@ class CompanionSurface(
             target=_send, name="mo-desktop-file-transfer", daemon=True
         ).start()
 
-    def _attach_dropped_files(self, raw: list[Any]) -> None:
-        """Import dropped files off the UI thread and bind the result to its source chat."""
+    def _attach_dropped_files(self, raw: list[Any], *, cleanup: tuple[Any, ...] = ()) -> None:
+        """Import dropped files off the UI thread and bind the result to its source chat.
+
+        ``cleanup`` names MO's own temporary sources (a clipboard image), deleted once imported."""
         from pathlib import Path
         from core.state.attachments import MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_TURN, import_attachment
 
@@ -3084,6 +3175,8 @@ class CompanionSurface(
                     saved.append(Path(str(record["saved_path"])))
                 except (OSError, ValueError):
                     rejected += 1
+            for temporary in cleanup:
+                Path(temporary).unlink(missing_ok=True)
 
             def finish_import() -> None:
                 try:
@@ -5511,6 +5604,10 @@ class CompanionSurface(
         try:
             self._hotkey_listener = keyboard.add_hotkey("win+alt+m", self.summon)
             log_event("Win+Alt+M hotkey registered", config=getattr(self._agent, "config", None))
+            try:
+                self._clipboard_hotkey = keyboard.add_hotkey("ctrl+shift+alt+z", self.open_clipboard)
+            except Exception:
+                self._clipboard_hotkey = None
             _write_stderr("[companion] ready: Win+Alt+M registered (summon).\n")
             try:
                 # Ctrl,Ctrl = chase/free; Alt,Alt+hold = push-to-talk voice (best-effort;
@@ -5535,6 +5632,13 @@ class CompanionSurface(
             _write_stderr(traceback.format_exc())
 
     def _unregister_hotkey(self) -> None:
+        if getattr(self, "_clipboard_hotkey", None):
+            try:
+                import keyboard
+                keyboard.remove_hotkey(self._clipboard_hotkey)
+            except Exception:
+                pass
+            self._clipboard_hotkey = None
         if self._hotkey_listener:
             try:
                 import keyboard

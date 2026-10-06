@@ -1361,7 +1361,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         elif state == PanelState.DASHBOARD:
             title = "MO Desktop — Dashboard"
         elif state == PanelState.HISTORY:
-            title = "MO Desktop — Conversation history"
+            title = ("MO Desktop — Clipboard" if getattr(self, "_list_view", "") == "clipboard"
+                     else "MO Desktop — Conversation history")
         elif mode == "input":
             provider_label = self._composer_search_label()
             title = (
@@ -1727,15 +1728,38 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         on_back: Callable[[], None],
     ) -> bool:
         """Show the dynamic Desktop conversation catalog without opening another window."""
+        return self._show_list("conversations", items[:24], on_select=on_select, on_new=on_new, on_back=on_back)
+
+    def show_clipboard(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        on_restore: Callable[[str], None],
+        on_action: Callable[[str, str], None],
+        on_clear: Callable[[], None],
+        on_back: Callable[[], None],
+    ) -> bool:
+        """The clipboard history as the same list view: click restores, a row's buttons ask MO
+        about it or remove it, the main button clears all."""
+        return self._show_list("clipboard", rows, on_select=on_restore, on_new=on_clear, on_back=on_back,
+                               on_action=on_action)
+
+    def _show_list(self, view: str, items: list[dict[str, Any]], *, on_select: Any, on_new: Any,
+                   on_back: Any, on_action: Any = None) -> bool:
         self._keyboard_hit = ""
         self._stash_input_draft()
+        same_view = (getattr(self, "_panel_state", None) == PanelState.HISTORY
+                     and getattr(self, "_list_view", "") == view)
         transition = self._prepare_panel_show("history", PanelState.HISTORY)
         self._body = ""
-        self._session_history_items = [dict(item) for item in list(items or [])[:24]]
-        self._session_history_page = 0
+        self._list_view = view
+        self._session_history_items = [dict(item) for item in list(items or [])]
+        if not same_view:
+            self._session_history_page = 0   # a refresh of the open list keeps its page
         self._on_session_select = on_select if callable(on_select) else None
         self._on_session_new = on_new if callable(on_new) else None
         self._on_session_back = on_back if callable(on_back) else None
+        self._on_session_row_action = on_action if callable(on_action) else None
         self._attachment_preview_paths = []
         return self._repaint_for_panel_show(transition)
 
@@ -2107,6 +2131,18 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 int(getattr(self, "_session_history_page", 0) or 0) + 1,
             )
             self._repaint()
+        elif key.startswith(("session:ask:", "session:remove:")):
+            action, _, raw = key[len("session:"):].partition(":")
+            try:
+                name = str((getattr(self, "_session_history_items", None) or [])[int(raw)].get("name") or "")
+            except (IndexError, TypeError, ValueError):
+                name = ""
+            callback = getattr(self, "_on_session_row_action", None)
+            if name and callable(callback):
+                try:
+                    callback(action, name)
+                except Exception:
+                    pass
         elif key.startswith("session:"):
             try:
                 item = (getattr(self, "_session_history_items", None) or [])[

@@ -136,13 +136,17 @@ class ReplySecondaryViewsMixin:
             radius=ss,
             fill=(*self._cyan, 255),
         )
+        clipboard = getattr(self, "_list_view", "") == "clipboard"
         draw.text(
             (left, accent_y + 12 * ss),
-            "Conversations",
+            "Clipboard" if clipboard else "Conversations",
             font=self._bfont,
             fill=(*self._text, 255),
         )
-        count_label = f"{len(items)} saved" if items else "No saved conversations"
+        if clipboard:
+            count_label = f"{len(items)} · memory only" if items else "Empty · memory only"
+        else:
+            count_label = f"{len(items)} saved" if items else "No saved conversations"
         count_w = int(draw.textlength(count_label, font=self._sfont))
         draw.text(
             (right - count_w, accent_y + 14 * ss),
@@ -156,7 +160,7 @@ class ReplySecondaryViewsMixin:
         if not shown:
             draw.text(
                 (left, y + 14 * ss),
-                "Start a new conversation to create history.",
+                "Copy something and it shows here." if clipboard else "Start a new conversation to create history.",
                 font=self._sfont,
                 fill=(*self._muted, 255),
             )
@@ -173,21 +177,43 @@ class ReplySecondaryViewsMixin:
                 outline=(*(self._cyan if hover or current else self._edge), 255),
                 width=max(1, ss) * (2 if hover else 1),
             )
+            # Row buttons (clipboard: ask MO, remove) sit at the right; their hits come
+            # before the row's, so a click on one never restores the row.
+            reserved = 0
+            from interface.desktop_brand import make_glyph_icon
+            for action, glyph in (("remove", "close"), ("ask", "send")):
+                if action not in tuple(item.get("actions") or ()):
+                    continue
+                action_key = f"session:{action}:{index}"
+                size = 14 * ss
+                ax = right - (12 + reserved) * ss - size
+                ay = (y + y1) // 2 - size // 2
+                color = self._cyan if self._hovering(action_key) or action == "ask" else self._muted
+                image.alpha_composite(make_glyph_icon(glyph, size, color="#%02x%02x%02x" % color), (ax, ay))
+                self._hit[action_key] = (int((ax - 5 * ss) / ss), int(y / ss), int((ax + size + 5 * ss) / ss), int(y1 / ss))
+                reserved += 24
+            thumbnail = item.get("thumbnail")
+            if thumbnail is not None:
+                thumb = thumbnail.resize((thumbnail.width * ss, thumbnail.height * ss))
+                tx = right - (12 + reserved) * ss - thumb.width
+                image.alpha_composite(thumb.convert("RGBA"), (tx, (y + y1) // 2 - thumb.height // 2))
+                reserved += thumbnail.width + 10
+            text_w = content_w * ss - 24 * ss - reserved * ss
             title = self._fit_plain(
                 draw,
                 str(item.get("title") or "Untitled conversation"),
-                content_w * ss - 24 * ss,
+                text_w,
                 self._font,
             )
             detail = self._fit_plain(
                 draw,
                 str(item.get("detail") or ""),
-                content_w * ss - 24 * ss,
+                text_w,
                 self._sfont,
             )
             draw.text((left + 10 * ss, y + 7 * ss), title, font=self._font, fill=(*self._text, 255))
             draw.text((left + 10 * ss, y + 25 * ss), detail, font=self._sfont, fill=(*self._muted, 255))
-            if current:
+            if current and not reserved:
                 draw.ellipse(
                     [right - 14 * ss, y + 10 * ss, right - 8 * ss, y + 16 * ss],
                     fill=(*self._cyan, 255),
@@ -238,7 +264,7 @@ class ReplySecondaryViewsMixin:
                 int((center_x + 44 * ss) / ss), int((footer_y + 26 * ss) / ss),
             )
         new_key = "session:new"
-        label = "New"
+        label = "Clear all" if clipboard else "New"
         label_w = int(draw.textlength(label, font=self._sfont))
         button_pad = int(visuals.metrics.button_padding) * ss
         new_right = right
@@ -394,13 +420,25 @@ class ReplySecondaryViewsMixin:
             "panel_tools_back": "Back",
             "panel_crop_apply": "Apply crop",
         }
+        clipboard = getattr(self, "_list_view", "") == "clipboard"
+        if clipboard and key == "session:new":
+            return "Clear the clipboard history"
         if key in names:
             return names[key]
+        if key.startswith(("session:ask:", "session:remove:")):
+            action, _, raw = key[len("session:"):].partition(":")
+            try:
+                title = str((getattr(self, "_session_history_items", None) or [])[int(raw)].get("title") or "item")[:52]
+            except (IndexError, TypeError, ValueError):
+                return ""
+            return ("Ask MO about " if action == "ask" else "Remove ") + title
         if key.startswith("session:"):
             try:
                 item = (getattr(self, "_session_history_items", None) or [])[
                     int(key.partition(":")[2])
                 ]
+                if clipboard:
+                    return "Copy again: " + str(item.get("title") or "item")[:52]
                 return "Open " + str(item.get("title") or "conversation")[:52]
             except (IndexError, TypeError, ValueError):
                 return "Conversation"

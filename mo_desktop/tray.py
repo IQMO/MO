@@ -27,15 +27,15 @@ from interface.desktop_ui import (
 TRAY_TOOLTIP = "MO Desktop"
 
 APP_GROUPS = (
-    ("Work", ("dashboard", "shell", "files", "design", "mologrthim")),
+    ("Work", ("dashboard", "shell", "files", "clipboard", "design", "mologrthim")),
     ("Devices", ("phone", "trackpad")),
     ("Care", ("systemcare",)),
     ("Your apps", ("settings",)),
 )
-APP_COLOR_ROLES = {"dashboard": "accent", "shell": "accent", "files": "ok",
+APP_COLOR_ROLES = {"dashboard": "accent", "shell": "accent", "files": "ok", "clipboard": "accent",
                    "design": "warn", "phone": "accent", "trackpad": "action",
                    "systemcare": "ok", "settings": "muted", "mologrthim": "accent"}
-APP_GLYPHS = {"dashboard": "split", "shell": "open", "files": "folder", "design": "file",
+APP_GLYPHS = {"dashboard": "split", "shell": "open", "files": "folder", "clipboard": "copy", "design": "file",
               "phone": "phone", "trackpad": "move", "systemcare": "refresh",
               "settings": "more", "mologrthim": "split"}
 
@@ -49,6 +49,7 @@ TRAY_ITEMS: "tuple[dict[str, Any], ...]" = (
     {"id": "dashboard", "kind": "action", "label": "Dashboard", "handler": "_on_dashboard"},
     {"id": "shell", "kind": "action", "label": "MO Shell", "handler": "_on_shell"},
     {"id": "files", "kind": "action", "label": "MO Files", "handler": "_on_files", "badge": "_files_transfer_count"},
+    {"id": "clipboard", "kind": "action", "label": "Clipboard", "handler": "_on_clipboard"},
     {"id": "design", "kind": "action", "label": "MO Design", "handler": "_on_design"},
     {"id": "mologrthim", "kind": "action", "label": "Mologrthim", "handler": "_on_mologrthim"},
     {"id": "phone", "kind": "action", "label": "MO Phone", "handler": "_on_phone"},
@@ -404,6 +405,11 @@ class CompanionTray:
 
     def _on_files(self, _icon: Any, _item: Any) -> None:
         opener = getattr(self._companion, "open_files_panel", None)
+        if callable(opener):
+            opener()
+
+    def _on_clipboard(self, _icon: Any, _item: Any) -> None:
+        opener = getattr(self._companion, "open_clipboard", None)
         if callable(opener):
             opener()
 

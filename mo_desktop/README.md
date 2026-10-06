@@ -650,6 +650,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | Double-click cube | Expand the four grouped MO app tiles; click one to open or focus it |
 | Mouse wheel over cube | Adjust Windows master volume |
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |
+| **Ctrl+Shift+Alt+Z** (or the Clipboard app) | Open the clipboard history in the one panel: newest first, text, images and file lists; click a row to copy it again, ask MO about it, remove it, or Clear all. Kept in memory only, never on disk; a copy an app marks as not for clipboard history (password managers do) is never recorded, and one that looks like a secret is masked and never offered to MO. Windows' own Win+V is untouched |
 | Drop a file on cube | Attach locally; MO reads it and answers in the one panel. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
 
 Screen selections are saved under the active private profile's ordinary
@@ -949,7 +950,8 @@ Common settings:
 | `behavior.follow_distance` | `64` | Lock-mode trailing distance |
 | `behavior.follow_ease` | `0.16` | Lock-mode spring |
 | `behavior.keep_above_apps` | `[]` | Exact executable basenames allowed to lift MO above their overlays. MO Shell is always included, and while MO itself acts on the computer the cubes stay above any always-on-top window |
-| `behavior.dim_level` | `0.0` | MO's dim layer level (0 to 0.9) on displays without hardware brightness; saved after Shift + wheel |
+| `behavior.dim_level` | `0.0` | MO's dim layer level (0 to 0.9) on displays without hardware brightness; saved after Shift + wheel, also set in Settings |
+| `behavior.clipboard_items` | `50` | Clipboard history size (0 to 200, memory only); `0` turns the listener off |
 | `panel.padding` | `16` | Shared Desktop panel padding |
 | `panel.corner_radius` | `12` | Shared Desktop window/panel radius |
 | `panel.button_padding` | `8` | Shared Desktop action padding |
