@@ -538,11 +538,11 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         saved = getattr(self, "_terminal_working", None)
         if bool(on) == (saved is not None):
             if on:
-                self._take_working_corner()          # Desktop may have become idle since
+                self._fit_working_to_desktop()       # Desktop may have become busy or idle since
             return
         if on:
             self._terminal_working = {"since": time.perf_counter(), "moved": False}
-            self._take_working_corner()
+            self._fit_working_to_desktop()
             self._show()
             return
         self._terminal_working = None
@@ -565,16 +565,29 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                     or getattr(self, "_held", False) or getattr(self, "_launcher_active", False)
                     or getattr(self, "_thinking", False) or holders)
 
-    def _take_working_corner(self) -> None:
+    def _fit_working_to_desktop(self, *, busy: bool | None = None) -> None:
+        """While Desktop is idle the working cubes grow into the emptiest corner; while it is in
+        use they go back to their normal size where they are, so its panels dock as always
+        (a docking face calls this with ``busy=True`` before it measures the cubes). The first
+        place and size are kept for the return when the work ends."""
         working = getattr(self, "_terminal_working", None)
-        if working is None or working.get("moved") or self._desktop_busy():
+        if working is None:
+            return
+        if self._desktop_busy() if busy is None else busy:
+            if working.get("moved"):
+                working["moved"] = False
+                self.set_size(working["size"])
+            return
+        if working.get("moved"):
             return
         corner = self._empty_corner()
         if corner is None:
             return
-        working.update(moved=True, size=self._size, home=getattr(self, "_home", None),
-                       at=(self._x, self._y), corner=corner)
-        self.set_size(round(self._size * _WORKING_SCALE))
+        working.setdefault("size", self._size)
+        working.setdefault("home", getattr(self, "_home", None))
+        working.setdefault("at", (self._x, self._y))
+        working.update(moved=True, corner=corner)
+        self.set_size(round(working["size"] * _WORKING_SCALE))
         if self._follow_enabled:
             self.set_home(corner)                    # home holds it off the cursor's tail
         else:

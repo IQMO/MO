@@ -239,14 +239,15 @@ slight swell, distinct from thinking and from Desktop's own acting wave) and car
 the label "MO Terminal is using your computer · Esc stops it"; cubes and label let
 input through and stay out of captures. When it is done they return to their place
 and size. Desktop's own use comes first: with a docked face, the launcher, expanded
-Focus, a Desktop turn, listening or speaking, the cubes show Desktop's own state in
-place and take the corner, beat and label once Desktop is idle; a cube you moved
+Focus, a Desktop turn, listening or speaking, the cubes go back to their normal size
+where they are and show Desktop's own state, so its panels dock as always; they grow
+back into the corner with the beat and label once Desktop is idle. A cube you moved
 meanwhile stays where you put it.
 
 One computer has one driver, and you come first. MO Terminal's native actions
 (clicks, keys, focusing or launching windows) wait while you use the keyboard or
-mouse, or while MO Desktop has focus, and continue once you pause; input MO itself
-sent never counts. After a minute of waiting the action reports that MO is waiting
+mouse, or while MO Desktop has focus; once you pause it looks at the screen again
+before acting, since what it saw may have changed. Input MO itself sent never counts. After a minute of waiting the action reports that MO is waiting
 for you instead of acting. The working cubes let clicks through, so use
 **Win+Alt+M** to talk to Desktop meanwhile; Esc stops the Terminal. Desktop's own
 actions act for you and do not wait. External
@@ -676,7 +677,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | Mouse wheel over cube | Adjust Windows master volume |
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |
 | **Ctrl+Shift+Alt+Z** (or the Clipboard app) | Open the clipboard history in the one panel: newest first, text, images and file lists; click a row to copy it again, ask MO about it, remove it, or Clear all. Each copy is read a moment later, once per burst, so the app that copied and a paste right after it go first. Kept in memory only, never on disk; a copy an app marks as not for clipboard history (password managers do) is never recorded, and one that looks like a secret is masked and never offered to MO. Windows' own Win+V is untouched |
-| **Esc** while MO acts on the computer | Stop it: a Desktop turn gets Panic Stop; a local MO Terminal using the computer gets its own Esc (the typed stop control). An Esc MO itself presses while acting, or one pressed in MO Desktop's own window (closing the composer), never stops anything |
+| **Esc** while MO acts on the computer | Stop it: a Desktop turn gets Panic Stop; a local MO Terminal using the computer gets its own Esc (the typed stop control). An Esc MO itself presses while acting, or one pressed in an MO Desktop panel (closing the composer), never stops anything |
 | Drop a file on cube | Attach locally; MO reads it and answers in the one panel. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
 
 Screen selections are saved under the active private profile's ordinary

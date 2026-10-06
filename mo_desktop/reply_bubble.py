@@ -1203,6 +1203,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._last_error = "desktop cube unavailable"
             return False
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
+        composer = self._mode == "input" and callable(getattr(self._cube, "launch_piece", None))
+        dashboard_face = (getattr(self, "_face", "panel") == "dashboard"
+                          and getattr(self, "_panel_state", None) == PanelState.DASHBOARD)
+        if ((composer and getattr(self._cube, "_composer_controller", None) is not self)
+                or (dashboard_face and getattr(self._cube, "_dashboard_controller", None) is not self)):
+            fit = getattr(self._cube, "_fit_working_to_desktop", None)
+            if callable(fit):
+                fit(busy=True)      # MO Terminal's enlarged working cubes: normal size before docking
         try:
             cx, cy = self._cube.center()
             half = int(getattr(self._cube, "_size", 84) / 2)
@@ -1216,14 +1224,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # therefore renders first and starts its clock only after the base is ready; the
         # old order spent the animation while the GUI thread was still drawing off-screen.
         starting_transition = bool(getattr(self, "_transition_pending_start", False))
-        composer = self._mode == "input" and callable(getattr(self._cube, "launch_piece", None))
         if composer and getattr(self._cube, "_composer_controller", None) is not self:
             self._capture_cube_source(1)
             self._cube._composer_controller = self
         elif not composer and getattr(self._cube, "_composer_controller", None) is self:
             self._cube._composer_controller = None
-        dashboard_face = (getattr(self, "_face", "panel") == "dashboard"
-                          and getattr(self, "_panel_state", None) == PanelState.DASHBOARD)
         if dashboard_face and getattr(self._cube, "_dashboard_controller", None) is not self:
             self._capture_cube_source(0)
             self._cube._dashboard_controller = self

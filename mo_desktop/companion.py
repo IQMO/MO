@@ -288,8 +288,8 @@ def terminal_workspace_request(text: str) -> tuple[int, str] | None:
     return panes, "host" if _HOST_WORD_RE.search(value) else "local"
 
 
-def _foreground_is_this_process() -> bool:
-    """Whether the window with keyboard focus belongs to this MO Desktop process."""
+def _foreground_own_window() -> int:
+    """The window with keyboard focus when it belongs to this MO Desktop process, else 0."""
     import ctypes
     import os
     from ctypes import wintypes
@@ -298,10 +298,10 @@ def _foreground_is_this_process() -> bool:
     user32.GetForegroundWindow.restype = wintypes.HWND
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
-        return False
+        return 0
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    return pid.value == os.getpid()
+    return int(hwnd) if pid.value == os.getpid() else 0
 
 
 class CompanionSurface(
@@ -5764,8 +5764,8 @@ class CompanionSurface(
         try:
             from core.desktop.runtime import native_input_held
 
-            if native_input_held() or _foreground_is_this_process():
-                return      # MO's own Esc, or an Esc for MO Desktop's own window (closing the composer)
+            if native_input_held() or self._esc_belongs_to_a_panel(cube):
+                return      # MO's own Esc, or an Esc for MO Desktop's own panel (closing the composer)
         except Exception:
             return
         if desktop:
@@ -5781,6 +5781,25 @@ class CompanionSurface(
             except Exception as exc:
                 log_event(f"Esc could not stop MO Terminal: {type(exc).__name__}",
                           config=getattr(self._agent, "config", None))
+
+    @staticmethod
+    def _esc_belongs_to_a_panel(cube: Any) -> bool:
+        """An MO Desktop panel has keyboard focus. The cubes' own windows (cube, label, trace) can
+        keep focus after a click; an Esc there still stops MO."""
+        own = _foreground_own_window()
+        if not own:
+            return False
+        from mo_desktop.focus_native import native_handle
+
+        cube_windows = set()
+        for name in ("_win", "_label_win", "_trace_win"):
+            win = getattr(cube, name, None)
+            if win is not None:
+                try:
+                    cube_windows.add(int(native_handle(win)))
+                except Exception:
+                    pass
+        return own not in cube_windows
 
     def _reset_tap_chains(self) -> None:
         self._ctrl_tap_armed = False
