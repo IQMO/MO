@@ -164,6 +164,22 @@ def _execute_app_launch(args: dict[str, Any]) -> str:
     )
 
 
+def _give_way_to_operator(cancel_event: Any) -> str | None:
+    """MO Terminal never fights the operator for the computer: its native actions wait while they
+    use the keyboard, mouse or MO Desktop. Desktop acts for the operator who is present, and a
+    headless call has no operator; neither waits. Runs outside the native lock, so the operator's
+    own MO Desktop is never blocked meanwhile."""
+    from core.runtime.backend_monitor import current_monitor_context
+    from core.runtime.surface_identity import DESKTOP_SURFACES, normalize_runtime_surface
+
+    context = current_monitor_context()
+    if not context or normalize_runtime_surface(context.get("surface")) in DESKTOP_SURFACES:
+        return None
+    from core.desktop.runtime import wait_for_operator
+
+    return wait_for_operator(cancel_event)
+
+
 def execute_computer_act(arguments: dict[str, Any]) -> str:
     if arguments.get("_cancel_event") is not None and arguments["_cancel_event"].is_set():
         return "Error: computer operation cancelled."
@@ -174,6 +190,9 @@ def execute_computer_act(arguments: dict[str, Any]) -> str:
     assert call is not None
     args = call.arguments
     if call.kind == "desktop":
+        paused = _give_way_to_operator(args.get("_cancel_event"))
+        if paused:
+            return paused
         if call.operation == "open":
             import webbrowser
 

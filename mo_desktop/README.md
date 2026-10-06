@@ -241,7 +241,15 @@ input through and stay out of captures. When it is done they return to their pla
 and size. Desktop's own use comes first: with a docked face, the launcher, expanded
 Focus, a Desktop turn, listening or speaking, the cubes show Desktop's own state in
 place and take the corner, beat and label once Desktop is idle; a cube you moved
-meanwhile stays where you put it. External
+meanwhile stays where you put it.
+
+One computer has one driver, and you come first. MO Terminal's native actions
+(clicks, keys, focusing or launching windows) wait while you use the keyboard or
+mouse, or while MO Desktop has focus, and continue once you pause; input MO itself
+sent never counts. After a minute of waiting the action reports that MO is waiting
+for you instead of acting. The working cubes let clicks through, so use
+**Win+Alt+M** to talk to Desktop meanwhile; Esc stops the Terminal. Desktop's own
+actions act for you and do not wait. External
 automation that does not publish MO activity has no such signal.
 
 ### Settings

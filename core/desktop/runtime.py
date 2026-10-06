@@ -21,6 +21,12 @@ from typing import Any
 
 TARGET_LEASE_SECONDS = 180.0
 OBSERVATION_MAX_AGE_SECONDS = 120.0
+# One computer, one driver: MO Terminal's native input waits while the operator uses the keyboard
+# or mouse (input within OPERATOR_IDLE_SECONDS that MO did not inject) or MO Desktop has focus,
+# for at most OPERATOR_WAIT_SECONDS.
+OPERATOR_IDLE_SECONDS = 1.5
+OPERATOR_WAIT_SECONDS = 60.0
+_OWN_INPUT_SLACK_SECONDS = 0.25
 
 COMPUTER_TOOLS = frozenset({
     "computer_targets", "computer_observe", "computer_act", "point_on_screen",
@@ -106,6 +112,7 @@ _LOCK = threading.RLock()
 _STATES: dict[str, _OwnerState] = {}
 _NATIVE_LOCK = threading.RLock()
 _NATIVE_CONTEXT = threading.local()
+_LAST_OWN_NATIVE_AT = 0.0     # wall time this process last left native_desktop_scope
 
 
 def _native_input_path() -> Path:
@@ -157,9 +164,85 @@ def native_desktop_scope(*, invalidate: bool = False):
                 _begin_native_input()
             yield
         finally:
+            global _LAST_OWN_NATIVE_AT
+            _LAST_OWN_NATIVE_AT = time.time()
             _NATIVE_CONTEXT.active = False
             _NATIVE_CONTEXT.owner = None
             _NATIVE_CONTEXT.prior_revision = None
+
+
+def operator_idle_seconds() -> float | None:
+    """Seconds since the last keyboard or mouse input in this session (None where unknown)."""
+    if os.name != "nt":
+        return None
+    import ctypes
+
+    class LastInput(ctypes.Structure):
+        _fields_ = [("size", ctypes.c_uint), ("tick", ctypes.c_uint)]
+    value = LastInput()
+    value.size = ctypes.sizeof(value)
+    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(value)):
+        return None
+    return ((ctypes.windll.kernel32.GetTickCount() - value.tick) & 0xffffffff) / 1000
+
+
+def _foreground_pid() -> int:
+    if os.name != "nt":
+        return 0
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return 0
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(pid.value)
+
+
+def _desktop_pids() -> set[int]:
+    from core.runtime.instance import recent_instance_snapshots
+    from core.runtime.surface_identity import DESKTOP_SURFACES, normalize_runtime_surface
+
+    rows = recent_instance_snapshots(current_pid=os.getpid(), limit=64)
+    return {int(row.get("pid") or 0) for row in rows if isinstance(row, dict)
+            and normalize_runtime_surface(row.get("surface")) in DESKTOP_SURFACES}
+
+
+def operator_holds_computer(*, desktop_pids: set[int] | None = None) -> str:
+    """What the operator is using right now - "MO Desktop" or "the keyboard or mouse" - or ""."""
+    pid = _foreground_pid()
+    if pid and pid != os.getpid() and pid in (_desktop_pids() if desktop_pids is None else desktop_pids):
+        return "MO Desktop"
+    idle = operator_idle_seconds()
+    if idle is not None and idle < OPERATOR_IDLE_SECONDS and \
+            time.time() - idle > _LAST_OWN_NATIVE_AT + _OWN_INPUT_SLACK_SECONDS:
+        return "the keyboard or mouse"
+    return ""
+
+
+def wait_for_operator(cancel_event: Any = None, *, timeout: float = OPERATOR_WAIT_SECONDS,
+                      poll: float = 0.2) -> str | None:
+    """Before native input, give way while the operator uses the computer; None to go ahead."""
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    desktop_pids: set[int] | None = None
+    while True:
+        if cancel_event is not None and cancel_event.is_set():
+            return "Error: computer operation cancelled."
+        if desktop_pids is None:
+            try:
+                desktop_pids = _desktop_pids()
+            except Exception:
+                desktop_pids = set()
+        reason = operator_holds_computer(desktop_pids=desktop_pids)
+        if not reason:
+            return None
+        if time.monotonic() >= deadline:
+            return (f"Paused: the operator is using {reason}, so MO did not act. Nothing changed; "
+                    "say that you are waiting for them, then try again.")
+        time.sleep(poll)
 
 
 def native_input_held() -> bool:

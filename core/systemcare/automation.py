@@ -1,24 +1,10 @@
 """SystemCare jobs run in MO's existing scheduler, without a provider turn."""
 from __future__ import annotations
 
-import ctypes
 import json
-import os
 from typing import Any
 
 from .config import normalized_systemcare_preferences
-
-
-def _idle_seconds() -> float | None:
-    if os.name != "nt":
-        return None
-    class LastInput(ctypes.Structure):
-        _fields_ = [("size", ctypes.c_uint), ("tick", ctypes.c_uint)]
-    value = LastInput()
-    value.size = ctypes.sizeof(value)
-    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(value)):
-        return None
-    return ((ctypes.windll.kernel32.GetTickCount() - value.tick) & 0xffffffff) / 1000
 
 
 def run_scheduled_care(config: dict[str, Any], options: dict[str, Any]) -> str:
@@ -38,7 +24,9 @@ def run_scheduled_care(config: dict[str, Any], options: dict[str, Any]) -> str:
     current = normalized_systemcare_preferences(config)["automation"]
     if not current["enabled"]:
         return json.dumps({"state": "skipped", "reason": "Automation is disabled"})
-    idle = _idle_seconds()
+    from core.desktop.runtime import operator_idle_seconds
+
+    idle = operator_idle_seconds()
     if current["idle_minutes"] and (idle is None or idle < current["idle_minutes"] * 60):
         return json.dumps({"state": "skipped", "reason": "Idle condition not satisfied"})
     power = service.adapter._power_status()
