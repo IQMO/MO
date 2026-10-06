@@ -710,6 +710,9 @@ class CubeLauncher:
         cube = getattr(self.owner._companion, "_cube", None)
         if cube is not None:
             cube._launcher_active = False
+            replay = getattr(cube, "_replay_pending_glance", None)
+            if callable(replay):
+                replay()                                  # a notice that waited for the launcher
             cube._launcher_painter = None
             cube._launcher_interacting = False
             cube._last_geometry = ""
@@ -789,6 +792,9 @@ class CubeLauncher:
         bubble = getattr(self.owner._companion, "_bubble", None)
         if bubble is not None and bubble._visible:
             bubble.set_launcher_active(True)
+        stash = getattr(cube, "stash_glance_for_launcher", None)
+        if callable(stash):
+            stash()
         cube._launcher_active = True
         self.window.position(x, y, width, height)
         self._paint_size = (width, height)

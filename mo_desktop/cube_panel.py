@@ -223,12 +223,35 @@ class CubePanelMixin:
         )
 
     def _guidance_owns_label(self, now: float | None = None) -> bool:
+        """The label is taken: pointed guidance is showing, or the launcher is open (a glance
+        then waits and appears when it closes, never over the four app cubes)."""
+        if getattr(self, "_launcher_active", False):
+            return True
         current = time.perf_counter() if now is None else float(now)
         return (
             getattr(self, "_label_variant", "glance") == "guidance"
             and bool(getattr(self, "_label_value", ""))
             and current < float(getattr(self, "_label_until", 0.0) or 0.0)
         )
+
+    def stash_glance_for_launcher(self) -> None:
+        """The launcher is opening over the cubes: a glance already showing steps aside and comes
+        back for its remaining time when the launcher closes."""
+        now = time.perf_counter()
+        value = str(getattr(self, "_label_value", "") or "")
+        remaining = float(getattr(self, "_label_until", 0.0) or 0.0) - now
+        if (value and remaining > 0.3 and getattr(self, "_label_kind", "bubble") != "running"
+                and getattr(self, "_label_variant", "glance") == "glance"):
+            kind = "notice" if getattr(self, "_label_kind", "") == "notice" else "bubble"
+            title = (getattr(self, "_notice_title", "") or value) if kind == "notice" else value
+            detail = str(getattr(self, "_notice_detail", "") or "") if kind == "notice" else ""
+            action = getattr(self, "_notice_action", None) if kind == "notice" else None
+            self._hide_label()
+            self._pending_glance = (title, remaining, None, detail, kind)
+            self._pending_notice_action = action
+            return
+        if value and getattr(self, "_label_kind", "bubble") != "running":
+            self._hide_label()
 
     def _show_glance(
         self,
