@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -21,6 +22,42 @@ def native_executable() -> Path | None:
         if candidate.is_file():
             return candidate
     return None
+
+
+BUILD_COMMAND = "dotnet build mo_shell/native/MoShell.Native.csproj -c Release"
+
+
+def native_build_current() -> bool:
+    """The native host is built and no older than its C# source."""
+    executable = native_executable()
+    if executable is None:
+        return False
+    assembly = executable.with_suffix(".dll")
+    sources = Path(__file__).resolve().parent / "native"
+    newest_source = max((path.stat().st_mtime_ns for pattern in ("*.cs", "*.csproj")
+                         for path in sources.glob(pattern)), default=0)
+    return assembly.is_file() and assembly.stat().st_mtime_ns >= newest_source
+
+
+def rebuild_native(*, timeout: float = 300.0) -> str:
+    """Build the native host from its source with the installed .NET SDK: a source change must
+    never leave MO Shell unavailable. Returns "" when built, otherwise why it could not be."""
+    dotnet = shutil.which("dotnet")
+    if not dotnet:
+        return f"MO Shell needs a build and the .NET 8 SDK is not installed. Run: {BUILD_COMMAND}"
+    from core.runtime.subprocess_flags import apply_windows_hidden_process_flags
+
+    project = Path(__file__).resolve().parent / "native" / "MoShell.Native.csproj"
+    options: dict[str, Any] = {"capture_output": True, "text": True, "timeout": timeout, "cwd": str(project.parent)}
+    apply_windows_hidden_process_flags(options)
+    try:
+        result = subprocess.run([dotnet, "build", str(project), "-c", "Release", "-nologo", "-v", "q"], **options)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"MO Shell build failed ({type(exc).__name__}). Run: {BUILD_COMMAND}"
+    if result.returncode != 0 or not native_build_current():
+        lines = [line.strip() for line in (result.stdout or result.stderr or "").splitlines() if line.strip()]
+        return "MO Shell build failed" + (f": {lines[-1][:160]}" if lines else f". Run: {BUILD_COMMAND}")
+    return ""
 
 
 SHELL_STARTUP_ENV = "MO_SHELL_STARTUP_FILE"
@@ -57,21 +94,12 @@ def launch_native(
 
     ``startup_args`` (from ``SHELL_STARTUP_FLAGS`` only) start this Shell's first terminal,
     e.g. with a handed-over goal or a pane count; later Shells open normally."""
+    if not native_build_current():
+        problem = rebuild_native()                 # missing or older than its source: build it now
+        if problem:
+            raise FileNotFoundError(problem)
     executable = native_executable()
-    if executable is None:
-        raise FileNotFoundError(
-            "MO Shell is not built. Run: "
-            "dotnet build mo_shell/native/MoShell.Native.csproj -c Release"
-        )
-    assembly = executable.with_suffix(".dll")
-    sources = Path(__file__).resolve().parent / "native"
-    newest_source = max((path.stat().st_mtime_ns for pattern in ("*.cs", "*.csproj")
-                         for path in sources.glob(pattern)), default=0)
-    if not assembly.is_file() or assembly.stat().st_mtime_ns < newest_source:
-        raise FileNotFoundError(
-            "MO Shell native build is older than its source. Run: "
-            "dotnet build mo_shell/native/MoShell.Native.csproj -c Release"
-        )
+    assert executable is not None
     project = (
         Path(project_cwd).expanduser().resolve(strict=False)
         if project_cwd

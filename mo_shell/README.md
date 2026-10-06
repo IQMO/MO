@@ -208,6 +208,11 @@ On Windows with .NET 8:
     dotnet build mo_shell/native/MoShell.Native.csproj -c Release
     python -m mo_shell
 
+A launch whose native build is missing or older than its C# source builds it
+first with the installed .NET 8 SDK (MO Desktop does this in the background and
+says "Updating MO Shell" on the cubes), so an update never leaves MO Shell
+unavailable; without the SDK the launch names the build command instead.
+
 An explicit profile remains available through python -m mo_shell --config
 PATH. Otherwise the canonical MO_CONFIG/default-profile resolution is
 inherited unchanged.

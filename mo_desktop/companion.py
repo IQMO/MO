@@ -1210,6 +1210,11 @@ class CompanionSurface(
 
     def open_mo_shell(self) -> None:
         """Launch the separate native Shell from the shared Desktop tray."""
+        from mo_shell.__main__ import native_build_current
+
+        if not native_build_current():
+            self._rebuild_mo_shell_then_open()
+            return
         options = {}
         try:
             from core.state.paths import runtime_config_path
@@ -1229,6 +1234,27 @@ class CompanionSurface(
             notifier = getattr(tray, "_notify", None)
             if callable(notifier):
                 notifier(message)
+
+    def _rebuild_mo_shell_then_open(self) -> None:
+        """MO Shell's native build is missing or older than its source (an update changed it):
+        build it off the GUI thread, saying so on the cubes, then open it."""
+        if getattr(self, "_shell_rebuilding", False):
+            return
+        self._shell_rebuilding = True
+        self._cube_notice("Updating MO Shell", "rebuilding after an update")
+
+        def build() -> None:
+            from mo_shell.__main__ import rebuild_native
+
+            problem = rebuild_native()
+            self._shell_rebuilding = False
+            if not problem:
+                self._post_gui_call(self.open_mo_shell)
+                return
+            self._cube_notice("Shell unavailable", problem[:100])
+            log_event(f"MO Shell rebuild failed: {problem[:160]}", config=self._config())
+
+        threading.Thread(target=build, daemon=True, name="mo-shell-build").start()
 
     def _start_clipboard(self, limit: int) -> None:
         """The event-driven clipboard history (memory only); 0 items turns it off."""
