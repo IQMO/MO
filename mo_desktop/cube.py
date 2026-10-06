@@ -549,10 +549,11 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         if not saved.get("moved"):
             return
         self.set_size(saved["size"])
-        here = (self._x - saved["corner"][0]) ** 2 + (self._y - saved["corner"][1]) ** 2
+        # Home again. The working cubes were click-through all along, so nobody dragged them; a
+        # position check misread a glide still on its way to the corner as a hand move.
         if self._follow_enabled:
             self.set_home(saved["home"])
-        elif here < 16:                              # never undo a move the operator made
+        else:
             self.summon_to(*saved["at"], chase=False)
 
     def _desktop_busy(self) -> bool:
