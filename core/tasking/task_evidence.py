@@ -638,8 +638,16 @@ def _specific_execution_matches(title: str, tool_name: str, arguments: dict) -> 
 
 
 def execution_actions_from_text(text: str) -> set[str]:
-    """Return explicit delivery/lifecycle actions named in task or claim text."""
+    """Return named delivery actions, excluding explicitly negated action lists."""
     value = " ".join(str(text or "").lower().split())
+    action_word = r"(?:commit(?:ted|ting|s)?|push(?:ed|ing|es)?|deploy(?:ed|ing|s|ment)?|publish(?:ed|ing|es)?)\b"
+    conjunction = r"(?:\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+|\s*/\s*)"
+    value = re.sub(
+        rf"\b(?:without|not|never|no|do\s+not|don['’]t|avoid(?:ing)?|skip(?:ping)?|excluding|except)"
+        rf"\s+(?:(?:a|any|the)\s+)?{action_word}(?:{conjunction}{action_word})*",
+        " ",
+        value,
+    )
     actions: set[str] = set()
     if re.search(r"\bcommit(?:ted|ting|s)?\b", value):
         actions.add("commit")
