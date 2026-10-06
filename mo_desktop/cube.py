@@ -122,6 +122,13 @@ _VOICE_TRAIL_SECONDS = 0.5
 _VOICE_LISTEN_STAGGER = 0.07
 _VOICE_SPEAK_STAGGER = 0.03
 _VOICE_LIFT = 2.4
+# Writer character (row 28): pen loops per second (radians), the caret's blink rate, how fast the
+# written line drifts left, how long ink stays, and its colour.
+_PEN_RATE = 9.0
+_CARET_HZ = 0.9
+_INK_DRIFT = 60.0   # below the pen's backward swing, so strokes loop like handwriting
+_INK_FADE_SECONDS = 2.4
+_WRITER_INK = (122, 140, 255)
 _VOICE_SWELL = 0.10   # speaking: how far a full syllable opens the cluster (heartbeat uses .07)
 # Their heartbeat meanwhile: a lub-dub every _HEARTBEAT_SECONDS; the cubes swell outward by
 # _HEARTBEAT_SWELL of their offset from the centre at the top of a beat.
@@ -1005,6 +1012,29 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self._hide_label()
             self._hide_at = time.perf_counter() + 0.6
 
+    def set_role_motion(self, name: str) -> None:
+        """A role's own behaviour for the same four cubes ('writer', or '' for none)."""
+        self._role_motion = str(name or "")
+        self._ink_points = []
+
+    def _writer_pose(self, i: int, bx: float, by: float, now: float) -> tuple[float, float, float]:
+        """The writer character: at rest the last cube in the line blinks like a caret; while MO
+        works the lead cube draws joined-up loops (the pen) and the others nod along the line."""
+        lead = max(range(len(self._bases)), key=lambda k: self._bases[k][0])
+        e = self._cube_edge
+        if self._thinking:
+            started = getattr(self, "_thinking_started_at", None)
+            t = (now - float(now if started is None else started)) * _PEN_RATE
+            if i == lead:
+                tall = 0.45 + 0.55 * math.sin(t * 0.31 + 1.3) ** 2
+                return bx - 0.34 * e * math.sin(t), by - 0.62 * e * tall * (1 - math.cos(t)) / 2, 1.0
+            order = sorted(range(len(self._bases)), key=lambda k: self._bases[k][0]).index(i)
+            follow = max(0.0, math.sin(t * 0.5 - (len(self._bases) - 1 - order) * 0.9))
+            return bx, by - self._bob_amp * 0.5 * follow, 0.88
+        if i == lead:
+            return bx, by, 0.55 + 0.45 * (0.5 + 0.5 * math.cos(now * 2 * math.pi * _CARET_HZ))
+        return bx, by, 0.92
+
     def set_speaking(self, on: bool) -> None:
         """MO's own voice moves the cubes while it is audible (see ``_voice_lift``)."""
         self._speaking = bool(on)
@@ -1133,6 +1163,9 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             wave = .5+.5*math.sin(now*3-i*math.pi/2)
             bright, alpha = .72+.28*wave, .78+.22*wave
             cx, cy = bx, by-self._bob_amp*.25*wave
+        elif (getattr(self, "_role_motion", "") == "writer" and not self._listening
+              and not getattr(self, "_speaking", False)):
+            cx, cy, bright = self._writer_pose(i, bx, by, now)
         elif self._thinking:
             from mo_desktop.emotes import get, sample
             emote, duration = get("thinking")
@@ -1513,6 +1546,45 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         right = math.ceil(max(xs) + pad)
         bottom = math.ceil(max(ys) + pad)
         return left, top, max(1, right - left), max(1, bottom - top)
+
+    def _tick_ink(self, now: float) -> None:
+        """Writer character: the pen leaves ink that drifts left like paper under a pen and fades;
+        drawn on the existing trace layer (the cubes stay inside their own window)."""
+        points = getattr(self, "_ink_points", None)
+        if points is None:
+            points = self._ink_points = []
+        if self._thinking:
+            lead = max(range(len(self._bases)), key=lambda k: self._bases[k][0])
+            cx, cy, _bright, _alpha = self._cube_state(lead, now)
+            # The pen writes on the line just under the cubes, so the ink shows beneath the others.
+            points.append((self._x - self._size / 2 + cx, self._y - self._size / 2 + cy + self._cube_edge * 1.25, now))
+        while points and now - points[0][2] > _INK_FADE_SECONDS:
+            points.pop(0)
+        surface = getattr(self, "_trace", None)
+        if surface is None or not getattr(surface, "available", lambda: False)():
+            return
+        if len(points) < 2:
+            try:
+                self._trace_win.hide()
+            except Exception:
+                pass
+            return
+        try:
+            from PIL import Image
+
+            from mo_desktop.cube_motion import paint_ink_line
+
+            shifted = [(x - _INK_DRIFT * (now - t), y, t) for x, y, t in points]
+            left = math.floor(min(p[0] for p in shifted) - 6)
+            top = math.floor(min(p[1] for p in shifted) - 6)
+            width = math.ceil(max(p[0] for p in shifted) + 6) - left
+            height = math.ceil(max(p[1] for p in shifted) + 6) - top
+            frame = Image.new("RGBA", (max(1, width), max(1, height)), (0, 0, 0, 0))
+            paint_ink_line(frame, shifted, now=now, origin=(left, top), color=_WRITER_INK, fade=_INK_FADE_SECONDS)
+            if surface.blit(frame, left, top):
+                self._trace_win.show()
+        except Exception:
+            pass
 
     def _paint_trace(self, now: float) -> None:
         """Draw passive fading cube footsteps for explicit point glides only."""

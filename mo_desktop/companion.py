@@ -1874,8 +1874,8 @@ class CompanionSurface(
         self._apply_role_character(self._effective_character_role() or None)
 
     def _apply_role_character(self, role: str | None) -> None:
-        """Give the cube the active role's look (coach/reviewer → the watching face); clear when the
-        role is dropped."""
+        """Give the cube the active role's look (coach/reviewer → the watching face, writer → the
+        writing line); clear when the role is dropped."""
         try:
             from mo_desktop import characters
             cube = getattr(self, "_cube", None)
@@ -1894,7 +1894,7 @@ class CompanionSurface(
                 )
                 color_mode = configured.character.color_mode
                 self._post_gui_call(
-                    lambda: characters.clear_reviewer_character(cube, color_mode=color_mode)
+                    lambda: characters.clear_role_character(cube, color_mode=color_mode)
                 )
         except Exception:
             pass

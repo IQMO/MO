@@ -57,6 +57,7 @@ def apply_reviewer_character(cube: Any, visuals: Any = None) -> None:
     (renderer-level) and is a live-verified follow-up."""
     if cube is None:
         return
+    _safe(cube, "set_role_motion", "")
     from mo_desktop.mcp_visuals import visual_state
     apply_mcp_character(
         cube,
@@ -65,8 +66,23 @@ def apply_reviewer_character(cube: Any, visuals: Any = None) -> None:
     )
 
 
-def clear_reviewer_character(cube: Any, *, color_mode: str = "skin") -> None:
+# ── writer character (row 28: the same four cubes, a writer's behaviour) ─────────────────────
+WRITER_PARCHMENT = "#f0e6d2"
+
+
+def apply_writer_character(cube: Any, visuals: Any = None) -> None:
+    """Writer roles: the four cubes in a parchment tone stand in a line like letters, the last one
+    blinking like a caret; while MO works the lead cube writes joined-up strokes in ink."""
+    if cube is None:
+        return
+    _safe(cube, "set_character", color_mode=WRITER_PARCHMENT)
+    _safe(cube, "set_formation", "row")
+    _safe(cube, "set_role_motion", "writer")
+
+
+def clear_role_character(cube: Any, *, color_mode: str = "skin") -> None:
     """Restore the configured ordinary cube character after a role is dismissed."""
+    _safe(cube, "set_role_motion", "")
     _safe(cube, "set_character", color_mode=str(color_mode or "skin"))
     _safe(cube, "set_formation", "cluster")
 
@@ -75,11 +91,14 @@ def clear_reviewer_character(cube: Any, *, color_mode: str = "skin") -> None:
 # neutral role kind (substring), so any "…-coach" / "…-reviewer" role qualifies and future roles
 # add a kind without operator- or product-specific names here.
 _REVIEWER_KINDS = ("coach", "reviewer")
+_WRITER_KINDS = ("writer",)
 
 
 def character_for_role(role_name: str) -> Any:
     """Return the cube-character applier for a role name, or None (leave the cube as-is)."""
     key = str(role_name or "").strip().lower()
+    if any(kind in key for kind in _WRITER_KINDS):
+        return apply_writer_character
     if any(kind in key for kind in _REVIEWER_KINDS):
         return apply_reviewer_character
     return None
