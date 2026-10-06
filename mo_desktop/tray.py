@@ -836,17 +836,21 @@ class CubeLauncher:
 
     def _draw_cube_entry(self, image: Any, box: tuple[int, int, int, int],
                          spec: dict[str, Any], ink: str) -> None:
-        from PIL import ImageDraw
-
-        draw = ImageDraw.Draw(image)
         x0, y0, x1, y1 = box
         app_id = str(spec["id"])
         icon = path_icon(str(spec["path"])) if spec.get("path") else None
         icon = icon or make_glyph_icon(APP_GLYPHS.get(app_id, "open"), 15, color=ink)
         image.alpha_composite(icon.resize((30, 30)), ((x0 + 3) * 2, (y0 + 5) * 2))
-        font = self._font(30)
-        label = self._fit_label(draw, str(spec["label"]), font, (x1 - x0 - 29) * 2)
-        draw.text(((x0 + 25) * 2, (y0 + 3) * 2), label, font=font, fill=ink)
+
+    def _draw_entry_label(self, image: Any, box: tuple[int, int, int, int], spec: dict[str, Any], ink: str) -> None:
+        """An app's title at 1x on the finished face: the font's hinting keeps the stems crisp
+        (a 2x title downsampled with the face came out soft next to the system's own text)."""
+        from PIL import ImageDraw
+
+        draw = ImageDraw.Draw(image)
+        x0, y0, x1, _y1 = box
+        font = self._font(15)
+        draw.text((x0 + 25, y0 + 3), self._fit_label(draw, str(spec["label"]), font, x1 - x0 - 29), font=font, fill=ink)
 
     def _entries(self) -> list[list[dict[str, Any]]]:
         specs = {spec["id"]: spec for spec in self.owner.item_specs() if spec["id"] not in self._hidden_ids}
@@ -889,9 +893,7 @@ class CubeLauncher:
             x, y = self._TILE_POSITIONS[index]
             tile = cube_face.copy()
             draw = ImageDraw.Draw(tile)
-            heading_font = self._font(30, bold=True)
-            heading_x = round((self._TILE_WIDTH * 2 - draw.textlength(title, font=heading_font)) / 2)
-            draw.text((heading_x, 27), title, font=heading_font, fill=ink)
+            labels = []
             if group_id == 0:
                 tile.alpha_composite(make_glyph_icon("settings", 26, color=ink), (26, 30))
             entries = groups[index]
@@ -904,10 +906,13 @@ class CubeLauncher:
                               for pos, value in enumerate(row_box))
                 row_image = Image.new("RGBA", tile.size)
                 self._draw_cube_entry(row_image, local, spec, ink)
-                self._row_sprites[str(spec["id"])] = row_image.crop(tuple(v*2 for v in local)).resize(
+                sprite = row_image.crop(tuple(v*2 for v in local)).resize(
                     (local[2]-local[0], local[3]-local[1]), Image.Resampling.LANCZOS)
+                self._draw_entry_label(sprite, (0, 0, local[2]-local[0], local[3]-local[1]), spec, ink)
+                self._row_sprites[str(spec["id"])] = sprite
                 if not self._editing:
                     tile.alpha_composite(row_image)
+                    labels.append((local, spec))
                 self._hitboxes.append((row_box, spec))
             if len(entries) > self._VISIBLE_ROWS:
                 count = len(entries)
@@ -919,6 +924,12 @@ class CubeLauncher:
                                        radius=max(1, self.owner._visuals.metrics.button_corner_radius // 4),
                                        fill=ink)
             tile = tile.resize((self._TILE_WIDTH, self._TILE_HEIGHT), Image.Resampling.LANCZOS)
+            heading_font = self._font(15, bold=True)
+            heading = ImageDraw.Draw(tile)
+            heading.text((round((self._TILE_WIDTH - heading.textlength(title, font=heading_font)) / 2), 14),
+                         title, font=heading_font, fill=ink)
+            for local, spec in labels:
+                self._draw_entry_label(tile, local, spec, ink)
             self._tile_images.append(tile)
             self._dimmed_tiles.append({0: tile})
         self._art = self._highlight_app()
@@ -956,8 +967,8 @@ class CubeLauncher:
 
     @staticmethod
     def _dim_sprite(image: Any, amount: float) -> Any:
-        return image.point([round(v*(1-.42*amount)) for v in range(256)]*3
-                           +[round(v*(1-.3*amount)) for v in range(256)]) if amount else image
+        # Darker, never see-through: a translucent face let the page behind tangle with its titles.
+        return image.point([round(v*(1-.42*amount)) for v in range(256)]*3 + list(range(256))) if amount else image
 
     def _highlight_app(self, now: float | None = None) -> Any:
         from PIL import Image, ImageColor, ImageDraw, ImageFilter
@@ -1120,22 +1131,19 @@ class CubeLauncher:
             amount = float(self._row_amounts.get(app_id, 0.0) or 0.0)
             if not row or amount <= .02 or self._editing or self._remove_app or self._menu is not None:
                 continue
-            chip_font = self._font(12, bold=True)
-            cx, cy = row[0] + 4, row[3] + 3
-            for action, label, glyph, handler in actions[:_QUICK_ACTION_LIMIT]:
+            right = row[2] - 2
+            for action, label, glyph, handler in reversed(actions[:_QUICK_ACTION_LIMIT]):
                 key = f"__quick:{app_id}:{action}"
                 hovered = self._hovered_control[0] == key
-                width = 24 + round(draw.textlength(label, font=chip_font)) + 10
-                chip = (cx, cy, cx + width, cy + 22)
-                draw.rounded_rectangle(chip, radius=radius, fill=(*ImageColor.getrgb(p.card), round((255 if hovered else 230) * amount)),
+                chip = (right - 22, row[1] + 2, right, row[1] + 24)
+                draw.rounded_rectangle(chip, radius=radius, fill=(*ImageColor.getrgb(p.card), round((255 if hovered else 215) * amount)),
                                        outline=(*ImageColor.getrgb(p.accent), round((255 if hovered else 0) * amount)))
                 mark = make_glyph_icon(glyph, 12, color=p.accent)
                 mark.putalpha(mark.getchannel("A").point(lambda value: round(value * amount)))
-                controls.alpha_composite(mark, (cx + 7, cy + 5))
-                draw.text((cx + 23, cy + 3), label, font=chip_font, fill=(*ImageColor.getrgb(p.accent), round(255 * amount)))
+                controls.alpha_composite(mark, (chip[0] + 5, chip[1] + 5))
                 if amount >= .16:
                     self._menu_hits.append((chip, {"id": key, "app": app_id, "label": label, "handler": handler}))
-                cx += width + 6
+                right -= 26
         if self._remove_app:
             row = next((box for box, spec in self._hitboxes if str(spec["id"]) == self._remove_app), None)
             if row:
