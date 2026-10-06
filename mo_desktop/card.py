@@ -148,6 +148,38 @@ def finish(img: Any, ss: int = SS) -> Any:
     return Image.frombytes("RGBA", pm.size, pm.tobytes())
 
 
+def grow_frame(source: Any, target: Any, size: tuple[int, int], amount: float) -> Any:
+    """One frame of a panel growing out of a cube; both images premultiplied RGBA, as is the result.
+
+    The panel's own full-size image is scaled down to ``size`` (Lanczos on premultiplied pixels, so
+    no dark fringe) and fades in, while the cube shows at its real size, centred, fading out. The
+    cube's few pixels are never stretched: a 27 px sprite blown up to a 400 px card (and the card
+    shrunk with a bilinear filter) drew a grainy ring and soft text, most visible when a loaded PC
+    shows fewer frames."""
+    from PIL import Image, ImageChops
+
+    amount = max(0.0, min(1.0, float(amount)))
+    width, height = max(1, int(size[0])), max(1, int(size[1]))
+    panel = target.copy() if target.size == (width, height) else target.resize((width, height), Image.Resampling.LANCZOS)
+    reveal = min(1.0, amount * 1.6)
+    if reveal < 1.0:
+        panel = panel.point(lambda value, k=reveal: int(value * k + 0.5))     # premultiplied fade
+    keep = 1.0 - min(1.0, amount * 2.2)
+    if keep <= 0.0 or source is None:
+        return panel
+    cube = source.point(lambda value, k=keep: int(value * k + 0.5))
+    left, top = (width - cube.width) // 2, (height - cube.height) // 2
+    box = (max(0, left), max(0, top), min(width, left + cube.width), min(height, top + cube.height))
+    if box[2] <= box[0] or box[3] <= box[1]:
+        return panel
+    cube = cube.crop((box[0] - left, box[1] - top, box[2] - left, box[3] - top))
+    under = panel.crop(box)
+    inverse = ImageChops.invert(cube.getchannel("A"))
+    under = ImageChops.multiply(under, Image.merge("RGBA", (inverse, inverse, inverse, inverse)))
+    panel.paste(ImageChops.add(under, cube), box[:2])                         # cube over panel
+    return panel
+
+
 def role_font(role: str = "small") -> Any:
     from interface.desktop_ui import DESKTOP_TYPOGRAPHY
     from mo_desktop.fonts import load_font

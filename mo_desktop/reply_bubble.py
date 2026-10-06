@@ -1313,14 +1313,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             # A reply, status or file panel grows out of the cube on its docking side.
             self._capture_cube_source(1 if side == "right" else 0)
         if morphing and getattr(self, "_cube_source_image", None) is not None:
-            from PIL import Image
             source = self._cube_source_image
             source_x = self._cube_source_center[0]-source.width/2
             source_y = self._cube_source_center[1]-source.height/2
             size = (max(1, round(source.width+(W-source.width)*progress)),
                     max(1, round(source.height+(H-source.height)*progress)))
-            img = Image.blend(source.resize(size, Image.Resampling.BILINEAR),
-                              img.resize(size, Image.Resampling.BILINEAR), progress)
+            img = card.grow_frame(source, img, size, progress)
             img_x = round(source_x+(img_x-source_x)*progress)
             img_y = round(source_y+(img_y-source_y)*progress)
             W, H = size

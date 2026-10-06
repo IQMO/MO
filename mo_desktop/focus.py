@@ -419,8 +419,8 @@ class FocusBar:
             x, y = round(sx+(x-sx)*amount), round(sy+(y-sy)*amount)
             size = (max(1, round(source.width+(width-source.width)*amount)),
                     max(1, round(source.height+(height-source.height)*amount)))
-            image = Image.blend(source.resize(size, Image.Resampling.LANCZOS),
-                                self._image.resize(size, Image.Resampling.LANCZOS), amount)
+            from mo_desktop.card import grow_frame
+            image = grow_frame(source, self._image, size, amount)
         else:
             image = self._image if self._image.size == (width, height) else self._image.resize((width, height), Image.Resampling.LANCZOS)
             if self._layout_motion is not None:
