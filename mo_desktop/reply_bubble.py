@@ -2094,8 +2094,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         key = self._hit_key_at(x, y)
         if getattr(self, "_browse_idx", None) is not None and key != "sessions":
             # While browsing, the darkened panel is not clickable: a click there only brings the
-            # composer back to normal. The history button at the top stays live.
-            self._end_browse()
+            # composer back to normal. The lit message line opens that message in full; the
+            # history button at the top stays live.
+            band = getattr(self, "_browse_band", None)
+            if band is not None and band[0] <= x <= band[2] and band[1] <= y <= band[3]:
+                self._open_browsed_reply()
+            else:
+                self._end_browse()
             return
         self._activate_hit(key)
 
@@ -2449,8 +2454,25 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         veil = _Image.new("RGBA", img.size, (0, 0, 0, 0))
         vd = _ImageDraw.Draw(veil)
         vd.rounded_rectangle(tuple(box), radius=radius, fill=(0, 0, 0, _BROWSE_DIM_ALPHA))
-        vd.rectangle((box[0] + ss, line_top - 4 * ss, box[2] - ss, line_top + line_h + 4 * ss), fill=(0, 0, 0, 0))
+        band = (box[0] + ss, line_top - 4 * ss, box[2] - ss, line_top + line_h + 4 * ss)
+        vd.rectangle(band, fill=(0, 0, 0, 0))
         img.alpha_composite(veil)
+        self._browse_band = tuple(int(v // ss) for v in band)      # 1x: a click there opens it
+
+    def _open_browsed_reply(self) -> None:
+        """Open the browsed message in full: the card becomes the reply view at that message (it
+        sizes like any reply) with its usual controls; the draft waits for the composer."""
+        index = getattr(self, "_browse_idx", None)
+        history = list(getattr(self, "_reply_history", None) or [])
+        if index is None or not 0 <= index < len(history):
+            self._end_browse()
+            return
+        self._stash_input_draft()
+        self._end_browse(repaint=False)
+        transition = self._prepare_panel_show("reply", PanelState.REPLY, controls=True)
+        self._reply_idx = index
+        self._restore_history_reply()
+        self._repaint_for_panel_show(transition)
 
     def _draw_search_brand(self, img: Any, d: Any, provider: str, ax: int, ay: int, ss: int) -> None:
         """The composer cube's search modes, in each service's own colours."""
