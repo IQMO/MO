@@ -3384,6 +3384,7 @@ class CompanionSurface(
                 config=config,
                 project_root=project,
                 fallback_workspace=raw_project,
+                as_goal=False,   # one normal turn, the same as a live Terminal gets
             )
             self._terminal_handoff_until = time.monotonic() + _TERMINAL_HANDOFF_FOLLOW_SECONDS
             return (

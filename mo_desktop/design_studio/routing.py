@@ -197,8 +197,11 @@ def launch_prompt_terminal(
     config: dict[str, Any] | None = None,
     project_root: str = "",
     fallback_workspace: str = "",
+    as_goal: bool = True,
 ) -> dict[str, str]:
-    """Open one interactive MO terminal and start the handoff as a visible goal."""
+    """Open one interactive MO terminal and start the handoff: as a visible goal (MO Design's
+    Build), or with ``as_goal=False`` as one normal first turn (Desktop's handoff, the same as a
+    live Terminal gets)."""
     text = str(prompt or "").strip()
     if not text or len(text) > 120_000:
         raise ValueError("MO terminal handoff prompt is empty or too large")
@@ -206,7 +209,7 @@ def launch_prompt_terminal(
     directory.mkdir(parents=True, exist_ok=True)
     _prune_prompt_files(directory)
     prompt_id = secrets.token_hex(12)
-    prompt_path = directory / f"{prompt_id}.goal.txt"
+    prompt_path = directory / f"{prompt_id}.{'goal' if as_goal else 'turn'}.txt"
     atomic_write_text(prompt_path, text + "\n", encoding="utf-8")
     entrypoint = Path(__file__).resolve().parents[2] / "mo.py"
     if not entrypoint.is_file():
@@ -219,7 +222,8 @@ def launch_prompt_terminal(
     environment["MO_PROJECT_CWD"] = str(workspace)
     environment.pop("MO_DESIGN_COMPLETION_ID", None)
     environment.pop("MO_DESIGN_COMPLETION_DIR", None)
-    host = _open_mo_terminal(("--startup-goal-file", str(prompt_path)), config=config,
+    flag = "--startup-goal-file" if as_goal else "--startup-turn-file"
+    host = _open_mo_terminal((flag, str(prompt_path)), config=config,
                              workspace=workspace, environment=environment)
     return {"route": "terminal", "prompt_id": prompt_id, "host": host}
 

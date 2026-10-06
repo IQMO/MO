@@ -212,6 +212,31 @@ def _startup_goal_file_arg(args: list[str]) -> str | None:
     return None
 
 
+def _startup_turn_file_arg(args: list[str]) -> str | None:
+    """Return the trusted visible-terminal first-turn file (a normal turn, not a goal), or None."""
+    flag = "--startup-turn-file"
+    if flag in args:
+        idx = args.index(flag)
+        return args[idx + 1] if idx + 1 < len(args) else ""
+    return None
+
+
+def _read_startup_file(path: str, what: str) -> str:
+    """The text of a trusted startup file; exits with a startup error when missing or empty."""
+    if not path.strip():
+        print(f"MO startup error: startup {what} file is missing", file=sys.stderr)
+        sys.exit(2)
+    try:
+        text = _read_prompt_file(path).strip()
+    except OSError as exc:
+        print(f"Could not read startup {what} file: {type(exc).__name__}", file=sys.stderr)
+        sys.exit(2)
+    if not text:
+        print(f"MO startup error: startup {what} is empty", file=sys.stderr)
+        sys.exit(2)
+    return text
+
+
 def _startup_panes_input(args: list[str]) -> str:
     """``--startup-panes N[:local|host]`` from a trusted launcher (MO Desktop) becomes the
     Terminal's first command, ``/workspace open N local|host``; "" when absent."""
@@ -536,8 +561,10 @@ def main(argv: list[str] | None = None):
     prompt = _prompt_arg(args)
     prompt_file = _prompt_file_arg(args)
     startup_goal_file = _startup_goal_file_arg(args)
+    startup_turn_file = _startup_turn_file_arg(args)
     goal_prompt_file = _goal_prompt_file_arg(args)
-    selected_inputs = sum(value is not None for value in (prompt, prompt_file, startup_goal_file, goal_prompt_file))
+    selected_inputs = sum(value is not None for value in (prompt, prompt_file, startup_goal_file, startup_turn_file,
+                                                          goal_prompt_file))
     if selected_inputs > 1:
         print("Usage: choose one prompt or goal input mode", file=sys.stderr)
         sys.exit(2)
@@ -550,19 +577,8 @@ def main(argv: list[str] | None = None):
         except OSError as exc:
             print(f"Could not read prompt file: {type(exc).__name__}", file=sys.stderr)
             sys.exit(2)
-    startup_goal = ""
-    if startup_goal_file is not None:
-        if not startup_goal_file.strip():
-            print("MO startup error: startup goal file is missing", file=sys.stderr)
-            sys.exit(2)
-        try:
-            startup_goal = _read_prompt_file(startup_goal_file).strip()
-        except OSError as exc:
-            print(f"Could not read startup goal file: {type(exc).__name__}", file=sys.stderr)
-            sys.exit(2)
-        if not startup_goal:
-            print("MO startup error: startup goal is empty", file=sys.stderr)
-            sys.exit(2)
+    startup_goal = _read_startup_file(startup_goal_file, "goal") if startup_goal_file is not None else ""
+    startup_turn = _read_startup_file(startup_turn_file, "turn") if startup_turn_file is not None else ""
     if goal_prompt_file is not None:
         if not goal_prompt_file.strip():
             print("MO startup error: background goal file is missing", file=sys.stderr)
@@ -668,7 +684,7 @@ def main(argv: list[str] | None = None):
             agent,
             gateway,
             startup_notice="",
-            startup_input=(("/goal " + startup_goal) if startup_goal else startup_panes
+            startup_input=(("/goal " + startup_goal) if startup_goal else startup_turn or startup_panes
                            or ("/dashboard show" if "--dashboard" in args else "")),
         )
     finally:

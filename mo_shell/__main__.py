@@ -24,7 +24,7 @@ def native_executable() -> Path | None:
 
 
 SHELL_STARTUP_ENV = "MO_SHELL_STARTUP_FILE"
-SHELL_STARTUP_FLAGS = frozenset({"--startup-goal-file", "--startup-panes"})
+SHELL_STARTUP_FLAGS = frozenset({"--startup-goal-file", "--startup-turn-file", "--startup-panes"})
 
 
 def write_shell_startup(args: tuple[str, ...]) -> Path:
