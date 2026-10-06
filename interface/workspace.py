@@ -985,6 +985,25 @@ class WorkspaceController:
         self.invalidate()
         return "New terminal: choose This machine or MO host."
 
+    def _project_for_destination_locked(self, destination: PaneDestination) -> WorkspaceProject | None:
+        """The project a new terminal at ``destination`` opens in: the same-named project there,
+        else (on this machine) the folder MO started in, else the first one listed."""
+        candidates = [project for project in self._projects.values()
+                      if project.destination is destination and project.path]
+        if not candidates:
+            return None
+        selected = self._projects[self._state.selected_project].name.casefold()
+        same = next((project for project in candidates if project.name.casefold() == selected), None)
+        if same is not None:
+            return same
+        if destination is PaneDestination.THIS_MACHINE:
+            started = str(Path(getattr(getattr(self.tui, "agent", None), "project_cwd", "") or os.getcwd()).resolve())
+            home = next((project for project in candidates
+                         if os.path.normcase(project.path) == os.path.normcase(started)), None)
+            if home is not None:
+                return home
+        return candidates[0]
+
     def launcher_move(self, delta: int) -> None:
         self.rail_move(delta)
 
@@ -998,12 +1017,14 @@ class WorkspaceController:
             destination = NEW_TERMINAL_DESTINATIONS[self._launcher_index]
             self._launcher_open = False
             if destination is not self.selected_project.destination:
-                project = next((project for project in self._projects.values()
-                                if project.destination is destination), None)
-                if project is not None:
-                    self._set_rail_selection_locked("project", project.key)
-                self.invalidate()
-                return f"Select a {destination.label} project in the rail, then choose New terminal."
+                # Choosing where is enough: open there in the matching project, never a detour.
+                project = self._project_for_destination_locked(destination)
+                if project is None:
+                    self.invalidate()
+                    return ("MO host has no project yet; it appears once the host connects."
+                            if destination is PaneDestination.MO_HOST
+                            else "No project on this machine has a recorded folder yet.")
+                self.select_project(project.key)
             self._rail_open = False
         result = self.new_terminal(destination)
         self._flush_scrollback_if_inactive()

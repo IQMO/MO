@@ -571,16 +571,17 @@ cannot redirect the terminal to another profile. These are non-secret routing
 paths; the workstation controller credential authorizes start and live control
 through the existing exact scopes, and no provider credential crosses that boundary.
 
-The same authenticated terminal endpoint advertises the serving host's current
-and curated profile project directories through `Profile.project_locations()`.
+The same authenticated terminal endpoint advertises the serving host's start
+folder and curated profile project directories through `Profile.project_locations()`.
+A hub service runs inside MO's own checkout; that runtime is never offered as a
+project, so its start folder is then the host user's home, listed as **Home**.
 Named projects without a local folder remain visible in the local rail but are
 excluded from this host launch catalog; recent launch history is not ownership. An optional `project_path` on terminal
 start must exactly match that host navigation; client-local paths and matching
 names do not establish authority. The supervisor sets both the tmux working
 directory and MO project routing to the selected directory and returns it with
 the terminal identity. Reusing an existing terminal ID with another project is
-rejected. Older callers may omit the selection and retain the serving process's
-project. The Ctrl+B rail keeps local and host project entries distinct; its host
+rejected. Older callers may omit the selection and get that start folder. The Ctrl+B rail keeps local and host project entries distinct; its host
 launch verifies the returned project before leasing the terminal. Existing
 terminal instances join their project only when the same host catalog supplies
 that association. Attaching a terminal with unknown project evidence uses a separate attached

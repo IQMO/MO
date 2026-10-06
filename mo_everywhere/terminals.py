@@ -93,6 +93,16 @@ def _entrypoint() -> Path:
     return entry
 
 
+def _default_directory() -> Path:
+    """Where a hub terminal starts with no project chosen: the service's working directory,
+    unless that is MO's own checkout - the runtime, not one of the operator's projects - and
+    then the host user's home."""
+    current = project_cwd().resolve()
+    if current == Path(__file__).resolve().parents[1]:
+        return Path.home().resolve()
+    return current
+
+
 def _session_name(terminal_id: str) -> str:
     return f"{SESSION_PREFIX}{terminal_id}"
 
@@ -166,8 +176,9 @@ class HubTerminalSupervisor:
 
         profile_path = self.config.get("paths", {}).get("memory_file", PROFILE_DB_PATH)
         profile = Profile.load(resolve_state_path(profile_path, self.config))
-        current = project_cwd().resolve()
-        projects = {str(current): {"path": str(current), "name": current.name or str(current)}}
+        current = _default_directory()
+        name = "Home" if current == Path.home().resolve() else (current.name or str(current))
+        projects = {str(current): {"path": str(current), "name": name}}
         for entry in profile.project_locations():
             if entry.path:
                 projects[entry.path] = {"path": entry.path, "name": entry.name}
@@ -175,7 +186,7 @@ class HubTerminalSupervisor:
 
     def _project_directory(self, requested: str) -> Path:
         if not requested:
-            return project_cwd().resolve()
+            return _default_directory()
         if not isinstance(requested, str) or len(requested) > 1024 or any(ord(char) < 32 for char in requested):
             raise TerminalError("terminal project is invalid")
         # The selected value must be advertised by this host. A local drive
