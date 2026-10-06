@@ -1276,7 +1276,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             img_x = round(source_x+(img_x-source_x)*progress)
             img_y = round(source_y+(img_y-source_y)*progress)
             W, H = size
-        if composer:
+        if composer or dashboard_face:   # the source pixels its cubes are launched from
             self._cube_published = (img, img_x, img_y)
         # Paint at the correct position WHILE still hidden, THEN show. Deiconifying first
         # flashed the window at its previous (stale) geometry for a frame before blit
@@ -2251,6 +2251,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         cb(text)
 
     def _on_wheel(self, event: Any) -> str:
+        if getattr(self, "_face", "panel") == "dashboard" and getattr(self, "_dashboard_max_scroll", 0):
+            # The docked Dashboard fitted to a shorter column scrolls its content in place.
+            notch = -40 if int(getattr(event, "delta", 0) or 0) > 0 else 40
+            current = int(getattr(self, "_dashboard_scroll", 0) or 0)
+            self._dashboard_scroll = max(0, min(int(self._dashboard_max_scroll), current + notch))
+            if self._dashboard_scroll != current:
+                self._repaint()
+            return "break"
         if getattr(self, "_role_menu_open", False):
             direction = -1 if getattr(event, "delta", 0) > 0 else 1
             self._role_scroll = max(0, min(len(self._role_choices)-getattr(self, "_role_capacity", 3), self._role_scroll+direction))

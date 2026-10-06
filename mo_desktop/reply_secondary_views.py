@@ -12,6 +12,16 @@ from mo_desktop.design import (
 _SS = card.SS
 
 
+
+def _plain_card_row(img: Any, below: int, pad: int) -> Any:
+    """A one-pixel row of the card with nothing drawn inside its borders, at or above ``below``
+    (a glyph's descender must not be repeated down the grown card)."""
+    inner = (pad + 3, img.width - pad - 3)
+    for y in range(below, max(pad, below - 40), -1):
+        row = img.crop((inner[0], y, inner[1], y + 1))
+        if len(set(row.getdata())) == 1:
+            return img.crop((0, y, img.width, y + 1))
+    return img.crop((0, below, img.width, below + 1))
 class ReplySecondaryViewsMixin:
     """Verbatim extraction from reply_bubble.py; state and composition stay
     with the host class."""
@@ -265,8 +275,74 @@ class ReplySecondaryViewsMixin:
             fonts=(self._font, self._bfont, self._sfont, self._ifont), ss=ss,
             visuals=self._visuals, shadow_pad=int(design.shadow_pad),
             shadow_alpha=int(design.shadow_alpha), shadow_blur=int(design.shadow_blur))
+        img, hits = self._fit_dashboard_face(img, hits, int(design.shadow_pad))
         self._hit = hits
         return self._draw_keyboard_focus(img, hits)
+
+    def _dashboard_column_height(self) -> int:
+        """The right column a docked Dashboard spans with Focus open: from its own top (the
+        composer's, else the upper-right cube's) to Focus's bottom; 0 when it keeps its height."""
+        if getattr(self, "_face", "panel") != "dashboard":
+            return 0
+        focus = getattr(self._cube, "_focus_controller", None)
+        if focus is None or getattr(focus, "_collapsed", False):
+            return 0
+        top = self.cube_extent()[1]
+        bottom = focus._face_offset[1] + focus._target_size[1]
+        return max(0, int(round(bottom - top)))
+
+    def _fit_dashboard_face(self, img: Any, hits: dict, pad: int) -> tuple[Any, dict]:
+        """Fit the docked Dashboard to the column beside it: keep the card's own rounded top
+        and bottom, show the scrolled middle, fade the cut, and drop controls scrolled away."""
+        target = self._dashboard_column_height()
+        card_h = img.height - 2 * pad
+        if not target or card_h == target or target < 140:
+            self._dashboard_scroll = self._dashboard_max_scroll = 0
+            return img, hits
+        from PIL import Image
+
+        cap = int(self._visuals.metrics.panel_corner_radius) + 2
+        if card_h < target:
+            # Shorter card: grow it to the column with its own plain bottom row, so the
+            # composer, Focus and Dashboard end on one line.
+            self._dashboard_scroll = self._dashboard_max_scroll = 0
+            width = img.width
+            out = Image.new("RGBA", (width, target + 2 * pad), (0, 0, 0, 0))
+            split = pad + card_h - cap
+            out.paste(img.crop((0, 0, width, split)), (0, 0))
+            plain = _plain_card_row(img, split - 1, pad)
+            for y in range(split, pad + target - cap):
+                out.paste(plain, (0, y))
+            out.paste(img.crop((0, split, width, img.height)), (0, pad + target - cap))
+            return out, hits
+        middle = target - 2 * cap
+        maximum = card_h - target
+        scroll = max(0, min(maximum, int(getattr(self, "_dashboard_scroll", 0) or 0)))
+        self._dashboard_scroll, self._dashboard_max_scroll = scroll, maximum
+        width = img.width
+        out = Image.new("RGBA", (width, target + 2 * pad), (0, 0, 0, 0))
+        out.paste(img.crop((0, 0, width, pad + cap)), (0, 0))
+        out.paste(img.crop((0, pad + cap + scroll, width, pad + cap + scroll + middle)), (0, pad + cap))
+        out.paste(img.crop((0, img.height - pad - cap, width, img.height)), (0, pad + target - cap))
+        fade = Image.new("RGBA", out.size, (0, 0, 0, 0))
+        steps = 18
+        inner = (pad + 2, width - pad - 2)
+        for row in range(steps):
+            alpha = int(235 * (steps - row) / steps)
+            if scroll > 0:      # more above: soften the top seam
+                fade.paste((*self._card, alpha), (inner[0], pad + cap + row, inner[1], pad + cap + row + 1))
+            if scroll < maximum:  # more below: soften the bottom seam
+                y = pad + target - cap - 1 - row
+                fade.paste((*self._card, alpha), (inner[0], y, inner[1], y + 1))
+        out.alpha_composite(fade)
+        low, high = pad + cap + scroll, pad + cap + scroll + middle
+        kept = {}
+        for key, (x0, y0, x1, y1) in hits.items():
+            if y0 >= low and y1 <= high:
+                kept[key] = (x0, y0 - scroll, x1, y1 - scroll)
+            elif y1 <= pad + cap:
+                kept[key] = (x0, y0, x1, y1)
+        return out, kept
 
     def _accessible_hit_label(self, key: str) -> str:
         if key.startswith("role:"):
