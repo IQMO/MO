@@ -728,7 +728,9 @@ after it, a question about that work without naming the Terminal ("is mo stuck
 with that goal?", "is it done?") gets the same native status. Asked to "open
 one terminal with 4 panes" (or "run mo in 4 splits", "... on the server"),
 Desktop opens MO Terminal the same way, already split with
-`/workspace open N local|host`.
+`/workspace open N local|host`. A message that only asks to open MO ("run mo
+for me", "open a new MO Terminal", "... on the server") opens one MO Terminal
+the same way (on the server, with one MO host pane) instead of a status answer.
 
 Everywhere lifecycle updates reuse the glance label. Active remote work stays
 quiet; completed, paused, cancelled, or failed work may produce one bounded

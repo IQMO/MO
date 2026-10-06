@@ -273,11 +273,23 @@ _PANES_RE = re.compile(r"\b([1-6]|one|two|three|four|five|six)\s*(?:panes?|split
 _TERMINAL_WORD_RE = re.compile(r"\b(?:mo|terminal|temrinal|termianl|terminl|shell)\b", re.I)
 _OPEN_WORD_RE = re.compile(r"\b(?:open|run|start|launch|give\s+me|split)\b", re.I)
 _HOST_WORD_RE = re.compile(r"\b(?:server|host|vps|remote)\b", re.I)
+# "run mo for me please", "open a new MO Terminal on the server": the whole message asks only to
+# open MO, nothing else (anything more - "run mo tests", "open mo design" - stays with the model).
+_PLAIN_TERMINAL_RE = re.compile(
+    r"^(?:(?:can|could|would)\s+you\s+|please\s+)?(?:open|run|start|launch)\s+(?:up\s+)?(?:a\s+|the\s+)?(?:new\s+)?"
+    r"(?:mo(?:\s+(?:terminal|shell|agent))?|terminal)"
+    r"(?:\s+(?:on|in)\s+(?:the\s+)?(?:server|host|vps|mo\s+host|this\s+(?:pc|machine)|here))?"
+    r"(?:\s+(?:for\s+me|please|now|again))*\s*[.!?]*$",
+    re.I,
+)
 
 
 def terminal_workspace_request(text: str) -> tuple[int, str] | None:
-    """(panes, "local"|"host") for "open one terminal with 4 panes" style requests, else None."""
+    """(panes, "local"|"host") for "open one terminal with 4 panes" style requests, and for a
+    plain "run mo" (one MO Terminal; on the MO host, one host pane beside the main one)."""
     value = " ".join(str(text or "").split())
+    if _PLAIN_TERMINAL_RE.match(value):
+        return (2, "host") if _HOST_WORD_RE.search(value) else (1, "local")
     match = _PANES_RE.search(value)
     if not match or not _TERMINAL_WORD_RE.search(value) or not _OPEN_WORD_RE.search(value):
         return None
@@ -3377,7 +3389,11 @@ class CompanionSurface(
                                       fallback_workspace=project)
         except Exception as exc:
             detail = redact_sensitive_text(str(exc) or type(exc).__name__)
-            return f"I couldn't open MO Terminal with {panes} panes: {detail}."
+            return f"I couldn't open MO Terminal: {detail}."
+        if panes == 1:
+            return "Opening MO Terminal on this PC."
+        if where == "host" and panes == 2:
+            return "Opening MO Terminal with a pane on the MO host."
         side = "on the MO host" if where == "host" else "on this PC"
         return f"Opening MO Terminal with {panes} panes {side}."
 
