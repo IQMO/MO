@@ -115,7 +115,7 @@ Your own Hub, the Android app, remote terminals, Live Control, files and transfe
 - **Share a phone folder** *(closed test)* — *Pick a folder.* Let your other MO devices read one folder you choose.
 - **This-phone chat** *(closed test)* — *Chat → This phone.* Direct chat with your own provider key when no Hub is around.
 - **Phone voice and charging cue** *(closed test)* — *Mic button; plug in.* Dictation into the draft; the cube plays its charging emote.
-- **Phone trackpad and pen** *(closed test)* — *Launcher → Trackpad.* Your phone becomes the PC's mouse and keyboard; Board mode draws as a real Windows pen.
+- **Phone trackpad and pen** *(closed test)* — *Launcher → hover MO Phone → Trackpad.* Your phone becomes the PC's mouse and keyboard; Board mode draws as a real Windows pen.
 - **Telegram remote** *(setup)* — *Pair your Telegram.* Talk to MO from Telegram; approve actions; /status /stop /continue /cancel.
 - **Headless and Docker** — *mo_service.py / compose.* Run MO as a service on a server.
 

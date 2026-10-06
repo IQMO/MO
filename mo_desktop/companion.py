@@ -1577,15 +1577,19 @@ class CompanionSurface(
 
     def open_phone_trackpad(self) -> None:
         """Open the phone trackpad in one step, choosing the ready device."""
-        self._post_gui_call(self._display_phone_trackpad)
+        self._post_gui_call(lambda: self._display_phone_action("trackpad"))
 
-    def _display_phone_trackpad(self) -> None:
+    def open_phone_mirror(self) -> None:
+        """Mirror the ready phone in one step (the launcher's MO Phone quick action)."""
+        self._post_gui_call(lambda: self._display_phone_action("mirror"))
+
+    def _display_phone_action(self, action: str) -> None:
         self._display_phone_panel()
         window = getattr(self, "_phone_window", None)
         if window is not None:
-            window.open_trackpad()
-            if window.trackpad_running:
-                self._pulse_desktop_app("trackpad")
+            window.open_action(action)
+            if self._cube is not None:
+                self._cube.show_bubble(f"{action.title()}: starting on your phone", seconds=1.6)
 
     def _display_phone_panel(self) -> None:
         if self._gui is None:

@@ -107,8 +107,8 @@ def run(config: dict[str, Any] | None = None, *, host_status: str = "",
                         status({"kind": "visible", "visible": True})
                     elif action == "host_status":
                         bridge._host_update(command.get("host_status", ""))
-                    elif action == "trackpad":
-                        bridge._open_trackpad()
+                    elif action in {"trackpad", "mirror"}:
+                        bridge._open_auto(action)
                     elif action == "files_result":
                         bridge._files_result(command.get("ok") is True)
                     elif action == "hide":

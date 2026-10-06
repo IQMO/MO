@@ -69,7 +69,10 @@ the launcher shrinks those cubes back to their live cluster. Their color and
 corner shape follow the live cube settings. The launcher projects app actions
 from Desktop's declarative catalog, with profile-owned apps under Your apps. The
 optional tray popup is a compact control projection rather than a second app
-launcher. Edit gently animates the app rows and lets
+launcher. Hovering an app shows at most three quick actions under its row; MO
+Phone's are Trackpad and Mirror, each started on the ready phone in one step
+and answered by the cubes' label (Trackpad has no separate launcher entry). Edit
+gently animates the app rows and lets
 them move between cubes. Outside Edit, hold a group heading to see its movable
 state and available landing slots, then drag to swap whole cubes.
 Hold an app to reveal its Remove button; removal affects the launcher entry,

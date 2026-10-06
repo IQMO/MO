@@ -51,7 +51,7 @@ class PhoneBridge:
         self._closing = False
         self._exit_when_idle = False
         self._refresh_pending = False
-        self._auto_trackpad = False
+        self._auto_action = ""      # "trackpad" or "mirror": start it on the ready phone after refresh
         self._pairing_image: Path | None = None
         self._devices: list[PhoneDevice] = []
         self._state: dict[str, Any] = {
@@ -256,12 +256,16 @@ class PhoneBridge:
             return {"accepted": self._submit(action, serial=device.serial if device else "",
                                               label=device.label if device else "", fullscreen=self._state["fullscreen"], stopping=stopping)}
 
-    def _open_trackpad(self) -> None:
+    def _open_auto(self, action: str) -> None:
+        """One step from outside the window (the launcher's quick actions): start Trackpad or
+        Mirror on the ready phone."""
+        if action not in {"trackpad", "mirror"}:
+            return
         with self._lock:
-            if self._closed or self._closing or self._state["trackpad"]:
+            if self._closed or self._closing or self._state[action]:
                 return
             self._exit_when_idle = False
-            self._auto_trackpad = True
+            self._auto_action = action
         self.refresh()
 
     def open_files(self) -> dict[str, bool]:
@@ -293,7 +297,8 @@ class PhoneBridge:
             self._clear_pairing()
             self._closing = True
             self._exit_when_idle = True
-            self._auto_trackpad = self._refresh_pending = False
+            self._auto_action = ""
+            self._refresh_pending = False
         try:
             if self._window is not None:
                 self._window.hide()
@@ -340,7 +345,8 @@ class PhoneBridge:
             if not self._closed:
                 self._closed = True
                 self._clear_pairing()
-                self._auto_trackpad = self._refresh_pending = False
+                self._auto_action = ""
+                self._refresh_pending = False
                 self._queue.put(("shutdown", {}))
         if self._thread is not threading.current_thread():
             self._thread.join()
@@ -446,15 +452,18 @@ class PhoneBridge:
                     self._publish(busy="")
                     with self._lock:
                         again, self._refresh_pending = self._refresh_pending, False
-                        auto, self._auto_trackpad = self._auto_trackpad, False
+                        auto, self._auto_action = self._auto_action, ""
                     if not self._closed and not self._closing:
                         if auto:
                             ready = next((d for d in self._devices if d.serial == self._state["serial"] and d.ready), None)
                             ready = ready or next((d for d in self._devices if d.ready), None)
                             if ready:
                                 self._select(ready)
-                                self.perform("trackpad")
+                                self.perform(auto)
                             else:
-                                self._publish(error="No phone is ready for Trackpad.", message="No phone is ready for Trackpad.")
+                                text = f"No phone is ready for {auto.title()}."
+                                self._publish(error=text, message=text)
+                                if self._on_status:
+                                    self._on_status({"kind": "notice", "title": "MO Phone", "detail": text})
                         if again:
                             self.refresh()

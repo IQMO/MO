@@ -40,9 +40,13 @@ class MoPhoneWindow(NativeAppWindow):
             self._send({"cmd": "host_status", "host_status": self._host_status()})
 
     def open_trackpad(self) -> None:
+        self.open_action("trackpad")
+
+    def open_action(self, action: str) -> None:
+        """Start Trackpad or Mirror on the ready phone, opening the window first if needed."""
         if not self.is_running():
             self.show()
-        self._send({"cmd": "trackpad"})
+        self._send({"cmd": action})
 
     def _handle_status(self, status: dict[str, Any]) -> None:
         kind = status.get("kind")

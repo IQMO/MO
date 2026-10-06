@@ -28,16 +28,24 @@ TRAY_TOOLTIP = "MO Desktop"
 
 APP_GROUPS = (
     ("Work", ("dashboard", "shell", "files", "clipboard", "design", "mologrthim")),
-    ("Devices", ("phone", "trackpad")),
+    ("Devices", ("phone",)),
     ("Care", ("systemcare",)),
     ("Your apps", ("settings",)),
 )
 APP_COLOR_ROLES = {"dashboard": "accent", "shell": "accent", "files": "ok", "clipboard": "accent",
-                   "design": "warn", "phone": "accent", "trackpad": "action",
+                   "design": "warn", "phone": "accent",
                    "systemcare": "ok", "settings": "muted", "mologrthim": "accent"}
 APP_GLYPHS = {"dashboard": "split", "shell": "open", "files": "folder", "clipboard": "copy", "design": "file",
-              "phone": "phone", "trackpad": "move", "systemcare": "refresh",
+              "phone": "phone", "systemcare": "refresh",
               "settings": "more", "mologrthim": "split"}
+
+# Hovering a launcher app shows at most three of these quick actions under its row:
+# (action id, label, glyph, CompanionTray handler). Trackpad lives here, not as its own app.
+QUICK_ACTIONS: "dict[str, tuple[tuple[str, str, str, str], ...]]" = {
+    "phone": (("trackpad", "Trackpad", "move", "_on_phone_trackpad"),
+              ("mirror", "Mirror", "open", "_on_phone_mirror")),
+}
+_QUICK_ACTION_LIMIT = 3
 
 # The one app and tray item table. Add a new entry here; the cube launcher
 # consumes its app actions and the optional tray retains controls and settings.
@@ -54,7 +62,6 @@ TRAY_ITEMS: "tuple[dict[str, Any], ...]" = (
     {"id": "mologrthim", "kind": "action", "label": "Mologrthim", "handler": "_on_mologrthim"},
     {"id": "phone", "kind": "action", "label": "MO Phone", "handler": "_on_phone"},
     {"id": "systemcare", "kind": "action", "label": "MO SystemCare", "handler": "_on_systemcare"},
-    {"id": "trackpad", "kind": "action", "label": "Phone Trackpad", "handler": "_on_phone_trackpad"},
     {"id": "settings", "kind": "action", "label": "Settings", "handler": "_on_open_settings"},
     {"id": "focus_mode", "kind": "toggle", "label": "Focus mode", "handler": "_on_toggle_focus", "checked": "_focus_enabled"},
     {"id": "voice_chat", "kind": "toggle", "label": "Continuous Voice Chat", "handler": "_on_toggle_voice_chat", "checked": "_voice_chat_enabled"},
@@ -215,10 +222,10 @@ class CompanionTray:
         rows: list[dict[str, Any]] = []
         inserted = False
         for spec in TRAY_ITEMS:
-            if not inserted and spec["id"] == "trackpad":
+            rows.append(spec)
+            if not inserted and spec["id"] == "phone":
                 rows.extend(private_rows)
                 inserted = True
-            rows.append(spec)
         if not inserted:
             rows.extend(private_rows)
         return tuple(rows)
@@ -435,6 +442,11 @@ class CompanionTray:
 
     def _on_phone_trackpad(self, _icon: Any, _item: Any) -> None:
         opener = getattr(self._companion, "open_phone_trackpad", None)
+        if callable(opener):
+            opener()
+
+    def _on_phone_mirror(self, _icon: Any, _item: Any) -> None:
+        opener = getattr(self._companion, "open_phone_mirror", None)
         if callable(opener):
             opener()
 
@@ -832,9 +844,9 @@ class CubeLauncher:
         icon = path_icon(str(spec["path"])) if spec.get("path") else None
         icon = icon or make_glyph_icon(APP_GLYPHS.get(app_id, "open"), 15, color=ink)
         image.alpha_composite(icon.resize((30, 30)), ((x0 + 3) * 2, (y0 + 5) * 2))
-        font = self._font(24)
+        font = self._font(30)
         label = self._fit_label(draw, str(spec["label"]), font, (x1 - x0 - 29) * 2)
-        draw.text(((x0 + 25) * 2, (y0 + 4) * 2), label, font=font, fill=ink)
+        draw.text(((x0 + 25) * 2, (y0 + 3) * 2), label, font=font, fill=ink)
 
     def _entries(self) -> list[list[dict[str, Any]]]:
         specs = {spec["id"]: spec for spec in self.owner.item_specs() if spec["id"] not in self._hidden_ids}
@@ -877,7 +889,7 @@ class CubeLauncher:
             x, y = self._TILE_POSITIONS[index]
             tile = cube_face.copy()
             draw = ImageDraw.Draw(tile)
-            heading_font = self._font(27, bold=True)
+            heading_font = self._font(30, bold=True)
             heading_x = round((self._TILE_WIDTH * 2 - draw.textlength(title, font=heading_font)) / 2)
             draw.text((heading_x, 27), title, font=heading_font, fill=ink)
             if group_id == 0:
@@ -1103,6 +1115,27 @@ class CubeLauncher:
             controls.alpha_composite(glyph, (box[0] + 5, box[1] + 5))
             if quick_amount >= .16:
                 self._menu_hits.append((box, {"id": "__game_mode", "label": "Game Session"}))
+        for app_id, actions in QUICK_ACTIONS.items():
+            row = next((box for box, spec in self._hitboxes if str(spec["id"]) == app_id), None)
+            amount = float(self._row_amounts.get(app_id, 0.0) or 0.0)
+            if not row or amount <= .02 or self._editing or self._remove_app or self._menu is not None:
+                continue
+            chip_font = self._font(12, bold=True)
+            cx, cy = row[0] + 4, row[3] + 3
+            for action, label, glyph, handler in actions[:_QUICK_ACTION_LIMIT]:
+                key = f"__quick:{app_id}:{action}"
+                hovered = self._hovered_control[0] == key
+                width = 24 + round(draw.textlength(label, font=chip_font)) + 10
+                chip = (cx, cy, cx + width, cy + 22)
+                draw.rounded_rectangle(chip, radius=11, fill=(*ImageColor.getrgb(p.card), round((255 if hovered else 230) * amount)),
+                                       outline=(*ImageColor.getrgb(p.accent), round((255 if hovered else 0) * amount)))
+                mark = make_glyph_icon(glyph, 12, color=p.accent)
+                mark.putalpha(mark.getchannel("A").point(lambda value: round(value * amount)))
+                controls.alpha_composite(mark, (cx + 7, cy + 5))
+                draw.text((cx + 23, cy + 3), label, font=chip_font, fill=(*ImageColor.getrgb(p.accent), round(255 * amount)))
+                if amount >= .16:
+                    self._menu_hits.append((chip, {"id": key, "app": app_id, "label": label, "handler": handler}))
+                cx += width + 6
         if self._remove_app:
             row = next((box for box, spec in self._hitboxes if str(spec["id"]) == self._remove_app), None)
             if row:
@@ -1403,6 +1436,11 @@ class CubeLauncher:
             if callable(opener):
                 self.hide(on_complete=opener)
             return
+        if app_id.startswith("__quick:"):
+            handler = getattr(self.owner, str(spec.get("handler") or ""), None)
+            if callable(handler):
+                self.hide(on_complete=lambda: handler(None, None))
+            return
         if app_id == "__edit":
             self._editing = not self._editing
             self._menu = None
@@ -1578,6 +1616,7 @@ class CubeLauncher:
         spec = self._hit(x, y)
         self._hovered_app = (
             "systemcare" if control and str(control.get("id") or "") == "__game_mode"
+            else str(control["app"]) if control and str(control.get("id") or "").startswith("__quick:")
             else "control:" + "".join(self._hovered_control) if control
             else str(spec["id"]) if spec is not None else ""
         )
