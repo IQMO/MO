@@ -236,6 +236,26 @@ def _desktop_frame_plan(surface: Any, now: float | None = None, *, render_ms: fl
     return max(1, round(interval - render_ms)), False
 
 
+
+_PANE_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+_PANES_RE = re.compile(r"\b([1-6]|one|two|three|four|five|six)\s*(?:panes?|splits?|split\s+panes?)\b", re.I)
+_TERMINAL_WORD_RE = re.compile(r"\b(?:mo|terminal|temrinal|termianl|terminl|shell)\b", re.I)
+_OPEN_WORD_RE = re.compile(r"\b(?:open|run|start|launch|give\s+me|split)\b", re.I)
+_HOST_WORD_RE = re.compile(r"\b(?:server|host|vps|remote)\b", re.I)
+
+
+def terminal_workspace_request(text: str) -> tuple[int, str] | None:
+    """(panes, "local"|"host") for "open one terminal with 4 panes" style requests, else None."""
+    value = " ".join(str(text or "").split())
+    match = _PANES_RE.search(value)
+    if not match or not _TERMINAL_WORD_RE.search(value) or not _OPEN_WORD_RE.search(value):
+        return None
+    word = match.group(1).lower()
+    panes = int(word) if word.isdigit() else _PANE_WORDS[word]
+    if panes < 2:
+        return None
+    return panes, "host" if _HOST_WORD_RE.search(value) else "local"
+
 class CompanionSurface(
     CompanionDashboardMixin, CompanionSessionMixin, CompanionVoiceMixin
 ):
@@ -3163,6 +3183,28 @@ class CompanionSurface(
             "it never overrides safety, evidence, tool, or privacy boundaries.]\n\n"
         )
 
+    def _terminal_workspace_handoff(self, user_input: str) -> str | None:
+        """"Open MO Terminal with 4 panes" / "run mo in 4 splits": open it here and now in MO
+        Shell (same MO Terminal), already split, local or on the MO host when asked."""
+        request = terminal_workspace_request(user_input)
+        if request is None:
+            return None
+        panes, where = request
+        agent = self._agent
+        config = getattr(agent, "config", {}) or {}
+        project_reader = getattr(agent, "_effective_project_cwd", None)
+        project = str(project_reader() if callable(project_reader) else getattr(agent, "project_cwd", "") or "")
+        try:
+            from mo_desktop.design_studio.routing import launch_terminal_workspace
+
+            launch_terminal_workspace(panes, where=where, config=config, project_root=project,
+                                      fallback_workspace=project)
+        except Exception as exc:
+            detail = redact_sensitive_text(str(exc) or type(exc).__name__)
+            return f"I couldn't open MO Terminal with {panes} panes: {detail}."
+        side = "on the MO host" if where == "host" else "on this PC"
+        return f"Opening MO Terminal with {panes} panes {side}."
+
     def _project_implementation_handoff(self, user_input: str) -> str | None:
         """Keep project implementation out of the resident companion turn.
 
@@ -3689,7 +3731,8 @@ class CompanionSurface(
                 self._set_active_skill_role(requested_role, reveal=True)
                 if role_started:
                     self._present_activity(f"{requested_role.name} active…")
-            implementation_reply = self._project_implementation_handoff(user_input)
+            implementation_reply = (self._terminal_workspace_handoff(user_input)
+                                    or self._project_implementation_handoff(user_input))
             if implementation_reply is not None:
                 self._record_direct_desktop_exchange(
                     desktop_session,

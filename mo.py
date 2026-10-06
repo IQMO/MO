@@ -212,6 +212,22 @@ def _startup_goal_file_arg(args: list[str]) -> str | None:
     return None
 
 
+def _startup_panes_input(args: list[str]) -> str:
+    """``--startup-panes N[:local|host]`` from a trusted launcher (MO Desktop) becomes the
+    Terminal's first command, ``/workspace open N local|host``; "" when absent."""
+    import re
+
+    flag = "--startup-panes"
+    if flag not in args:
+        return ""
+    index = args.index(flag)
+    value = args[index + 1].strip().lower() if index + 1 < len(args) else ""
+    match = re.fullmatch(r"([1-6])(?::(local|host))?", value)
+    if not match:
+        raise ValueError("startup panes must be 1-6, optionally :local or :host")
+    return f"/workspace open {match.group(1)} {match.group(2) or 'local'}"
+
+
 def _goal_prompt_file_arg(args: list[str]) -> str | None:
     """Return the trusted headless GoalRunner prompt file, or None when absent."""
     flag = "--goal-prompt-file"
@@ -507,6 +523,7 @@ def main(argv: list[str] | None = None):
         handoff_ready_id = _handoff_ready_id(args, portable_startup)
         runtime_lane = _runtime_lane_arg(args)
         explicit_config_path = _config_arg(args)
+        startup_panes = _startup_panes_input(args)
     except ValueError as exc:
         print(f"MO startup error: {exc}", file=sys.stderr)
         sys.exit(2)
@@ -651,7 +668,8 @@ def main(argv: list[str] | None = None):
             agent,
             gateway,
             startup_notice="",
-            startup_input=("/goal " + startup_goal) if startup_goal else "/dashboard show" if "--dashboard" in args else "",
+            startup_input=(("/goal " + startup_goal) if startup_goal else startup_panes
+                           or ("/dashboard show" if "--dashboard" in args else "")),
         )
     finally:
         _stop_mo_desktop_hotkey_launcher(mo_desktop_hotkey)

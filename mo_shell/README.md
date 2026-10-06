@@ -73,6 +73,11 @@ There is no filled container, extra cube, or expanding scene. The footprint and
 Desktop's skin-defined cube size stay fixed. Touch or terminal work cancels the
 charge through the existing surface clock; it runs once per idle period.
 
+A launcher may hand the next Shell's first terminal its start: MO Desktop writes a one-shot
+file of allowlisted `mo.py` flags (`--startup-goal-file`, `--startup-panes`) and names it in
+`MO_SHELL_STARTUP_FILE`; the first bridge renames it before reading, so one terminal gets
+it and every later Shell opens normally.
+
 ## Window modes
 
 - **Managed** is the default. The selected top-level window keeps its native

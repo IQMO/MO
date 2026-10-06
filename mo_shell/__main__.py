@@ -23,6 +23,27 @@ def native_executable() -> Path | None:
     return None
 
 
+SHELL_STARTUP_ENV = "MO_SHELL_STARTUP_FILE"
+SHELL_STARTUP_FLAGS = frozenset({"--startup-goal-file", "--startup-panes"})
+
+
+def write_shell_startup(args: tuple[str, ...]) -> Path:
+    """One private, one-shot file of flag/value pairs for the next Shell's first terminal."""
+    import secrets
+
+    from core.state.paths import MO_DESIGN_HANDOFF_DIR, resolve_state_path
+    from core.utils.atomic_write import atomic_write_text
+
+    pairs = list(args)
+    if len(pairs) % 2 or any(flag not in SHELL_STARTUP_FLAGS for flag in pairs[::2]):
+        raise ValueError("MO Shell startup accepts only known flag/value pairs")
+    directory = Path(resolve_state_path(MO_DESIGN_HANDOFF_DIR))
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"shell-startup-{secrets.token_hex(8)}.json"
+    atomic_write_text(path, json.dumps(pairs), encoding="utf-8")
+    return path
+
+
 def launch_native(
     *,
     config_path: str = "",
@@ -30,8 +51,12 @@ def launch_native(
     on_source: Any = None,
     on_started: Any = None,
     on_ready: Any = None,
+    startup_args: tuple[str, ...] = (),
 ) -> subprocess.Popen[Any]:
-    """Launch one native Shell instance with the canonical Python/project context."""
+    """Launch one native Shell instance with the canonical Python/project context.
+
+    ``startup_args`` (from ``SHELL_STARTUP_FLAGS`` only) start this Shell's first terminal,
+    e.g. with a handed-over goal or a pane count; later Shells open normally."""
     executable = native_executable()
     if executable is None:
         raise FileNotFoundError(
@@ -56,6 +81,9 @@ def launch_native(
     environment["MO_PYTHON"] = console_python_executable()
     environment["MO_PROJECT_CWD"] = str(project)
     environment.pop("MO_SHELL_LAUNCH_ORIGIN", None)
+    environment.pop(SHELL_STARTUP_ENV, None)
+    if startup_args:
+        environment[SHELL_STARTUP_ENV] = str(write_shell_startup(startup_args))
     if on_source:
         environment["MO_SHELL_LAUNCH_ORIGIN"] = json.dumps({"deferred": True})
     if config_path:

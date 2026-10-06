@@ -33,6 +33,35 @@ from prompt_toolkit.utils import get_cwidth
 _WINDOW_VISUAL_ERROR = "canonical shell window effect failed"
 
 
+
+def claim_shell_startup() -> list[str]:
+    """The flag/value pairs MO Desktop handed this Shell's first terminal, claimed once: the
+    file is renamed before it is read, so of several bridges starting together only one gets
+    it, and every later terminal opens normally."""
+    raw = str(os.environ.get("MO_SHELL_STARTUP_FILE", "") or "").strip()
+    if not raw:
+        return []
+    from mo_shell.__main__ import SHELL_STARTUP_FLAGS
+
+    source = Path(raw)
+    claimed = source.with_name(source.name + f".claimed-{os.getpid()}")
+    try:
+        os.replace(source, claimed)
+    except OSError:
+        return []   # another terminal took it, or it is gone
+    try:
+        values = json.loads(claimed.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        values = []
+    finally:
+        claimed.unlink(missing_ok=True)
+    pairs = values if isinstance(values, list) else []
+    out: list[str] = []
+    for flag, value in zip(pairs[::2], pairs[1::2]):
+        if flag in SHELL_STARTUP_FLAGS and isinstance(value, str) and value.strip():
+            out.extend([flag, value])
+    return out
+
 class MoShellTerminal:
     """Run the canonical MO entry point inside a Windows pseudoconsole."""
 
@@ -73,6 +102,7 @@ class MoShellTerminal:
         command = [sys.executable, str(entrypoint)]
         if self.config_path:
             command.extend(["--config", self.config_path])
+        command.extend(claim_shell_startup())
         environment = workspace_terminal_environment()
         environment["MO_INSTANCE_ID"] = self.instance_id
         environment["MO_SHELL_TERMINAL"] = "1"

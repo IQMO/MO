@@ -679,8 +679,12 @@ synthetic user message inside a tool chain.
 Project implementation handoff is separate from sync. Desktop queues the exact
 request as one normal turn to a heartbeat-proven Terminal in the same project.
 If no such Terminal is live, Desktop opens one visible Terminal with that
-request. The handoff does not make Desktop a taskboard worker and does not copy
-Terminal progress back into the companion conversation.
+request, in MO Shell (MO's own window for the same Terminal) when it is built,
+else in a console. The handoff does not make Desktop a taskboard worker and does
+not copy Terminal progress back into the companion conversation. Asked to "open
+one terminal with 4 panes" (or "run mo in 4 splits", "... on the server"),
+Desktop opens MO Terminal the same way, already split with
+`/workspace open N local|host`.
 
 Everywhere lifecycle updates reuse the glance label. Active remote work stays
 quiet; completed, paused, cancelled, or failed work may produce one bounded

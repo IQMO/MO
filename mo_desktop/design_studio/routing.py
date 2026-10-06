@@ -219,17 +219,47 @@ def launch_prompt_terminal(
     environment["MO_PROJECT_CWD"] = str(workspace)
     environment.pop("MO_DESIGN_COMPLETION_ID", None)
     environment.pop("MO_DESIGN_COMPLETION_DIR", None)
-    mo_command = [console_python_executable(), str(entrypoint), "--startup-goal-file", str(prompt_path)]
+    host = _open_mo_terminal(("--startup-goal-file", str(prompt_path)), config=config,
+                             workspace=workspace, environment=environment)
+    return {"route": "terminal", "prompt_id": prompt_id, "host": host}
+
+
+def launch_terminal_workspace(
+    panes: int,
+    *,
+    where: str = "local",
+    config: dict[str, Any] | None = None,
+    project_root: str = "",
+    fallback_workspace: str = "",
+) -> dict[str, str]:
+    """Open one MO Terminal already split into ``panes`` panes (local or MO host)."""
+    count = max(1, min(6, int(panes)))
+    side = "host" if str(where).lower() in {"host", "server"} else "local"
+    workspace = _handoff_workspace(project_root, fallback_workspace=fallback_workspace)
+    environment = dict(os.environ)
+    environment["MO_PROJECT_CWD"] = str(workspace)
+    host = _open_mo_terminal(("--startup-panes", f"{count}:{side}"), config=config,
+                             workspace=workspace, environment=environment)
+    return {"route": "terminal", "panes": str(count), "where": side, "host": host}
+
+
+def _open_mo_terminal(startup: tuple[str, ...], *, config: dict[str, Any] | None,
+                      workspace: Path, environment: dict[str, str]) -> str:
+    """Open MO Terminal in MO Shell, MO's own window for it, when built; else in a console."""
     config_path = runtime_config_path(config)
+    try:
+        from mo_shell.__main__ import launch_native
+
+        launch_native(config_path=config_path or "", project_cwd=str(workspace), startup_args=tuple(startup))
+        return "mo_shell"
+    except (FileNotFoundError, OSError):
+        pass   # MO Shell is not built here: the console terminal is the same MO Terminal
+    entrypoint = Path(__file__).resolve().parents[2] / "mo.py"
+    mo_command = [console_python_executable(), str(entrypoint), *startup]
     if config_path:
         mo_command.extend(["--config", config_path])
-    _open_visible_terminal(
-        mo_command,
-        cwd=workspace,
-        environment=environment,
-        close_on_exit=False,
-    )
-    return {"route": "terminal", "prompt_id": prompt_id}
+    _open_visible_terminal(mo_command, cwd=workspace, environment=environment, close_on_exit=False)
+    return "console"
 
 
 def launch_background_goal(
