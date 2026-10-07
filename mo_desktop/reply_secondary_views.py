@@ -21,8 +21,9 @@ class ReplySecondaryViewsMixin:
         return fit_text(draw, text, width, font)
 
     def _render_status(self) -> Any:
-        """MO's four-cube mark and its current step on the first line of the reply card: the
-        same size the reply then fills, so the panel never changes size within a turn."""
+        """MO's four-cube mark and its current step centred in the reply card, this turn's earlier
+        steps dim under it: the same size the reply then fills, so the panel never changes size
+        within a turn and is never an empty card with one line in a corner."""
         from PIL import ImageDraw
 
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
@@ -31,13 +32,15 @@ class ReplySecondaryViewsMixin:
         visuals = self._visuals
         pad_x = int(visuals.metrics.panel_padding)
         shadow_pad = int(design.shadow_pad)
-        mark_w, gap, line_box = 12, 10, 44
+        mark_size = 60
         card_h = int(design.reply_card_height)
         content_w = max(int(design.content_width), int(getattr(design, "reply_content_width", 0) or 0))
         card_w = content_w + 2 * pad_x
         probe = ImageDraw.Draw(card.new_canvas(10, 10))
-        text_room = max(24, card_w - 2 * pad_x - mark_w - gap)
+        text_room = max(24, card_w - 2 * pad_x)
         shown = card.fit_text(probe, str(getattr(self, "_status_text", "") or ""), text_room * ss, self._font)
+        trail = " · ".join(str(step) for step in (getattr(self, "_status_trail", None) or []))
+        trail_shown = card.fit_text(probe, trail, text_room * ss, self._sfont) if trail else ""
         width = (card_w + 2 * shadow_pad) * ss
         height = (card_h + 2 * shadow_pad) * ss
         pad = shadow_pad * ss
@@ -57,13 +60,21 @@ class ReplySecondaryViewsMixin:
         from interface.desktop_brand import make_four_cube_icon
 
         draw = ImageDraw.Draw(image)
-        mark_x = box[0] + pad_x * ss
-        # MO's canonical four-cube mark, in the live skin, never a hand-drawn copy.
-        mark = make_four_cube_icon(16 * ss, palette=visuals.palette)
-        image.alpha_composite(mark, (int(mark_x - 2 * ss), int(box[1] + (line_box // 2 - 8) * ss)))
+        centre_x = (box[0] + box[2]) // 2
         ascent, descent = self._font.getmetrics()
-        text_y = box[1] + (line_box * ss - (ascent + descent)) // 2
-        draw.text((mark_x + (mark_w + gap) * ss, text_y), shown, font=self._font, fill=(*self._text, 255))
+        line_h = ascent + descent
+        small_h = sum(self._sfont.getmetrics()) if trail_shown else 0
+        block_h = mark_size * ss + 14 * ss + line_h + (8 * ss + small_h if trail_shown else 0)
+        top = (box[1] + box[3] - block_h) // 2
+        # MO's canonical four-cube mark, in the live skin, never a hand-drawn copy.
+        mark = make_four_cube_icon(mark_size * ss, palette=visuals.palette)
+        image.alpha_composite(mark, (int(centre_x - mark.width // 2), int(top)))
+        text_y = top + mark_size * ss + 14 * ss
+        draw.text((centre_x - draw.textlength(shown, font=self._font) / 2, text_y), shown,
+                  font=self._font, fill=(*self._text, 255))
+        if trail_shown:
+            draw.text((centre_x - draw.textlength(trail_shown, font=self._sfont) / 2, text_y + line_h + 8 * ss),
+                      trail_shown, font=self._sfont, fill=(*self._muted, 255))
         self._hit = {}
         return card.finish(image, ss)
 
