@@ -1,78 +1,144 @@
 """Presentation-only Generate controls for the existing composer.
 
-The core catalog validates provider behavior. This module owns short labels and
-request-local choices, never generation, credentials or persistence.
+The core catalog validates provider behavior. This module owns the pills the composer draws
+(two fixed rows: kind first, then only that kind's choices, in order), the drop-down choices
+behind each pill and how a pick changes the request-local selection. Never generation,
+credentials or persistence.
 """
 from __future__ import annotations
 
 from core.media.catalog import OPERATIONS, default_model, settings
 
+KINDS = (("", "Auto"), ("song", "Song"), ("image", "Image"), ("video", "Video"))
+TYPES = {"song": ("music", "cover", "extend_music"), "image": ("image", "edit_image"),
+         "video": ("video", "extend_video")}
+# Each kind's options, in the order its pills appear.
+OPTION_ORDER = {"song": ("instrumental",), "image": ("quality", "aspect_ratio"),
+                "video": ("duration", "resolution", "aspect_ratio")}
+DEFAULTS = {"song": {"instrumental": False}, "image": {"quality": "basic", "aspect_ratio": "1:1"},
+            "video": {"duration": 5, "resolution": "720p", "aspect_ratio": "16:9"}}
+MORE = (("credits", ""), ("setup", "Kie setup"), ("privacy", "Privacy"), ("jobs", "Saved results"))
+
+
+def kind_of(operation: str | None) -> str:
+    return next((kind for kind, ops in TYPES.items() if operation in ops), "")
+
 
 def initial_selection(config: dict) -> dict:
-    # Invalid saved defaults stay visible and are rejected by the core; they
-    # must not prevent opening the ordinary composer or Settings to fix them.
-    model = str(settings(config).get("music_model") or OPERATIONS["music"][1][0])
-    return {"operation": "music", "model": model, "options": {}}
+    """Auto until a kind is picked: MO chooses the operation from the request's words."""
+    return {"operation": None, "model": None, "options": {}}
+
+
+def _model_for(operation: str, config: dict) -> str:
+    # Invalid saved defaults stay visible and are rejected by the core; they must not prevent
+    # opening the ordinary composer or Settings to fix them.
+    try:
+        return default_model(operation, config)
+    except ValueError:
+        key = "video_model" if "video" in operation else "music_model"
+        return str(settings(config).get(key) or "Unavailable")
 
 
 def request_selection(selection: dict) -> dict:
-    """Snapshot every displayed choice, including defaults, at Submit."""
+    """Snapshot every displayed choice, including defaults, at Submit. Auto sends no
+    operation or model, so the request's words decide them."""
+    operation = selection.get("operation")
+    if not operation:
+        return {"options": {}}
     value = {**selection, "options": dict(selection.get("options", {}))}
-    op = value["operation"]
-    defaults = ({"duration": 5, "resolution": "720p", "aspect_ratio": "16:9"} if "video" in op else
-                {"quality": "basic", "aspect_ratio": "1:1"} if "image" in op else {"instrumental": False})
-    value["options"] = {**defaults, **value["options"]}
+    value["options"] = {**DEFAULTS[kind_of(operation)], **value["options"]}
     return value
 
 
-def control_rows(selection: dict, credit: str = "Credits · refresh") -> list[list[tuple[str, str]]]:
-    op = selection["operation"]
-    model = selection["model"]
-    opts = selection.get("options", {})
-    short_model = model.replace("bytedance/", "").replace("seedream/", "")
-    rows = [[("operation", OPERATIONS[op][0]), ("model", short_model)]]
-    if op in {"video", "extend_video"}:
-        duration = opts.get("duration", 5)
-        rows.append([("duration", "Auto" if duration == -1 else f"{duration}s"), ("resolution", opts.get("resolution", "720p")),
-                     ("aspect_ratio", opts.get("aspect_ratio", "16:9"))])
-    elif op in {"image", "edit_image"}:
-        rows.append([("quality", opts.get("quality", "basic")), ("aspect_ratio", opts.get("aspect_ratio", "1:1"))])
-    else:
-        rows.append([("instrumental", "Instrumental" if opts.get("instrumental") else "Vocals")])
-    rows.append([("credits", credit), ("setup", "Kie · setup"), ("privacy", "Privacy")])
-    rows.append([("jobs", "Jobs · saved results · continue")])
-    return rows
+def _short_model(model: str) -> str:
+    return str(model or "").replace("bytedance/", "").replace("seedream/", "").replace("seedance-", "Seedance ")
 
 
-def cycle(selection: dict, key: str, config: dict) -> dict:
-    value = {**selection, "options": dict(selection.get("options", {}))}
-    op = value["operation"]
-    if key == "operation":
-        order = tuple(OPERATIONS)
-        value["operation"] = order[(order.index(op) + 1) % len(order)]
-        try:
-            value["model"] = default_model(value["operation"], config)
-        except ValueError:
-            key = "video_model" if "video" in value["operation"] else "music_model"
-            value["model"] = str(settings(config).get(key) or "Unavailable")
-        value["options"] = {}
-        value.pop("parent_id", None)
-        value.pop("output_index", None)
-        return value
-    if key == "model":
-        models = OPERATIONS[op][1]
-        value["model"] = models[(models.index(value["model"]) + 1) % len(models)] if value["model"] in models else models[0]
-        # Leave an incompatible choice visible as a validation issue; never
-        # silently lower 4K or shorten a requested 30-second video.
-        return value
-    choices = {
-        "duration": (5, 10, 15, 30, -1, 4) if value["model"].endswith("2-5") else (5, 10, 15, -1, 4),
-        "resolution": ("720p", "1080p", "480p") + (() if value["model"].endswith("2-5") else ("4k",)),
+def _option_label(key: str, value) -> str:
+    if key == "duration":
+        return "Auto length" if value == -1 else f"{value}s"
+    if key == "instrumental":
+        return "Instrumental" if value else "Vocals"
+    if key == "quality":
+        return str(value).capitalize()
+    return str(value)
+
+
+def _option_values(key: str, model: str) -> tuple:
+    two_five = str(model).endswith("2-5")
+    return {
+        "duration": (4, 5, 10, 15) + ((30,) if two_five else ()) + (-1,),
+        "resolution": ("480p", "720p", "1080p") + (() if two_five else ("4k",)),
         "aspect_ratio": ("1:1", "16:9", "9:16", "4:3", "3:4", "21:9"),
-        "quality": ("basic", "high"), "instrumental": (False, True),
-    }
-    order = choices[key]
-    default = "16:9" if key == "aspect_ratio" and "video" in op else order[0]
-    current = value["options"].get(key, default)
-    value["options"][key] = order[(order.index(current) + 1) % len(order)] if current in order else order[0]
-    return value
+        "quality": ("basic", "high"),
+        "instrumental": (False, True),
+    }[key]
+
+
+def pill_rows(selection: dict, reference_count: int = 0) -> list[list[tuple[str, str]]]:
+    """Two rows, always: [kind, model?, references?, more] and the picked kind's type and
+    options in order (empty under Auto, where the composer shows a one-line hint)."""
+    operation = selection.get("operation")
+    kind = kind_of(operation)
+    first = [("kind", dict(KINDS)[kind])]
+    if kind and len(OPERATIONS[operation][1]) > 1:
+        first.append(("model", _short_model(selection.get("model") or "")))
+    if reference_count:
+        first.append(("refs", f"{reference_count} reference{'s' if reference_count != 1 else ''}"))
+    first.append(("more", "More"))
+    second: list[tuple[str, str]] = []
+    if kind:
+        second.append(("type", OPERATIONS[operation][0]))
+        options = {**DEFAULTS[kind], **dict(selection.get("options", {}))}
+        second.extend((key, _option_label(key, options[key])) for key in OPTION_ORDER[kind])
+    return [first, second]
+
+
+def menu(selection: dict, key: str, *, references: list[tuple[str, str]] = (),
+         credit: str = "Credits · refresh") -> tuple[list[tuple[str, str]], str]:
+    """The drop-down behind one pill: ``(choices as (value, label), selected value)``."""
+    operation = selection.get("operation")
+    kind = kind_of(operation)
+    if key == "kind":
+        return list(KINDS), kind
+    if key == "type":
+        return [(op, OPERATIONS[op][0]) for op in TYPES[kind]], str(operation)
+    if key == "model":
+        return [(m, _short_model(m)) for m in OPERATIONS[operation][1]], str(selection.get("model") or "")
+    if key == "more":
+        return [(value, credit if value == "credits" else label) for value, label in MORE], ""
+    if key == "refs":
+        return [(f"reference:{index}", f"{role} · {name}") for index, (role, name) in enumerate(references)], ""
+    current = {**DEFAULTS[kind], **dict(selection.get("options", {}))}.get(key)
+    values = _option_values(key, str(selection.get("model") or ""))
+    return [(str(value), _option_label(key, value)) for value in values], str(current)
+
+
+def choose(selection: dict, key: str, value: str, config: dict) -> dict:
+    """Apply one drop-down pick. A new kind starts at its first type with its defaults; a type
+    in the same kind keeps the options; an incompatible choice stays visible for the core's
+    validator (never silently lowering 4K or shortening a requested 30-second video)."""
+    current = {**selection, "options": dict(selection.get("options", {}))}
+    if key == "kind":
+        if not value:
+            return {"operation": None, "model": None, "options": {}}
+        operation = TYPES[value][0]
+        return {"operation": operation, "model": _model_for(operation, config), "options": {}}
+    if key == "type":
+        if kind_of(value) != kind_of(current.get("operation")):
+            return choose(current, "kind", kind_of(value), config) | {"operation": value}
+        current["operation"] = value
+        if current.get("model") not in OPERATIONS[value][1]:
+            current["model"] = _model_for(value, config)
+        current.pop("parent_id", None)
+        current.pop("output_index", None)
+        return current
+    if key == "model":
+        current["model"] = value
+        return current
+    kind = kind_of(current.get("operation"))
+    if key not in OPTION_ORDER.get(kind, ()):
+        return current
+    current["options"][key] = (int(value) if key == "duration" else value == "True" if key == "instrumental"
+                               else value)
+    return current

@@ -2977,10 +2977,14 @@ class CompanionSurface(
             self._post_gui_call(present)
         threading.Thread(target=refresh, name="mo-media-credits", daemon=True).start()
 
-    def _generate_action(self, action: str) -> None:
+    def _generate_action(self, action: str, value: str = "") -> None:
+        """One pick from a Generate drop-down. More and References carry their own action
+        (credits, setup, privacy, jobs; reference:<i>); every other pill sets its choice."""
         bubble = getattr(self, "_bubble", None)
         if not bubble:
             return
+        if action in {"more", "refs"}:
+            action, value = value, ""
         if action == "setup":
             self.open_settings_panel()
             return
@@ -3015,8 +3019,8 @@ class CompanionSurface(
                 roles[path] = next_role
             bubble._generate_reference_roles = roles
         else:
-            from mo_desktop.generate_controls import cycle
-            bubble._generate_selection = cycle(bubble._generate_selection, action, self._config())
+            from mo_desktop.generate_controls import choose
+            bubble._generate_selection = choose(bubble._generate_selection, action, value, self._config())
         bubble._repaint()
 
     def _show_attachment_panel(

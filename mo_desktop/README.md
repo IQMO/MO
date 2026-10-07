@@ -2,9 +2,11 @@
 
 ### Generate: music, images and video
 
-Choose **Generate** through the existing composer role switcher. It provides Kie
-model/operation controls, purpose-labelled references, timestamped credits and
-real stage/elapsed progress. MO prepares, submits, waits and saves results.
+Choose **Generate** through the existing composer role switcher. The composer keeps
+one size: drop-down pills, kind first (Auto, Song, Image, Video), then only that
+kind's choices in order, a References pill for purpose-labelled files, a dot pill
+for credits, setup, privacy and saved results, and real stage/elapsed progress. The
+role selector uses the same composer drop-down. MO prepares, submits, waits and saves results.
 Ready result cards retain image previews or audio/video file cards beside result
 choices. Jobs in that same conversation offers local open/play, save-copy,
 continuation and exact-job cleanup review. Audio/video playback uses the system

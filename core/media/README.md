@@ -15,10 +15,15 @@ backends and local explainer rendering remain independent.
    reference helper and enable sharing. MO verifies the official Cloudflare
    release's published SHA-256 digest. No account, domain, manually run server
    or upload bucket is needed. Installation/enabling starts no tunnel or job.
-3. Choose Generate through the composer role switcher. Choose operation/model,
-   attach or drop selected files, click reference chips to cycle purpose/remove,
-   describe the result and send. Choices are captured at submission, including
-   queued requests, and enforced independently of model prose.
+3. Choose Generate through the composer role switcher. The composer keeps one
+   size: two rows of drop-down pills and a status line. Pick the kind first
+   (Auto, Song, Image or Video; Auto lets the request's words decide); only that
+   kind's choices then appear, in order (type, model when there is a choice,
+   then duration/resolution/aspect, quality/aspect or vocals). Attached files get
+   one References pill whose menu sets each file's purpose or removes it; the dot
+   pill holds credits, Kie setup, privacy and saved results. Describe the result
+   and send. Choices are captured at submission, including queued requests, and
+   enforced independently of model prose.
 4. MO prepares copies, submits once, checks progress and saves results. The ready
    job card keeps image previews or audio/video file cards together with result
    choices. Open Jobs / saved results in Generate to revisit a variation, open/play

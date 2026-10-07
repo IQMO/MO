@@ -10,7 +10,9 @@ when that source tree is present.
 ## Process and lane boundaries
 
 - Generate is a shipped role in the existing composer, not another app. Its
-  presentation-only controls snapshot choices/references into the submitted
+  presentation-only controls (`mo_desktop/generate_controls.py`: kind-first pills
+  in two fixed rows, each a menu in the composer's one drop-down, `_menu`, shared
+  with the role selector) snapshot choices/references into the submitted
   request, including queued requests. `core/media/README.md` owns provider/job
   contracts. Reuse Settings, credentials, attachments, reply/options cards and
   notices; run preparation, polling, credit reads and installation off the GUI

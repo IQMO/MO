@@ -62,6 +62,7 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # The composer's earlier-message browse: room kept for the three dots above Send, the dim behind
 # the composer, and the cross-fade between messages.
 _COMPOSER_DOTS_RESERVE = 16
+_GENERATE_CONTROLS_H = 88     # Generate's two pill rows and status line: one height in every state
 _BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
 BLUR_CARD_ALPHA = 226    # row 32: the card's see-through over Windows' blur (text stays crisp)
 _BROWSE_FADE_SECONDS = 0.15
@@ -164,7 +165,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def _on_native_event(self, kind: str, event: Any) -> None:
         if kind in {"key", "text"}:
-            if event.keysym in {"Up", "Down"} and not getattr(self, "_role_menu_open", False):
+            if event.keysym in {"Up", "Down"} and getattr(self, "_menu", None) is None:
                 self._nav(-1 if event.keysym == "Up" else 1)
             elif kind == "text" or event.keysym != "space":
                 self._on_key(event)
@@ -484,8 +485,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         generate_mode = is_input and str(getattr(self, "_role_label", "")).casefold() == "generate"
         generate_rows = []
         if generate_mode and getattr(self, "_generate_selection", None):
-            from mo_desktop.generate_controls import control_rows
-            generate_rows = control_rows(self._generate_selection, getattr(self, "_generate_credit", "Credits · refresh"))
+            from mo_desktop.generate_controls import pill_rows
+            generate_rows = pill_rows(self._generate_selection, len(getattr(self, "_attachment_preview_paths", [])))
         caret_rect: tuple[int, int, int, int] | None = None
         shown = self._body if (self._body or not is_input) else ""
         # Browsing MO's earlier replies happens IN the composer (Up/Down, the three dots).
@@ -508,8 +509,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         image_inset = max(6, panel_padding//2)
         body_top = image_inset if image_card else int(design.accent_top)+13
         if generate_mode:
-            body_top += 26 * len(generate_rows) + 32
-            body_top += 24 * ((len(getattr(self, "_attachment_preview_paths", [])) + 1) // 2)
+            body_top += _GENERATE_CONTROLS_H     # fixed: two pill rows and the status line
         rich_text = (not is_input) and (not placeholder) and not attachment_caption
         wrap_text = shown if not placeholder else "Type a message…"
         mail_reply = rich_text and shown.startswith(("**Gmail / ", "**Outlook / "))
@@ -612,7 +612,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             body_top + preview_h + actions_h + preview_gap + text_h
             + options_h + (int(design.footer_height) if footer else 0) + 14
         )
-        role_menu = is_input and bool(getattr(self, "_role_menu_open", False))
+        open_menu = getattr(self, "_menu", None) if is_input else None
         W = (card_w + 2 * int(design.shadow_pad)) * ss
         H = (card_h + 2 * int(design.shadow_pad)) * ss
         pad = int(design.shadow_pad) * ss
@@ -688,25 +688,42 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
             if generate_mode:
                 cy = ay + 22 * ss
-                for row in generate_rows:
-                    cell_w = int(content_width * ss / len(row))
+                menu_owner = str((open_menu or {}).get("owner", ""))
+                for row_index, row in enumerate(generate_rows):
+                    if not row:
+                        hint = "Pick Song, Image or Video for its choices, or just describe it"
+                        d.text((ax, cy + 4 * ss), card.fit_text(d, hint, content_width * ss, self._sfont),
+                               font=self._sfont, fill=(*self._muted, 255))
+                    left, gap = ax, 5 * ss
+                    right_edge = ax + content_width * ss
                     for index, (key, text) in enumerate(row):
-                        left, right = ax + index * cell_w, ax + (index + 1) * cell_w - 4 * ss
-                        d.rounded_rectangle((left, cy, right, cy + 22 * ss), radius=button_radius, fill=(*self._entry, 255))
-                        label = card.fit_text(d, str(text), right - left - 10 * ss, self._sfont)
-                        d.text((left + 5 * ss, cy + 3 * ss), label, font=self._sfont, fill=(*self._muted, 255))
-                        _set_hit("generate:" + key, (int(left/ss), int(cy/ss), int(right/ss), int(cy/ss) + 22))
-                    cy += 26 * ss
-                from pathlib import Path
-                for index, path in enumerate(getattr(self, "_attachment_preview_paths", [])):
-                    role = getattr(self, "_generate_reference_roles", {}).get(path, "reference")
-                    left = ax + (index % 2) * int(content_width * ss / 2)
-                    top = cy + (index // 2) * 24 * ss
-                    width = int(content_width * ss / 2) - 4 * ss
-                    label = card.fit_text(d, f"{role}: {Path(path).name}", width - 8 * ss, self._sfont)
-                    d.text((left + 4 * ss, top + 2 * ss), label, font=self._sfont, fill=(*self._cyan, 255))
-                    _set_hit(f"generate:reference:{index}", (int(left/ss), int(top/ss), int((left + width)/ss), int(top/ss) + 22))
-                cy += 24 * ss * ((len(getattr(self, "_attachment_preview_paths", [])) + 1) // 2)
+                        more = key == "more"                       # a compact three-dot pill
+                        natural = 30 * ss if more else d.textlength(str(text), font=self._sfont) + 26 * ss
+                        remaining = len(row) - index - 1
+                        tail = (30 * ss + gap) if row and row[-1][0] == "more" and not more else 0
+                        room = right_edge - left - max(0, remaining - (1 if tail else 0)) * (34 * ss + gap) - tail
+                        right = left + (natural if more else max(34 * ss, min(natural, room)))
+                        hit = "generate:" + key
+                        opened = menu_owner == hit
+                        d.rounded_rectangle((left, cy, right, cy + 22 * ss), radius=button_radius,
+                                            fill=(*self._entry, 255),
+                                            outline=(*(self._cyan if opened else self._edge), 255 if opened else 120),
+                                            width=max(1, ss))
+                        colour = self._cyan if (opened or self._hovering(hit)) else self._text
+                        if more:
+                            mid = (left + right) / 2
+                            for dot in (-5, 0, 5):
+                                d.ellipse((mid + dot * ss - 1.4 * ss, cy + 9.6 * ss, mid + dot * ss + 1.4 * ss, cy + 12.4 * ss),
+                                          fill=(*colour, 255))
+                        else:
+                            label = card.fit_text(d, str(text), right - left - 24 * ss, self._sfont)
+                            d.text((left + 8 * ss, cy + 4 * ss), label, font=self._sfont, fill=(*colour, 255))
+                            cx, cyc = right - 11 * ss, cy + 11 * ss      # the drop-down chevron
+                            d.line([(cx - 3 * ss, cyc - 1.5 * ss), (cx, cyc + 1.5 * ss), (cx + 3 * ss, cyc - 1.5 * ss)],
+                                   fill=(*colour, 255), width=max(1, ss), joint="curve")
+                        _set_hit(hit, (int(left/ss), int(cy/ss), int(right/ss), int(cy/ss) + 22))
+                        left = right + gap
+                    cy += 28 * ss
                 note = getattr(self, "_generate_progress", "References stay local until you send")
                 d.text((ax, cy + 2 * ss), card.fit_text(d, note, content_width * ss, self._sfont), font=self._sfont, fill=(*self._muted, 255))
 
@@ -1047,14 +1064,19 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     _set_hit("down", (int(dot_x / ss) - 10, int(mid_y / ss), int(dot_x / ss) + 8, int((mid_y + 14 * ss) / ss)),
                              min_width=28)
 
-        if role_menu:
-            # An opaque dropdown at the selector; never resize or replace the composer.
-            menu_left, menu_top = ax+21*ss, ay+15*ss
+        if open_menu and open_menu.get("owner") in self._hit:
+            # One opaque drop-down under its control (the role selector or a Generate pill);
+            # it never resizes or replaces the composer and scrolls when it cannot fit.
+            choices = open_menu["choices"]
+            anchor = self._hit[open_menu["owner"]]
+            menu_left, menu_top = anchor[0]*ss, anchor[3]*ss+3*ss
             available = max(1, int((box[3]-7*ss-menu_top)/(20*ss)))
-            self._role_capacity = min(6, available)
-            visible = self._role_choices[self._role_scroll:self._role_scroll+self._role_capacity]
-            label_width = max(d.textlength(role or "Default role", font=self._sfont) for role in self._role_choices)
-            menu_right = min(box[2]-8*ss, menu_left+label_width+24*ss)
+            self._menu_capacity = min(6, available)
+            scroll = int(open_menu.get("scroll", 0))
+            visible = choices[scroll:scroll+self._menu_capacity]
+            label_width = max(d.textlength(label, font=self._sfont) for _value, label in choices)
+            menu_right = min(box[2]-8*ss, max(anchor[2]*ss, menu_left+label_width+24*ss))
+            menu_left = max(box[0]+8*ss, min(menu_left, menu_right-label_width-24*ss))
             menu_bottom = menu_top+(len(visible)*20+6)*ss
             d.rounded_rectangle((menu_left, menu_top, menu_right, menu_bottom), radius=button_radius,
                                  fill=(*self._card, 255), outline=(*self._edge, 255), width=ss)
@@ -1062,20 +1084,20 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._hit = {key: bounds for key, bounds in self._hit.items() if
                          not (bounds[0]*ss < menu_right and bounds[2]*ss > menu_left and
                               bounds[1]*ss < menu_bottom and bounds[3]*ss > menu_top)}
-            for offset, role in enumerate(visible):
-                index = offset+self._role_scroll
-                key = f"role:{index}"
+            for offset, (value, label) in enumerate(visible):
+                key = f"menu:{offset+scroll}"
                 top = menu_top+(3+offset*20)*ss
                 bounds = (menu_left+3*ss, top, menu_right-3*ss, top+20*ss)
-                if self._hovering(key) or role == getattr(self, "_role_label", ""):
+                if self._hovering(key) or value == open_menu.get("selected"):
                     d.rounded_rectangle(bounds, radius=button_radius, fill=(*self._entry, 255))
-                label = card.fit_text(d, role or "Default role", menu_right-menu_left-16*ss, self._sfont)
-                d.text((menu_left+8*ss, top+3*ss), label, font=self._sfont, fill=(*self._text, 255))
-                _set_hit(key, tuple(round(value/ss) for value in bounds))
-            if len(self._role_choices) > self._role_capacity:
+                text = card.fit_text(d, label, menu_right-menu_left-16*ss, self._sfont)
+                d.text((menu_left+8*ss, top+3*ss), text, font=self._sfont,
+                       fill=(*(self._cyan if value == open_menu.get("selected") else self._text), 255))
+                _set_hit(key, tuple(round(v/ss) for v in bounds))
+            if len(choices) > self._menu_capacity:
                 track = max(8*ss, menu_bottom-menu_top-8*ss)
-                thumb = max(8*ss, track*self._role_capacity/len(self._role_choices))
-                ty = menu_top+4*ss+(track-thumb)*self._role_scroll/max(1, len(self._role_choices)-self._role_capacity)
+                thumb = max(8*ss, track*self._menu_capacity/len(choices))
+                ty = menu_top+4*ss+(track-thumb)*scroll/max(1, len(choices)-self._menu_capacity)
                 d.rounded_rectangle((menu_right-3*ss, ty, menu_right-2*ss, ty+thumb), radius=ss, fill=(*self._muted, 180))
             caret_rect = None
         if browse_head:
@@ -1856,7 +1878,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # A repeated summon keeps the live edit. Only reopening a closed composer
         # or returning from another panel consumes its stashed draft.
         if not already_composing:
-            self._role_menu_open = False
+            self._menu = None
             self._body = str(getattr(self, "_input_draft", "") or "")
             self._cursor = len(self._body)
             self._select_all = False
@@ -1930,7 +1952,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def hide(self) -> None:
         self._end_browse(repaint=False)
-        self._role_menu_open = False
+        self._menu = None
         self._cube_closing = False
         self._cancel_panel_transition()
         if getattr(self, "_settle_after", None) is not None:
@@ -1981,14 +2003,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         ks = getattr(event, "keysym", "")
         key = str(ks).lower()
-        if self._mode == "input" and getattr(self, "_role_menu_open", False):
+        if self._mode == "input" and getattr(self, "_menu", None) is not None:
             if ks == "Escape":
-                self._role_menu_open = False
+                self._menu = None
                 self._repaint()
             elif ks in {"Tab", "Down", "Up"}:
                 self._move_keyboard_hit(-1 if ks == "Up" else 1)
             elif ks in {"Return", "KP_Enter", "space"}:
-                self._activate_hit(getattr(self, "_keyboard_hit", "role"))
+                self._activate_hit(getattr(self, "_keyboard_hit", "") or self._menu["owner"])
             return "break"
         if self._mode != "input":
             shift = bool(int(getattr(event, "state", 0) or 0) & 0x1)
@@ -2158,24 +2180,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not key or key not in (getattr(self, "_hit", None) or {}):
             return
         self._keyboard_hit = key
-        if key.startswith("generate:"):
-            callback = getattr(self, "_on_generate_action", None)
-            if callable(callback):
-                callback(key[len("generate:"):])
+        if key.startswith("menu:"):
+            self._pick_menu(int(key.split(":", 1)[1]))
+        elif key.startswith("generate:"):
+            self._toggle_generate_menu(key)
         elif key == "collapse":
             self.collapse_to_cube()
         elif key == "role":
-            self._role_menu_open = not getattr(self, "_role_menu_open", False)
-            if self._role_menu_open:
-                self._role_choices = ("", *self._role_options())
-                self._role_scroll = 0
-            self._repaint()
-        elif key.startswith("role:"):
-            selected = self._role_choices[int(key.split(":", 1)[1])]
-            self._on_role_select(selected)
-            self._role_label = selected
-            self._role_menu_open = False
-            self._repaint()
+            choices = tuple((role, role or "Default role") for role in ("", *self._role_options()))
+            self._toggle_menu("role", choices, getattr(self, "_role_label", ""))
         elif key == "sessions":
             callback = getattr(self, "_on_session_history", None)
             if callable(callback):
@@ -2335,13 +2348,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._repaint()
 
     def _nav(self, step: int) -> None:
-        if self._mode == "input" and getattr(self, "_role_menu_open", False):
+        if self._mode == "input" and getattr(self, "_menu", None) is not None:
+            open_menu = self._menu
             current = str(getattr(self, "_keyboard_hit", ""))
-            index = int(current.split(":", 1)[1]) if current.startswith("role:") else -1
-            index = max(0, min(len(self._role_choices)-1, index+step))
-            capacity = getattr(self, "_role_capacity", 3)
-            self._role_scroll = max(0, min(index, max(self._role_scroll, index-capacity+1)))
-            self._keyboard_hit = f"role:{index}"
+            index = int(current.split(":", 1)[1]) if current.startswith("menu:") else -1
+            index = max(0, min(len(open_menu["choices"])-1, index+step))
+            capacity = getattr(self, "_menu_capacity", 3)
+            open_menu["scroll"] = max(0, min(index, max(int(open_menu.get("scroll", 0)), index-capacity+1)))
+            self._keyboard_hit = f"menu:{index}"
             self._repaint()
         elif self._mode == "reply" and bool(getattr(self, "_controls_enabled", True)):
             self._recall_reply(step)
@@ -2392,10 +2406,47 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._input_draft = ""      # submitted to MO — the draft must not reappear
         self._input_attachments = []
 
+    def _toggle_menu(self, owner: str, choices: tuple, selected: str) -> None:
+        """Open the composer's one drop-down under ``owner``'s control, or close it."""
+        current = getattr(self, "_menu", None)
+        self._menu = None if (current and current.get("owner") == owner) or not choices else {
+            "owner": owner, "choices": tuple(choices), "selected": str(selected), "scroll": 0}
+        self._repaint()
+
+    def _toggle_generate_menu(self, hit: str) -> None:
+        from pathlib import Path
+        from mo_desktop.generate_controls import menu
+
+        roles = getattr(self, "_generate_reference_roles", {}) or {}
+        references = [(roles.get(path, "reference"), Path(path).name)
+                      for path in getattr(self, "_attachment_preview_paths", [])]
+        choices, selected = menu(self._generate_selection, hit[len("generate:"):], references=references,
+                                 credit=getattr(self, "_generate_credit", "Credits · refresh"))
+        self._toggle_menu(hit, tuple(choices), selected)
+
+    def _pick_menu(self, index: int) -> None:
+        """Apply one drop-down pick to the control that opened it, then close the menu."""
+        open_menu = getattr(self, "_menu", None) or {}
+        choices = open_menu.get("choices", ())
+        if not 0 <= index < len(choices):
+            return
+        owner, value = str(open_menu.get("owner")), choices[index][0]
+        self._menu = None
+        if owner == "role":
+            self._on_role_select(value)
+            self._role_label = value
+        elif owner.startswith("generate:"):
+            callback = getattr(self, "_on_generate_action", None)
+            if callable(callback):
+                callback(owner[len("generate:"):], value)
+        self._repaint()
+
     def _on_wheel(self, event: Any) -> str:
-        if getattr(self, "_role_menu_open", False):
+        open_menu = getattr(self, "_menu", None)
+        if open_menu is not None:
             direction = -1 if getattr(event, "delta", 0) > 0 else 1
-            self._role_scroll = max(0, min(len(self._role_choices)-getattr(self, "_role_capacity", 3), self._role_scroll+direction))
+            limit = max(0, len(open_menu["choices"])-getattr(self, "_menu_capacity", 3))
+            open_menu["scroll"] = max(0, min(limit, int(open_menu.get("scroll", 0))+direction))
             self._repaint()
             return "break"
         delta = int(getattr(event, "delta", 0) or 0)

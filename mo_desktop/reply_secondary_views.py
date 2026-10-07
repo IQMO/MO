@@ -297,8 +297,10 @@ class ReplySecondaryViewsMixin:
         return self._draw_keyboard_focus(img, hits)
 
     def _accessible_hit_label(self, key: str) -> str:
-        if key.startswith("role:"):
-            return self._role_choices[int(key.split(":", 1)[1])] or "Default role"
+        if key.startswith("menu:"):
+            choices = (getattr(self, "_menu", None) or {}).get("choices", ())
+            index = int(key.split(":", 1)[1])
+            return choices[index][1] if 0 <= index < len(choices) else ""
         provider_label = self._composer_search_label()
         names = {
             "collapse": "Collapse composer",
