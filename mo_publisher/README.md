@@ -10,9 +10,14 @@ remain a separate future boundary.
 
 - `pages.py`: escaped public copy and configuration validation; CSS consumes
   the canonical default skin contract, with no scripts, cookies or analytics.
-  The customer-facing copy must match the current Google Play feature boundary;
-  distinguish the published closed-test baseline from unreleased corrections.
-  Lead with the mobile companion to MO Agent: host-backed work, projects,
+  The home page introduces MO Agent (an example terminal session where switching
+  the model changes only the route, the map's differentiators and pillars, and
+  install), then carries the Android companion section; its model switch and
+  install tabs are CSS radio inputs, so no script is needed. Support, privacy and
+  deletion stay Android-focused. The customer-facing copy must match the current
+  Google Play feature boundary; distinguish the published closed-test baseline
+  from unreleased corrections.
+  The Android section leads with the mobile companion to MO Agent: host-backed work, projects,
   scheduling, explicit shared conversations and configured tools. Distinguish
   scoped Hub access from full-profile replication, which uses a separate private
   SSH/Git lane between trusted computers. Remote access, configurable providers and selected images are shared source
