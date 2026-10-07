@@ -347,7 +347,7 @@ class LayeredWindow:
         self._dc = self._bmp = self._old = self._ppv = None
         self._w = self._h = 0
 
-    def _update_layered_opacity(self, opacity: int) -> bool:
+    def _update_layered_opacity(self, opacity: int, *, dest: tuple[int, int] | None = None) -> bool:
         if not self._ok or not self._dc or self._w <= 0 or self._h <= 0:
             return self._fail("layered bitmap unavailable")
         try:
@@ -355,12 +355,13 @@ class LayeredWindow:
             ctypes = api.ctypes
             size = api.Size(self._w, self._h)
             source = api.Point(0, 0)
+            target = api.Point(*dest) if dest is not None else None
             alpha = max(0, min(255, int(opacity)))
             blend = api.BlendFunction(0, 0, alpha, 1)
             updated = api.user32.UpdateLayeredWindow(
                 self._hwnd(),
                 None,
-                None,
+                ctypes.byref(target) if target is not None else None,
                 ctypes.byref(size),
                 self._dc,
                 ctypes.byref(source),
@@ -397,7 +398,9 @@ class LayeredWindow:
     ) -> bool:
         """Paint PIL RGBA ``img`` at screen ``(x, y)``; the window resizes to match.
 
-        Positions the HWND before painting the content in place (``pptDst = NULL``).
+        With ``position`` the move, resize and paint are ONE ``UpdateLayeredWindow`` call: a
+        separate ``SetWindowPos`` first showed the old bitmap at the new size for a frame (the
+        launcher's stray top-left cube). Without it the content is painted where the window is.
         ``premultiplied=True`` means the caller already multiplied RGB by alpha (e.g. it
         resized in premultiplied space to avoid edge darkening), so only reorder to BGRA.
         """
@@ -420,11 +423,7 @@ class LayeredWindow:
                 bgra = Image.merge("RGBA", (ImageChops.multiply(b, a), ImageChops.multiply(g_, a),
                                             ImageChops.multiply(r, a), a)).tobytes()
             ctypes.memmove(self._ppv, bgra, min(len(bgra), w * h * 4))
-            if position:
-                if not api.user32.SetWindowPos(self._hwnd(), None, int(x), int(y), w, h, 0x0014):
-                    return self._fail("layered surface could not be positioned")
-
-            return self._update_layered_opacity(opacity)
+            return self._update_layered_opacity(opacity, dest=(int(x), int(y)) if position else None)
         except Exception as exc:
             return self._fail(f"layered blit failed ({type(exc).__name__})", disable=True)
 
@@ -795,24 +794,13 @@ class NativeLayeredWindow(LayeredWindow):
             return False
         api = _winapi()
         width, height = img.size
-        positioned = not position or api.user32.SetWindowPos(
-            self._native_hwnd,
-            None,
-            int(x),
-            int(y),
-            int(width),
-            int(height),
-            self._SWP_NOZORDER | self._SWP_NOACTIVATE,
-        )
-        if not positioned:
-            return self._fail("native layered effect window could not be positioned")
         if not super().blit(
             img,
             x,
             y,
             premultiplied=premultiplied,
             opacity=opacity,
-            position=False,
+            position=position,          # one native update moves, resizes and paints
         ):
             return False
         if not show:

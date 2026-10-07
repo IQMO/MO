@@ -725,8 +725,15 @@ class CubeMotionMixin:
         geo = (left, top, w, w)
         if geo != self._last_geometry:
             self._last_geometry = geo
-            try:
-                self._win.position(*geo)
-            except Exception:
-                pass
+            surface = getattr(self, "_ulw", None)
+            if surface is not None and (getattr(surface, "_w", w), getattr(surface, "_h", w)) != (w, w):
+                # A size change (back from the launcher's rect) goes with the next paint as one
+                # native update; resizing here showed the old frame cropped at the top-left.
+                self._window_move_pending = True
+                self._last_layered_frame_signature = None
+            else:
+                try:
+                    self._win.position(*geo)
+                except Exception:
+                    pass
         self._reposition_label()

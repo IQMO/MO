@@ -796,7 +796,8 @@ class CubeLauncher:
         cube._launcher_rect = (x, y, width, height)
         if getattr(cube, "_label_value", ""):
             cube._reposition_label()                      # a glance moves beside the launcher
-        self.window.position(x, y, width, height)
+        # No separate move/resize: the first frame's blit does both in one native update, so the
+        # cube's old bitmap never shows at the launcher's top-left (his msg 167).
         self._paint_size = (width, height)
         self._animation_started = time.perf_counter()
         self._animation_from = self._progress = 0.0
@@ -1726,9 +1727,7 @@ class CubeLauncher:
         if self.window is None or image is None:
             return
         if image.size != self._paint_size:
-            x, y = self._window_position
-            self.window.position(x, y, image.width, image.height)
-            self._paint_size = image.size
+            self._paint_size = image.size       # the blit below resizes with the paint
         if self._surface is not None and self._surface.available():
             self._surface.blit(image, *self._window_position)
 

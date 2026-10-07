@@ -1443,6 +1443,13 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 cache.pop(next(iter(cache)))
         return shifted
 
+    def _take_window_move(self) -> bool:
+        """True once after the window must change size: that paint moves, resizes and paints in
+        one native update instead of a separate resize showing the old frame."""
+        pending = bool(getattr(self, "_window_move_pending", False))
+        self._window_move_pending = False
+        return pending
+
     def _paint_layered(self, now: float) -> bool:
         """Composite the sprites (glow + cube, NO plate) onto a transparent frame and
         blit it to the shared layered window — the cubes float with smooth edges."""
@@ -1491,7 +1498,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             if passive and content_signature in frame_cache:
                 frame = frame_cache.pop(content_signature)
                 frame_cache[content_signature] = frame
-                published = surface.blit(frame, left, top, premultiplied=True, position=False)
+                published = surface.blit(frame, left, top, premultiplied=True, position=self._take_window_move())
                 if published:
                     self._last_layered_frame_signature = content_signature
                 return published
@@ -1532,7 +1539,7 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
                 frame_cache[content_signature] = frame
                 if len(frame_cache) > _PASSIVE_FRAME_CACHE_LIMIT:
                     frame_cache.pop(next(iter(frame_cache)))
-            published = surface.blit(frame, left, top, premultiplied=True, position=False)
+            published = surface.blit(frame, left, top, premultiplied=True, position=self._take_window_move())
             if published:
                 self._last_layered_frame_signature = content_signature
             return published
