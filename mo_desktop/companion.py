@@ -2999,6 +2999,61 @@ class CompanionSurface(
             self._post_gui_call(present)
         threading.Thread(target=refresh, name="mo-media-credits", daemon=True).start()
 
+    def _refine_generate_prompt(self, bubble: Any) -> None:
+        """Generate's Refine: MO's own prompt enhancer (the Terminal's Ctrl+E) with the Generate
+        skill's refining rules and this request's generator, so the draft keeps its goal and scope
+        and reads the way Suno, Seedream or Seedance follows it. A second press brings his own
+        words back; typing meanwhile keeps his newer text."""
+        from pathlib import Path
+        from mo_desktop.generate_controls import _short_model, refine_guidance
+
+        refined_to = getattr(bubble, "_generate_refined_to", None)
+        if refined_to is not None and bubble._body == refined_to:
+            original = getattr(bubble, "_generate_refined_from", "") or ""
+            bubble._body, bubble._cursor = original, len(original)
+            bubble._generate_refined_from = bubble._generate_refined_to = None
+            bubble._generate_progress = "Your own words are back"
+            bubble._repaint()
+            return
+        draft = str(getattr(bubble, "_body", "") or "")
+        enhance = getattr(self._agent, "enhance_prompt_for_input", None)
+        if not draft.strip() or not callable(enhance) or getattr(bubble, "_generate_refining", False):
+            if not draft.strip():
+                bubble._generate_progress = "Describe what you want, then Refine"
+                bubble._repaint()
+            return
+        roles = getattr(bubble, "_generate_reference_roles", {}) or {}
+        references = [(roles.get(path, "reference"), Path(path).name)
+                      for path in getattr(bubble, "_attachment_preview_paths", []) or []]
+        selection = dict(getattr(bubble, "_generate_selection", None) or {})
+        skill_body = str(getattr(getattr(self, "_active_skill_role", None), "body", "") or "")
+        guidance = refine_guidance(skill_body, selection, references)
+        bubble._generate_refining = True
+        bubble._generate_progress = "Refining the prompt…"
+        bubble._repaint()
+
+        def refine() -> None:
+            try:
+                refined = str(enhance(draft, guidance=guidance, max_chars=2400) or "").strip()
+            except Exception:
+                refined = ""
+
+            def apply() -> None:
+                bubble._generate_refining = False
+                if bubble._body != draft:
+                    bubble._generate_progress = "Kept your newer text · Refine again when ready"
+                elif refined and refined != draft.strip():
+                    bubble._generate_refined_from, bubble._generate_refined_to = draft, refined
+                    bubble._body, bubble._cursor = refined, len(refined)
+                    model = _short_model(selection.get("model") or "")
+                    bubble._generate_progress = (f"Refined for {model}" if model else "Refined") + " · Refine again for your own words"
+                else:
+                    bubble._generate_progress = "Already precise · nothing changed"
+                bubble._repaint()
+            self._post_gui_call(apply)
+
+        threading.Thread(target=refine, name="mo-generate-refine", daemon=True).start()
+
     def _generate_action(self, action: str, value: str = "") -> None:
         """One pick from a Generate drop-down. More and References carry their own action
         (credits, setup, privacy, jobs; reference:<i>); every other pill sets its choice."""
@@ -3007,6 +3062,9 @@ class CompanionSurface(
             return
         if action in {"more", "refs"}:
             action, value = value, ""
+        if action == "enhance":
+            self._refine_generate_prompt(bubble)
+            return
         if action == "setup":
             self.open_settings_panel()
             return

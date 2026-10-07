@@ -4,8 +4,11 @@
 
 Choose **Generate** through the existing composer role switcher. The composer keeps
 one size: drop-down pills, kind first (Auto, Song, Image, Video), then only that
-kind's choices in order, a References pill for purpose-labelled files, a dot pill
-for credits, setup, privacy and saved results, and real stage/elapsed progress. The
+kind's choices in order (each kind shows its model), a References pill for
+purpose-labelled files, a dot pill for credits, setup, privacy and saved results, a
+Refine sparkle by Send that rewrites the draft through MO's prompt enhancer under
+the Generate skill's refining rules (press again to restore it), and real
+stage/elapsed progress. The
 role selector uses the same composer drop-down. MO prepares, submits, waits and saves results.
 Ready result cards retain image previews or audio/video file cards beside result
 choices. Jobs in that same conversation offers local open/play, save-copy,

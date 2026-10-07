@@ -100,6 +100,36 @@ def pill_rows(selection: dict, reference_count: int = 0) -> list[list[tuple[str,
     return [first, second]
 
 
+_REFINE_HEADING = "## Refining a request"
+
+
+def refine_guidance(skill_body: str, selection: dict, references: list[tuple[str, str]] = ()) -> str:
+    """What Refine hands MO's prompt enhancer: the Generate skill's own refining rules and the
+    generator this request is set to, so the draft keeps its goal and reads the way that
+    generator follows it."""
+    body = str(skill_body or "")
+    start = body.find(_REFINE_HEADING)
+    rules = ""
+    if start >= 0:
+        rest = body[start + len(_REFINE_HEADING):]
+        end = rest.find("\n## ")
+        rules = (rest if end < 0 else rest[:end]).strip()
+    if not rules:
+        rules = "Keep the user's goal, subject and scope; make the prompt precise for the chosen generator."
+    operation = selection.get("operation")
+    kind = kind_of(operation)
+    if kind:
+        options = {**DEFAULTS[kind], **dict(selection.get("options", {}))}
+        target = (f"{dict(KINDS)[kind]} with {_short_model(selection.get('model') or '')} "
+                  f"({OPERATIONS[operation][0]}): "
+                  + ", ".join(_option_label(key, options[key]) for key in OPTION_ORDER[kind]))
+    else:
+        target = "Auto, no kind chosen yet: infer it from the draft without changing the draft's goal"
+    if references:
+        target += "; references: " + ", ".join(f"{role} ({name})" for role, name in references)
+    return f"{rules}\n\nThis request: {target}."
+
+
 def menu(selection: dict, key: str, *, references: list[tuple[str, str]] = (),
          credit: str = "Credits · refresh") -> tuple[list[tuple[str, str]], str]:
     """The drop-down behind one pill: ``(choices as (value, label), selected value)``."""

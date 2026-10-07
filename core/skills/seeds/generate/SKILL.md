@@ -74,3 +74,26 @@ honor the operator's chosen method instead of substituting this one.
 Personal singing-voice enrollment is a later phase. Never send MO's local speech
 clone automatically, manufacture a verification recording, or claim that a
 reference song plus the user's cloned voice is already verified working.
+
+## Refining a request
+
+The composer's Refine rewrites the user's draft into one prompt the chosen
+generator follows accurately. It keeps the user's goal; it never changes the scope.
+
+- Keep the subject, every named element, constraint and the language of any
+  lyrics or on-screen text. Add no subject, character, object, story beat or
+  style the user did not ask for or clearly imply, and drop nothing.
+- Make what the draft implies explicit for the chosen kind, only where it serves
+  that goal:
+  - Song (Suno): genre and era, mood, tempo feel, instruments, vocal type and
+    language. The user's lyrics stay word for word; a theme is not lyrics.
+  - Image (Seedream): the subject and its key features, setting, composition and
+    framing, light, colour, medium or style. With a reference image, say what to
+    keep from it and what to change.
+  - Video (Seedance): the subject, then its action and motion in order, camera
+    framing and movement, setting, light and pacing within the chosen length.
+    With references, say which gives the subject and which gives the motion. One
+    continuous shot unless the user asks for cuts.
+- Write a direct description, not instructions to MO: no headings, lists or
+  quality boilerplate such as "8k, masterpiece".
+- A draft that is already precise changes little.

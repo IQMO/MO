@@ -18,8 +18,13 @@ backends and local explainer rendering remain independent.
 3. Choose Generate through the composer role switcher. The composer keeps one
    size: two rows of drop-down pills and a status line. Pick the kind first
    (Auto, Song, Image or Video; Auto lets the request's words decide); only that
-   kind's choices then appear, in order (type, model when there is a choice,
-   then duration/resolution/aspect, quality/aspect or vocals). Attached files get
+   kind's choices then appear, in order (type, its model: Suno, Seedream or
+   Seedance, then duration/resolution/aspect, quality/aspect or vocals). Files
+   dropped on the open composer or picked together with its attach button all
+   join the request. The sparkle beside the attach button refines the draft
+   with MO's own prompt enhancer (the Terminal's Ctrl+E), guided by the Generate
+   skill's "Refining a request" rules: same goal and scope, precise for the
+   chosen generator; press it again for your own words. Attached files get
    one References pill whose menu sets each file's purpose or removes it; the dot
    pill holds credits, Kie setup, privacy and saved results. Describe the result
    and send. Choices are captured at submission, including queued requests, and

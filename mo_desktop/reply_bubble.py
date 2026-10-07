@@ -63,7 +63,7 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # the composer, and the cross-fade between messages.
 _COMPOSER_DOTS_RESERVE = 16
 _GENERATE_CONTROLS_H = 88     # Generate's two pill rows and status line: one height in every state
-_BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
+_BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
 BLUR_CARD_ALPHA = 226    # row 32: the card's see-through over Windows' blur (text stays crisp)
 _BROWSE_FADE_SECONDS = 0.15
 
@@ -702,13 +702,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                font=self._sfont, fill=(*self._muted, 255))
                     left, gap = ax, 5 * ss
                     right_edge = ax + content_width * ss
+                    compact = {"more"}                             # the three-dot pill
                     for index, (key, text) in enumerate(row):
-                        more = key == "more"                       # a compact three-dot pill
-                        natural = 30 * ss if more else d.textlength(str(text), font=self._sfont) + 26 * ss
-                        remaining = len(row) - index - 1
-                        tail = (30 * ss + gap) if row and row[-1][0] == "more" and not more else 0
-                        room = right_edge - left - max(0, remaining - (1 if tail else 0)) * (34 * ss + gap) - tail
-                        right = left + (natural if more else max(34 * ss, min(natural, room)))
+                        icon = key in compact
+                        natural = 30 * ss if icon else d.textlength(str(text), font=self._sfont) + 26 * ss
+                        reserve = sum((30 * ss if later in compact else 34 * ss) + gap for later, _ in row[index + 1:])
+                        room = right_edge - left - reserve
+                        right = left + (natural if icon else max(34 * ss, min(natural, room)))
                         hit = "generate:" + key
                         opened = menu_owner == hit
                         d.rounded_rectangle((left, cy, right, cy + 22 * ss), radius=button_radius,
@@ -716,7 +716,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                             outline=(*(self._cyan if opened else self._edge), 255 if opened else 120),
                                             width=max(1, ss))
                         colour = self._cyan if (opened or self._hovering(hit)) else self._text
-                        if more:
+                        if key == "more":
                             mid = (left + right) / 2
                             for dot in (-5, 0, 5):
                                 d.ellipse((mid + dot * ss - 1.4 * ss, cy + 9.6 * ss, mid + dot * ss + 1.4 * ss, cy + 12.4 * ss),
@@ -1015,6 +1015,18 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                         (int(clip_x), int(cyy - 2 * ss)))
                     _set_hit("attach", (int(clip_x / ss) - 4, int((cyy - 5 * ss) / ss), int(clip_x / ss) + 19,
                                         int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
+                if generate_mode:          # Refine: MO's prompt enhancer for this request (Generate only)
+                    busy = getattr(self, "_generate_refining", False)
+                    color = self._cyan if (busy or self._hovering("generate:enhance")) else self._muted
+                    spark_x = (clip_x if callable(getattr(self, "_on_attach", None)) else rx0) - 8 * ss - 14 * ss
+                    mx, my, outer, inner = spark_x + 7 * ss, cyy + 5.5 * ss, 6 * ss, 1.7 * ss
+                    d.polygon([(mx, my - outer), (mx + inner, my - inner), (mx + outer, my), (mx + inner, my + inner),
+                               (mx, my + outer), (mx - inner, my + inner), (mx - outer, my), (mx - inner, my - inner)],
+                              fill=(*color, 255))
+                    d.ellipse((mx + 5.6 * ss - 1.3 * ss, my - 5.6 * ss - 1.3 * ss, mx + 5.6 * ss + 1.3 * ss, my - 5.6 * ss + 1.3 * ss),
+                              fill=(*color, 255))
+                    _set_hit("generate:enhance", (int(spark_x / ss) - 4, int((cyy - 5 * ss) / ss), int(spark_x / ss) + 18,
+                                                  int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
                 if dots:
                     # Three dots above Send: the bottom one is your draft, the middle one MO's last
                     # reply, the top one anything older. Click above or below the middle to move.
@@ -2188,6 +2200,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._keyboard_hit = key
         if key.startswith("menu:"):
             self._pick_menu(int(key.split(":", 1)[1]))
+        elif key == "generate:enhance":                    # Refine acts at once; no drop-down
+            self._menu = None
+            callback = getattr(self, "_on_generate_action", None)
+            if callable(callback):
+                callback("enhance", "")
         elif key.startswith("generate:"):
             self._toggle_generate_menu(key)
         elif key == "collapse":
