@@ -35,9 +35,10 @@ APP_GROUPS = (
 APP_COLOR_ROLES = {"dashboard": "accent", "shell": "accent", "files": "ok", "clipboard": "accent",
                    "design": "warn", "phone": "accent",
                    "systemcare": "ok", "settings": "muted", "mologrthim": "accent"}
-APP_GLYPHS = {"dashboard": "split", "shell": "open", "files": "folder", "clipboard": "copy", "design": "file",
-              "phone": "phone", "systemcare": "refresh",
-              "settings": "more", "mologrthim": "split"}
+# One distinct glyph per app (row 26, approved 2026-10-07).
+APP_GLYPHS = {"dashboard": "gauge", "shell": "terminal", "files": "folder", "clipboard": "clipboard", "design": "pen",
+              "phone": "phone", "systemcare": "pulse",
+              "settings": "settings", "mologrthim": "team"}
 
 # Hovering a launcher app shows at most three of these quick actions under its row:
 # (action id, label, glyph, CompanionTray handler). Trackpad lives here, not as its own app.

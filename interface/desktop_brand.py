@@ -251,6 +251,29 @@ def make_glyph_icon(
             angle = index*math.pi/4
             draw.line([pt(.5+.27*math.cos(angle), .5+.27*math.sin(angle)),
                        pt(.5+.39*math.cos(angle), .5+.39*math.sin(angle))], fill=color, width=stroke)
+    elif name == "terminal":                     # MO Shell: a window with a prompt
+        draw.rounded_rectangle([pt(.08, .16), pt(.92, .84)], radius=s * .1, outline=color, width=stroke)
+        draw.line([pt(.25, .38), pt(.41, .50), pt(.25, .62)], fill=color, width=stroke, joint="curve")
+        draw.line([pt(.50, .64), pt(.72, .64)], fill=color, width=stroke)
+    elif name == "gauge":                        # Dashboard: a frame of rising bars
+        draw.rounded_rectangle([pt(.1, .14), pt(.9, .86)], radius=s * .1, outline=color, width=stroke)
+        for x, h in ((.30, .26), (.50, .44), (.70, .34)):
+            draw.rounded_rectangle([pt(x - .06, .72 - h), pt(x + .06, .72)], radius=s * .03, fill=color)
+    elif name == "pen":                          # MO Design
+        draw.line([pt(.24, .76), pt(.70, .30)], fill=color, width=round(stroke * 1.6))
+        draw.polygon([pt(.12, .88), pt(.18, .66), pt(.34, .82)], fill=color)
+        draw.line([pt(.62, .20), pt(.80, .38)], fill=color, width=stroke)
+    elif name == "team":                         # Mologrthim: specialists as stacked cubes
+        for x0, y0, x1, y1 in ((.36, .12, .64, .40), (.14, .52, .42, .80), (.58, .52, .86, .80)):
+            draw.rounded_rectangle([pt(x0, y0), pt(x1, y1)], radius=s * .06, outline=color, width=stroke)
+    elif name == "pulse":                        # SystemCare
+        draw.line([pt(.06, .56), pt(.28, .56), pt(.38, .28), pt(.52, .80), pt(.62, .46), pt(.70, .56), pt(.94, .56)],
+                  fill=color, width=stroke, joint="curve")
+    elif name == "clipboard":
+        draw.rounded_rectangle([pt(.18, .18), pt(.82, .90)], radius=s * .08, outline=color, width=stroke)
+        draw.rounded_rectangle([pt(.36, .08), pt(.64, .28)], radius=s * .05, fill=color)
+        draw.line([pt(.32, .52), pt(.68, .52)], fill=color, width=stroke)
+        draw.line([pt(.32, .70), pt(.58, .70)], fill=color, width=stroke)
     elif name == "tray":
         draw.line([pt(.12, .44), pt(.2, .82), pt(.8, .82), pt(.88, .44),
                    pt(.64, .44), pt(.59, .58), pt(.41, .58), pt(.36, .44), pt(.12, .44)],

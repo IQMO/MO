@@ -38,6 +38,12 @@ DESKTOP_STRUCTURAL_RADIUS_WHITELIST = MappingProxyType({
         "open/copy/delete action glyph detail",
     ("interface/desktop_brand.py", "make_glyph_icon", "s * 0.05"):
         "delete action glyph detail",
+    ("interface/desktop_brand.py", "make_glyph_icon", "s * 0.1"):
+        "launcher app glyph frames (terminal, gauge)",
+    ("interface/desktop_brand.py", "make_glyph_icon", "s * 0.08"):
+        "launcher clipboard glyph board",
+    ("interface/desktop_brand.py", "make_glyph_icon", "s * 0.03"):
+        "launcher gauge glyph bars",
     ("mo_desktop/cube_motion.py", "_footstep", "max(0, size * corner) * ss"):
         "shared cube trace follows each actual piece's size and character radius",
     ("mo_desktop/reply_bubble.py", "_draw_search_brand", "round(2.5 * ss)"):
