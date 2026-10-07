@@ -663,7 +663,8 @@ one fixed-size card. **Now**: open tasks, live MO terminals and unread mail as f
 then the terminals running now and what needs you (a signed-out Gmail, learning reviews).
 **You**: profile files, learned skills and learning as figures, then mail and your own
 Desktop apps. **System**: the MO host, surfaces and PC health, then where MO is running
-(model, session) and the project map, with Scan PC when SystemCare is available. Lists
+(model, session) and two checks, the project map and SystemCare's own status (its row opens
+SystemCare), with Scan PC (Cancel scan while one runs) when SystemCare is available. Lists
 show "+N" instead of growing, and figures the snapshot does not know show a dash. Every
 row and chip re-enters an existing owner (the terminal switch, the inbox request, the
 learning or work command, Gmail reconnect, SystemCare, the app itself); the Dashboard

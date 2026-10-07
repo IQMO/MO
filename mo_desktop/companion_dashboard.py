@@ -500,7 +500,7 @@ class CompanionDashboardMixin:
 
         def tile(value: Any, label: str, tone: str = "neutral") -> dict[str, str]:
             text = str(value if value not in (None, "") else "—")
-            return {"value": text[:10], "label": label, "tone": tone}
+            return {"value": text[:12], "label": label, "tone": tone}
 
         def tone_of(entry: dict[str, Any]) -> str:
             return str(entry.get("tone") or "neutral")
@@ -595,16 +595,21 @@ class CompanionDashboardMixin:
         provider = item(operations_projection, "runtime", "provider")
         session = item(operations_projection, "runtime", "session")
         graph = item(operations_projection, "graph", "structure")
-        care = str(systemcare.get("summary") or systemcare.get("state") or ("ready" if systemcare.get("available") else "—"))
+        # SystemCare's own status: a state word for the glance, its readable label on the row.
+        care_state = str(systemcare.get("state") or ("ready" if systemcare.get("available") else "")).replace("_", " ")
+        care_tone = "attention" if care_state == "review" else "good" if systemcare.get("available") else "neutral"
+        checks = [{"name": "Map", "detail": str(graph.get("value") or "not built"), "tone": tone_of(graph)}]
+        if systemcare.get("available"):
+            checks.append({"name": "SystemCare", "detail": str(systemcare.get("label") or care_state or "open"),
+                           "tone": care_tone, "hit": "systemcare:open"})
         system = {
             "tiles": [tile(host, "MO host", "good" if host == "Online" else "attention" if host == "Offline" else "neutral"),
                       tile(surfaces.get("value"), "surfaces", tone_of(surfaces)),
-                      tile(care.capitalize(), "PC health", "good" if systemcare.get("available") else "neutral")],
+                      tile(care_state.capitalize(), "PC health", care_tone)],
             "sections": [{"title": "Running on",
                           "rows": [{"name": "Model", "detail": str(provider.get("value") or "—"), "tone": tone_of(provider)},
                                    {"name": "Session", "detail": str(session.get("value") or "—"), "tone": tone_of(session)}]},
-                         {"title": "Project map",
-                          "rows": [{"name": "Map", "detail": str(graph.get("value") or "not built"), "tone": tone_of(graph)}]}],
+                         {"title": "Checks", "rows": checks}],
             "chip": ({"label": "Cancel scan" if systemcare.get("active") else "Scan PC",
                       "hit": "systemcare:cancel" if systemcare.get("active") else "systemcare:scan"}
                      if systemcare.get("available") else None),
