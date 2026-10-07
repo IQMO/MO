@@ -1026,6 +1026,21 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                               fill=(*color, 255))
                     _set_hit("generate:enhance", (int(spark_x / ss) - 4, int((cyy - 5 * ss) / ss), int(spark_x / ss) + 18,
                                                   int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
+                # MO's own hover label for the icon-only controls, drawn in the card itself the way
+                # Focus reveals a pin's name: no Windows tooltip window, no delay timer.
+                tip, tip_right = "", 0
+                if callable(getattr(self, "_on_attach", None)) and self._hovering("attach"):
+                    tip = "Add references · several at once" if generate_mode else "Attach files · several at once"
+                    tip_right = (spark_x if generate_mode else clip_x) - 6 * ss     # never over the sparkle
+                if generate_mode and self._hovering("generate:enhance"):
+                    tip = "Refining the prompt…" if busy else "Refine the prompt"
+                    tip_right = spark_x - 6 * ss
+                if tip:
+                    tip_left = max(box[0] + panel_padding * ss, tip_right - d.textlength(tip, font=self._sfont) - 16 * ss)
+                    d.rounded_rectangle((tip_left, cyy - 4 * ss, tip_right, cyy + 15 * ss), radius=button_radius,
+                                        fill=(*self._entry, 255), outline=(*self._edge, 120), width=max(1, ss))
+                    d.text((tip_left + 8 * ss, cyy - 3 * ss), card.fit_text(d, tip, tip_right - tip_left - 16 * ss, self._sfont),
+                           font=self._sfont, fill=(*self._muted, 255))
                 if dots:
                     # Three dots above Send: the bottom one is your draft, the middle one MO's last
                     # reply, the top one anything older. Click above or below the middle to move.
