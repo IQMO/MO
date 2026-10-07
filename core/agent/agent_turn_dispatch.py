@@ -1431,6 +1431,19 @@ class AgentTurnDispatchMixin:
             ledgers[session_id] = {}
         return ledgers[session_id]
 
+    def _note_recent_write(self, path: Any) -> None:
+        """Keep the last files this process changed (newest last): its heartbeat shows them, so
+        sibling MOs see what it is editing before they touch the same file."""
+        if not path:
+            return
+        try:
+            resolved = str(Path(str(path)).expanduser().resolve())
+        except (OSError, RuntimeError, ValueError):
+            return
+        writes = [row for row in self.__dict__.get("_recent_writes", []) if row[0] != resolved]
+        writes.append((resolved, time.time()))
+        self.__dict__["_recent_writes"] = writes[-6:]
+
     def _dispatch_tool(self, name: str, arguments: dict, *, cancel_event: object = None) -> str:
         """Execute a tool and return the result. Sandbox already approved it."""
         from tools import TOOL_EXECUTORS
@@ -1594,6 +1607,8 @@ class AgentTurnDispatchMixin:
             if name == "mail":
                 return "Error: Mail operation failed; check the chosen account connection."
             return f"Error executing {name}: {exc}"
+        if name in {"write_file", "edit_file"} and not str(result).startswith("Error"):
+            self._note_recent_write(runtime_arguments.get("path"))
         if name == "mail" and not str(result).startswith("Error"):
             from ..mail.service import operator_result
 

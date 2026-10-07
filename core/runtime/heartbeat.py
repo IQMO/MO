@@ -280,6 +280,7 @@ def build_heartbeat_snapshot(
         ),
         "computer_activity": _computer_activity_state(getattr(agent, "_computer_activity", None)),
         "turn": _turn_state(getattr(agent, "_heartbeat_turn", None)),
+        "recent_files": _recent_files_state(agent),
         # An MO Shell pane has no window title of its own; its host window lets the rail show it.
         "shell_host": _shell_host_window(),
         "extra": _safe_extra(extra),
@@ -642,6 +643,38 @@ def _turn_state(value: Any) -> dict[str, Any]:
     except (TypeError, ValueError):
         started = 0.0
     return {"busy": True, "request": redact_monitor_text(value.get("request") or "", 100), "started_at": started}
+
+
+_RECENT_FILE_SECONDS = 1800.0
+
+
+def _recent_files_state(agent: Any) -> list[dict[str, Any]]:
+    """Files this process changed in the last 30 minutes, newest first (at most five): a path
+    inside the working folder stays relative, any other path shows only its name."""
+    now = time.time()
+    try:
+        base = Path(os.getcwd()).resolve()
+    except OSError:
+        base = None
+    rows: list[dict[str, Any]] = []
+    for path, at in reversed(list(getattr(agent, "_recent_writes", []) or [])):
+        try:
+            at = float(at)
+            target = Path(str(path))
+        except (TypeError, ValueError):
+            continue
+        if now - at > _RECENT_FILE_SECONDS:
+            continue
+        shown = target.name
+        if base is not None:
+            try:
+                shown = target.relative_to(base).as_posix()
+            except ValueError:
+                pass
+        rows.append({"path": redact_monitor_text(shown, 200), "at": at})
+        if len(rows) >= 5:
+            break
+    return rows
 
 
 def _worker_state(agent: Any) -> list[str]:

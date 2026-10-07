@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,10 @@ def build_workspace_awareness(agent: Any, *, cwd: str | None = None, max_files: 
     sibling_summary = _sibling_terminal_summary(agent, project_cwd)
     if sibling_summary:
         lines.append(sibling_summary)
+
+    heavy_job = _heavy_job_summary()
+    if heavy_job:
+        lines.append(heavy_job)
 
     worker_summary = _worker_summary(agent)
     if worker_summary:
@@ -145,6 +150,9 @@ def working_sibling_instances(agent: Any, cwd: str, *, limit: int = 3) -> list[s
         activity = item.get("computer_activity") if isinstance(item.get("computer_activity"), dict) else {}
         if activity.get("active"):
             details.append("computer action active")
+        edited = _recent_files_text(item.get("recent_files"))
+        if edited:
+            details.append(f"edited {edited}")
         if not details:
             continue
 
@@ -152,6 +160,42 @@ def working_sibling_instances(agent: Any, cwd: str, *, limit: int = 3) -> list[s
         if len(rows) >= max(1, int(limit or 1)):
             break
     return rows
+
+
+def _recent_files_text(value: Any) -> str:
+    """'a.py, b.py (2 min ago)' from a sibling heartbeat's recent files, newest first."""
+    if not isinstance(value, list):
+        return ""
+    names: list[str] = []
+    newest = 0.0
+    for row in value[:3]:
+        if not isinstance(row, dict) or not str(row.get("path") or "").strip():
+            continue
+        names.append(redact_monitor_text(str(row["path"]), 120))
+        try:
+            newest = max(newest, float(row.get("at") or 0.0))
+        except (TypeError, ValueError):
+            pass
+    if not names:
+        return ""
+    minutes = max(0, int((time.time() - newest) // 60)) if newest else None
+    age = "" if minutes is None else (" (just now)" if minutes == 0 else f" ({minutes} min ago)")
+    return ", ".join(names) + age
+
+
+def _heavy_job_summary() -> str:
+    """The full test gate holds a machine-wide lock; while it runs, say so, so a second MO runs
+    only scoped tests instead of starting another full suite."""
+    try:
+        from ..diagnostics.test_suite import SUITE_LOCK_NAME
+        from ..runtime.lock import runtime_lock_holder
+
+        holder = runtime_lock_holder(SUITE_LOCK_NAME)
+    except Exception:
+        return ""
+    if not holder:
+        return ""
+    return f"Heavy job on this machine: the full test suite is running ({holder}); run only scoped tests until it ends."
 
 
 def _active_workers(value: Any) -> tuple[int, list[str]]:
