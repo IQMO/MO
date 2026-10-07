@@ -852,10 +852,11 @@ Each process receives a stable `MO_INSTANCE_ID` and defaults to a separate
 terminal's active slot. Singleton services use a resource lock.
 
 On nontrivial turns, workspace coordination reuses those live instance
-heartbeats to warn when another terminal has active work in the same repository:
-its running turn (a short, redacted summary of what it was asked), its task rows
+heartbeats to warn when another terminal, or MO Desktop, has active work in the
+same repository: its running turn (a short, redacted summary of what it was
+asked), its task rows, the files it just edited, a computer action it is driving,
 and what its registered workers, tests and goals are doing. That signal never
-assigns unclaimed dirty files to the sibling terminal.
+assigns unclaimed dirty files to the sibling MO.
 Explicit PRT reviews capture independent source snapshots, so sibling activity
 does not block them or require a commit. See the
 [PRT review contract](core/MAINTAINING.md#prt-review-contract) for source,

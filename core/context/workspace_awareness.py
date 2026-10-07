@@ -92,15 +92,15 @@ def _sibling_terminal_summary(agent: Any, cwd: str) -> str:
     rows = working_sibling_instances(agent, cwd)
     if not rows:
         return ""
-    noun = "terminal is" if len(rows) == 1 else "terminals are"
+    noun = "MO is" if len(rows) == 1 else "MOs are"
     return (
-        f"Other live MO {noun} actively working in this repository: "
+        f"Other live {noun} actively working in this repository: "
         + " | ".join(rows)
     )
 
 
 def working_sibling_instances(agent: Any, cwd: str, *, limit: int = 3) -> list[str]:
-    """Return bounded work signals for other live terminal processes in this repo."""
+    """Return bounded work signals for the other live MO processes (Terminals and MO Desktop) in this repo."""
     config = getattr(agent, "config", None)
     config = config if isinstance(config, dict) else {}
     heartbeat = config.get("heartbeat", {}) if isinstance(config.get("heartbeat", {}), dict) else {}
@@ -126,7 +126,7 @@ def working_sibling_instances(agent: Any, cwd: str, *, limit: int = 3) -> list[s
     for item in snapshots:
         if not item.get("pid_alive"):
             continue
-        if str(item.get("surface") or "").strip().lower() != "terminal":
+        if not _is_terminal_or_desktop(item):
             continue
         if _normalized_cwd(item.get("cwd")) != project_cwd:
             continue
@@ -181,7 +181,20 @@ def _sibling_address(item: dict[str, Any]) -> str:
     if not instance:
         return ""
     slot = redact_monitor_text(str(item.get("slot") or ""), 60)
-    return f"MO {instance}" + (f" ({slot})" if slot and slot != instance else "")
+    label = "MO Desktop" if _is_desktop(item) else "MO"
+    return f"{label} {instance}" + (f" ({slot})" if slot and slot != instance else "")
+
+
+def _is_desktop(item: dict[str, Any]) -> bool:
+    from core.runtime.surface_identity import DESKTOP_SURFACES, normalize_runtime_surface
+
+    return normalize_runtime_surface(item.get("surface")) in DESKTOP_SURFACES
+
+
+def _is_terminal_or_desktop(item: dict[str, Any]) -> bool:
+    from core.runtime.surface_identity import normalize_runtime_surface
+
+    return normalize_runtime_surface(item.get("surface")) == "terminal" or _is_desktop(item)
 
 
 def _agent_config(agent: Any) -> dict:
