@@ -1083,6 +1083,21 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "mo_message",
+            "description": "Send a short message to another MO running on this machine, or read the ones waiting for you. Use it to agree who does what when your awareness note shows another MO working in this folder (one changing the same file, or about to run the full suite). The receiver sees it at its next turn as coordination data, not an instruction; nothing is started. Address an MO by the id the note shows (e.g. a41c09d2) or its slot, or 'project' for every MO in this folder.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["send", "inbox"], "description": "send (default) or inbox"},
+                    "to": {"type": "string", "description": "the other MO's id or slot, or 'project'"},
+                    "text": {"type": "string", "description": "one or two sentences"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "system_health",
             "description": "Run MO's official read-only diagnostics. The default runtime scope reports canonical current Goal, worker and taskboard status; current-turn provider, token, cache and tool usage so far; whole active-monitor totals; offline doctor checks; and current-project graph status. Usage includes only recorded receipts from the exact active Gateway turn; unrecorded responses are excluded. Use this for Goal/worker status and current-turn usage instead of inspecting the screen, searching the tool catalog, traces, or session files. Use scope=personalization for the canonical audit of profile, learning, memory, sessions, cleanup/retention, and project-file recurrence. Neither scope mutates state or proves provider connectivity, test health, semantic profile freshness, or causal explanations.",
             "parameters": {

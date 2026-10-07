@@ -1921,6 +1921,7 @@ def guard_tool_call(
         or (name == "migrate" and action in {"inspect", "plan"})
         or (name == "project_history" and action in {"status", "inspect", "trace"})
         or (name == "role_work" and action in {"list", "status", "wait"})
+        or (name == "mo_message" and action == "inbox")
         or (name == "mail" and (action or "status") in {"status", "list", "search", "read_latest", "read"})
         or design_artifact_action
         or clarification_board_action

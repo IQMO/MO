@@ -25,6 +25,7 @@ MUTATING_TOOLS = frozenset({
     "systemcare_apply",
     "systemcare_rollback",
     "systemcare_cancel",
+    "mo_message",
 })
 
 # MO Design work is read-only with respect to the selected project.  Its

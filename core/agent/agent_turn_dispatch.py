@@ -1581,7 +1581,7 @@ class AgentTurnDispatchMixin:
             runtime_arguments["_mo_profile"] = getattr(self, "profile", None)
         if name == "record_convention":
             runtime_arguments["_mo_project_cwd"] = self._effective_project_cwd()
-        if name in {"schedule_job", "life_item", "life_money"}:
+        if name in {"schedule_job", "life_item", "life_money", "mo_message"}:
             runtime_arguments["_mo_agent"] = self
         if name == "mail":
             runtime_arguments["_mo_agent"] = self

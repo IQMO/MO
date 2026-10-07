@@ -79,7 +79,11 @@ from .. import local_extensions
 from ..context.project_context import render_project_rule_context, resolve_project_rules
 from ..context.work_patterns import build_work_pattern_context
 from ..context.onboarding import build_onboarding_context
-from ..context.workspace_awareness import build_workspace_awareness, should_include_workspace_awareness
+from ..context.workspace_awareness import (
+    build_workspace_awareness,
+    has_unread_messages,
+    should_include_workspace_awareness,
+)
 from ..gates.security_check import run_turn_security_check
 from ..session.session import (
     INTERNAL_CONTINUATION_KEY,
@@ -2156,6 +2160,7 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                     if turn_intent.include_workspace_context else False
                 )
                 or active_coordination
+                or has_unread_messages(self, getattr(self, "project_cwd", None))
             )
         )
         workspace_context = ""

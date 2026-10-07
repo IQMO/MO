@@ -1171,6 +1171,30 @@ def execute_tool_search(arguments: dict[str, Any]) -> str:
         return f"Error running tool_search: {exc}"
 
 
+def execute_mo_message(arguments: dict[str, Any]) -> str:
+    """Send a message to another running MO, or show the ones waiting for this one."""
+    from core.context.workspace_awareness import _agent_config, _self_identity
+    from core.runtime import mo_messages
+
+    agent = arguments.get("_mo_agent")
+    config = _agent_config(agent)
+    me = _self_identity(agent)
+    action = str(arguments.get("action") or "send").strip().lower()
+    if action == "inbox":
+        rows = mo_messages.unread(config, instance_id=me["instance_id"], slot=me["slot"], cwd=me["cwd"])
+        mo_messages.mark_delivered(config, me["instance_id"], rows)
+        return mo_messages.render(rows) or "No messages waiting."
+    if action != "send":
+        return "Error: action must be send or inbox."
+    try:
+        row = mo_messages.send(config, sender=me, to=str(arguments.get("to") or ""), text=str(arguments.get("text") or ""))
+    except ValueError as exc:
+        return f"Error: {exc}."
+    except OSError as exc:
+        return f"Error: the message could not be saved ({exc})."
+    return f"Sent to {row['to']}. It shows at that MO's next turn; nothing was started."
+
+
 def execute_record_convention(arguments: dict[str, Any]) -> str:
     """MO records a durable, code-location-scoped convention it has learned (autonomous)."""
     try:
@@ -2330,4 +2354,5 @@ TOOL_EXECUTORS = {
     "graph_stats": execute_graph_stats,
     "build_graph": execute_build_graph,
     "record_convention": execute_record_convention,
+    "mo_message": execute_mo_message,
 }

@@ -1426,6 +1426,14 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
                 required_names.add("test_runner")
             elif active_task_kind in {"build", "deploy", "execute"}:
                 required_names.add("shell")
+            # The awareness note names mo_message only when another MO can hear it; offer the tool then.
+            try:
+                from ..context.workspace_awareness import mo_message_wanted
+
+                if mo_message_wanted(self, getattr(self, "project_cwd", None)):
+                    required_names.add("mo_message")
+            except Exception:
+                pass
             definitions = registry.definitions_for_mode(
                 mode,
                 capability_hints,
