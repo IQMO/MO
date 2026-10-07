@@ -100,6 +100,7 @@ class WorkerRegistry:
         result_summary: str = "",
         evidence: list[str] | None = None,
         result_report: str = "",
+        difficulty: str = "",
     ) -> WorkerRecord | None:
         if not worker_id:
             return None
@@ -115,6 +116,8 @@ class WorkerRegistry:
             record.result_report = redact_monitor_text(result_report, 12000)
         if evidence is not None:
             record.evidence = [redact_monitor_text(item, 240) for item in evidence[:12] if str(item or "").strip()]
+        if difficulty:
+            record.difficulty = difficulty
         now = time.time()
         record.updated_at = now
         if next_state in TERMINAL_STATES and not record.finished_at:

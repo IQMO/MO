@@ -219,7 +219,6 @@ class BackgroundWorkerRuntime:
                     claimed_paths=claimed_paths,
                     role=role,
                     project_root=str(getattr(role_skill, "project_root", "") or ""),
-                    difficulty=_objective_difficulty(objective),
                 )
             conflicts = registry.conflicts(claimed_paths, exclude=record.id)
             if conflicts and record.state != "running":
@@ -293,6 +292,7 @@ class BackgroundWorkerRuntime:
         result = ""
         state = "completed"
         note = "background worker finished"
+        work = {"actions": 0, "files": 0}
         try:
             if cancel_event is not None and cancel_event.is_set():
                 return
@@ -318,9 +318,17 @@ class BackgroundWorkerRuntime:
                 and callable(getattr(self.agent, "workspace_scope", None))
                 else nullcontext()
             )
+            def count_action(event: dict) -> None:
+                if isinstance(event, dict) and event.get("successful"):
+                    work["actions"] += 1
+                    if event.get("tool") in _FILE_CHANGING_TOOLS or event.get("diffstat"):
+                        work["files"] += 1
+                if on_action is not None:
+                    on_action(event)
+
             with workspace_scope:
                 with lane_scope:
-                    turn_options = {"on_activity": on_activity, "on_action": on_action}
+                    turn_options = {"on_activity": on_activity, "on_action": count_action}
                     if cancel_event is not None:
                         turn_options["cancel_event"] = cancel_event
                     if hasattr(self.agent, "isolated_session"):
@@ -363,6 +371,7 @@ class BackgroundWorkerRuntime:
                 result_summary=result_summary,
                 evidence=evidence,
                 result_report=result,
+                difficulty=_measured_difficulty(work["actions"], work["files"]),
             )
             _record_role_outcome(role_skill, state)
             if record and on_finish:
@@ -415,7 +424,10 @@ def worker_result_indicates_blocked(result: str) -> bool:
         # This field contains both status and next steps. Classify its status
         # clause, not the length of the optional follow-up explanation.
         status = value.split(";", 1)[0].split(".", 1)[0].strip()
-        return status not in {"", "none", "n/a", "na", "no", "not blocked", "nothing", "no blocker", "no blockers", "nothing blocked"}
+        words = status.split()
+        if status in {"", "no", "none", "n/a", "na", "nothing"} or (words[0] == "none" and words[1:2] != ["of"]):
+            return False      # "none for this inspection" is no blocker; "none of the checks could run" is
+        return not status.startswith(("not blocked", "no blocker", "nothing blocked"))
     return False
 
 
@@ -474,14 +486,18 @@ def _role_overlay(role_skill) -> str:
         return BACKGROUND_WORKER_SYSTEM
 
 
-def _objective_difficulty(objective: str) -> str:
-    """MO's own grade of a worker objective (simple, moderate or complex; the estimator the Gateway and goal
-    view share): it weighs verified reports in a specialist's rank, so harder checked work counts more."""
-    try:
-        from ..context.work_patterns import estimate_work_complexity
-        return estimate_work_complexity(objective)
-    except Exception:
-        return ""
+_FILE_CHANGING_TOOLS = frozenset({"write_file", "edit_file"})
+
+
+def _measured_difficulty(actions: int, files_changed: int) -> str:
+    """How hard a finished worker's task was, measured from what it actually did (its successful tool actions
+    and the files it changed), never from the wording of its assignment: a live run graded 'list three
+    headings' complex from the architect's careful objective text. It weighs checked reports in rank."""
+    if files_changed >= 3 or actions > 20:
+        return "complex"
+    if files_changed or actions > 8:
+        return "moderate"
+    return "simple"
 
 
 def _record_role_outcome(role_skill, state: str) -> None:

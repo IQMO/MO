@@ -711,9 +711,13 @@ search or copy the whole transcript store into the project index.
   `role_work` `verify` (`accept`/`reject` with the evidence) on a completed
   worker, once per report; the verdict is stored on the worker record and its
   `worker_event`, so a specialist's track record holds only checked work. Each
-  worker record also carries MO's own difficulty grade of its objective
-  (`estimate_work_complexity`: simple, moderate, complex; lexical, the same
-  estimator the Gateway and goal view use), which weighs checked work in rank.
+  finished worker record also carries a difficulty grade measured from the work
+  it did (`_measured_difficulty`: its successful tool actions and changed files;
+  simple, moderate, complex), never from the assignment's wording; it weighs
+  checked work in rank. A worker's turn fields (taskboard tools, project rules)
+  live per thread (`_TurnStateField`), and a parallel tool batch runs with the
+  caller's thread state, so a worker running beside the lead's turn never resets
+  it.
 - Questions about previously implemented features remain bounded lookups unless
   they also request current work. `work_signals` checks that distinction before
   lexical inflection normalization can turn historical verbs into build work;
