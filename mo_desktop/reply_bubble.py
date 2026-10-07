@@ -1251,7 +1251,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         side = "right" if cx + half + card_w + 2 * int(design.shadow_pad) <= sw else "left"
         self._dock_side = side
         if morphing:
-            key = (self._mode, self._panel_state, self._body, card_w)
+            key = (self._mode, self._panel_state, self._body, card_w, getattr(self, "_role_label", ""))   # a role switch mid-reveal redraws
             if getattr(self, "_transition_base", None) is None or getattr(self, "_transition_base_key", None) != key:
                 self._transition_base = self._render()   # rendered ONCE, crisp
                 self._transition_base_key = key
