@@ -108,6 +108,44 @@ def _bounded_read_page(
     return fixed + lines[0][:room].rstrip() + suffix
 
 
+def _file_key(path: Any) -> str:
+    return os.path.normcase(str(Path(path).expanduser().resolve(strict=False)))
+
+
+def _file_digest(path: Any) -> str | None:
+    import hashlib
+
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _note_file_seen(arguments: dict[str, Any], path: Any) -> None:
+    """Record the version of ``path`` this conversation has now read or written."""
+    ledger = arguments.get("_mo_file_ledger")
+    if isinstance(ledger, dict):
+        digest = _file_digest(path)
+        if digest:
+            ledger[_file_key(path)] = digest
+
+
+def _stale_write_refusal(arguments: dict[str, Any], path: Any, *, require_read: bool) -> str:
+    """Refuse to change a file that changed since this conversation last read it (another MO
+    terminal, a tool or a person edited it), so a fresh change is never overwritten blind."""
+    ledger = arguments.get("_mo_file_ledger")
+    if not isinstance(ledger, dict) or not Path(path).is_file():
+        return ""
+    seen = ledger.get(_file_key(path))
+    if seen is None:
+        return (f"Error: {path} already exists and this conversation has not read it. Read it first, "
+                "then write; nothing was changed.") if require_read else ""
+    if seen != _file_digest(path):
+        return (f"Error: {path} changed since this conversation last read it (another MO terminal, a tool "
+                "or a person edited it). Read it again, then retry; nothing was changed.")
+    return ""
+
+
 def execute_read_file(arguments: dict[str, Any]) -> str:
     path = arguments["path"]
     offset = _coerce_positive_int(arguments.get("offset"), "offset")
@@ -133,6 +171,7 @@ def execute_read_file(arguments: dict[str, Any]) -> str:
         return f"Error: Cannot read {path} as text (binary file)."
     except Exception as e:
         return f"Error reading {path}: {e}"
+    _note_file_seen(arguments, p)
     view_note = ""
     if arguments.get("_mo_session_snapshot"):
         from core.session.session import project_messages
@@ -212,10 +251,14 @@ def execute_write_file(arguments: dict[str, Any]) -> str:
     path = arguments["path"]
     content = arguments["content"]
     p = Path(path)
+    refusal = _stale_write_refusal(arguments, p, require_read=True)
+    if refusal:
+        return refusal
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
         size = p.stat().st_size
+        _note_file_seen(arguments, p)
         return f"Wrote {size} bytes to {path}"
     except Exception as e:
         return f"Error writing {path}: {e}"
@@ -228,6 +271,9 @@ def execute_edit_file(arguments: dict[str, Any]) -> str:
     p = Path(path)
     if not p.exists():
         return f"Error: File not found: {path}"
+    refusal = _stale_write_refusal(arguments, p, require_read=False)
+    if refusal:
+        return refusal
     try:
         content = p.read_text(encoding="utf-8")
     except Exception as e:
@@ -243,6 +289,7 @@ def execute_edit_file(arguments: dict[str, Any]) -> str:
     new_content = content.replace(old_text, new_text, 1)
     try:
         p.write_text(new_content, encoding="utf-8")
+        _note_file_seen(arguments, p)
         return f"Edited {path} — 1 replacement"
     except Exception as e:
         return f"Error writing {path}: {e}"

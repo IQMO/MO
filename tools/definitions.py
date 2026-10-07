@@ -616,7 +616,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Create a NEW file or overwrite a SMALL file (<50 lines). For existing files, use edit_file instead — targeted exact-text replacements. Writing an existing file with write_file will be blocked by the sandbox if it exceeds 250 lines.",
+            "description": "Create a NEW file or overwrite a SMALL file (<50 lines). For existing files, use edit_file instead — targeted exact-text replacements. Writing an existing file with write_file will be blocked by the sandbox if it exceeds 250 lines. Overwriting an existing file needs a read_file of it in this conversation first; a file that changed since that read is refused (read it again).",
             "parameters": {
                 "type": "object",
                 "required": ["path", "content"],
@@ -631,7 +631,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "edit_file",
-            "description": "Edit an EXISTING file by exact text replacement. This is the PRIMARY tool for modifying files. old_text must be unique. Issue distinct known replacements together as multiple calls; keep each <=250 lines.",
+            "description": "Edit an EXISTING file by exact text replacement. This is the PRIMARY tool for modifying files. old_text must be unique. A file that changed since this conversation last read it is refused: read it again. Issue distinct known replacements together as multiple calls; keep each <=250 lines.",
             "parameters": {
                 "type": "object",
                 "required": ["path", "old_text", "new_text"],

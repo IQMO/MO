@@ -1419,6 +1419,18 @@ class AgentTurnDispatchMixin:
                 )
         return cap_text_evidence("\n\n".join(blocks), 8000) if blocks else ""
 
+    def _file_ledger(self) -> dict:
+        """sha256 of each file this conversation read or wrote: write_file and edit_file refuse
+        a file that changed since (the stale-write guard), so parallel MO terminals never
+        overwrite each other's fresh edits."""
+        session_id = str(getattr(getattr(self, "session", None), "session_id", "") or "")
+        ledgers = self.__dict__.setdefault("_file_ledgers", {})
+        if session_id not in ledgers:
+            if len(ledgers) >= 8:
+                ledgers.pop(next(iter(ledgers)))
+            ledgers[session_id] = {}
+        return ledgers[session_id]
+
     def _dispatch_tool(self, name: str, arguments: dict, *, cancel_event: object = None) -> str:
         """Execute a tool and return the result. Sandbox already approved it."""
         from tools import TOOL_EXECUTORS
@@ -1506,6 +1518,8 @@ class AgentTurnDispatchMixin:
             return f"Error: Unknown tool '{name}'"
 
         runtime_arguments = dict(arguments or {})
+        if name in {"read_file", "write_file", "edit_file"}:
+            runtime_arguments["_mo_file_ledger"] = self._file_ledger()
         if name in {"computer_targets", "computer_observe", "computer_act", "point_on_screen", "perceive"}:
             runtime_arguments["_cancel_event"] = cancel_event
         if name == "computer_act":
