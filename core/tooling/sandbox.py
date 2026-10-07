@@ -1474,6 +1474,10 @@ def _large_existing_write_reason(arguments: dict[str, Any], *, max_lines: int = 
 
 def _guard_web_tools(name: str, arguments: dict[str, Any], cfg: dict[str, Any]) -> str | None:
     """Check web/network tool restrictions. Return block reason or None."""
+    if name == "media":
+        if str(arguments.get("action") or "catalog") not in {"create", "wait", "credits"}:
+            return None
+        name, arguments = "web_fetch", {"url": "https://api.kie.ai"}
     if name == "computer_act" and str(arguments.get("action") or "").strip().lower() == "open":
         name = "browser_open"
     if name not in {"web_fetch", "web_search", "browser_open", "inspect_repo", "use_repo"}:
@@ -1677,6 +1681,10 @@ def _guard_path_scope(
     """Check file/path scope for find, grep, git, project_bridge tools.
     Also handles shell workdir path check.
     Return block reason or None."""
+    if name == "media":
+        for ref in arguments.get("references") or []:
+            if isinstance(ref, dict) and not path_allowed(str(ref.get("path") or ""), allowed_roots):
+                return "[PATH BLOCKED] media reference is outside allowed roots."
     # File tools: read_file, write_file, edit_file. read_file may ALSO reach the
     # operator's own profile and skills (read-only); writes stay on allowed_roots.
     if name in {"read_file", "write_file", "edit_file"} and "path" in arguments:
@@ -1753,6 +1761,8 @@ def _guard_read_secret(name: str, arguments: dict[str, Any], operator_override: 
     """Block raw reads of secret-shaped paths; sanctioned helpers handle secrets."""
     del operator_override  # raw values never enter model context, even in full-access mode
     candidates: list[str] = []
+    if name == "media":
+        candidates.extend(str(ref.get("path") or "") for ref in arguments.get("references") or [] if isinstance(ref, dict))
     if name == "read_file" and arguments.get("path"):
         candidates.append(str(arguments.get("path")))
     elif name in {"find_files", "grep"}:
@@ -1906,6 +1916,7 @@ def guard_tool_call(
     )
     mutates = name in MUTATING_TOOLS and not (
         (name == "schedule_job" and (action or "list") == "list")
+        or (name == "media" and (action or "catalog") in {"catalog", "credits", "list", "status", "cleanup_review"})
         or (name == "file_transfer" and (action or "list") == "list")
         or (name == "migrate" and action in {"inspect", "plan"})
         or (name == "project_history" and action in {"status", "inspect", "trace"})

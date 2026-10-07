@@ -1,5 +1,21 @@
 # MO Desktop
 
+### Create: music, images and video
+
+Choose **Create** through the existing composer role switcher. It provides Kie
+model/operation controls, purpose-labelled references, timestamped credits and
+real stage/elapsed progress. MO prepares, submits, waits and saves results.
+Ready result cards retain image previews or audio/video file cards beside result
+choices. Jobs in that same conversation offers local open/play, save-copy,
+continuation and exact-job cleanup review. Audio/video playback uses the system
+viewer, not an embedded player. Outputs stay under the user's private
+`media/generated/<job-id>/`; originals are not rewritten. Setup is in
+Settings → Tools & connections.
+Reference sharing is optional: temporary Cloudflare links grant access to selected
+prepared copies; cleanup revokes local access, not provider retention. Originals
+and saved results stay. See [Create's complete contract](../core/media/README.md)
+for supported Suno/Seedream/Seedance models, privacy, setup and verification limits.
+
 MO Desktop is an opt-in resident assistant and companion for MO Agent. It places MO's
 cube character, conversation card, screen guidance, voice controls, and selected
 apps on the Windows desktop while reusing the same Agent, Gateway,

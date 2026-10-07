@@ -1559,11 +1559,17 @@ class AgentTurnDispatchMixin:
         if name == "mail":
             runtime_arguments["_mo_agent"] = self
             runtime_arguments["_mo_config"] = getattr(self, "config", {}) or {}
-        if name == "generate_image":
+        if name in {"generate_image", "media"}:
             callbacks = getattr(self, "_image_gen_callbacks", {}) or {}
             runtime_arguments["_on_activity"] = callbacks.get("on_activity")
             runtime_arguments["_cancel_event"] = callbacks.get("cancel_event") or cancel_event
             runtime_arguments["_mo_config"] = getattr(self, "config", {}) or {}
+            if name == "media":
+                runtime_arguments["_mo_session_id"] = str(getattr(self.session, "session_id", "") or "")
+                runtime_arguments["_mo_turn_id"] = str(getattr(self.session, "turn_count", 0))
+                runtime_arguments["_mo_allowed_roots"] = self._effective_allowed_roots()
+                runtime_arguments["_on_operator_media"] = callbacks.get("on_operator_media")
+                runtime_arguments["_mo_media_selection"] = callbacks.get("media_selection")
         if name == "migrate":
             runtime_arguments["_mo_project_cwd"] = getattr(self, "project_cwd", None)
 

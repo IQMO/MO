@@ -11,6 +11,7 @@ values, alternate files, and legacy combined files are not credential sources.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -30,6 +31,7 @@ _SERVICE_ALIASES = {
     "embeddings": "providers",
 }
 _MCP_SERVICE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+_PROVIDER_WRITE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,32 @@ def secret_status(
         present=True,
         source=f"canonical:{_service_name(service)}",
     )
+
+
+def save_provider_secret(key: str, value: str, *, config: dict[str, Any] | None = None) -> None:
+    """Native operator setup only: save one value without exposing it to a model.
+
+    This is not a provider-facing tool. Preserve comments and unrelated keys in
+    the canonical file under the same cross-process writer lock.
+    """
+    import os
+    from core.runtime.lock import file_byte_lock
+    from core.utils.atomic_write import atomic_write_text
+
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", str(key)):
+        raise ValueError("Invalid provider credential name.")
+    if not isinstance(value, str) or not 8 <= len(value) <= 4096 or any(ch.isspace() or ch in "\"'" for ch in value):
+        raise ValueError("Enter a valid provider key; it is never sent to the conversation.")
+    path = canonical_secret_file("providers", config)
+    if path is None:
+        raise ValueError("Provider credential storage is unavailable.")
+    with file_byte_lock(mo_home(config) / "run/provider-credentials.lock", _PROVIDER_WRITE_LOCK):
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        pattern = re.compile(r"^\s*" + re.escape(key) + r"\s*=")
+        kept = [line for line in lines if not pattern.match(line)]
+        atomic_write_text(path, "\n".join([*kept, key + "=" + value]) + "\n")
+        if os.name != "nt":
+            path.chmod(0o600)
 
 
 def service_status(

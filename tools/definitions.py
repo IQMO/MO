@@ -18,6 +18,40 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "media",
+            "description": "Native Kie media creation: Suno music, reference songs/covers/extensions, Seedream images/reference edits, Seedance 2.0/2.5 video/motion/continuation. Each create may spend credits. Use only for requested generation. Local references use optional expiring sharing, never hosted-upload fallback; no provider-erasure guarantee. Read the Create skill. catalog reports setup/models; list/status are local; credits reads the account balance; wait polls/downloads an existing job without resubmitting. Keep waiting automatically until delivered or a real blocker. Never resubmit an uncertain job. cleanup_review opens an exact local-reference review, never deletes originals or results. Singing-voice enrollment is not implemented.",
+            "parameters": {
+                "type": "object",
+                "required": ["action"],
+                "properties": {
+                    "action": {"type": "string", "enum": ["catalog", "credits", "create", "list", "status", "wait", "cleanup_review"]},
+                    "operation": {"type": "string", "enum": ["music", "cover", "extend_music", "image", "edit_image", "video", "extend_video"]},
+                    "model": {"type": "string", "description": "Exact catalog model; omitted uses the user's saved media default. Never substitute another model."},
+                    "options": {"type": "object", "description": "Only operation-supported controls. Music prompt is an idea in non-custom mode, literal lyrics in custom mode. Non-custom music also needs style, lyrics or references. Do not put URLs or voice IDs here.", "properties": {
+                        "prompt": {"type": "string"}, "style": {"type": "string"}, "title": {"type": "string"},
+                        "lyrics": {"type": "string"}, "custom_mode": {"type": "boolean"}, "instrumental": {"type": "boolean"},
+                        "negative_tags": {"type": "string"}, "vocal_gender": {"type": "string", "enum": ["m", "f"]},
+                        "style_weight": {"type": "number"}, "weirdness_constraint": {"type": "number"},
+                        "audio_weight": {"type": "number"}, "variety": {"type": "integer"},
+                        "duration": {"type": "integer"}, "continue_at": {"type": "number"},
+                        "resolution": {"type": "string"}, "aspect_ratio": {"type": "string"},
+                        "generate_audio": {"type": "boolean"}, "quality": {"type": "string", "enum": ["basic", "high"]}
+                    }, "additionalProperties": False},
+                    "references": {"type": "array", "maxItems": 50, "items": {"type": "object", "required": ["path"], "properties": {
+                        "path": {"type": "string", "description": "Exact authorized local reference; never a credential, URL or unselected private file."},
+                        "role": {"type": "string", "enum": ["reference", "subject", "motion", "song", "first_frame", "last_frame"]}
+                    }, "additionalProperties": False}},
+                    "parent_id": {"type": "string", "description": "Exact media job in this conversation, required for extension."},
+                    "output_index": {"type": "integer", "minimum": 0, "description": "Exact zero-based returned variation to continue."},
+                    "job_id": {"type": "string"}, "seconds": {"type": "integer", "minimum": 0, "maximum": 60}
+                },
+                "additionalProperties": False
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "tool_search",
             "description": "Search MO's runtime tool catalog and activate matching schemas for the next request. Use action=list for the complete inventory and count without activating schemas. Search by task description or exact name for a needed capability. Activation grants no permission; normal sandbox and confirmation policy still applies.",
             "parameters": {

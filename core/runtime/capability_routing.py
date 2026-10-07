@@ -253,7 +253,8 @@ _LIFE_CASE_QUESTION_RE = re.compile(
 )
 _MIGRATION_RE = re.compile(r"\b(?:migrate|migration|adopt|import\s+(?:a\s+)?project|clone\s+and)\b", re.I)
 _VISUALIZATION_RE = re.compile(
-    r"\b(?:visuali[sz](?:e|ation)|chart|plot|graph\s+this|interactive\s+(?:tool|view|lab))\b",
+    r"\b(?:visuali[sz](?:e|ation)|chart|plot|graph\s+this|interactive\s+(?:tool|view|lab)|suno|seedance|seedream|kie)\b|"
+    r"\b(?:generate|create|make|cover|extend|continue)\w*\b[^.?!\n]{0,100}\b(?:song|music|track|video|clip)\b",
     re.I,
 )
 _IMAGE_TOOL_RE = re.compile(

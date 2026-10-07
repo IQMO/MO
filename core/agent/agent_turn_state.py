@@ -32,6 +32,8 @@ class TurnState:
     on_action: object = None
     on_operator_visual: object = None
     on_operator_image: object = None
+    on_operator_media: object = None
+    media_selection: dict | None = None
     tool_rounds: int = 0
     next_progress_reminder_at: float = field(default_factory=lambda: time.monotonic() + 60.0)
     offered_tool_names: frozenset[str] = field(default_factory=frozenset)

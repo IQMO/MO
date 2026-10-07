@@ -179,13 +179,24 @@ class SettingsPanel(NativeAppWindow):
 
         # Slow enumeration uses the existing pipe reader; live Desktop changes
         # are posted to their existing GUI owner without another worker pool.
-        if action in {"devices", "chrome_status", "chrome_repair", "chrome_remove", "model", "models_status", "configuration", "lsp"}:
+        if action in {"devices", "chrome_status", "chrome_repair", "chrome_remove", "model", "models_status", "configuration", "lsp", "media_status", "media_install"}:
             run()
         elif self._c._post_gui_call(run) is False and self.is_running():
             self._send({"cmd": "result", "request_id": request_id,
                         "result": {"ok": False, "message": "MO Desktop is closing."}})
 
     def dispatch(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if action == "media_status":
+            import json
+            import shutil
+            from tools.media import execute_media
+            value = json.loads(execute_media({"action": "catalog", "_mo_config": self.config}))
+            value["audio_video_tools_ready"] = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+            return {"media_status": value}
+        if action == "media_install":
+            from core.media.setup import install_reference_helper
+            install_reference_helper(self.config)
+            return {"message": "Verified reference helper ready. No tunnel or upload was started.", **self.dispatch("media_status", {})}
         if action == "snapshot":
             return {"state": self.snapshot()}
         if action in {"preview", "save"}:
@@ -212,9 +223,9 @@ class SettingsPanel(NativeAppWindow):
                 for name in keys[:-1]:
                     node = node.setdefault(name, {})
                 node[keys[-1]] = value
-            if not persist_configuration(self.config, changes, remove=(key,) if value is None else (), update_runtime=False):
+            if not persist_configuration(self.config, changes, remove=(key,) if value is None else (), update_runtime=key.startswith("media.")):
                 raise ValueError("Configuration was not saved; the previous value was kept.")
-            return {"message": "Saved · reload the affected Terminal or restart Desktop to apply.", "overview": self._overview()}
+            return {"message": "Saved · next Create request uses this; active jobs keep their settings." if key.startswith("media.") else "Saved · reload the affected Terminal or restart Desktop to apply.", "overview": self._overview()}
         if action == "graph":
             from core.state.preferences import persist_graph_preferences
             key = str(payload.get("id") or "")

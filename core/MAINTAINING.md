@@ -6,6 +6,14 @@ public/private-boundary invariants for changes under `core/`. The root
 
 ## Runtime truth
 
+- `core/media/README.md` owns Kie/Suno/Seedream/Seedance creation, session-bound
+  job truth, optional reference leases and custody. `tools/media.py` is only an
+  adapter. Native request selections are trusted turn scope; provider prose
+  cannot override them. Keep credential entry out of chat/event pipes, reference
+  URLs out of records, and uncertain submissions out of automatic retry paths.
+  Reference cleanup never establishes downstream deletion. Use scoped synthetic
+  checks; paid generation and real Desktop acceptance remain separate evidence.
+
 - Task-phase chronology checks require an explicit phase or row claim. Ordinary
   explanations such as reporting blockers must not trigger corrective requests.
 - `show_viz` owns structured diagrams and terminal-native data visuals. ANSI

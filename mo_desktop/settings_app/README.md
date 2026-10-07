@@ -53,11 +53,19 @@ The UI polls only while awaiting an explicit model request, with a bounded wait.
 `../settings_panel.py` is the adapter. `catalog.py` declares supported controls
 and validates bridge input; it does not own runtime defaults. `app.py` reuses
 `NativeAppWindow`, Design native visuals, `studio_theme`, `app_controls.css`, and
-shared cube/glyph assets. Only request, readiness and window actions cross the
-renderer bridge. Slow operations use the existing pipe reader; live Desktop
+shared cube/glyph assets. Request, readiness and window actions use the value-free
+stdout transport. The separate `save_media_key` password-field method writes
+directly through the private credential broker; keys never enter that transport,
+snapshots or conversations. Slow operations use the existing pipe reader; live Desktop
 changes use its GUI queue. Failed persistence is visibly unsaved.
 
 ## Verification and Design
+
+Create setup lives in Tools & connections: private key entry, readiness, creation
+and sharing opt-ins, music/video defaults and explicit reference-helper install.
+Only `media.*` configuration changes apply to the next request without reload;
+submitted provider options are already captured. Credit balance is not a quote.
+See [Create custody and requirements](../../core/media/README.md).
 
 Generate the Settings Design artifact from production `assets()` and safe sample
 data. The artifact's simulated adapter must say it does not save real settings.

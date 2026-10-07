@@ -125,7 +125,7 @@ CAPABILITY_TOOL_NAMES: dict[str, frozenset[str]] = {
     CAP_LIFE: frozenset({"life_item", "life_money"}),
     CAP_MIGRATION: frozenset({"migrate"}),
     CAP_VISUALIZATION: frozenset({
-        "show_viz", "show_image", "generate_image", "edit_image",
+        "show_viz", "show_image", "generate_image", "edit_image", "media",
     }),
 }
 

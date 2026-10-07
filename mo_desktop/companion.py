@@ -2438,6 +2438,7 @@ class CompanionSurface(
         attachment_allow_tools: bool,
         voice_started_at: float,
         panic_generation: int,
+        media_selection: dict | None = None,
     ) -> bool:
         item = {
             "text": text,
@@ -2450,6 +2451,7 @@ class CompanionSurface(
             "attachment_allow_tools": bool(attachment_allow_tools),
             "voice_started_at": float(voice_started_at or 0.0),
             "panic_generation": int(panic_generation),
+            "media_selection": media_selection,
         }
         with self._desktop_follow_up_lock:
             if int(getattr(self, "_panic_generation", 0)) != int(panic_generation):
@@ -2504,6 +2506,7 @@ class CompanionSurface(
                     lane=item["lane"],
                     selected_options=item["selected_options"],
                     _queued_attachment_paths=item["attachment_paths"],
+                    media_selection=item.get("media_selection"),
                     _queued_attachment_allow_tools=item["attachment_allow_tools"],
                     _voice_started_at=item["voice_started_at"],
                     _request_panic_generation=item["panic_generation"],
@@ -2537,6 +2540,7 @@ class CompanionSurface(
         _request_panic_generation: int | None = None,
         _from_queue: bool = False,
         _keep_speech: bool = False,
+        media_selection: dict | None = None,
     ) -> bool:
         text = str(text or "").strip()
         if not text:
@@ -2584,6 +2588,7 @@ class CompanionSurface(
                 attachment_allow_tools=attachment_allow_tools,
                 voice_started_at=_voice_started_at,
                 panic_generation=request_panic_generation,
+                media_selection=media_selection,
             )
         with self._desktop_follow_up_lock:
             if int(getattr(self, "_panic_generation", 0)) != request_panic_generation:
@@ -2609,6 +2614,7 @@ class CompanionSurface(
         # submitted; later browsing or file drops cannot rebind a queued turn.
         self._current_attachment_paths = list(attachment_paths)
         self._current_attachment_allow_tools = attachment_allow_tools
+        self._current_media_selection = media_selection
         self._preserve_panel_for_turn = bool(preserve_panel or source == "options")
         # A walkthrough has its own compact visual language: the cube-side
         # activity bubble while MO observes, then one numbered point label at a
@@ -2772,12 +2778,15 @@ class CompanionSurface(
         if not p.is_file():
             return
         pairing_qr = p.suffix.lower() == ".png" and p.name.startswith("android-pairing-")
+        self._present_operator_artifacts([p], caption="Android pairing QR · one use" if pairing_qr else None,
+                                         allow_tools=not pairing_qr)
+
+    def _present_operator_artifacts(self, paths: list[Path], *, caption: str | None = None, allow_tools: bool = True) -> None:
+        """Use the existing attachment panel for generated images, music and video."""
 
         def present() -> None:
             self._show_attachment_panel(
-                [p],
-                caption="Android pairing QR · one use" if pairing_qr else None,
-                allow_tools=not pairing_qr,
+                paths, caption=caption, allow_tools=allow_tools,
             )
             if self._reply_visible:
                 log_event("MO Desktop operator image panel shown", config=self._config())
@@ -2788,9 +2797,227 @@ class CompanionSurface(
         if not self._post_gui_call(present):
             self._operator_image_presented_for_turn = False
             return
-        self._current_attachment_paths = [str(p)]
-        self._current_attachment_allow_tools = not pairing_qr
+        self._current_attachment_paths = [str(p) for p in paths]
+        self._current_attachment_allow_tools = allow_tools
         log_event("MO Desktop operator image presentation queued", config=self._config())
+
+    def _on_operator_media(self, value: dict) -> None:
+        """Project verified media events into the existing panel and notice spine."""
+        session_id = str(value.get("session_id") or "")
+        if session_id != str(getattr(self._ensure_desktop_session(), "session_id", "") or ""):
+            return
+        job_id = str(value.get("id") or value.get("job_id") or "")
+        if value.get("receipt"):
+            self._post_gui_call(lambda: self._review_media_cleanup(job_id, session_id))
+            return
+        if value.get("state") == "ready":
+            paths = [Path(o["path"]) for o in value.get("outputs", []) if Path(o["path"]).is_file()]
+            if paths:
+                # The job card owns both previews and actions. Showing an
+                # attachment card first immediately hid it behind the job menu.
+                self._operator_image_presented_for_turn = True
+                self._preserve_panel_for_turn = True
+                self._suppress_stream_for_turn = True
+                self._current_attachment_paths = [str(path) for path in paths]
+                self._current_attachment_allow_tools = False
+            from mo_desktop.notify import Notice
+
+            self._current_media_job = job_id
+            if not self._post_gui_call(lambda: self._show_media_job(job_id, session_id)):
+                self._operator_image_presented_for_turn = False
+            notice = Notice(f"media:{job_id}", "Media ready", "Saved locally · review results and cleanup",
+                            activate=lambda: self._show_media_job(job_id, session_id))
+            self._post_gui_call(lambda: self._emit_notice(notice))
+        elif value.get("error"):
+            self._post_gui_call(lambda: self._cube_notice("Media needs attention", str(value["error"])))
+        if value.get("state") in {"ready", "failed", "waiting", "submission_unknown"}:
+            self._refresh_create_credits()
+
+    def _show_media_jobs(self) -> None:
+        from core.media.jobs import recent
+        from mo_desktop.options import Option, OptionSet
+
+        session_id = str(self._ensure_desktop_session().session_id)
+        rows = recent(self._config(), session_id)
+        labels = [f"{i + 1}. {r['operation']} · {r['state']}" for i, r in enumerate(rows)]
+        options = OptionSet("single", [Option(label, time.strftime("%d %b %H:%M", time.localtime(r["created_at"])))
+                                       for label, r in zip(labels, rows)])
+        def choose(selected):
+            self._show_media_job(rows[labels.index(selected[0])]["id"], session_id)
+            return True
+        self._show_on_reply_surface("media jobs", lambda b: b.show(
+            "Create · this conversation" if rows else "No media jobs in this conversation yet.",
+            options=options, on_options_submit=choose, action_label="Back to Create", on_action=self._display_input_dialog))
+
+    def _show_media_job(self, job_id: str, session_id: str) -> None:
+        from core.media.jobs import status
+        from mo_desktop.artifacts import attachment_panel_state
+        from mo_desktop.options import Option, OptionSet
+
+        if session_id != str(self._ensure_desktop_session().session_id):
+            return
+        row = status(self._config(), job_id, session_id)
+        outputs = row.get("outputs") or []
+        choices = [Option(f"Result {o['index'] + 1}", Path(o["path"]).name) for o in outputs]
+        choices += [Option("Resume status", "No new paid submission"), Option("Review cleanup", "Originals and saved results kept")]
+        def choose(selected):
+            label = selected[0]
+            if label == "Review cleanup":
+                self._review_media_cleanup(job_id, session_id)
+            elif label == "Resume status":
+                self._submit_text_request(f"Resume media job {job_id}: wait for and save its results. Do not submit a new job.", source="media_resume")
+            else:
+                output = next(o for o in outputs if label == f"Result {o['index'] + 1}")
+                self._show_media_output(row, output, session_id)
+            return True
+        detail = row.get("error") or "Originals and saved results kept. Reference cleanup does not delete provider copies."
+        paths = [str(o["path"]) for o in outputs if Path(o["path"]).is_file()]
+        self._show_on_reply_surface("media job", lambda b: b.show(
+            f"Kie · {row['model']} · {row['state']}\n{detail}", options=OptionSet("single", choices),
+            presentation={"attachments": paths[:8], "attachment_state": attachment_panel_state(paths).value, "allow_tools": False},
+            on_options_submit=choose, action_label="Back to Create", on_action=self._display_input_dialog))
+
+    def _show_media_output(self, row: dict, output: dict, session_id: str) -> None:
+        from mo_desktop.artifacts import attachment_panel_state
+        from mo_desktop.options import Option, OptionSet
+
+        path = Path(output["path"])
+        labels = [Option("Open / play", "Use the system's local viewer"), Option("Save a copy", "Choose a folder; never overwrite")]
+        if output["kind"] == "video" or (output["kind"] == "audio" and output.get("track_id")):
+            labels.append(Option("Continue this result", "Prepare a new Create request; no charge until you send"))
+        def choose(selected):
+            if session_id != str(self._ensure_desktop_session().session_id):
+                return False
+            action = selected[0]
+            if action == "Open / play":
+                try:
+                    os.startfile(str(path))
+                except OSError:
+                    self._cube_notice("Could not open", "Choose a local media viewer")
+            elif action == "Save a copy":
+                from mo_desktop.native_files import choose_path
+                folder = choose_path(int(getattr(getattr(self._bubble, "_layered", None), "_native_hwnd", 0) or 0), folder=True)
+                if folder:
+                    def save():
+                        import shutil
+                        try:
+                            with path.open("rb") as source, (Path(folder) / path.name).open("xb") as target:
+                                shutil.copyfileobj(source, target, 256 * 1024)
+                            self._post_gui_call(lambda: self._cube_notice("Copy saved", "Private original retained"))
+                        except OSError:
+                            self._post_gui_call(lambda: self._cube_notice("Copy not saved", "Destination exists or is unavailable; nothing overwritten"))
+                    threading.Thread(target=save, name="mo-media-save", daemon=True).start()
+            else:
+                self.set_voice_role("Create")
+                self._display_input_dialog()
+                self._bubble._create_selection = {"operation": "extend_video" if output["kind"] == "video" else "extend_music",
+                    "model": row["model"], "options": {}, "parent_id": row["id"], "output_index": output["index"]}
+                self._bubble._create_progress = f"Continue result {output['index'] + 1} · add your next instructions"
+                self._bubble._repaint()
+                return True
+            self._show_media_output(row, output, session_id)
+            return True
+        self._show_on_reply_surface("media output", lambda b: b.show(
+            f"Result {output['index'] + 1} · {path.name}\nSaved locally. Provider copies are not deleted by MO cleanup.",
+            presentation={"attachments": [str(path)], "attachment_state": attachment_panel_state([path]).value, "allow_tools": False},
+            options=OptionSet("single", labels), on_options_submit=choose, action_label="Back to job",
+            on_action=lambda: self._show_media_job(row["id"], session_id)))
+
+    def _review_media_cleanup(self, job_id: str, session_id: str) -> None:
+        from core.media import jobs
+        from mo_desktop.options import Option, OptionSet
+
+        if session_id != str(getattr(self._ensure_desktop_session(), "session_id", "") or ""):
+            return
+        review = jobs.review_cleanup(self._config(), job_id, session_id)
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(review["created_at"]))
+        names = ", ".join(review["outputs_kept"]) or "No saved results"
+        text = f"Media cleanup · {when}\n{names}\n{review['effect']}"
+        choices = OptionSet("single", [Option("Keep saved results", "Return to Create")])
+        if review["can_revoke"]:
+            choices.options.append(Option("Revoke reference access", "Prepared copies only; saved results stay"))
+
+        def confirm(selected):
+            if "Revoke reference access" in selected:
+                def clean():
+                    try:
+                        jobs.confirm_cleanup(self._config(), job_id, session_id, review["receipt"])
+                        self._post_gui_call(lambda: self._cube_notice("References revoked", "Originals and saved results kept; provider copies unchanged"))
+                    except (ValueError, OSError):
+                        self._post_gui_call(lambda: self._cube_notice("Review changed", "Open cleanup again; nothing was deleted"))
+                threading.Thread(target=clean, name="mo-media-cleanup", daemon=True).start()
+            self._display_input_dialog()
+            return True
+
+        self._show_on_reply_surface("media cleanup", lambda bubble: bubble.show(text, options=choices, on_options_submit=confirm))
+
+    def _refresh_create_credits(self) -> None:
+        if getattr(self, "_create_credit_busy", False):
+            return
+        from core.media.catalog import settings
+        if settings(self._config()).get("enabled") is not True:
+            return
+        self._create_credit_busy = True
+
+        def refresh():
+            from core.media.kie import credits
+            try:
+                balance = credits(self._config())
+                label = f"{balance['credits']:g} cr · {time.strftime('%H:%M', time.localtime(balance['checked_at']))}"
+            except Exception:
+                label = "Credits unavailable · retry"
+            finally:
+                self._create_credit_busy = False
+            def present():
+                bubble = getattr(self, "_bubble", None)
+                if bubble:
+                    bubble._create_credit = label
+                    if getattr(bubble, "_mode", "") == "input":
+                        bubble._repaint()
+            self._post_gui_call(present)
+        threading.Thread(target=refresh, name="mo-media-credits", daemon=True).start()
+
+    def _create_action(self, action: str) -> None:
+        bubble = getattr(self, "_bubble", None)
+        if not bubble:
+            return
+        if action == "setup":
+            self.open_settings_panel()
+            return
+        if action == "credits":
+            self._refresh_create_credits()
+            return
+        if action == "privacy":
+            from core.media.catalog import PRIVACY_NOTICE
+            self._show_on_reply_surface("media privacy", lambda view: view.show(
+                PRIVACY_NOTICE, action_label="Back to Create", on_action=self._display_input_dialog))
+            return
+        if action == "jobs":
+            self._show_media_jobs()
+            return
+        if action.startswith("reference:"):
+            from core.media.preparation import kind_for
+            index = int(action.split(":")[1])
+            paths = bubble._attachment_preview_paths
+            if not 0 <= index < len(paths):
+                return
+            path = paths[index]
+            order = {"image": ("reference", "subject", "first_frame", "last_frame", "remove"),
+                     "audio": ("reference", "song", "remove"), "video": ("reference", "motion", "remove")}[kind_for(Path(path))]
+            roles = dict(getattr(bubble, "_create_reference_roles", {}))
+            role = roles.get(path, "reference")
+            next_role = order[(order.index(role) + 1) % len(order)]
+            if next_role == "remove":
+                bubble._attachment_preview_paths = [p for p in paths if p != path]
+                bubble._input_attachments = list(bubble._attachment_preview_paths)
+                roles.pop(path, None)
+            else:
+                roles[path] = next_role
+            bubble._create_reference_roles = roles
+        else:
+            from mo_desktop.create_controls import cycle
+            bubble._create_selection = cycle(bubble._create_selection, action, self._config())
+        bubble._repaint()
 
     def _show_attachment_panel(
         self,
@@ -3236,6 +3463,7 @@ class CompanionSurface(
             return
         session_id = str(getattr(session, "session_id", "") or "")
         turn_count = int(getattr(session, "turn_count", 0) or 0)
+        create_attachment = self._active_skill_role_label().casefold() == "create"
         selected = [Path(item) for item in raw[:MAX_ATTACHMENTS_PER_TURN]]
         initial_rejected = max(0, len(raw) - MAX_ATTACHMENTS_PER_TURN)
         self._set_status("Loading attachment…", self._visual_palette.accent)
@@ -3245,10 +3473,13 @@ class CompanionSurface(
             rejected = initial_rejected
             for item in selected:
                 try:
+                    if create_attachment:
+                        from core.media.preparation import kind_for
+                        kind_for(item)
                     record = import_attachment(
                         self._config(), item,
                         session_id=session_id, turn_count=turn_count,
-                        max_bytes=MAX_ATTACHMENT_BYTES,
+                        max_bytes=500 * 1024 * 1024 if create_attachment else MAX_ATTACHMENT_BYTES,
                     )
                     saved.append(Path(str(record["saved_path"])))
                 except (OSError, ValueError):
@@ -3265,7 +3496,7 @@ class CompanionSurface(
                     return
                 if not saved:
                     self._set_status(
-                        "No files attached — check file access and the 20 MB limit",
+                        "No supported files attached — check file access and the " + ("500 MB" if create_attachment else "20 MB") + " limit",
                         self._visual_palette.warn,
                     )
                     return
@@ -3276,6 +3507,16 @@ class CompanionSurface(
                     if rejected else ""
                 )
                 self._set_status(f"Attached: {names}{note}", self._visual_palette.ok)
+                if create_attachment:
+                    bubble = self._get_reply_bubble()
+                    if bubble:
+                        bubble._stash_input_draft()
+                        pending = list(getattr(bubble, "_input_attachments", []))
+                        self._display_input_dialog()
+                        bubble._input_attachments = list(dict.fromkeys([*pending, *(str(p) for p in saved)]))[:MAX_ATTACHMENTS_PER_TURN]
+                        bubble._attachment_preview_paths = list(bubble._input_attachments)
+                        bubble._repaint()
+                    return
                 from mo_desktop.artifacts import attachment_panel_state
                 from mo_desktop.design import PanelState
                 if attachment_panel_state(saved) == PanelState.IMAGE:
@@ -3735,6 +3976,8 @@ class CompanionSurface(
         previous_id = str(getattr(previous, "role", "") or "").casefold()
         next_id = str(getattr(skill, "role", "") or "").casefold()
         self._active_skill_role = skill
+        if next_id == "create":
+            self._refresh_create_credits()
         self._refresh_effective_role_character()
         if next_id == "project-architect":
             self._role_workspace_roles = self._desktop_roles()
@@ -3992,6 +4235,7 @@ class CompanionSurface(
         self._reply_visible = False
         self._stream_used_tools = False
         self._operator_image_presented_for_turn = False
+        self._current_media_job = ""
         self._desktop_turn_action_events = []
         # The cube IS the thinking/responding indicator (a rotating working spinner) for
         # the whole turn; fall back to a text line only when there is no cube.
@@ -4168,6 +4412,8 @@ class CompanionSurface(
                         on_assistant_text=self._on_assistant_text,
                         on_action=self._on_action,
                         on_operator_image=self._on_operator_image,
+                        on_operator_media=self._on_operator_media,
+                        media_selection=getattr(self, "_current_media_selection", None),
                         cancel_event=self._cancel_event,
                     )
             aborted_turn = self._is_aborted_result(result)
@@ -4232,6 +4478,13 @@ class CompanionSurface(
     # ------------------------------------------------------------------
 
     def _on_activity(self, label: str) -> None:
+        if str(label).startswith("media:"):
+            def present_media_progress():
+                bubble = getattr(self, "_bubble", None)
+                if bubble and getattr(bubble, "_mode", "") == "input" and str(getattr(bubble, "_role_label", "")).casefold() == "create":
+                    bubble._create_progress = str(label)[7:]
+                    bubble._repaint()
+            self._post_gui_call(present_media_progress)
         """Record raw evidence and update the cube's shared glance label."""
         self._set_status(label, self._visual_palette.muted)
         self._voice_progress(label)
@@ -4764,6 +5017,7 @@ class CompanionSurface(
         card, same smooth feel as the cube). The panel is the ONLY surface: if it cannot
         render, this records why and shows nothing."""
         self._ensure_desktop_session()   # restores the saved replies the composer's Up/Down browse
+        from mo_desktop.create_controls import initial_selection
         if self._show_on_reply_surface(
             "input",
             lambda bubble: bool(
@@ -4777,6 +5031,8 @@ class CompanionSurface(
                     on_role_select=self.set_voice_role,
                     role_label=self._active_skill_role_label() or (
                         self._voice_cfg.get("role", "") if self._voice_cfg.get("role_active") else ""),
+                    create_selection=initial_selection(self._config()),
+                    on_create_action=self._create_action,
                 )
             ),
         ):
@@ -4822,8 +5078,18 @@ class CompanionSurface(
             )
         return opened
 
-    def _submit_from_input(self, text: str) -> None:
-        self._submit_text_request(text, source="submit", hide_input=False)
+    def _submit_from_input(self, text: str) -> bool:
+        bubble = getattr(self, "_bubble", None)
+        create = bool(bubble and self._active_skill_role_label().casefold() == "create")
+        selection = None
+        if create:
+            from mo_desktop.create_controls import request_selection
+            selection = request_selection(bubble._create_selection)
+            selection["references"] = [{"path": path, "role": getattr(bubble, "_create_reference_roles", {}).get(path, "reference")}
+                                       for path in bubble._attachment_preview_paths]
+            text += "\n\n[Create controls for this request; preserve these choices: " + json.dumps(selection, ensure_ascii=False) + "]"
+            bubble._create_progress = "Preparing request · elapsed starts on submission"
+        return self._submit_text_request(text, source="submit", hide_input=False, preserve_panel=create, media_selection=selection)
 
     def _reply_button_pressed(self, step: int = 0) -> None:
         """Open the composer; reply-history arrows stay on the reply card."""
@@ -5122,6 +5388,10 @@ class CompanionSurface(
                 config=self._config(),
             )
         self._remember_reply(summary)  # keep the options with their own canonical reply
+        if getattr(self, "_current_media_job", "") and getattr(self, "_operator_image_presented_for_turn", False):
+            self._current_media_job = ""
+            self._resume_voice_chat_after_turn()
+            return
         final_text = visible or "No response."
         walkthrough = bool(getattr(self, "_turn_is_walkthrough", False))
         # Any turn that pointed waits like a walkthrough: the reply panel opens once the

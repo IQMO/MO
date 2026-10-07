@@ -983,6 +983,8 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
         on_action: object = None,
         on_operator_visual: object = None,
         on_operator_image: object = None,
+        on_operator_media: object = None,
+        media_selection: dict | None = None,
         *,
         max_provider_requests: int | None = None,
     ) -> str:
@@ -1069,6 +1071,8 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             on_action=on_action,
             on_operator_visual=on_operator_visual,
             on_operator_image=on_operator_image,
+            on_operator_media=on_operator_media,
+            media_selection=media_selection,
         )
         thread_state = getattr(self, "_thread_state", None)
         if thread_state is not None:

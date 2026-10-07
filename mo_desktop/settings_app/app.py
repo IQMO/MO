@@ -35,12 +35,32 @@ def shell(theme: dict[str, Any]) -> str:
 
 
 class SettingsBridge:
-    """Value-free request transport; this renderer never writes preferences."""
+    """Value-free settings transport plus one local-only credential entry method.
+
+    Preferences belong to the host. Password entry goes straight to the private
+    broker, never through the stdout request/event transport.
+    """
 
     def __init__(self) -> None:
         self._window: Any = None
         self._on_ready: Any = None
         self._exiting = False
+        self._config: dict = {}
+
+    def save_media_key(self, value: str) -> dict:
+        """A native password field writes through the canonical broker locally.
+
+        The value never enters the stdout request transport, host diagnostics,
+        saved snapshot, conversation or model context.
+        """
+        from core.media.catalog import settings
+        from core.state.secrets import save_provider_secret
+
+        try:
+            save_provider_secret(str(settings(self._config).get("api_key_env") or "KIE_API_KEY"), value, config=self._config)
+            return {"ok": True, "message": "Kie key saved privately. It was not sent to MO's conversation."}
+        except (ValueError, OSError):
+            return {"ok": False, "message": "The key could not be saved. Check its format and private profile access."}
 
     def request(self, request_id: str, action: str, payload: dict[str, Any]) -> None:
         if not isinstance(payload, dict) or len(json.dumps(payload)) > 16000:
@@ -78,6 +98,7 @@ def run(config: dict[str, Any], *, launch_snapshot: dict | None = None) -> int:
     visuals = load_desktop_visual_state(config, refresh_skin=True)
     theme = studio_theme(config=config, visuals=visuals)
     bridge = SettingsBridge()
+    bridge._config = config
     if os.name == "nt":
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MOAgent.Settings")

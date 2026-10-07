@@ -52,6 +52,17 @@
           </section>
           <div class="page-action"><button class="quiet" data-action="show_cube">Show my cubes</button></div>
         </section>
+        <section data-section="connections" class="page-section">
+          <section class="setting-group" data-search="create kie suno seedance music video images privacy key cloudflare">
+            <div class="group-heading"><h2>Create setup · Kie</h2><button class="quiet" id="media-refresh">Check readiness</button></div>
+            <p class="group-description">Use your own Kie account. The key is saved directly in MO's private provider credential store, never in chat or diagnostics.</p>
+            <div class="group-actions"><input id="media-key" type="password" autocomplete="off" spellcheck="false" aria-label="Kie API key" placeholder="Paste your Kie API key"><button id="media-key-save" class="button">Save key privately</button></div>
+            <p id="media-status" class="muted">Readiness not checked.</p>
+            <p class="group-description">Only selected prepared copies are shared temporarily through Cloudflare with Kie and its generation provider. Anyone holding a live link can fetch its copy. Automatic cleanup stops local access, not provider retention. Originals and saved results are kept. Kie documents 14 days for generated files and 2 months for text/metadata logs; fetched-input retention is not verified.</p>
+            <div class="group-actions"><button id="media-install" class="quiet">Install optional reference helper</button></div>
+            <p class="muted">Installation downloads a checksum-verified Cloudflare helper only when you confirm. MO starts and stops it as needed; no server or domain setup. Audio/video preparation also requires FFmpeg and FFprobe. The no-account tunnel has no uptime guarantee; failure never falls back to another upload host.</p>
+          </section>
+        </section>
         <section data-section="models" class="page-section">
           <section class="setting-group"><div class="group-heading"><h2>Running MO</h2><button class="quiet" id="refresh-models">Refresh instances</button></div><div id="running-models"></div></section>
           <section class="setting-group"><div class="group-heading"><h2>Model selection</h2></div><p class="group-description">Choose where this change applies. A Terminal default is separate from the model already running in each open Terminal.</p><div id="model-target"></div><div id="model-controls"></div><div class="group-actions"><button id="apply-model" class="button primary">Save model choice</button><button id="follow-model" class="quiet">Follow Terminal provider</button><span class="muted" id="model-note"></span></div></section>

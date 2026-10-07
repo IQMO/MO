@@ -40,6 +40,11 @@ def execute_computer_targets(arguments: dict[str, Any]) -> str:
     return _execute(arguments)
 
 
+def execute_media(arguments: dict[str, Any]) -> str:
+    from .media import execute_media as _execute
+    return _execute(arguments)
+
+
 def execute_computer_observe(arguments: dict[str, Any]) -> str:
     from .computer import execute_computer_observe as _execute
     return _execute(arguments)
@@ -1241,9 +1246,9 @@ def execute_credential_status(arguments: dict[str, Any]) -> str:
                 keys.append(key)
             if str(provider.get("type") or provider.get("api_mode") or "").lower() == "codex_responses" or str(provider.get("name") or "").lower() == "openai-codex":
                 external = external or Path(codex_auth_path(provider.get("auth_path"))).expanduser().is_file()
-        for section in ("embeddings", "image"):
+        for section in ("embeddings", "image", "media"):
             cfg = config.get(section) if isinstance(config.get(section), dict) else {}
-            key = str(cfg.get("api_key_env") or "").strip()
+            key = str(cfg.get("api_key_env") or ("KIE_API_KEY" if section == "media" and cfg.get("enabled") else "")).strip()
             if key:
                 keys.append(key)
         for key in dict.fromkeys(keys):
@@ -2262,6 +2267,7 @@ TOOL_EXECUTORS = {
     "tool_search": execute_tool_search,
     "system_health": execute_system_health,
     "credential_status": execute_credential_status,
+    "media": execute_media,
     "everywhere_readiness": execute_everywhere_readiness,
     "everywhere_pair_android": execute_everywhere_pair_android,
     "file_transfer": execute_file_transfer,

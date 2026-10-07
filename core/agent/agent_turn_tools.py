@@ -413,6 +413,30 @@ def _tool_result_is_pending_background(tool_name: str, result: object) -> bool:
     )
 
 
+def _pending_media_wait_batch(calls: list[dict], results: list[dict]) -> bool:
+    """Only bounded waits for verified pending jobs may bypass completed replay.
+
+    A create, mixed batch, terminal result, failure or unknown submission still
+    uses normal duplicate protection. This never turns a create into a retry.
+    """
+    if not calls or len(calls) != len(results):
+        return False
+    for call, result in zip(calls, results):
+        function = call.get("function") or {}
+        try:
+            args = json.loads(function.get("arguments") or "{}")
+            value = json.loads(result.get("result") or "{}")
+        except (TypeError, ValueError):
+            return False
+        if not isinstance(args, dict) or not isinstance(value, dict):
+            return False
+        if (function.get("name") != "media" or args.get("action") != "wait"
+                or not value.get("task_id") or value.get("error") or value.get("waiting_stopped")
+                or value.get("state") not in {"waiting", "queuing", "generating", "downloading"}):
+            return False
+    return True
+
+
 def _should_request_action_confirmation(tool_name: str, block_reason: str | None) -> bool:
     """Ask for high-impact approval only when every earlier gate can execute."""
     return str(tool_name or "") in ACTUATION_TOOLS and not block_reason
@@ -707,6 +731,10 @@ class AgentTurnToolLoopMixin:
             arguments = self._project_scoped_tool_arguments(name, self._parsed_tool_arguments(tc_data))
             arguments = local_extensions.normalize_tool_arguments(self, state.user_input, name, arguments)
             arguments = _foreground_graph_arguments(name, state.user_input, arguments)
+            if name == "media" and state.media_selection:
+                from ..media.catalog import apply_selection
+
+                arguments = apply_selection(arguments, state.media_selection)
             fn["arguments"] = _json_tool_arguments(arguments)
 
     @staticmethod
@@ -1094,6 +1122,11 @@ class AgentTurnToolLoopMixin:
 
         batch_signature = self._tool_call_batch_signature(tool_calls_data)
         batch_is_task_progress = self._tool_batch_is_task_completion_progress(tool_calls_data, state.task_board)
+        if batch_signature == state.completed_tool_batch_signature and _pending_media_wait_batch(
+            tool_calls_data, state.completed_tool_batch_results,
+        ):
+            state.clear_completed_tool_batch()
+            state.clear_repeat_tracking()
         if (
             batch_signature
             and state.blocked_tool_batch_signature
@@ -1507,10 +1540,12 @@ class AgentTurnToolLoopMixin:
                         "on_activity": state.on_activity,
                         "cancel_event": state.cancel_event,
                     }
-                if name == "generate_image":
+                if name in {"generate_image", "media"}:
                     self._image_gen_callbacks = {
                         "on_activity": state.on_activity,
                         "cancel_event": state.cancel_event,
+                        "on_operator_media": state.on_operator_media,
+                        "media_selection": state.media_selection,
                     }
                 computer_activity_started = False
                 try:
@@ -1609,7 +1644,7 @@ class AgentTurnToolLoopMixin:
                             delattr(self, "_map_project_callbacks")
                         except AttributeError:
                             pass
-                    if name == "generate_image":
+                    if name in {"generate_image", "media"}:
                         try:
                             delattr(self, "_image_gen_callbacks")
                         except AttributeError:

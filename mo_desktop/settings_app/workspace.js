@@ -39,7 +39,7 @@
   function request(action, payload = {}) {
     const id = String(++sequence);
     const response = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error('MO did not respond. Refresh Settings to reconnect.')); }, 20000);
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('MO did not respond. Refresh Settings to reconnect.')); }, action === 'media_install' ? 180000 : 20000);
       pending.set(id, {resolve, reject, timer});
       Promise.resolve(window.pywebview.api.request(id, action, payload)).catch(error => {
         clearTimeout(timer); pending.delete(id); reject(error);
@@ -78,6 +78,11 @@
       if (!result.ok) { status(result.message || 'This change could not be saved.', true); return result; }
       if (result.state) render(result.state);
       if (result.chrome) showChrome(result.chrome);
+      if (result.media_status) {
+        const m = result.media_status;
+        $('media-status').textContent = `Key ${m.credential_present ? 'ready' : 'missing'} · reference helper ${m.reference_helper_ready ? 'ready' : 'missing'} · ${m.reference_platform_ready ? 'reference sharing supported' : 'reference sharing requires Windows'} · audio/video tools ${m.audio_video_tools_ready ? 'ready' : 'missing'} · ${m.enabled ? 'creation enabled' : 'creation off'}`;
+        $('media-install').disabled = m.reference_helper_ready || !m.reference_platform_ready;
+      }
       if (result.model_state) { state.model_state = result.model_state; showRunningModels(); }
       if (result.overview) { state.overview = result.overview; }
       if (result.graph) { state.graph = result.graph; buildGraph(); }
@@ -459,6 +464,16 @@
   $('skin-name-form').onsubmit = async event => { event.preventDefault(); const result = await act('skin_save', {id:selectedSkin, label:$('skin-name').value, colors:draftColors}); if (result.ok) $('skin-name-form').hidden = true; };
   $('delete-skin').onclick = () => confirmAction('Delete this custom skin?', 'MO will return to its default skin if this skin is in use.', 'skin_delete', {id:selectedSkin});
   $('chrome-refresh').onclick = () => act('chrome_status');
+  $('media-refresh').onclick = () => act('media_status');
+  $('media-install').onclick = () => confirmAction('Install the optional reference helper?', 'MO will download Cloudflare’s helper from its official release and verify its checksum. No tunnel, upload or paid job starts now.', 'media_install');
+  $('media-key-save').onclick = async () => {
+    let value = $('media-key').value; $('media-key').value = '';
+    try {
+      const pendingSave = window.pywebview.api.save_media_key(value); value = '';
+      const result = await pendingSave; status(result.message, !result.ok);
+      if (result.ok) await act('media_status');
+    } catch (_error) { status('The key was not saved. Reopen Settings and try again.', true); }
+  };
   $('chrome-remove').onclick = () => confirmAction('Remove the Chrome bridge?', 'Connected Tab will be unavailable until the bridge is installed again. MO may reinstall it on its next startup.', 'chrome_remove');
   $('restart').onclick = () => confirmAction('Restart MO Desktop?', 'Your Desktop windows will close and the companion will start again.', 'restart');
   $('reset').onclick = () => confirmAction('Reset Desktop preferences?', 'Cube, panel, movement and voice preferences will return to their defaults. Other MO configuration stays as it is.', 'reset');

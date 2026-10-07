@@ -9,6 +9,16 @@ when that source tree is present.
 
 ## Process and lane boundaries
 
+- Create is a shipped role in the existing composer, not another app. Its
+  presentation-only controls snapshot choices/references into the submitted
+  request, including queued requests. `core/media/README.md` owns provider/job
+  contracts. Reuse Settings, credentials, attachments, reply/options cards and
+  notices; run preparation, polling, credit reads and installation off the GUI
+  lane. Reference attachment does not ask a model to inspect the content.
+  Results, continuation and cleanup bind exact session/job/variation identities.
+  Do not claim provider deletion, a countdown, voice enrollment or live UI/provider
+  acceptance from configuration or mock tests.
+
 Desktop session snapshots retain shared input/output and cache hit/miss/write
 accounting through save and reload. `companion_session` still owns the separate
 Desktop slot and its conversation sanitizer; transient tool and provider replay

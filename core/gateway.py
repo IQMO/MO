@@ -179,6 +179,8 @@ class Gateway:
         on_action: object = None,
         on_operator_visual: object = None,
         on_operator_image: object = None,
+        on_operator_media: object = None,
+        media_selection: dict | None = None,
         desktop_action_admission: object = None,
         queued_request: bool = False,
         *,
@@ -206,6 +208,8 @@ class Gateway:
                         "on_action": on_action,
                         "on_operator_visual": on_operator_visual,
                         "on_operator_image": on_operator_image,
+                        "on_operator_media": on_operator_media,
+                        "media_selection": media_selection,
                     })
                 except ProviderRequestLimitReached:
                     override = ""
@@ -270,6 +274,8 @@ class Gateway:
                         on_action=on_action,
                         on_operator_visual=on_operator_visual,
                         on_operator_image=on_operator_image,
+                        on_operator_media=on_operator_media,
+                        media_selection=media_selection,
                         desktop_action_admission=desktop_action_admission,
                         queued_request=queued_request,
                     )
@@ -287,6 +293,8 @@ class Gateway:
         on_action: object = None,
         on_operator_visual: object = None,
         on_operator_image: object = None,
+        on_operator_media: object = None,
+        media_selection: dict | None = None,
         desktop_action_admission: object = None,
         queued_request: bool = False,
     ) -> str:
@@ -313,6 +321,8 @@ class Gateway:
                     on_action=on_action,
                     on_operator_visual=on_operator_visual,
                     on_operator_image=on_operator_image,
+                    on_operator_media=on_operator_media,
+                    media_selection=media_selection,
                 )
             if status == "ok" and handoff_record is not None:
                 _mark_surface_handoff(self.agent, handoff_record, route_source, handoff_key)
@@ -543,6 +553,8 @@ class Gateway:
         on_action: object = None,
         on_operator_visual: object = None,
         on_operator_image: object = None,
+        on_operator_media: object = None,
+        media_selection: dict | None = None,
     ) -> tuple[str, str]:
         """Core turn: lazy board → agent run → continuations."""
         result_text = ""
@@ -726,6 +738,8 @@ class Gateway:
                     on_action=on_action,
                     on_operator_visual=on_operator_visual,
                     on_operator_image=on_operator_image,
+                    on_operator_media=on_operator_media,
+                    media_selection=media_selection,
                 )
 
                 result_text = self.agent.run_turn(

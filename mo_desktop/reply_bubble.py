@@ -481,6 +481,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         button_radius = int(self._visuals.metrics.button_corner_radius) * ss
         probe = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
         is_input = self._mode == "input"
+        create_mode = is_input and str(getattr(self, "_role_label", "")).casefold() == "create"
+        create_rows = []
+        if create_mode and getattr(self, "_create_selection", None):
+            from mo_desktop.create_controls import control_rows
+            create_rows = control_rows(self._create_selection, getattr(self, "_create_credit", "Credits · refresh"))
         caret_rect: tuple[int, int, int, int] | None = None
         shown = self._body if (self._body or not is_input) else ""
         # Browsing MO's earlier replies happens IN the composer (Up/Down, the three dots).
@@ -502,6 +507,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         panel_padding = int(self._visuals.metrics.panel_padding)
         image_inset = max(6, panel_padding//2)
         body_top = image_inset if image_card else int(design.accent_top)+13
+        if create_mode:
+            body_top += 26 * len(create_rows) + 32
+            body_top += 24 * ((len(getattr(self, "_attachment_preview_paths", [])) + 1) // 2)
         rich_text = (not is_input) and (not placeholder) and not attachment_caption
         wrap_text = shown if not placeholder else "Type a message…"
         mail_reply = rich_text and shown.startswith(("**Gmail / ", "**Outlook / "))
@@ -536,7 +544,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             card_budget = 668
         preview_height = min(232 if not option_rows else 168, max(64, card_budget - options_content_h - 120))
         preview_width = content_width+2*(panel_padding-image_inset) if image_card else content_width
-        preview = self._attachment_preview_surface(preview_width, preview_height)
+        preview = None if create_mode else self._attachment_preview_surface(preview_width, preview_height)
         # The preview slot morphs to the quick edit-tools grid when opened (image only,
         # gated). It occupies the SAME slot, so sizing/draw both key off ``tools_open``.
         tools_open = (
@@ -677,6 +685,30 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 d.text((ax+28*ss, ay-5*ss), label, font=self._sfont,
                        fill=(*(self._cyan if self._hovering("role") else self._muted), 255))
                 _set_hit("role", (int(ax/ss)+21, int(ay/ss)-8, int(role_right/ss), int(ay/ss)+12))
+
+            if create_mode:
+                cy = ay + 22 * ss
+                for row in create_rows:
+                    cell_w = int(content_width * ss / len(row))
+                    for index, (key, text) in enumerate(row):
+                        left, right = ax + index * cell_w, ax + (index + 1) * cell_w - 4 * ss
+                        d.rounded_rectangle((left, cy, right, cy + 22 * ss), radius=button_radius, fill=(*self._entry, 255))
+                        label = card.fit_text(d, str(text), right - left - 10 * ss, self._sfont)
+                        d.text((left + 5 * ss, cy + 3 * ss), label, font=self._sfont, fill=(*self._muted, 255))
+                        _set_hit("create:" + key, (int(left/ss), int(cy/ss), int(right/ss), int(cy/ss) + 22))
+                    cy += 26 * ss
+                from pathlib import Path
+                for index, path in enumerate(getattr(self, "_attachment_preview_paths", [])):
+                    role = getattr(self, "_create_reference_roles", {}).get(path, "reference")
+                    left = ax + (index % 2) * int(content_width * ss / 2)
+                    top = cy + (index // 2) * 24 * ss
+                    width = int(content_width * ss / 2) - 4 * ss
+                    label = card.fit_text(d, f"{role}: {Path(path).name}", width - 8 * ss, self._sfont)
+                    d.text((left + 4 * ss, top + 2 * ss), label, font=self._sfont, fill=(*self._cyan, 255))
+                    _set_hit(f"create:reference:{index}", (int(left/ss), int(top/ss), int((left + width)/ss), int(top/ss) + 22))
+                cy += 24 * ss * ((len(getattr(self, "_attachment_preview_paths", [])) + 1) // 2)
+                note = getattr(self, "_create_progress", "References stay local until you send")
+                d.text((ax, cy + 2 * ss), card.fit_text(d, note, content_width * ss, self._sfont), font=self._sfont, fill=(*self._muted, 255))
 
         if not is_input and not image_card and callable(getattr(self, "_on_session_history", None)):
             hcol = self._cyan if self._hovering("sessions") else self._muted
@@ -1793,6 +1825,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         role_label: str | None = None,
         history: list[dict[str, Any]] | None = None,
         on_attach: Callable[[], None] | None = None,
+        create_selection: dict | None = None,
+        on_create_action: Callable[[str], None] | None = None,
     ) -> bool:
         already_composing = bool(getattr(self, "_visible", False)) and self._mode == "input"
         if history is not None:
@@ -1812,6 +1846,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._on_role_select = on_role_select
         if role_label is not None:
             self._role_label = role_label
+        if create_selection is not None and not getattr(self, "_create_selection", None):
+            self._create_selection = create_selection
+        if on_create_action is not None:
+            self._on_create_action = on_create_action
         if self._on_web_search is None:
             self._search_provider = ""
         self._end_browse(repaint=False)
@@ -1824,7 +1862,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._select_all = False
             self._scroll_line = 0
         self._input_draft = ""
-        self._attachment_preview_paths = []
+        self._attachment_preview_paths = list(getattr(self, "_input_attachments", []))
         self._on_submit = on_submit
         self._caret = True
         return self._repaint_for_panel_show(transition)
@@ -1832,6 +1870,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def clear_input_draft(self) -> None:
         """Drop a draft and composer routing only for a conversation switch/new action."""
         self._input_draft = ""
+        self._input_attachments = []
+        self._attachment_preview_paths = []
+        self._create_reference_roles = {}
+        self._create_selection = None
+        self._create_progress = ""
         self._search_provider = ""
         if self._mode == "input":
             self._body = ""
@@ -2115,7 +2158,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not key or key not in (getattr(self, "_hit", None) or {}):
             return
         self._keyboard_hit = key
-        if key == "collapse":
+        if key.startswith("create:"):
+            callback = getattr(self, "_on_create_action", None)
+            if callable(callback):
+                callback(key[len("create:"):])
+        elif key == "collapse":
             self.collapse_to_cube()
         elif key == "role":
             self._role_menu_open = not getattr(self, "_role_menu_open", False)
@@ -2305,8 +2352,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         """Preserve an in-progress composer draft so closing or replacing the input panel
         (click-away, or MO pushing a reply mid-compose) never discards what the operator
         was typing. Restored by ``show_input``; cleared only on an MO submission."""
-        if self._mode == "input" and str(getattr(self, "_body", "") or "").strip():
-            self._input_draft = self._body
+        if self._mode == "input":
+            self._input_draft = self._body if str(getattr(self, "_body", "") or "").strip() else ""
+            self._input_attachments = list(getattr(self, "_attachment_preview_paths", []))
 
     def _submit_input(self) -> None:
         text = self._body.strip()
@@ -2328,9 +2376,21 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         cb = self._on_submit
         if not callable(cb):
             return
+        create = str(getattr(self, "_role_label", "")).casefold() == "create"
+        if create:
+            if cb(text) is False:
+                return
+            self._body = ""
+            self._cursor = 0
+            self._select_all = False
+            self._attachment_preview_paths = []
+            self._create_reference_roles = {}
+            self._repaint()
+        else:
+            self.hide()
+            cb(text)
         self._input_draft = ""      # submitted to MO — the draft must not reappear
-        self.hide()
-        cb(text)
+        self._input_attachments = []
 
     def _on_wheel(self, event: Any) -> str:
         if getattr(self, "_role_menu_open", False):

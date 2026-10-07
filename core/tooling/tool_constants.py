@@ -12,6 +12,7 @@ MUTATING_TOOLS = frozenset({
     "write_file",
     "edit_file",
     "generate_image",
+    "media",
     "edit_image",
     "record_profile_fact",
     "project_history",
