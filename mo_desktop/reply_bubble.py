@@ -1134,7 +1134,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         recent_render = (
             now - float(getattr(self, "_last_render_at", 0.0) or 0.0)
         ) < 0.25
-        fast = input_edit or recent_render
+        # Only text that is still arriving earns the cheaper 2x pass. A hover, an option
+        # toggle or a tab switch over the same text at 2x re-rasterizes every glyph, and the
+        # 3x settle snaps them back: the card shimmered under a moving pointer (his msg 167).
+        streaming = getattr(self, "_body", None) != getattr(self, "_last_render_body", None)
+        fast = input_edit or (recent_render and streaming)
         return (1 if input_edit else (2 if fast else _SS)), fast
 
     def _repaint(self) -> bool:
@@ -1187,6 +1191,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._ss, fast = self._render_supersample(morphing=morphing, now=now)
         self._font, self._bfont, self._sfont, self._ifont = self._fonts(self._ss)
         self._last_render_at = now
+        self._last_render_body = getattr(self, "_body", None)
 
         card_w = self._card_width()
         side = "right" if cx + half + card_w + 2 * int(design.shadow_pad) <= sw else "left"
