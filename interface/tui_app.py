@@ -784,10 +784,10 @@ class TuiAppMixin:
                 dashboard.close()
                 self.agent._dashboard_server = None
             self.agent._dashboard_dispatch = None
-            role_workspace = getattr(self.agent, "_terminal_role_workspace", None)
-            if role_workspace is not None:
-                role_workspace.close()
-                self.agent._terminal_role_workspace = None
+            floor = getattr(self.agent, "_mologrthim_window", None)
+            if floor is not None:
+                floor.destroy()          # Mologrthim's floor opened from this Terminal closes with it
+                self.agent._mologrthim_window = None
             # Restore the user's terminal palette before erasing the visible MO
             # render region. This prevents Dracula/silver cells from remaining
             # mixed with the host default background after Ctrl+C/Ctrl+D exits.

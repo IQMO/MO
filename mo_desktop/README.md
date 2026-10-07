@@ -140,12 +140,10 @@ close and save-confirmation behavior stays with each app.
 
 Desktop's resident cube, composer, launcher, tray and screen selection use native
 alpha windows and a single Windows message/timer loop. Clipboard, pointer and
-screen services no longer require Tk. The current on-demand
-[Mologrthim workroom](mologrthim/README.md) and existing profile Tk apps retain
-their widgets in a host on the same GUI thread; normal Desktop startup neither
-imports Tk nor creates an interpreter. Mologrthim remains exposed through the
-Work cube; only further concept and visual changes are parked. Settings, Phone
-and Files use the shared native WebView renderer. Shell owns its native control
+screen services no longer require Tk. Private profile Tk apps keep their
+widgets in an on-demand host on the same GUI thread; normal Desktop startup
+neither imports Tk nor creates an interpreter. Settings, Phone, Files, SystemCare
+and [Mologrthim](mologrthim/README.md) use the shared native WebView renderer. Shell owns its native control
 strip; Windows file pickers and attached third-party windows retain their own chrome.
 
 ## What the companion can do
@@ -1106,8 +1104,8 @@ Those surfaces, the launcher and screen selection use the shared native
 per-pixel-alpha window adapter. File drops use Windows OLE and the launcher
 opens Windows file/folder pickers. There is no chroma-key canvas fallback.
 The resident uses `gui_loop.py` to wait for native messages, posted work and
-monotonic timer deadlines. `tk_host.py` loads only for a parked workroom or
-existing profile Tk app; that optional host and its widgets are cleaned up on
+monotonic timer deadlines. `tk_host.py` loads only for a private profile Tk
+app; that optional host and its widgets are cleaned up on
 the GUI thread at shutdown. Tk has not been eliminated from the whole project. A missing required visual adapter fails explicitly.
 Optional `keyboard`, `pystray`,
 `pywin32`, RTL, voice, and volume packages load only when needed; there is no

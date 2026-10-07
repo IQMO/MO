@@ -1,0 +1,19 @@
+<main class="floor-app">
+  <header class="mo-titlebar pywebview-drag-region">
+    <div class="mo-title-identity pywebview-drag-region">@@MARK@@<strong class="mo-title">Mologrthim</strong><span class="floor-sub pywebview-drag-region" id="floor-sub">MO's operations floor</span></div>
+    <div class="mo-title-actions">
+      <button type="button" class="goal-pill" id="goal-pill" hidden></button>
+      <span class="usage-pill" id="usage-pill" title="Machine and MO load">sampling…</span>
+      <button type="button" class="mo-window-button plus-button" id="new-mo" title="Start a new MO terminal" aria-label="Start a new MO terminal">@@PLUS@@</button>
+      <div class="mo-window-controls">@@WINDOW_CONTROLS@@</div>
+    </div>
+  </header>
+  <div class="floor-body">
+    <section class="floor-stage" id="stage">
+      <canvas id="floor" tabindex="0" aria-label="MO's operations floor: select an MO, a specialist or a candidate"></canvas>
+      <div class="floor-empty" id="floor-empty" hidden></div>
+    </section>
+    <aside class="floor-panel" id="panel" aria-live="polite"></aside>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
+</main>

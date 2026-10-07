@@ -1,4 +1,4 @@
-"""On-demand host for the parked workroom and existing profile Tk apps.
+"""On-demand host for private profile Tk apps (the profile app contract's ``root``); MO's own apps use WebView.
 
 Never constructed by normal Desktop startup. The native resident owns the
 thread and deadlines; this host only services an explicitly opened Tk app.

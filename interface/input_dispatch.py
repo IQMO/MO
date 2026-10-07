@@ -526,15 +526,6 @@ class InputDispatchMixin:
         completed = threading.Event()
         result = {}
         model_request = {}
-        room_request = {}
-        if kind == "mologrthim":
-            import json
-            room_request = json.loads(value)
-            if (not isinstance(room_request, dict)
-                    or room_request.get("mode") not in {"observe", "talk"}
-                    or not isinstance(room_request.get("request_id"), str)
-                    or not 1 <= len(room_request["request_id"]) <= 64):
-                raise ValueError("Invalid Mologrthim request")
         if kind == "model":
             import json
             model_request = json.loads(value)
@@ -551,7 +542,7 @@ class InputDispatchMixin:
                     from pathlib import Path
                     if Path(project).resolve() != Path(self.agent._effective_project_cwd()).resolve():
                         raise RuntimeError("Terminal changed project; refresh the list and choose again")
-                focused = focus_terminal(get_instance_id()) if kind not in {"model", "mologrthim"} else False
+                focused = focus_terminal(get_instance_id()) if kind != "model" else False
                 workspace = getattr(self, "_workspace", None)
                 if kind in {"command", "request", "steer"} and workspace is not None and workspace.active:
                     workspace.focus_pane("main")
@@ -565,40 +556,6 @@ class InputDispatchMixin:
                 elif kind == "stop":
                     handled = self._handle_busy_interrupt()
                     result["message"] = str(getattr(self, "_last_busy_escape_notice", "")) if handled else "Nothing to stop in this terminal"
-                elif kind in {"role_workspace", "mologrthim"}:
-                    from mo_desktop.mologrthim.app import TerminalMologrthimHost
-
-                    room_roles = roles
-                    if kind == "mologrthim":
-                        from core.skills import default_skill_roots, list_roles
-                        current_project = self.agent._effective_project_cwd()
-                        roots = default_skill_roots(
-                            current_project, getattr(self.agent, "runtime_home", None),
-                            profile=getattr(self.agent, "profile", None), config=self.agent.config,
-                        )
-                        room_roles = list_roles(roots, profile=getattr(self.agent, "profile", None),
-                                               project_cwd=current_project)
-                    can_talk = kind == "role_workspace" or room_request["mode"] == "talk"
-                    host = getattr(self.agent, "_terminal_role_workspace", None)
-                    if host is not None and not host.matches(self.agent):
-                        host.close()
-                        host = None
-                    if host is None:
-                        host = TerminalMologrthimHost(
-                            self.agent, room_roles, app.loop,
-                            on_submit=lambda text: self._handle_input(text, owner_bound=True),
-                        )
-                        self.agent._terminal_role_workspace = host
-                    host.roles = tuple(room_roles or ())
-                    host.role_bound = kind == "role_workspace"
-                    host.can_talk = can_talk
-                    try:
-                        host.show()
-                    except Exception:
-                        host.close()
-                        self.agent._terminal_role_workspace = None
-                        raise
-                    result["message"] = "Role workspace opened" if kind == "role_workspace" else "Mologrthim opened"
                 elif kind == "command":
                     children = self._palette_children_for_item(PaletteItem(value, value))
                     if children:
@@ -633,14 +590,6 @@ class InputDispatchMixin:
             except Exception as exc:
                 result["error"] = str(exc)
             finally:
-                if kind == "mologrthim":
-                    from core.runtime.heartbeat import record_heartbeat
-                    self.agent._mologrthim_control = {
-                        "request_id": room_request["request_id"],
-                        "ok": not bool(result.get("error")),
-                        "message": result.get("error") or result.get("message", ""),
-                    }
-                    record_heartbeat(self.agent, surface="terminal", event="mologrthim")
                 if kind == "model":
                     from core.runtime.heartbeat import record_heartbeat
                     self.agent._settings_model_control = {

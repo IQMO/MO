@@ -513,8 +513,8 @@ Do not guess. Do not call something dead unless imports/tests prove it.
   inventory supplies Tab completion. Selecting a role activates it and returns
   to the conversation with a notice. Role changes save immediately, including
   before the first message. Conversation requests use the same lifecycle via
-  `role_work activate/off`. `/role show` opens the native Mologrthim workroom
-  against this Terminal's own roster and workers, without starting a
+  `role_work activate/off`. `/role show` opens Mologrthim's floor at this
+  Terminal's bay, with its real specialists and their checked work, without starting a
   task or another Agent; with no active role, it selects Project Architect first.
   It never implicitly replaces a different active role. Conversation returns to this Terminal. Closing the
   view keeps the conversation; leaving the role, changing conversation/project,

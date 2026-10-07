@@ -917,12 +917,12 @@ interaction clock must not become an always-running background animation.
   active and opens the actual native view. It does not replace another active
   role implicitly; activate Project Architect explicitly first. A Design prototype requires a
   separate design request and must never stand in for live workers.
-- `mologrthim/snapshot.py` projects that roster and worker state; the extracted
-  `mologrthim/app.py` owns the frameless native Mologrthim workroom, with
-  skin-derived room and character artwork in `mologrthim/scene.py`. Its current
-  scene and backend boundary are documented in [Mologrthim](mologrthim/README.md).
-  The Work cube opens this same room dimmed with the live-Terminal chooser;
-  choosing a running Terminal opens an observation-only view with no composer.
+- Mologrthim is a native WebView app on the shared window owners (like Files and
+  SystemCare): `mologrthim/snapshot.py` reads every running MO and the specialists'
+  checked record, `mologrthim/bridge.py` observes only while visible and acts only
+  through the Terminal handoff, `mologrthim/floor.js` draws the floor. The Work cube,
+  the tray, Project Architect activation and `/role show` open it through
+  `MologrthimWindow`. See [Mologrthim](mologrthim/README.md).
   The plus beside Close launches one fresh Terminal with Talk to MO enabled;
   it starts no message or work automatically. Discovery, exact typed handoff,
   startup and correlated acknowledgement reuse their existing owners. The

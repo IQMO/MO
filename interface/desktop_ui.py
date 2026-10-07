@@ -54,8 +54,6 @@ DESKTOP_STRUCTURAL_RADIUS_WHITELIST = MappingProxyType({
         "thin dimming slider track has circular end caps",
     ("mo_desktop/mo_renderer.py", "panel", "radius * 2"):
         "active panel radius at the local 2x antialiasing pass",
-    ("mo_desktop/mologrthim/app.py", "paint", "r * 3"):
-        "active panel or button radius at Mologrthim's local 3x antialiasing pass",
     ("mo_desktop/dashboard_card.py", "render_dashboard_card", "2 * ss"):
         "four-cube brand glyph",
     ("mo_desktop/tray.py", "_render", "max(1, self.owner._visuals.metrics.button_corner_radius // 4)"):

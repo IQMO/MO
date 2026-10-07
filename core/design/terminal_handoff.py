@@ -177,7 +177,7 @@ def queue_terminal_turn(
 def queue_terminal_control(kind: str, value: str, target: dict[str, Any], *,
                            project_root: str, expected_slot: str = "", config=None) -> str:
     """Queue a typed UI action, never reinterpret a normal Design message."""
-    if kind not in {"command", "request", "stop", "steer", "terminal", "model", "mologrthim"}:
+    if kind not in {"command", "request", "stop", "steer", "terminal", "model"}:
         raise ValueError("Unknown terminal control")
     payload = {"kind": kind, "value": value, "project": str(Path(project_root).resolve())}
     if expected_slot:
@@ -314,7 +314,7 @@ def _claim_terminal_message(
         if row.get("control") is True:
             control = json.loads(text)
             if (isinstance(control, dict)
-                    and control.get("kind") in {"command", "request", "stop", "steer", "terminal", "model", "mologrthim"}
+                    and control.get("kind") in {"command", "request", "stop", "steer", "terminal", "model"}
                     and isinstance(control.get("value"), str)
                     and isinstance(control.get("project"), str)
                     and isinstance(control.get("expected_slot", ""), str)):

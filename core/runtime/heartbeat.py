@@ -276,7 +276,6 @@ def build_heartbeat_snapshot(
         "model": redact_monitor_text(str(getattr(agent, "model", "") or ""), 120),
         "model_selection": {key: redact_monitor_text(value, 120) for key, value in active_model_selection(agent).items()},
         "model_control": _safe_extra(getattr(agent, "_settings_model_control", None)),
-        "mologrthim_control": _safe_extra(getattr(agent, "_mologrthim_control", None)),
         "context": _context_pressure(agent),
         "taskboard": _taskboard_state(board, session_id=session_id),
         "workers": _worker_state(agent),

@@ -14,7 +14,7 @@ are owned by the linked product documentation and source.
   knowledge, and private continuity.
 - The optional Windows-focused MO Desktop companion provides conversation,
   screen help, Dashboard, Files, Design/Board, Phone, SystemCare, voice, Shell,
-  and the Mologrthim role workroom through the same runtime owners and guards.
+  and the Mologrthim operations floor through the same runtime owners and guards.
 - MO Everywhere supplies the authenticated Hub, explicit portable
   conversations, bounded work controls, file transfer, schedules, and native
   Live Control. The Android companion is distributed only through Google Play;
@@ -33,8 +33,8 @@ are owned by the linked product documentation and source.
   perspective in the [README](README.md), [FAQ](FAQ.md), and
   [capability contract](CAPABILITIES.md).
 - Desktop app title bars and controls use shared compact geometry and skin
-  settings. MO Files uses its guarded WebView board, while Project Architect
-  uses the Mologrthim workroom.
+  settings. MO Files uses its guarded WebView board, and Project Architect's
+  specialists appear on the Mologrthim operations floor (a WebView app).
 - Retired compatibility callables are removed; public diagnostics enforce
   registered compatibility debt, source duplication, prompt ownership,
   documentation links, packaging boundaries, and privacy gates.

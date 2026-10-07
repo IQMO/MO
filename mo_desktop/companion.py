@@ -232,17 +232,9 @@ def _desktop_frame_plan(surface: Any, now: float | None = None, *, render_ms: fl
             )
     if active:
         return max(1, round(_GUI_ACTIVE_FRAME_MS - render_ms)), True
-    role_view = getattr(surface, "_role_workspace", None)
-    role_window = getattr(role_view, "window", None)
-    role_visible = False
-    if role_window is not None:
-        try:
-            role_visible = role_window.state() != "withdrawn"
-        except Exception:
-            role_visible = False
     visible = bool(getattr(surface, "_visible", False)) or bool(
         cube is not None and getattr(cube, "_visible", False)
-    ) or role_visible
+    )
     interval = _GUI_PASSIVE_FRAME_MS if visible else _GUI_HIDDEN_FRAME_MS
     return max(1, round(interval - render_ms)), False
 
@@ -461,19 +453,7 @@ class CompanionSurface(
         # Profile-authored conversational role selected by the user's own
         # triggers. Unlike the voice persona, this is a real tool/lane scope.
         self._active_skill_role: Any = None
-        self._role_workspace: Any = None
-        self._role_workspace_roles: tuple[Any, ...] = ()
-        self._role_workspace_requested = False
-        self._role_workspace_refresh_at = 0.0
-        self._role_workspace_session: Any = None
-        self._role_workspace_session_id = ""
-        self._role_workspace_observation: dict[str, Any] = {}
-        self._role_workspace_observation_at = 0.0
-        self._role_workspace_observing = False
-        self._role_workspace_event_cache: dict[str, Any] = {}
-        self._desktop_task_board: Any = None
-        self._role_workspace_activity = "Main brain · ready"
-        self._role_workspace_summary = ""
+        self._role_workspace: Any = None      # Mologrthim's native floor window (separate process)
         self._register_dashboard_sources()
         self._agent._dashboard_mail_request = self._dashboard_mail_request
 
@@ -2337,7 +2317,6 @@ class CompanionSurface(
                     return
                 self._poll_voice_autostop()
                 current = time.monotonic()
-                self._refresh_project_role_workspace(current)
                 if current - float(getattr(self, "_last_theme_poll_at", 0.0)) >= _THEME_POLL_SECONDS:
                     self._last_theme_poll_at = current
                     self._refresh_theme_from_disk()
@@ -2403,8 +2382,6 @@ class CompanionSurface(
             self._shutdown_private_desktop_apps()
             view = getattr(self, "_role_workspace", None)
             if view is not None:
-                if view.connections is not None:
-                    view.connections.close()
                 view.destroy()
                 self._role_workspace = None
             host = getattr(self, "_tk_host", None)
@@ -2434,7 +2411,7 @@ class CompanionSurface(
             self._gui = None
 
     def _optional_tk_root(self) -> Any:
-        """Preserve parked/profile Tk apps without loading Tk in the resident."""
+        """The Tk root for private profile apps, created only when one opens (never at startup)."""
         if getattr(self, "_tk_host", None) is None:
             from mo_desktop.tk_host import OptionalTkHost
 
@@ -4074,211 +4051,31 @@ class CompanionSurface(
         if next_id == "generate":
             self._refresh_generate_credits()
         self._refresh_effective_role_character()
-        if next_id == "project-architect":
-            self._role_workspace_roles = self._desktop_roles()
-            if previous_id != next_id:
-                self._role_workspace_summary = "Resume from the saved conversation; verify the project and specialist evidence before dispatch."
-            if previous_id != next_id or reveal:
-                self._role_workspace_requested = True
-            if bool(getattr(self, "_role_workspace_requested", False)):
-                self._post_gui_call(self._open_project_role_workspace)
-        elif previous_id == "project-architect":
-            self._role_workspace_requested = False
-            self._post_gui_call(self._hide_project_role_workspace)
+        if next_id == "project-architect" and (previous_id != next_id or reveal):
+            from core.runtime.instance import get_instance_id
 
-    def open_mologrthim(self) -> None:
-        """Open the dimmed room and exact live-Terminal chooser."""
-        self._role_workspace_roles = self._desktop_roles()
-        self._role_workspace_requested = True
-        self._post_gui_call(lambda: self._open_project_role_workspace(landing=True))
+            self._post_gui_call(lambda: self.open_mologrthim(focus=get_instance_id()))
 
-    def _role_workspace_snapshot(self) -> dict[str, Any]:
-        from mo_desktop.mologrthim.snapshot import build_snapshot
+    def open_mologrthim(self, focus: str = "") -> None:
+        """Open Mologrthim's floor (its own WebView process, like Files and SystemCare): every running MO, their
+        specialists' checked work, candidates and MO Care. It reads records and acts only through MO's handoff."""
+        self._post_gui_call(lambda: self._display_mologrthim(str(focus or "")))
 
-        session = getattr(self, "_role_workspace_session", None)
-        observation = getattr(self, "_role_workspace_observation", {})
-        landing = bool(getattr(self, "_role_workspace_landing", False))
-        if landing or not self._mologrthim_session_matches():
-            session, observation = None, {}
-        data = build_snapshot(
-            getattr(self, "_role_workspace_roles", ()),
-            getattr(self._agent, "workers", None),
-            activity=getattr(self, "_role_workspace_activity", ""),
-            summary=getattr(self, "_role_workspace_summary", ""),
-            session=session,
-            board=getattr(self, "_desktop_task_board", None),
-            events=observation.get("events"),
-            learning=observation.get("learning"),
-            binding="Desktop conversation",
-        )
-        current = getattr(self, "_role_workspace_observation", {})
-        data.update({key: value for key, value in current.items() if key not in {"events", "learning"}})
-        return data
+    def _display_mologrthim(self, focus: str = "") -> None:
+        from mo_desktop.mologrthim.window import MologrthimWindow
 
-    def _open_project_role_workspace(self, *, landing: bool = False) -> None:
-        if not bool(getattr(self, "_role_workspace_requested", False)) or self._gui is None:
-            return
-        self._role_workspace_landing = landing
-        session = None if landing else self._ensure_desktop_session()
-        if landing or not self._mologrthim_session_matches():
-            self._role_workspace_session = session
-            self._role_workspace_session_id = str(session.session_id) if session is not None else ""
-            self._role_workspace_observation = {}
-            self._role_workspace_observation_at = 0.0
-        if self._role_workspace is None:
-            from mo_desktop.mologrthim.app import MologrthimWindow
-
-            self._role_workspace = MologrthimWindow(
-                self._optional_tk_root(),
-                self._role_workspace_snapshot,
-                self._show_role_workspace_conversation,
-                on_dismiss=self._role_workspace_dismissed,
-                monitor_anchor=getattr(getattr(self, "_cube", None), "_win", None),
-                on_submit=self._submit_mologrthim_message,
-            )
-        from mo_desktop.mologrthim.connections import RoomConnections
-        previous_connections = getattr(self._role_workspace, "connections", None)
-        if previous_connections is not None:
-            previous_connections.close()
-        self._role_workspace.connections = RoomConnections(
-            self._config(), str(self._agent._effective_project_cwd()),
-        )
-        self._role_workspace.landing = landing
-        self._role_workspace.show()
-        bubble = getattr(self, "_bubble", None)
-        if bubble is not None and bubble is not False:
-            bubble.hide()
-        self._reply_visible = False
-
-    def _hide_project_role_workspace(self) -> None:
-        view = getattr(self, "_role_workspace", None)
-        if view is not None:
-            view.hide()
-
-    def _role_workspace_dismissed(self) -> None:
-        self._role_workspace_requested = False
-        connections = getattr(getattr(self, "_role_workspace", None), "connections", None)
-        if connections is not None:
-            connections.close()
-        if getattr(self, "_role_workspace_landing", False):
-            self._role_workspace.destroy()
-
-    def _mologrthim_session_matches(self) -> bool:
-        session = getattr(self, "_desktop_session", None)
-        return (session is not None
-                and session is getattr(self, "_role_workspace_session", None)
-                and str(getattr(session, "session_id", ""))
-                == getattr(self, "_role_workspace_session_id", ""))
-
-    def _submit_mologrthim_message(self, text: str) -> dict[str, Any]:
-        if (not self._role_workspace_requested
-                or getattr(self, "_role_workspace_landing", False)
-                or not self._mologrthim_session_matches()):
-            raise RuntimeError("The conversation changed. Reopen Mologrthim before sending.")
-        accepted = self._submit_text_request(
-            text, source="mologrthim", preserve_panel=True,
-            _queued_attachment_paths=(), _queued_attachment_allow_tools=True,
-        )
-        if not accepted:
-            raise RuntimeError("The request was not accepted. Your message is still in the composer.")
-        return {"accepted": True, "message": "Submitted to this Desktop conversation"}
-
-    def _observe_mologrthim_runtime(self, now: float) -> None:
-        if (getattr(self, "_role_workspace_observing", False)
-                or now < getattr(self, "_role_workspace_observation_at", 0.0)):
-            return
-        session = self._role_workspace_session
-        session_id = self._role_workspace_session_id
-        view = self._role_workspace
-        connections = getattr(view, "connections", None)
-        landing = bool(getattr(self, "_role_workspace_landing", False))
-        self._role_workspace_observation_at = now + 2.0
-        self._role_workspace_observing = True
-
-        def observe() -> None:
-            observation: dict[str, Any] = {}
-            try:
-                if connections is not None:
-                    observation.update(connections.poll())
-                from core.learning.status import build_learning_status
-                from mo_desktop.mologrthim.snapshot import read_runtime_events
-
-                if not landing:
-                    observation["events"] = read_runtime_events(
-                        getattr(self._gateway, "monitor", None),
-                        session_id,
-                        getattr(self, "_role_workspace_event_cache", None),
-                    )
-                    observation["learning"] = build_learning_status(
-                        getattr(self._agent, "profile", None), config=self._config(),
-                    ).as_dict()
-            except Exception:
-                _write_stderr(traceback.format_exc())
-
-            def apply() -> None:
-                self._role_workspace_observing = False
-                if (self._role_workspace_requested
-                        and session is self._role_workspace_session
-                        and session_id == self._role_workspace_session_id
-                        and connections is getattr(self._role_workspace, "connections", None)
-                        and (landing or self._mologrthim_session_matches())):
-                    self._role_workspace_observation = observation
-                    self._role_workspace.refresh()
-
-            self._post_gui_call(apply)
-
-        threading.Thread(target=observe, name="mo-mologrthim-observe", daemon=True).start()
-
-    def _on_desktop_board(self, event: dict[str, Any]) -> None:
-        # Gateway calls this in the existing isolated Desktop session scope.
-        # Retain its read-only board reference; never borrow Terminal's board.
-        board = getattr(self._agent, "_active_task_board", None)
-        session = getattr(self, "_desktop_session", None)
-        session_id = str(getattr(session, "session_id", ""))
-        if (not session_id or str(event.get("session_id", "")) != session_id
-                or str(getattr(board, "session_id", "")) != session_id):
-            return
-
-        def apply() -> None:
-            if (session is self._desktop_session
-                    and str(getattr(session, "session_id", "")) == session_id):
-                self._desktop_task_board = board
-
-        self._post_gui_call(apply)
-
-    def _show_role_workspace_conversation(self) -> None:
-        self._role_workspace_requested = False
-        self._hide_project_role_workspace()
-        text = str(getattr(self, "_last_reply_dialog_text", "") or "").strip()
-        self._render_reply_dialog(
-            text or "The Desktop conversation remains saved; type or speak to continue.",
-            follow_tail=False,
-            controls=True,
-        )
-
-    def _refresh_project_role_workspace(self, now: float) -> None:
-        if not bool(getattr(self, "_role_workspace_requested", False)):
-            return
-        if (getattr(self, "_role_workspace_session", None) is not None
-                and not getattr(self, "_role_workspace_landing", False)
-                and not self._mologrthim_session_matches()):
-            self._role_workspace_requested = False
-            self._hide_project_role_workspace()
-            return
-        view = getattr(self, "_role_workspace", None)
-        if view is None or getattr(view, "window", None) is None:
-            self._open_project_role_workspace()
-            view = getattr(self, "_role_workspace", None)
-        if view is None or now < float(getattr(self, "_role_workspace_refresh_at", 0.0) or 0.0):
-            return
-        self._role_workspace_refresh_at = now + 0.3
+        window = getattr(self, "_role_workspace", None)
+        if window is None:
+            window = MologrthimWindow(self._config())
+            self._role_workspace = window
+        options = self._app_launch_options("mologrthim")      # born from the cubes, like the other apps
         try:
-            if view.window.state() != "normal":
-                return
+            window.show(focus=focus, **options)
         except Exception:
-            return
-        self._observe_mologrthim_runtime(now)
-        view.refresh()
+            if options.get("on_ready"):
+                options["on_ready"](False)
+            raise
+        self._pulse_desktop_app("mologrthim")
 
     @staticmethod
     def _role_activation_reply(reply: object, started_role: Any | None) -> str:
@@ -4416,9 +4213,6 @@ class CompanionSurface(
             self._suppress_stream_for_turn = bool(
                 bool(getattr(self, "_preserve_panel_for_turn", False))
                 or self._turn_is_walkthrough
-                or (
-                    bool(getattr(self, "_role_workspace_requested", False))
-                )
             )
             self._set_panel_dismissible(not self._turn_is_walkthrough)
             pairing_action = desktop_pairing_action(user_input)
@@ -4503,7 +4297,6 @@ class CompanionSurface(
                         route_source="mo_desktop",
                         desktop_action_admission=admission,
                         on_activity=self._on_activity,
-                        on_board_event=self._on_desktop_board,
                         on_assistant_text=self._on_assistant_text,
                         on_action=self._on_action,
                         on_operator_image=self._on_operator_image,
@@ -4587,8 +4380,6 @@ class CompanionSurface(
             self._yield_for_desktop_actuation()
         short = self._concise_activity_label(label)
         if short:
-            if bool(getattr(self, "_role_workspace_requested", False)):
-                self._role_workspace_activity = f"Main brain · {short}"[:180]
             self._present_activity(short)
 
     @staticmethod
@@ -4899,8 +4690,6 @@ class CompanionSurface(
         # text, command, file path). This is what makes the action log reflect
         # what MO actually DID on the desktop — the whole point of the log.
         tool = str(action.get("tool", "") or "tool")
-        if tool == "role_work" and action.get("successful"):
-            self._role_workspace_roles = self._desktop_roles()
         if (
             tool == "point_on_screen"
             and bool(action.get("successful"))
@@ -5498,20 +5287,6 @@ class CompanionSurface(
         # Any turn that pointed waits like a walkthrough: the reply panel opens once the
         # pointer label has had its time, never beside it.
         pointing = walkthrough or self._walkthrough_recap_must_wait()
-        role_workspace_active = bool(
-            getattr(self, "_role_workspace_requested", False)
-        )
-        if role_workspace_active:
-            self._role_workspace_roles = self._desktop_roles()
-        if role_workspace_active and options is None and not walkthrough:
-            self._role_workspace_activity = "Main brain · response ready"
-            self._role_workspace_summary = f"Latest response: {final_text}"
-            view = getattr(self, "_role_workspace", None)
-            if view is not None:
-                self._post_gui_call(view.refresh)
-            if not self._speak_reply(final_text):
-                self._resume_voice_chat_after_turn()
-            return
         if pointing:
             # Pointer labels are the only walkthrough body. The normal reply card
             # appears once, after the FIFO, as the final recap and response path.

@@ -182,8 +182,6 @@ def terminal_session_candidates(config: dict[str, Any] | None, sessions_dir: str
             "project_id": project_id,
             "source_surface": "terminal",
             "status": event.status if event is not None else "active",
-            "mologrthim_control": snapshot.get("mologrthim_control") or {},
-            "mologrthim_available": "mologrthim_control" in snapshot,
             "intent": event.intent if event is not None else _session_focus(path),
             "outcome": event.outcome if event is not None else "",
             "taskboard": snapshot.get("taskboard") if isinstance(snapshot.get("taskboard"), dict) else {},

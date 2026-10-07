@@ -175,6 +175,29 @@ def claim_new_findings(config: dict[str, Any], surface: str) -> list[dict[str, A
     return claimed
 
 
+def dismiss_finding(config: dict[str, Any], finding_id: str) -> bool:
+    """The user dismissed one report (Mologrithm's MO Care corner); it stays in the record, marked."""
+    from core.runtime.lock import file_byte_lock
+    from core.utils.atomic_write import atomic_write_json
+
+    state_path, lock_path = _state_paths(config)
+    if not state_path.is_file():
+        return False
+    with file_byte_lock(lock_path):
+        state = _read_state(state_path)
+        recent = [row for row in state.get("recent") or [] if isinstance(row, dict)]
+        hit = False
+        for row in recent:
+            if row.get("id") == finding_id:
+                row["dismissed"] = True
+                row.setdefault("shown_by", "mologrthim")
+                hit = True
+        if hit:
+            state["recent"] = recent
+            atomic_write_json(state_path, state)
+    return hit
+
+
 def recent_findings(config: dict[str, Any]) -> list[dict[str, Any]]:
     """MO Care's recent reports, newest first, read-only (Mologrithm's MO Care corner)."""
     state_path, _lock = _state_paths(config)
@@ -218,7 +241,10 @@ def watch(config: dict[str, Any], *, now: float | None = None, _locked: bool = F
         findings.append({"id": hashlib.sha1(fingerprint.encode("utf-8")).hexdigest()[:12], "kind": kind,
                          "detail": " ".join(str(detail or "").split())[:300], "at": at, "source": source})
 
-    monitor_dir = Path(resolve_state_path("logs/monitor", config))
+    import os
+
+    configured = str(os.environ.get("MO_BACKEND_MONITOR_DIR") or "").strip()
+    monitor_dir = Path(configured) if configured else Path(resolve_state_path("logs/monitor", config))
     for log in sorted(monitor_dir.glob("backend_monitor-*.jsonl")) if monitor_dir.is_dir() else []:
         try:
             if log.stat().st_mtime < since:

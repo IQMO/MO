@@ -1836,10 +1836,6 @@ class AgentTurnDispatchMixin:
 
             return open_role_workspace(self, roles)
 
-        view = getattr(self, "_terminal_role_workspace", None)
-        if view is not None and view.matches(self):
-            view.roles = tuple(roles)
-
         def belongs_to_project(record) -> bool:
             return bool(
                 record is not None and record.source == "project-architect"

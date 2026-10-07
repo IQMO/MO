@@ -410,12 +410,12 @@ search or copy the whole transcript store into the project index.
 - `core/state/preferences.py` owns the private interactive overlay: Terminal model/display defaults, optional Desktop model choice, graph preferences, mail opt-in and per-project LSP selection. Typed writers merge under the shared byte-lock/atomic-write pattern. Startup, `/reload`, and MO Design dispatch revalidate the saved Terminal model through `core.provider.model_catalog.activate_model_selection`. Design has no chooser or persisted model state. Desktop's explicit selection or followed Terminal provider variant is resolved by `runtime_model_selection` and applied only in Gateway's request-local scope.
 - `core/state/configuration.py` owns surgical authored YAML updates, including Desktop persistence. It reads fresh disk state under a cross-process lock, validates the merged document and atomically replaces only touched top-level blocks. Settings' declared configuration editors save for reload/restart without mutating the current Agent. The private preference overlay and authored configuration retain distinct scopes; Settings owns neither defaults nor a browser store.
 - Native Settings observes running Terminal model selections from existing instance heartbeats. An exact instance/PID/project/slot request uses the existing typed terminal handoff queue; the receiving idle Terminal validates and activates it, then publishes a correlated receipt. Queuing is not successful application. Draft text, focus and saved defaults remain unchanged; busy Terminals reject the request. No model-control daemon or second instance registry is added.
-- Mologrthim uses that same typed Terminal handoff for an exact observation-only
-  or talk view, with a correlated heartbeat receipt after the native room opens.
-  Observation never activates a role, sends input or focuses the Terminal. The
-  receiving Terminal owns its session, taskboard and workers; the view remains
-  a projection. Its explicit new-conversation action reuses the normal Terminal
-  launcher. Closing the room never stops the Terminal or its work. Resource
+- Mologrthim, MO's operations floor, reads every running MO from these same
+  heartbeats and acts only through the typed Terminal handoff: Assign and Hire are
+  normal turns (`queue_terminal_turn`), Pause/Resume are that Terminal's own
+  `/goal pause`/`/goal resume` commands, Open terminal is the `terminal` control.
+  It never activates a role, dispatches a specialist directly or stops work, and
+  closing it never stops the Terminal or its work (see `mo_desktop/mologrthim/README.md`). Resource
   totals use the native sampler's opt-in exclusive-root attribution, preserving
   existing workspace pane sampling semantics.
 - Do not add top-level `core` → `interface` imports, let rendered text become task truth, or create a second renderer to avoid a bounded adapter call. Boundary changes re-run the import scan, the affected rendering/task-board tests, and structural-cycle verification.

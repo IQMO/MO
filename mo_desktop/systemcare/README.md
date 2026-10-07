@@ -303,7 +303,7 @@ claimed by the first surface that shows them (`claim_new_findings`), so a proble
 shown once even with Desktop and Terminals open: MO Desktop shows one tray notice
 whose Investigate action opens a separate MO terminal seeded with that problem's
 record (`launch_care_report_terminal`, which fixes nothing without the operator's
-approval); a Terminal prints one dim `MO Care` line. Mologrithm reads the same
+approval); a Terminal prints one dim `MO Care` line. Mologrthim reads the same
 record (`recent_findings`).
 
 ## Coverage and ownership
