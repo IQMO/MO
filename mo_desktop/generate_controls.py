@@ -50,8 +50,13 @@ def request_selection(selection: dict) -> dict:
     return value
 
 
+_MODEL_NAMES = {"bytedance/seedance-2": "Seedance 2.0", "bytedance/seedance-2-5": "Seedance 2.5",
+                "seedream/4.5-text-to-image": "Seedream 4.5", "seedream/4.5-edit": "Seedream 4.5 Edit",
+                "V6": "Suno V6", "V6_MINI": "Suno V6 Mini", "V6_WILD": "Suno V6 Wild"}
+
+
 def _short_model(model: str) -> str:
-    return str(model or "").replace("bytedance/", "").replace("seedream/", "").replace("seedance-", "Seedance ")
+    return _MODEL_NAMES.get(str(model or ""), str(model or ""))
 
 
 def _option_label(key: str, value) -> str:
@@ -76,12 +81,13 @@ def _option_values(key: str, model: str) -> tuple:
 
 
 def pill_rows(selection: dict, reference_count: int = 0) -> list[list[tuple[str, str]]]:
-    """Two rows, always: [kind, model?, references?, more] and the picked kind's type and
-    options in order (empty under Auto, where the composer shows a one-line hint)."""
+    """Two rows, always: [kind, model, references?, more] and the picked kind's type and
+    options in order (empty under Auto, where the composer shows a one-line hint). Every picked
+    kind shows its model (Suno, Seedream, Seedance), even when it has only one."""
     operation = selection.get("operation")
     kind = kind_of(operation)
     first = [("kind", dict(KINDS)[kind])]
-    if kind and len(OPERATIONS[operation][1]) > 1:
+    if kind:
         first.append(("model", _short_model(selection.get("model") or "")))
     if reference_count:
         first.append(("refs", f"{reference_count} reference{'s' if reference_count != 1 else ''}"))
