@@ -783,7 +783,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "required": ["action"],
                 "properties": {
-                    "action": {"type": "string", "enum": ["activate", "off", "show", "list", "register", "dispatch", "status", "wait", "verify"], "description": "activate selects a role for the conversation; off leaves it; show opens the actual native workspace; list discovers roles without activation. register and dispatch start specialist setup/work only when requested; status/wait reads a worker report."},
+                    "action": {"type": "string", "enum": ["activate", "off", "show", "list", "register", "dispatch", "status", "wait", "verify"], "description": "activate selects a role for the conversation; off leaves it; show opens the actual native workspace; list discovers roles without activation. register PROPOSES a specialist: it is staged as an inert candidate (never dispatched) until the user says 'hire <name>', so use it whenever you propose one. dispatch starts work only when requested; status/wait reads a worker report; verify records your check of a completed report."},
                     "name": {"type": "string", "maxLength": 90, "description": "Display name for a new specialist role."},
                     "role": {"type": "string", "maxLength": 90, "description": "Role id for activate (for example project-architect), register, dispatch, status, or wait."},
                     "description": {"type": "string", "maxLength": 220, "description": "One-line project-specific responsibility summary for register."},
