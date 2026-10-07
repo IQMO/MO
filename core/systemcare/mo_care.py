@@ -101,3 +101,90 @@ def inspect_mo(config: dict[str, Any], section: str, *, cancelled: Callable[[], 
                 "detail": "Canonical trace declaration owner; task truth and loaded-source evidence require runtime observations"}
     else:
         raise ValueError("Unknown MO diagnostic owner")
+
+
+# ---------------------------------------------------------------- MO Care: background problems, reported once
+WATCH_STATE = "run/mo-care.json"
+WATCH_INTERVAL_SECONDS = 15 * 60
+_ERROR_EVENTS = {
+    "provider_error": "Provider error", "turn_error": "Turn error", "learning_write_error": "Learning write failed",
+    "memory_index_error": "Memory index failed", "memory_recall_error": "Memory recall failed",
+    "memory_embed_error": "Memory embedding failed", "worker_on_finish_error": "Worker finish failed",
+}
+MAX_FINDINGS = 5
+
+
+def watch(config: dict[str, Any], *, now: float | None = None) -> dict[str, Any]:
+    """MO Care: MO's own background problems since the last look, each reported once. Deterministic (no model):
+    the backend monitor (provider and turn errors, workers that ended blocked, apps that failed to open, memory
+    and learning write failures), scheduled jobs that failed, and failing offline doctor checks. The first look
+    sets a baseline, so history is never resurfaced as news."""
+    import json
+    from pathlib import Path
+
+    from core.state.paths import resolve_state_path
+    from core.utils.atomic_write import atomic_write_json
+
+    current = time.time() if now is None else float(now)
+    state_path = Path(resolve_state_path(WATCH_STATE, config))
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        since = float(state.get("since") or current)
+        seen = set(state.get("seen") or [])
+    except (OSError, ValueError, TypeError, AttributeError):
+        since, seen = current, set()
+    findings: list[dict[str, Any]] = []
+
+    def add(fingerprint: str, kind: str, detail: str, at: float, source: str) -> None:
+        if fingerprint in seen:
+            return
+        seen.add(fingerprint)
+        findings.append({"kind": kind, "detail": " ".join(str(detail or "").split())[:300], "at": at, "source": source})
+
+    monitor_dir = Path(resolve_state_path("logs/monitor", config))
+    for log in sorted(monitor_dir.glob("backend_monitor-*.jsonl")) if monitor_dir.is_dir() else []:
+        try:
+            if log.stat().st_mtime < since:
+                continue
+            lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                row = json.loads(line)
+                at = float(row.get("ts") or 0.0)
+            except (ValueError, TypeError, AttributeError):
+                continue
+            if at <= since:
+                continue
+            kind, payload = str(row.get("type") or ""), row.get("payload") or {}
+            if kind in _ERROR_EVENTS:
+                error = str(payload.get("error") or payload.get("reason") or "")
+                provider = str(payload.get("provider") or "")
+                add(f"{kind}:{provider}:{error[:80]}", _ERROR_EVENTS[kind], (f"{provider}: " if provider else "") + error,
+                    at, f"monitor {log.name} {kind}")
+            elif kind == "worker_event" and payload.get("state") == "blocked":
+                who = payload.get("role") or payload.get("kind") or "worker"
+                add(f"worker:{payload.get('worker_id')}", "Worker blocked", f"{who}: {payload.get('note') or payload.get('objective') or ''}",
+                    at, f"monitor {log.name} worker_event {payload.get('worker_id')}")
+            elif kind == "session_event" and payload.get("kind") == "scheduler_job_run" and payload.get("status") == "error":
+                add(f"scheduler:{payload.get('job_id')}:{str(payload.get('error'))[:80]}", "Scheduled job failed",
+                    f"{payload.get('job_kind') or 'job'} {payload.get('job_id') or ''}: {payload.get('error') or ''}", at,
+                    f"monitor {log.name} scheduler_job_run")
+            elif kind == "desktop_launch" and payload.get("stage") == "renderer_ready" and payload.get("confirmed") is False:
+                add(f"launch:{payload.get('app')}:{int(at)}", "App failed to open", f"{payload.get('app') or 'app'} did not confirm it opened",
+                    at, f"monitor {log.name} desktop_launch")
+    try:
+        from core.diagnostics.doctor import FAIL, build_doctor_report
+        from core.state.paths import mo_home
+
+        for check in build_doctor_report(home=mo_home(config), project_path=None, config=config).checks:
+            if check.status == FAIL:
+                add(f"doctor:{check.name}:{str(check.detail)[:80]}", "Health check failing", f"{check.name}: {check.detail}",
+                    current, "offline doctor (/doctor)")
+    except Exception:
+        pass
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(state_path, {"since": current, "seen": sorted(seen)[-300:]})
+    return {"checked_at": current, "findings": findings[:MAX_FINDINGS], "more": max(0, len(findings) - MAX_FINDINGS)}
+

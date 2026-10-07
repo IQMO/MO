@@ -5725,12 +5725,62 @@ class CompanionSurface(
             self._update_overlay_compat()
             self._update_video_fade()
             self._update_explainer_activity()
+            self._maybe_run_mo_care()
         except Exception:
             _write_stderr(traceback.format_exc())
         try:
             self._gui.schedule(_HOME_POLL_MS, self._poll_home_dock)
         except Exception:
             pass
+
+    def _maybe_run_mo_care(self) -> None:
+        """MO Care looks at MO's own background problems every 15 minutes, off the GUI thread and one look at a
+        time; new problems become one notice whose Investigate opens a separate MO terminal on the record."""
+        now = time.monotonic()
+        config_reader = getattr(self, "_config", None)
+        if not callable(config_reader) or getattr(self, "_mo_care_running", False):
+            return
+        if getattr(self, "_mo_care_next", None) is None:
+            # The first look waits for start-up to settle: its offline doctor imports MO's core modules.
+            self._mo_care_next = now + 120.0
+            return
+        if now < self._mo_care_next:
+            return
+        from core.systemcare.mo_care import WATCH_INTERVAL_SECONDS
+
+        self._mo_care_running = True
+        self._mo_care_next = now + WATCH_INTERVAL_SECONDS
+        config = config_reader()
+
+        def look() -> None:
+            result: dict[str, Any] = {}
+            try:
+                from core.systemcare.mo_care import watch
+                result = watch(config)
+            except Exception:
+                _write_stderr(traceback.format_exc())
+            finally:
+                self._mo_care_running = False
+            findings = list(result.get("findings") or [])
+            if findings:
+                more = len(findings) - 1 + int(result.get("more") or 0)
+                self._post_gui_call(lambda: self._mo_care_notice(findings[0], more))
+
+        threading.Thread(target=look, name="mo-care", daemon=True).start()
+
+    def _mo_care_notice(self, finding: dict[str, Any], more: int = 0) -> None:
+        detail = str(finding.get("detail") or "") + (f" · {more} more" if more else "")
+        title = f"MO Care · {finding.get('kind') or 'problem'}"
+
+        def investigate() -> None:
+            from mo_desktop.issue_report import launch_care_report_terminal
+            launch_care_report_terminal(finding, config=self._config())
+
+        tray = getattr(self, "_tray", None)
+        if tray is not None:
+            tray._notify(f"{title}: {detail}", action=investigate)
+        else:
+            self._cube_notice(title, detail)
 
     def _update_explainer_activity(self) -> None:
         """Project only this turn's live CLI evidence through the existing glance."""

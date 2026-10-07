@@ -288,6 +288,18 @@ Unchanged settings preserve the existing schedule and next-run time.
 Restored and irreversible originals follow configured retention after their
 receipts expire; unrestored reversible originals remain protected.
 
+## MO Care
+
+MO Care watches MO's own background, not the machine: `core.systemcare.mo_care.watch`
+reads the backend monitor since its last look (provider and turn errors, workers
+that ended blocked, apps that failed to open, memory and learning write failures,
+scheduled jobs that failed) and failing offline doctor checks, without a model. The
+first look is a baseline, so history is never reported as news; each problem is
+reported once (`run/mo-care.json`). MO Desktop runs it off the GUI thread every 15
+minutes, first two minutes after start-up, and shows one notice per look; its
+Investigate action opens a separate MO terminal seeded with that problem's record
+(`launch_care_report_terminal`), which fixes nothing without the operator's approval.
+
 ## Coverage and ownership
 
 Results retain their scope rather than inventing an overall health score.
