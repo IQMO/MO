@@ -425,6 +425,10 @@ search or copy the whole transcript store into the project index.
 - Parallel instances never overwrite each other's fresh file edits: `AgentTurnDispatchMixin._file_ledger()` keeps, per conversation, the sha256 of each file it read or wrote, and the file tools (`tools/files.py`) refuse `write_file` over an existing file this conversation has not read, and `write_file`/`edit_file` on a file that changed since its last read (another MO, a tool or a person). New files are unaffected; a re-read clears the refusal. Shell writes are outside this guard.
 - Multiple terminal MO instances are allowed. Each process gets a stable `MO_INSTANCE_ID` and its own default session slot (`main-<instance>`). Automatic prior-conversation projection excludes every conversation currently owned by another live Terminal process before reading its record; live siblings contribute only bounded heartbeat/taskboard coordination metadata. A cached closed conversation is hidden immediately if another Terminal reopens it. Explicit session restoration remains the only way to adopt that transcript or its taskboard.
 - Desktop heartbeat snapshots omit repository status. Repository state belongs to active Terminal or Role project work; the resident companion must not spawn Git on every periodic liveness pulse or ordinary conversation turn.
+- `core/runtime/first_state.py` owns the one launch-time first-state build: work an app's
+  first view waits on (the Dashboard's state) starts alongside its
+  window and is served once to the first request while fresh; later requests build anew.
+  New Desktop apps reuse it rather than holding their own launch thread.
 - `core/runtime/resources.py` owns bounded Windows/Linux Health sampling for local
   process trees. Native probes retain process creation times and validate each
   parent/child edge before attribution: a child that predates its numeric parent
