@@ -87,4 +87,33 @@ def startup_overview_fragment_lines(agent: Any, *, columns: int) -> list[list[tu
             parts.append(f"{pending} {noun}")
         summary = " · ".join(parts)
     rows.append(_row("Learning", summary, "/learning", columns))
+    host = _host_line(config)
+    if host:
+        rows.append(_row("MO host", host, "/everywhere status", columns))
     return rows
+
+
+def _host_line(config: dict) -> str:
+    """The MO host as this PC last saw it (the Everywhere coordinator's record, no network
+    call at startup); nothing when MO Everywhere is not set up here."""
+    import time
+
+    try:
+        from core.state.everywhere_coordinator import host_last_seen
+
+        seen = host_last_seen(config)
+    except Exception:
+        return ""
+    state, at = seen.get("state"), seen.get("at")
+    if state in {"off", "unknown"}:
+        return ""
+    when = ""
+    if at:
+        minutes = max(0, int((time.time() - float(at)) // 60))
+        when = ("just now" if minutes < 1 else f"{minutes} min ago" if minutes < 60
+                else f"{minutes // 60} h ago" if minutes < 48 * 60 else time.strftime("%d %b", time.localtime(float(at))))
+    if state == "online":
+        return f"Online · synced {when}" if when else "Online"
+    if state == "blocked":
+        return f"Needs attention · {when}" if when else "Needs attention"
+    return f"Unreachable · last tried {when}" if when else "Unreachable"

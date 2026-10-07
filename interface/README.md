@@ -329,7 +329,10 @@ Do not guess. Do not call something dead unless imports/tests prove it.
   The logo is MO's four-cube mark in half blocks. Beside it: the build id (read from
   git's files, no git process) and, when others run, how many live MO terminals the
   heartbeats report. Server aliases stay off the start screen: startup performs no
-  network probe and `/status` lists them.
+  network probe and `/status` lists them. An **MO host** row shows the paired host as
+  this PC last saw it ("Online · synced 2 min ago", "Unreachable · last tried …"),
+  read from the Everywhere coordinator's own record, not a probe; it is absent when
+  MO Everywhere is not set up here. The phone has no local record, so it is not shown.
   Unavailable learning reads remain unknown rather than reporting zero skills.
   The active skin, composer, native scrollback and resume/session owners remain
   unchanged; launch rendering creates no additional persisted state.

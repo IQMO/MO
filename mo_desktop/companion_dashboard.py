@@ -68,17 +68,6 @@ class CompanionDashboardMixin:
             )
         except Exception:
             _write_stderr(traceback.format_exc())
-        try:
-            from core.state.paths import resolve_state_path
-            from mo_desktop.everywhere import terminal_binding_status
-
-            config = getattr(self._agent, "config", {}) or {}
-            snapshot["everywhere"] = terminal_binding_status(
-                config,
-                resolve_state_path("memory/sessions", config),
-            )
-        except Exception:
-            _write_stderr(traceback.format_exc())
         self._dashboard_snapshot_cache = snapshot
         self._dashboard_snapshot_at = now
         return self._dashboard_snapshot_cache
@@ -460,7 +449,6 @@ class CompanionDashboardMixin:
         from core.dashboard.projection import build_dashboard_projection
 
         snap = snapshot if isinstance(snapshot, dict) else {}
-        everywhere = snap.get("everywhere") or {}
         systemcare = snap.get("systemcare") if isinstance(snap.get("systemcare"), dict) else {}
         user_projection = build_dashboard_projection(
             snap,
@@ -473,11 +461,11 @@ class CompanionDashboardMixin:
             surface="desktop",
         )
 
-        data, actions = self._dashboard_mini(snap, user_projection, operations_projection, everywhere, systemcare)
+        data, actions = self._dashboard_mini(snap, user_projection, operations_projection, systemcare)
         return data, actions
 
     def _dashboard_mini(self, snap: dict[str, Any], user_projection: dict[str, Any],
-                        operations_projection: dict[str, Any], everywhere: dict[str, Any],
+                        operations_projection: dict[str, Any],
                         systemcare: dict[str, Any]) -> tuple[dict, dict]:
         """The mini Dashboard (row 19, approved v2): a glance that jumps into MO's main Dashboard
         app, never a copy of it. Three views - Now, You, System - each with three figures and two
@@ -588,9 +576,15 @@ class CompanionDashboardMixin:
         }
 
         # System: where MO runs, the machine, the project map.
-        host_state = str(everywhere.get("state") or "loading")
-        host = {"following": "Online", "available": "Online", "choose": "Online", "offline": "Offline",
-                "none": "None"}.get(host_state, "…")
+        # The MO host as this PC last saw it (the Everywhere coordinator's record), not the
+        # Desktop-to-Terminal binding the tile used to read.
+        try:
+            from core.state.everywhere_coordinator import host_last_seen
+
+            host_state = str(host_last_seen(self._config()).get("state") or "unknown")
+        except Exception:
+            host_state = "unknown"
+        host = {"online": "Online", "unreachable": "Offline", "blocked": "Attention", "off": "Off"}.get(host_state, "—")
         surfaces = metric(operations_projection, "surfaces")
         provider = item(operations_projection, "runtime", "provider")
         session = item(operations_projection, "runtime", "session")

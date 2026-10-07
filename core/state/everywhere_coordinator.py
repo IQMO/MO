@@ -338,6 +338,25 @@ def start_everywhere_coordinator_if_enabled(config: dict[str, Any] | None = None
     return coordinator if coordinator.start() else None
 
 
+def host_last_seen(config: dict[str, Any] | None = None, *, now: float | None = None) -> dict[str, Any]:
+    """The MO host as this PC last saw it, from the coordinator's own record (no network call):
+    ``{"state": "online" | "unreachable" | "blocked" | "off" | "unknown", "at": seconds or None}``.
+    "online" means the last continuity sync with the hub succeeded at ``at``."""
+    status = read_coordinator_status(config)
+    lane = status.get("continuity") if isinstance(status.get("continuity"), dict) else {}
+    state = str(lane.get("state") or "")
+    at = status.get("created_at") if isinstance(status.get("created_at"), (int, float)) else None
+    if not status:
+        return {"state": "unknown", "at": None}
+    if state in {"disabled", ""}:
+        return {"state": "off", "at": at}
+    if state == "error":
+        return {"state": "unreachable", "at": at}
+    if state == "blocked":
+        return {"state": "blocked", "at": at}
+    return {"state": "online", "at": at}
+
+
 def read_coordinator_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     import json
 
