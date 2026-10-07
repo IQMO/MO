@@ -578,11 +578,17 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         line_h = max(1, int(design.line_height))
         minimum_text = max(line_h, int(design.min_text_height))
         available_h = max(minimum_text, card_budget - preview_h - frame_h)
+        # Replies keep one card size: text and options share what the fixed height leaves.
+        fixed_reply = (not is_input and preview is None and not attachment_caption
+                       and getattr(self, "_panel_state", None) in (PanelState.REPLY, PanelState.FOOTERLESS))
+        if fixed_reply:
+            available_h = max(minimum_text, int(design.reply_card_height) - (frame_h - 2 * int(design.shadow_pad)))
         options_h = min(options_content_h + 8, max(48, available_h - minimum_text)) if option_rows else 0
         self._max_options_scroll = max(0, options_content_h - (options_h - 8)) if option_rows else 0
         self._options_scroll = max(0, min(int(getattr(self, "_options_scroll", 0)), self._max_options_scroll))
         self._options_region = None
-        text_budget = max(minimum_text, min(int(design.max_text_height), available_h - options_h))
+        text_budget = (max(minimum_text, available_h - options_h) if fixed_reply
+                       else max(minimum_text, min(int(design.max_text_height), available_h - options_h)))
         max_visible = max(1, text_budget // line_h)
         visible_count = max(1, min(len(all_lines), max_visible))
         self._max_scroll_line = max(0, len(all_lines) - visible_count)
@@ -604,8 +610,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if browse_head:
             head = card.fit_text(probe, browse_head, max(1, int(wrap_width or content_width)) * ss, self._font)
             lines = [[(head, False)]] + [[] for _line in lines[1:]]
-        text_h = max(int(design.min_text_height),
-                     min(int(design.max_text_height), visible_count * line_h))
+        text_h = (text_budget if fixed_reply else
+                  max(int(design.min_text_height), min(int(design.max_text_height), visible_count * line_h)))
         panel_radius = int(self._visuals.metrics.panel_corner_radius)
         card_w = int(content_width) + 2 * panel_padding
         card_h = (
@@ -1495,7 +1501,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if getattr(self, "_panel_state", None) == PanelState.DASHBOARD:
             from mo_desktop.dashboard_card import CONTENT_W as _DCW
             return _DCW + 2 * int(self._visuals.metrics.panel_padding)
-        if getattr(self, "_panel_state", None) == PanelState.HISTORY:
+        if getattr(self, "_panel_state", None) in (PanelState.HISTORY, PanelState.STATUS):
             content = max(
                 int(design.content_width),
                 int(getattr(design, "reply_content_width", 0) or 0),

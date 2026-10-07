@@ -3,10 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 from mo_desktop import card
-from mo_desktop.design import (
-    DEFAULT_BUBBLE_DESIGN,
-    DEFAULT_DESKTOP_PANEL_DESIGN,
-)
+from mo_desktop.design import DEFAULT_BUBBLE_DESIGN
 
 
 _SS = card.SS
@@ -24,22 +21,23 @@ class ReplySecondaryViewsMixin:
         return fit_text(draw, text, width, font)
 
     def _render_status(self) -> Any:
-        """One line: MO's four-cube mark and its current step, sized to the text."""
+        """MO's four-cube mark and its current step on the first line of the reply card: the
+        same size the reply then fills, so the panel never changes size within a turn."""
         from PIL import ImageDraw
 
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
-        panel = getattr(self, "_panel_design", DEFAULT_DESKTOP_PANEL_DESIGN)
         ss = int(getattr(self, "_ss", _SS) or _SS)
         self._font, self._bfont, self._sfont, self._ifont = self._fonts(ss)
         visuals = self._visuals
         pad_x = int(visuals.metrics.panel_padding)
         shadow_pad = int(design.shadow_pad)
-        mark_w, gap, card_h = 12, 10, 44
+        mark_w, gap, line_box = 12, 10, 44
+        card_h = int(design.reply_card_height)
+        content_w = max(int(design.content_width), int(getattr(design, "reply_content_width", 0) or 0))
+        card_w = content_w + 2 * pad_x
         probe = ImageDraw.Draw(card.new_canvas(10, 10))
-        text_room = max(24, int(panel.max_width) - 2 * pad_x - mark_w - gap)
+        text_room = max(24, card_w - 2 * pad_x - mark_w - gap)
         shown = card.fit_text(probe, str(getattr(self, "_status_text", "") or ""), text_room * ss, self._font)
-        text_w = int(probe.textlength(shown, font=self._font) / ss) + 1
-        card_w = max(int(panel.min_width), min(int(panel.max_width), 2 * pad_x + mark_w + gap + text_w))
         width = (card_w + 2 * shadow_pad) * ss
         height = (card_h + 2 * shadow_pad) * ss
         pad = shadow_pad * ss
@@ -48,11 +46,11 @@ class ReplySecondaryViewsMixin:
             card.new_canvas(width, height),
             box,
             radius=int(visuals.metrics.panel_corner_radius) * ss,
-            fill=(*self._card, 255),
+            fill=(*self._card, _BLUR_CARD_ALPHA if self._blur_enabled() else 255),
             edge=(*self._edge, 255),
             edge_highlight=(*self._cyan, 110),
             edge_width=max(1, ss),
-            shadow_alpha=int(design.shadow_alpha),
+            shadow_alpha=0 if self._blur_enabled() else int(design.shadow_alpha),
             shadow_blur=int(design.shadow_blur) * ss,
             shadow_dy=6 * ss,
         )
@@ -62,9 +60,9 @@ class ReplySecondaryViewsMixin:
         mark_x = box[0] + pad_x * ss
         # MO's canonical four-cube mark, in the live skin, never a hand-drawn copy.
         mark = make_four_cube_icon(16 * ss, palette=visuals.palette)
-        image.alpha_composite(mark, (int(mark_x - 2 * ss), int(box[1] + (card_h // 2 - 8) * ss)))
+        image.alpha_composite(mark, (int(mark_x - 2 * ss), int(box[1] + (line_box // 2 - 8) * ss)))
         ascent, descent = self._font.getmetrics()
-        text_y = box[1] + (card_h * ss - (ascent + descent)) // 2
+        text_y = box[1] + (line_box * ss - (ascent + descent)) // 2
         draw.text((mark_x + (mark_w + gap) * ss, text_y), shown, font=self._font, fill=(*self._text, 255))
         self._hit = {}
         return card.finish(image, ss)
