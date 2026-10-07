@@ -863,8 +863,14 @@ class _DesignNativeVisualController:
             return
         self._window.native.Opacity = fade
         try:
-            frame = _app_entrance_frame(entrance["art"], elapsed)
-            published = entrance["surface"].blit(frame, *frame.info.get("screen_position", entrance["art"]["position"]), opacity=round(255 * (1 - fade)))
+            if elapsed >= duration and entrance.get("still_shown"):
+                # From its duration on the entrance art no longer changes: the fade and any wait for
+                # the content only change its opacity, never re-render a window-sized frame.
+                published = entrance["surface"]._update_layered_opacity(round(255 * (1 - fade)))
+            else:
+                frame = _app_entrance_frame(entrance["art"], elapsed)
+                published = entrance["surface"].blit(frame, *frame.info.get("screen_position", entrance["art"]["position"]), opacity=round(255 * (1 - fade)))
+                entrance["still_shown"] = bool(published) and elapsed >= duration
         except (OSError, RuntimeError, TypeError, ValueError):
             published = False
         if not published:

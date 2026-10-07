@@ -274,7 +274,7 @@ class LayeredWindow:
             self._fail("layered windows require Windows")
             return
         try:
-            from PIL import Image, ImageChops  # noqa: F401 (used by blit)
+            from PIL import Image  # noqa: F401 (blit packs Pillow images)
         except Exception as exc:
             self._fail(f"Pillow unavailable ({type(exc).__name__})")
             return
@@ -403,6 +403,8 @@ class LayeredWindow:
         launcher's stray top-left cube). Without it the content is painted where the window is.
         ``premultiplied=True`` means the caller already multiplied RGB by alpha (e.g. it
         resized in premultiplied space to avoid edge darkening), so only reorder to BGRA.
+        Pillow packs (and premultiplies, rounded) in one C pass: half the time of splitting
+        into bands, which mattered for window-sized frames such as the app entrances.
         """
         if not self._ok:
             if not self._last_error:
@@ -411,17 +413,14 @@ class LayeredWindow:
         try:
             api = _winapi()
             ctypes = api.ctypes
-            from PIL import Image, ImageChops
             w, h = img.size
             if (w, h) != (self._w, self._h):
                 if not self._alloc(w, h):
                     return False
-            r, g_, b, a = img.split()
             if premultiplied:
-                bgra = Image.merge("RGBA", (b, g_, r, a)).tobytes()
+                bgra = img.tobytes("raw", "BGRA")
             else:
-                bgra = Image.merge("RGBA", (ImageChops.multiply(b, a), ImageChops.multiply(g_, a),
-                                            ImageChops.multiply(r, a), a)).tobytes()
+                bgra = img.convert("RGBa").tobytes("raw", "BGRa")
             ctypes.memmove(self._ppv, bgra, min(len(bgra), w * h * 4))
             return self._update_layered_opacity(opacity, dest=(int(x), int(y)) if position else None)
         except Exception as exc:
