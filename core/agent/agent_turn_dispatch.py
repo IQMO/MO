@@ -1076,9 +1076,10 @@ class AgentTurnDispatchMixin:
             except Exception as exc:
                 result = f"Error executing tool: {exc}"
             return {idx: result for idx in mapped_indices}
+        caller_state = dict(getattr(getattr(self, "_thread_state", None), "__dict__", {}) or {})
         with ThreadPoolExecutor(max_workers=min(len(runnable), 8)) as pool:
             futures = {
-                pool.submit(self._dispatch_tool, name, args): mapped_indices
+                pool.submit(self._dispatch_with_caller_state, caller_state, name, args): mapped_indices
                 for name, args, mapped_indices in runnable.values()
             }
             for fut in as_completed(futures):
@@ -1090,6 +1091,20 @@ class AgentTurnDispatchMixin:
                 for idx in mapped_indices:
                     results[idx] = result
         return results
+
+    def _dispatch_with_caller_state(self, caller_state: dict, name: str, args: dict) -> str:
+        """Run one batched tool on a pool thread with the calling turn's thread state (its session, role,
+        provider route and turn fields), so a parallel batch behaves exactly like a single call."""
+        state = getattr(self, "_thread_state", None)
+        if state is None or not caller_state:
+            return self._dispatch_tool(name, args)
+        previous = dict(state.__dict__)
+        state.__dict__.update(caller_state)
+        try:
+            return self._dispatch_tool(name, args)
+        finally:
+            state.__dict__.clear()
+            state.__dict__.update(previous)
 
     def _wait_for_background_verification(
         self, verification_key: str, verification_cache: dict[str, str] | None,

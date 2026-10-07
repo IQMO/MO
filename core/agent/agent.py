@@ -222,6 +222,36 @@ class _ProviderRouteField:
         instance._set_provider_route_value(self.name, self.normalize(value))
 
 
+_UNSET = object()
+
+
+class _TurnStateField:
+    """Descriptor keeping one per-turn field on the calling thread. Background workers run their own turns
+    concurrently on this same Agent; a worker's turn start used to reset the running turn's fields (its
+    taskboard tools vanished mid-turn and the done-claim gate looped). Instances without thread state keep
+    the value as a plain attribute."""
+
+    def __init__(self, default=None):
+        self.default = default
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        state = instance.__dict__.get("_thread_state")
+        value = getattr(state, self.name, _UNSET) if state is not None else _UNSET
+        return instance.__dict__.get(self.name, self.default) if value is _UNSET else value
+
+    def __set__(self, instance, value) -> None:
+        state = instance.__dict__.get("_thread_state")
+        if state is None:
+            instance.__dict__[self.name] = value
+        else:
+            setattr(state, self.name, value)
+
+
 _PROFILE_LOOKUP_TOOL_NAMES = frozenset({"read_file", "grep"})
 
 
@@ -238,6 +268,11 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
     last_fallback_notice = _ProviderRouteField("last_fallback_notice", _route_text)
     last_model_change_kind = _ProviderRouteField("last_model_change_kind", _route_text)
     last_provider_route = _ProviderRouteField("last_provider_route", _route_dict)
+    _taskboard_runtime_available_for_turn = _TurnStateField()
+    _project_rule_snapshot = _TurnStateField()
+    _project_rule_snapshots = _TurnStateField()
+    _project_rule_preflight_active = _TurnStateField(False)
+    _turn_onboarding_offer_pending = _TurnStateField(False)
 
     def __init__(self, config_path: str | None = None):
         self._init_config(config_path)
