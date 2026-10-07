@@ -94,6 +94,26 @@ class _WindowsInlineRenderer(Renderer):
         super().render(app, layout, is_done=is_done)
 
 
+def _mo_care_lines(config, stamp):
+    """MO Care problems no surface has shown yet, as dim Terminal lines; reads only when its record changed."""
+    try:
+        from core.systemcare.mo_care import _state_paths, claim_new_findings
+
+        config = config if isinstance(config, dict) else {}
+        current = _state_paths(config)[0].stat().st_mtime
+        if current == stamp:
+            return stamp, []
+        findings = claim_new_findings(config, "terminal")
+        current = _state_paths(config)[0].stat().st_mtime      # its own claim is no news
+    except Exception:
+        return stamp, []
+    if not findings:
+        return current, []
+    first = findings[0]
+    more = f" · {len(findings) - 1} more" if len(findings) > 1 else ""
+    return current, [f"MO Care · {first.get('kind') or 'problem'}: {first.get('detail') or ''}{more}"]
+
+
 def _status_refresh_token(state, *, now: float | None = None) -> tuple[object, ...]:
     """Describe only time-driven changes to the existing status row."""
     current = time.time() if now is None else float(now)
@@ -662,6 +682,8 @@ class TuiAppMixin:
 
             nonlocal last_status_refresh_token
             next_design_context_poll = 0.0
+            next_care_check = 0.0
+            care_stamp = None
 
             while not self._refresh_stop.is_set():
                 now = time.monotonic()
@@ -691,6 +713,15 @@ class TuiAppMixin:
                     elif context:
                         self._app.loop.call_soon_threadsafe(
                             lambda value=context: self._handle_input(value, owner_bound=True)
+                        )
+                if now >= next_care_check and self._app and getattr(self._app, "loop", None) is not None:
+                    # MO Care runs on the heartbeat; this terminal shows a problem no other surface showed yet.
+                    next_care_check = now + 30.0
+                    care_stamp, care_lines = _mo_care_lines(getattr(getattr(self, "agent", None), "config", None),
+                                                            care_stamp)
+                    for care_line in care_lines:
+                        self._app.loop.call_soon_threadsafe(
+                            lambda value=care_line: self._add_line("system", [("class:dim", value)])
                         )
                 self._sync_terminal_background(now=now)
                 working = self._working_animation_active()

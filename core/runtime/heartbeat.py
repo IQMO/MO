@@ -64,6 +64,17 @@ class HeartbeatService:
         interval = max(5.0, float(self.interval_seconds or DEFAULT_PREFERENCES["heartbeat.interval_seconds"]))
         while not self._stop.wait(interval):
             self._record("periodic")
+            self._care()
+
+    def _care(self) -> None:
+        """MO Care rides every MO process's heartbeat; one process looks per interval (see ``mo_care.tick``)."""
+        try:
+            from core.systemcare.mo_care import tick
+
+            config = getattr(self.agent, "config", None)
+            tick(config if isinstance(config, dict) else {})
+        except Exception:
+            return
 
     def _record(self, event: str) -> None:
         try:

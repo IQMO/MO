@@ -5725,7 +5725,7 @@ class CompanionSurface(
             self._update_overlay_compat()
             self._update_video_fade()
             self._update_explainer_activity()
-            self._maybe_run_mo_care()
+            self._maybe_show_mo_care()
         except Exception:
             _write_stderr(traceback.format_exc())
         try:
@@ -5733,40 +5733,42 @@ class CompanionSurface(
         except Exception:
             pass
 
-    def _maybe_run_mo_care(self) -> None:
-        """MO Care looks at MO's own background problems every 15 minutes, off the GUI thread and one look at a
-        time; new problems become one notice whose Investigate opens a separate MO terminal on the record."""
+    def _maybe_show_mo_care(self) -> None:
+        """MO Care itself runs on the heartbeat of every MO process (``mo_care.tick``); the Desktop only shows
+        what it found: when MO Care's record changes, claim the unshown problems off the GUI thread and show one
+        notice whose Investigate opens a separate MO terminal on the record."""
         now = time.monotonic()
         config_reader = getattr(self, "_config", None)
-        if not callable(config_reader) or getattr(self, "_mo_care_running", False):
+        if (not callable(config_reader) or getattr(self, "_mo_care_claiming", False)
+                or now < getattr(self, "_mo_care_next_check", 0.0)):
             return
-        if getattr(self, "_mo_care_next", None) is None:
-            # The first look waits for start-up to settle: its offline doctor imports MO's core modules.
-            self._mo_care_next = now + 120.0
-            return
-        if now < self._mo_care_next:
-            return
-        from core.systemcare.mo_care import WATCH_INTERVAL_SECONDS
+        self._mo_care_next_check = now + 30.0
+        from core.systemcare.mo_care import _state_paths
 
-        self._mo_care_running = True
-        self._mo_care_next = now + WATCH_INTERVAL_SECONDS
         config = config_reader()
+        try:
+            stamp = _state_paths(config)[0].stat().st_mtime
+        except OSError:
+            return
+        if stamp == getattr(self, "_mo_care_seen_stamp", None):
+            return
+        self._mo_care_seen_stamp = stamp
+        self._mo_care_claiming = True
 
-        def look() -> None:
-            result: dict[str, Any] = {}
+        def claim() -> None:
+            findings: list[dict[str, Any]] = []
             try:
-                from core.systemcare.mo_care import watch
-                result = watch(config)
+                from core.systemcare.mo_care import claim_new_findings
+                findings = claim_new_findings(config, "desktop")
+                self._mo_care_seen_stamp = _state_paths(config)[0].stat().st_mtime   # its own claim is no news
             except Exception:
                 _write_stderr(traceback.format_exc())
             finally:
-                self._mo_care_running = False
-            findings = list(result.get("findings") or [])
+                self._mo_care_claiming = False
             if findings:
-                more = len(findings) - 1 + int(result.get("more") or 0)
-                self._post_gui_call(lambda: self._mo_care_notice(findings[0], more))
+                self._post_gui_call(lambda: self._mo_care_notice(findings[0], len(findings) - 1))
 
-        threading.Thread(target=look, name="mo-care", daemon=True).start()
+        threading.Thread(target=claim, name="mo-care", daemon=True).start()
 
     def _mo_care_notice(self, finding: dict[str, Any], more: int = 0) -> None:
         detail = str(finding.get("detail") or "") + (f" · {more} more" if more else "")

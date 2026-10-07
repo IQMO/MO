@@ -295,10 +295,16 @@ reads the backend monitor since its last look (provider and turn errors, workers
 that ended blocked, apps that failed to open, memory and learning write failures,
 scheduled jobs that failed) and failing offline doctor checks, without a model. The
 first look is a baseline, so history is never reported as news; each problem is
-reported once (`run/mo-care.json`). MO Desktop runs it off the GUI thread every 15
-minutes, first two minutes after start-up, and shows one notice per look; its
-Investigate action opens a separate MO terminal seeded with that problem's record
-(`launch_care_report_terminal`), which fixes nothing without the operator's approval.
+reported once (`run/mo-care.json`). It rides the heartbeat every MO process already
+runs (Terminal, Desktop, the headless server): `mo_care.tick` lets one process look
+per 15 minutes (a cross-process lock plus the shared last-look time), so it watches
+whether or not Desktop is open. New problems join the record's recent list and are
+claimed by the first surface that shows them (`claim_new_findings`), so a problem is
+shown once even with Desktop and Terminals open: MO Desktop shows one tray notice
+whose Investigate action opens a separate MO terminal seeded with that problem's
+record (`launch_care_report_terminal`, which fixes nothing without the operator's
+approval); a Terminal prints one dim `MO Care` line. Mologrithm reads the same
+record (`recent_findings`).
 
 ## Coverage and ownership
 

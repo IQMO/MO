@@ -112,34 +112,111 @@ _ERROR_EVENTS = {
     "memory_embed_error": "Memory embedding failed", "worker_on_finish_error": "Worker finish failed",
 }
 MAX_FINDINGS = 5
+_KEEP_RECENT = 30
 
 
-def watch(config: dict[str, Any], *, now: float | None = None) -> dict[str, Any]:
-    """MO Care: MO's own background problems since the last look, each reported once. Deterministic (no model):
-    the backend monitor (provider and turn errors, workers that ended blocked, apps that failed to open, memory
-    and learning write failures), scheduled jobs that failed, and failing offline doctor checks. The first look
-    sets a baseline, so history is never resurfaced as news."""
-    import json
+def _state_paths(config: dict[str, Any]) -> tuple[Any, Any]:
     from pathlib import Path
 
     from core.state.paths import resolve_state_path
-    from core.utils.atomic_write import atomic_write_json
 
-    current = time.time() if now is None else float(now)
     state_path = Path(resolve_state_path(WATCH_STATE, config))
+    return state_path, state_path.with_suffix(".lock")
+
+
+def _read_state(state_path: Any) -> dict[str, Any]:
+    import json
+
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
-        since = float(state.get("since") or current)
-        seen = set(state.get("seen") or [])
-    except (OSError, ValueError, TypeError, AttributeError):
-        since, seen = current, set()
+        return state if isinstance(state, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def tick(config: dict[str, Any], *, now: float | None = None) -> bool:
+    """Every MO process's heartbeat calls this (Terminal, Desktop, the headless server). One process looks per
+    interval: a cross-process lock plus the shared last-look time; the others return at once. True if it looked."""
+    from core.runtime.lock import file_byte_lock
+
+    current = time.time() if now is None else float(now)
+    state_path, lock_path = _state_paths(config)
+    since = _read_state(state_path).get("since")
+    if since is not None and current - float(since or 0.0) < WATCH_INTERVAL_SECONDS:
+        return False
+    with file_byte_lock(lock_path):
+        since = _read_state(state_path).get("since")
+        if since is not None and current - float(since or 0.0) < WATCH_INTERVAL_SECONDS:
+            return False          # another MO looked while this one waited
+        watch(config, now=current, _locked=True)
+    return True
+
+
+def claim_new_findings(config: dict[str, Any], surface: str) -> list[dict[str, Any]]:
+    """Findings no surface has shown yet, marked shown by this one: with Desktop and a Terminal both open, each
+    problem is still reported once."""
+    from core.runtime.lock import file_byte_lock
+    from core.utils.atomic_write import atomic_write_json
+
+    state_path, lock_path = _state_paths(config)
+    if not state_path.is_file():
+        return []
+    with file_byte_lock(lock_path):
+        state = _read_state(state_path)
+        recent = [row for row in state.get("recent") or [] if isinstance(row, dict)]
+        claimed = [dict(row) for row in recent if not row.get("shown_by")]
+        if not claimed:
+            return []
+        for row in recent:
+            if not row.get("shown_by"):
+                row["shown_by"] = surface
+        state["recent"] = recent
+        atomic_write_json(state_path, state)
+    return claimed
+
+
+def recent_findings(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """MO Care's recent reports, newest first, read-only (Mologrithm's MO Care corner)."""
+    state_path, _lock = _state_paths(config)
+    rows = [row for row in _read_state(state_path).get("recent") or [] if isinstance(row, dict)]
+    return sorted(rows, key=lambda row: float(row.get("at") or 0.0), reverse=True)
+
+
+def watch(config: dict[str, Any], *, now: float | None = None, _locked: bool = False) -> dict[str, Any]:
+    """MO Care: MO's own background problems since the last look, each reported once. Deterministic (no model):
+    the backend monitor (provider and turn errors, workers that ended blocked, apps that failed to open, memory
+    and learning write failures), scheduled jobs that failed, and failing offline doctor checks. The first look
+    sets a baseline, so history is never resurfaced as news. New findings join the shared recent list for the
+    surfaces to claim. Normally reached through ``tick``."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    from core.runtime.lock import file_byte_lock
+    from core.state.paths import resolve_state_path
+    from core.utils.atomic_write import atomic_write_json
+
+    if not _locked:
+        _state_path, lock_path = _state_paths(config)
+        with file_byte_lock(lock_path):
+            return watch(config, now=now, _locked=True)
+    current = time.time() if now is None else float(now)
+    state_path, _lock_path = _state_paths(config)
+    state = _read_state(state_path)
+    try:
+        since = float(state["since"]) if "since" in state else current
+    except (TypeError, ValueError):
+        since = current
+    seen = set(state.get("seen") or [])
+    recent = [row for row in state.get("recent") or [] if isinstance(row, dict)]
     findings: list[dict[str, Any]] = []
 
     def add(fingerprint: str, kind: str, detail: str, at: float, source: str) -> None:
         if fingerprint in seen:
             return
         seen.add(fingerprint)
-        findings.append({"kind": kind, "detail": " ".join(str(detail or "").split())[:300], "at": at, "source": source})
+        findings.append({"id": hashlib.sha1(fingerprint.encode("utf-8")).hexdigest()[:12], "kind": kind,
+                         "detail": " ".join(str(detail or "").split())[:300], "at": at, "source": source})
 
     monitor_dir = Path(resolve_state_path("logs/monitor", config))
     for log in sorted(monitor_dir.glob("backend_monitor-*.jsonl")) if monitor_dir.is_dir() else []:
@@ -185,6 +262,7 @@ def watch(config: dict[str, Any], *, now: float | None = None) -> dict[str, Any]
     except Exception:
         pass
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(state_path, {"since": current, "seen": sorted(seen)[-300:]})
+    atomic_write_json(state_path, {"since": current, "seen": sorted(seen)[-300:],
+                                   "recent": (recent + findings)[-_KEEP_RECENT:]})
     return {"checked_at": current, "findings": findings[:MAX_FINDINGS], "more": max(0, len(findings) - MAX_FINDINGS)}
 
