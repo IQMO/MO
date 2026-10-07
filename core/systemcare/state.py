@@ -172,13 +172,21 @@ class SystemCareState:
             row = db.execute(sql, params).fetchone()
         return ScanResult.from_dict(_loads(row["payload"])) if row else None
 
-    def recent_scans(self, limit: int = 12) -> list[ScanResult]:
+    def recent_scans_for_history(self, limit: int = 12) -> list[ScanResult]:
+        """The latest scans WITHOUT their saved candidates, for the history's summary rows only:
+        rebuilding thousands of private candidates to show counts held every snapshot ~1 s."""
         bounded = max(1, min(50, int(limit or 12)))
         with self._connect() as db:
             rows = db.execute(
                 "SELECT payload FROM scans ORDER BY created_at DESC LIMIT ?", (bounded,)
             ).fetchall()
-        return [ScanResult.from_dict(_loads(row["payload"])) for row in rows]
+        scans = []
+        for row in rows:
+            payload = _loads(row["payload"])
+            payload["findings"] = [{key: value for key, value in finding.items() if key != "candidates"}
+                                   for finding in payload.get("findings") or [] if isinstance(finding, dict)]
+            scans.append(ScanResult.from_dict(payload))
+        return scans
 
     def save_plan(self, plan: Plan) -> None:
         actual = plan.with_digest() if not plan.digest else plan

@@ -43,9 +43,6 @@ class SystemCareViewModel:
     def status(self) -> dict[str, Any]:
         return self.service.status()
 
-    def history(self, limit: int = 12) -> list[dict[str, Any]]:
-        return self.service.history(limit=limit)
-
     def latest_scan(self):
         return self.service.state.latest_scan()
 

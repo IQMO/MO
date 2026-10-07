@@ -776,7 +776,11 @@ class SystemCareService:
         return self.state.request_cancel(operation_id)
 
     def history(self, *, limit: int = 12) -> list[dict[str, Any]]:
-        return [scan.to_dict(include_private=False) for scan in self.state.recent_scans(limit=limit)]
+        """The Activity list's scan rows: what it shows, never the findings themselves."""
+        return [{"scan_id": scan.scan_id, "mode": scan.mode.value, "state": scan.state.value,
+                 "completed_at": float(scan.completed_at), "finding_count": len(scan.findings),
+                 "reclaimable_bytes": scan.reclaimable_bytes, "review_count": scan.review_count}
+                for scan in self.state.recent_scans_for_history(limit=limit)]
 
     def dashboard_status(self) -> dict[str, Any]:
         active = self.state.active_operation()
