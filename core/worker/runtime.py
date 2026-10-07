@@ -219,6 +219,7 @@ class BackgroundWorkerRuntime:
                     claimed_paths=claimed_paths,
                     role=role,
                     project_root=str(getattr(role_skill, "project_root", "") or ""),
+                    difficulty=_objective_difficulty(objective),
                 )
             conflicts = registry.conflicts(claimed_paths, exclude=record.id)
             if conflicts and record.state != "running":
@@ -471,6 +472,16 @@ def _role_overlay(role_skill) -> str:
         return role_overlay_text(role_skill)
     except Exception:
         return BACKGROUND_WORKER_SYSTEM
+
+
+def _objective_difficulty(objective: str) -> str:
+    """MO's own grade of a worker objective (simple, moderate or complex; the estimator the Gateway and goal
+    view share): it weighs verified reports in a specialist's rank, so harder checked work counts more."""
+    try:
+        from ..context.work_patterns import estimate_work_complexity
+        return estimate_work_complexity(objective)
+    except Exception:
+        return ""
 
 
 def _record_role_outcome(role_skill, state: str) -> None:

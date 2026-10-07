@@ -36,6 +36,7 @@ class WorkerRecord:
     project_root: str = ""
     verdict: str = ""          # "accepted" | "rejected": the lead's check of the report (role_work verify)
     verdict_reason: str = ""
+    difficulty: str = ""       # simple | moderate | complex: MO's own grade of the objective (turn intent)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -66,6 +67,7 @@ class WorkerRegistry:
         claimed_paths: list[str] | None = None,
         role: str = "",
         project_root: str = "",
+        difficulty: str = "",
     ) -> WorkerRecord:
         now = time.time()
         record = WorkerRecord(
@@ -81,6 +83,7 @@ class WorkerRegistry:
             claimed_paths=normalize_worker_paths(claimed_paths if claimed_paths is not None else extract_worker_paths(objective)),
             created_at=now,
             updated_at=now,
+            difficulty=str(difficulty or ""),
         )
         self._records[record.id] = record
         self._order.append(record.id)
@@ -189,6 +192,7 @@ class WorkerRegistry:
             "evidence": [redact_monitor_text(item, 160) for item in record.evidence[:8]],
             "verdict": record.verdict,
             "verdict_reason": record.verdict_reason,
+            "difficulty": record.difficulty,
         })
 
 

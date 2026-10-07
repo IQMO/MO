@@ -703,7 +703,10 @@ search or copy the whole transcript store into the project index.
   on its pack. Success or correction comes from the Project Architect's check:
   `role_work` `verify` (`accept`/`reject` with the evidence) on a completed
   worker, once per report; the verdict is stored on the worker record and its
-  `worker_event`, so a specialist's track record holds only checked work.
+  `worker_event`, so a specialist's track record holds only checked work. Each
+  worker record also carries MO's own difficulty grade of its objective
+  (`estimate_work_complexity`: simple, moderate, complex; lexical, the same
+  estimator the Gateway and goal view use), which weighs checked work in rank.
 - Questions about previously implemented features remain bounded lookups unless
   they also request current work. `work_signals` checks that distinction before
   lexical inflection normalization can turn historical verbs into build work;
