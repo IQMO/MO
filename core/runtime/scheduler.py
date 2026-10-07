@@ -406,7 +406,7 @@ def start_scheduler_service_if_enabled(agent: Any, gateway: Any = None) -> Sched
     scheduler_cfg = cfg.get("scheduler", {}) if isinstance(cfg.get("scheduler", {}), dict) else {}
     if not scheduler_service_enabled(agent):
         return None
-    resource_lock = acquire_runtime_lock(lock_name="mo-scheduler.lock", label="MO scheduler")
+    resource_lock = acquire_runtime_lock(lock_name="mo-scheduler.lock", label="MO scheduler", quiet=True)
     if resource_lock is None:
         _emit_scheduler_event("scheduler_not_started", {"reason": "resource lock held"})
         return None

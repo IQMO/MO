@@ -1197,7 +1197,7 @@ def start_telegram_gateway_if_enabled(agent: Any, gateway: Any = None) -> Telegr
                 },
             )
         return telegram
-    resource_lock = acquire_runtime_lock(lock_name="mo-telegram-poller.lock", label="MO Telegram poller")
+    resource_lock = acquire_runtime_lock(lock_name="mo-telegram-poller.lock", label="MO Telegram poller", quiet=True)
     if resource_lock is None:
         if monitor:
             monitor.emit("session_event", {"kind": "telegram_not_started", "reason": "resource lock held"})

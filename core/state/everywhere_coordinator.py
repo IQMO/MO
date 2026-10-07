@@ -85,7 +85,7 @@ class EverywhereCoordinator:
     def start(self) -> bool:
         if not everywhere_coordinator_enabled(self.config):
             return False
-        lock = acquire_runtime_lock(lock_name="mo-everywhere-coordinator.lock", label="MO Everywhere coordinator")
+        lock = acquire_runtime_lock(lock_name="mo-everywhere-coordinator.lock", label="MO Everywhere coordinator", quiet=True)
         if lock is None:
             return False
         self._runtime_lock = lock
