@@ -49,7 +49,7 @@ def _startup_attention_summary(agent: Any) -> str:
         traceback.print_exc()
     try:
         scheduler_summary = getattr(agent, "_status_scheduler_summary", lambda: "")()
-        if scheduler_summary:
+        if scheduler_summary and not scheduler_summary.startswith("running"):
             parts.append("scheduler " + scheduler_summary.partition(" ·")[0])
     except Exception:
         traceback.print_exc()

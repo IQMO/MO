@@ -443,6 +443,11 @@ class AgentStatusCommands:
                 return "running · detail monitor"
             if service is not None:
                 return "paused · detail monitor"
+            # A Terminal never runs the scheduler itself; the service or Desktop on this machine does.
+            from core.runtime.lock import runtime_lock_owner
+
+            if runtime_lock_owner("mo-scheduler.lock"):
+                return "running in another MO process · detail monitor"
             return "needs attention · detail monitor"
         except Exception:
             return "needs attention · detail monitor"
