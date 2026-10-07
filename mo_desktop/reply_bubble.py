@@ -129,7 +129,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._watch_after: Any = None
         self._font_cache: dict[int, tuple] = {}
         self._ss = _SS                 # active supersample (drops during motion, settles back)
-        self._input_edit_active = False # only the direct key/edit repaint uses the 1x latency path
         self._last_render_at = 0.0
         self._settle_after: Any = None
         self._transition_base: Any = None      # finished 1x card, reused for every morph frame
@@ -1197,21 +1196,20 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
 
     def _render_supersample(self, *, morphing: bool, now: float) -> tuple[int, bool]:
-        """Select render quality without putting full supersampling on the key path."""
+        """Select render quality: full, except the cheaper 2x pass for reply text still arriving."""
         if morphing:
             return _SS, False
-        input_edit = self._mode == "input" and bool(
-            getattr(self, "_input_edit_active", False)
-        )
         recent_render = (
             now - float(getattr(self, "_last_render_at", 0.0) or 0.0)
         ) < 0.25
-        # Only text that is still arriving earns the cheaper 2x pass. A hover, an option
-        # toggle or a tab switch over the same text at 2x re-rasterizes every glyph, and the
-        # 3x settle snaps them back: the card shimmered under a moving pointer (his msg 167).
+        # Only a reply's text that is still arriving earns the cheaper 2x pass. A hover, an
+        # option toggle or a tab switch over the same text at 2x re-rasterizes every glyph, and
+        # the 3x settle snaps them back: the card shimmered under a moving pointer (his msg 167).
+        # Typing too: a 1x or 2x keystroke frame drew the composer's text wider and its edges
+        # jagged until the settle (his report 2026-10-07); the composer's full render is ~15 ms.
         streaming = getattr(self, "_body", None) != getattr(self, "_last_render_body", None)
-        fast = input_edit or (recent_render and streaming)
-        return (1 if input_edit else (2 if fast else _SS)), fast
+        fast = recent_render and streaming and self._mode != "input"
+        return (2 if fast else _SS), fast
 
     def _repaint(self) -> bool:
         if getattr(self._cube, "_launcher_active", False):
@@ -2132,11 +2130,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _finish_input_edit(self) -> None:
         self._keyboard_hit = ""
         self._caret = True
-        self._input_edit_active = True
-        try:
-            self._repaint()
-        finally:
-            self._input_edit_active = False
+        self._repaint()
 
     # ------------------------------------------------------------------ footer clicks
     def _on_click(self, event: Any) -> None:
