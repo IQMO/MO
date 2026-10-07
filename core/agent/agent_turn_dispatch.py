@@ -30,7 +30,7 @@ from ..learning.workflow_learning import (
 )
 from ..gates.consistency_boundary import changed_markdown_paths_for_last_commit
 from ..gates.behavior_gates import run_input_gates
-from ..context.gateway_helpers import WORKFLOW_ADOPTION_RE, WORKFLOW_APPROVAL_RE
+from ..context.gateway_helpers import ROLE_HIRE_RE, WORKFLOW_ADOPTION_RE, WORKFLOW_APPROVAL_RE
 from ..context.mo_control_context import resolve_mo_control_workspace
 from .. import local_extensions
 from .agent_utils import (
@@ -452,6 +452,36 @@ class AgentTurnDispatchMixin:
                 f"Please open this link manually to report the issue:\n{url}"
             )
 
+    def _hire_role_candidate(self, wanted: str) -> str:
+        """The user's own 'hire <name>' (never the model) writes a staged specialist's pack to the project team."""
+        from ..graph.structural_graph import project_root
+        from ..skills import role_candidates, skills_root, write_skill_pack
+
+        project_reader = getattr(self, "_effective_project_cwd", None)
+        raw_project = str(project_reader() if callable(project_reader) else getattr(self, "project_cwd", "") or "").strip()
+        if not raw_project:
+            return "Select a project first; specialists belong to a project team."
+        current_project = str(project_root(raw_project))
+        config = getattr(self, "config", {}) or {}
+        candidate = role_candidates.find(config, current_project, wanted)
+        if candidate is None:
+            waiting = ", ".join(row["name"] for row in role_candidates.pending(config, current_project))
+            return f"No specialist candidate named {wanted.strip()} is waiting here." + (f" Waiting: {waiting}." if waiting else "")
+        write_skill_pack(
+            root=skills_root(getattr(self, "profile", None), runtime_home=getattr(self, "runtime_home", None), config=config),
+            name=candidate["name"],
+            description=candidate.get("description", ""),
+            triggers=tuple(candidate.get("triggers") or ()),
+            body=candidate.get("body", ""),
+            provenance="authored",
+            approval="hired by the user",
+            project_root=current_project,
+            role=candidate["role"],
+            role_tools=("mcp__*",),
+        )
+        role_candidates.mark(config, candidate, "hired")
+        return f"Hired {candidate['name']} ({candidate['role']}) for this project; the Project Architect can now send it work."
+
     def _maybe_handle_workflow_control_turn(self, user_input: str) -> str | None:
         """Handle local skill adoption/promotion without a provider call.
 
@@ -465,6 +495,9 @@ class AgentTurnDispatchMixin:
         learning = self._maybe_handle_learning_control_turn(text)
         if learning is not None:
             return learning
+        hire = ROLE_HIRE_RE.search(text)
+        if hire:
+            return self._hire_role_candidate(hire.group("name"))
         if WORKFLOW_APPROVAL_RE.search(text):
             result = promote_workflow_candidate(getattr(self, "profile", None), text, "workflow approval handled locally")
             if result.get("promoted"):
@@ -1771,7 +1804,7 @@ class AgentTurnDispatchMixin:
             return "[ROLE WORK BLOCKED] select a project before managing its specialist roles."
         try:
             from ..graph.structural_graph import project_root
-            from ..skills import default_skill_roots, list_roles, resolve_role, skills_root, write_skill_pack
+            from ..skills import default_skill_roots, list_roles, resolve_role
             current_project = str(project_root(raw_project))
             profile = getattr(self, "profile", None)
             config = getattr(self, "config", {}) or {}
@@ -1869,6 +1902,12 @@ class AgentTurnDispatchMixin:
                 lines.append(line)
             if not project_roles:
                 lines.append("- No project-bound specialists are registered yet.")
+            from ..skills import role_candidates
+
+            waiting = role_candidates.pending(config, current_project)
+            if waiting:
+                lines.append("Candidates waiting for the user's yes (not on the team; they hire one by saying 'hire <name>'):")
+                lines.extend(f"- {row['role']} — {row['name']}: {str(row.get('description') or '')[:220]}" for row in waiting)
             if global_roles:
                 lines.append("Global role templates (not registered to this project):")
                 lines.extend(f"- {skill.role} — {skill.name}" for skill in global_roles)
@@ -1895,6 +1934,10 @@ class AgentTurnDispatchMixin:
                     f"[ROLE EXISTS] {role_id} is already registered as {existing.name}. "
                     "Present a proposed responsibility update and wait for explicit user approval; do not overwrite it."
                 )
+            shadowed = next((skill for skill in roles if not skill.project_root and skill.role.casefold() == role_id), None)
+            if shadowed is not None:
+                return (f"[ROLE WORK BLOCKED] {role_id} is MO's global role {shadowed.name}; choose a distinct "
+                        "specialist id so the project team never shadows it.")
             try:
                 from ..tooling.sandbox import redact_sensitive_text
                 if redact_sensitive_text(body) != body:
@@ -1906,21 +1949,12 @@ class AgentTurnDispatchMixin:
                     triggers = tuple(" ".join(str(item or "").split())[:120] for item in raw_triggers if str(item or "").strip())
                 else:
                     return "[ROLE WORK BLOCKED] triggers must be a list of short phrases."
-                write_skill_pack(
-                    root=skills_root(profile, runtime_home=runtime_home, config=config),
-                    name=name,
-                    description=description,
-                    triggers=triggers,
-                    body=body,
-                    provenance="authored",
-                    approval="operator-authorized role registration",
-                    project_root=current_project,
-                    role=role_id,
-                    role_tools=("mcp__*",),
-                )
-                if view is not None and view.matches(self):
-                    view.roles = tuple(list_roles(roots, profile=profile, project_cwd=current_project))
-                return f"[ROLE REGISTERED] {role_id} ({name}) is now bound to this project; its private skill file was written through MO's skill owner."
+                from ..skills import role_candidates
+
+                role_candidates.stage(config, project_root=current_project, role=role_id, name=name,
+                                      description=description, body=body, triggers=triggers)
+                return (f"[ROLE CANDIDATE STAGED] {role_id} ({name}) waits for the user's yes and is not on the team yet. "
+                        f"Tell the user what it would own and why it is needed; they hire it by saying: hire {name}")
             except Exception as exc:
                 return f"[ROLE WORK BLOCKED] registration failed ({type(exc).__name__}); the project team was not changed."
 

@@ -24,6 +24,11 @@ WORKFLOW_ADOPTION_RE = re.compile(
     r"(?::[\s\S]+|from\s+(?:`[^`]+`|\"[^\"]+\"|'[^']+'|\S+))\s*\Z",
     re.I,
 )
+# "hire Source Auditor": the user's own yes to a specialist the Project Architect staged; handled before any provider call.
+ROLE_HIRE_RE = re.compile(
+    r"\A\s*(?:please\s+)?hire\s+(?:the\s+)?(?:specialist\s+)?(?P<name>[^\n.!?]{1,90}?)\s*[.!]?\s*\Z",
+    re.I,
+)
 WORKFLOW_APPROVAL_RE = re.compile(
     r"\A\s*(?:please\s+)?(?:approve|promote|activate)\s+"
     r"(?:(?:this|the|that|my)\s+)?(?:latest\s+)?(?:workflow|skill)"

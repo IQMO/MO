@@ -699,6 +699,12 @@ search or copy the whole transcript store into the project index.
   its own snapshot owner. Specialist operations retain their Project Architect
   prerequisite and ordinary lane guards. A role change returns its new contract
   to the current provider turn; subsequent turns resolve persisted metadata.
+- A specialist the Project Architect proposes (`role_work` `register`) is
+  staged in `core/skills/role_candidates.py` (`memory/learning/role-candidates.jsonl`)
+  and is not on the team: dispatch refuses it and `list` shows it waiting. Only
+  the user's own words `hire <name>`, handled locally before any provider call
+  (`ROLE_HIRE_RE`, the same rule as workflow-candidate approval), write its pack.
+  A specialist id equal to a global role (for example the book writer) is refused.
 - A specialist worker finishing (and a scheduled role run) counts only as a use
   on its pack. Success or correction comes from the Project Architect's check:
   `role_work` `verify` (`accept`/`reject` with the evidence) on a completed
