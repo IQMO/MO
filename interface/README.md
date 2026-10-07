@@ -586,8 +586,9 @@ Do not guess. Do not call something dead unless imports/tests prove it.
   remains with the existing terminal loop.
 - Typed and selected commands use one busy boundary. Registry-admitted inspection
   commands (such as `/status`, `/projects`, and `/settings`) can run during a turn
-  and never enter the chat queue. Other state-changing commands stay unavailable
-  until idle, apart from their existing explicit goal/PRT controls. A `/model` choice made
+  and never enter the chat queue. Any other command waits in the input queue and
+  runs, in order, when the turn ends; it is never refused or lost. Goal and PRT
+  keep their existing explicit controls. A `/model` choice made
   during an active turn replaces the one pending model choice and applies after
   that turn, before the next queued input; it never mutates the in-flight request.
 - MO Desktop launches separately and cannot own terminal task state.

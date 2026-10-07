@@ -327,7 +327,10 @@ class InputDispatchMixin:
                 self._pending_palette_model_selection = normalized
                 feedback = "Model selection queued for the next turn"
             else:
-                feedback = f"Finish the current MO turn before running {normalized.split()[0]}"
+                # Never dropped: the command waits in the input queue and runs when the answer ends,
+                # where the gate no longer applies (it used to be refused with a notice and lost).
+                self._pending_inputs.put({"text": normalized, "steer": False, "source": "command", "echo": False})
+                feedback = f"{normalized.split()[0]} runs when this answer ends"
             self._clear_palette_query_input(normalized)
             self._palette.close()
             self._set_notice(feedback)
