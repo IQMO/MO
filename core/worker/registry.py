@@ -196,6 +196,7 @@ class WorkerRegistry:
             "verdict": record.verdict,
             "verdict_reason": record.verdict_reason,
             "difficulty": record.difficulty,
+            "project_root": redact_monitor_text(record.project_root, 260),
         })
 
 

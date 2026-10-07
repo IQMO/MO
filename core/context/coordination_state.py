@@ -37,6 +37,8 @@ def goal_summary_lines(agent: Any, *, limit: int = 8, include_evidence: bool = F
     try:
         objective = redact_monitor_text(getattr(plan, "objective", ""), 240)
         state = str(getattr(plan, "state", "") or "unknown")
+        if state == "running" and getattr(getattr(agent, "_goal_runner", None), "_pause_requested", False):
+            state = "pausing"   # /goal pause asked: the current step finishes, then it pauses
         completed = getattr(plan, "completed_count", lambda: 0)()
         total = len(getattr(plan, "steps", []) or [])
         rows.append(f"objective: {objective}")
