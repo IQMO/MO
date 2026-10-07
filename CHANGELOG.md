@@ -14,7 +14,7 @@ are owned by the linked product documentation and source.
   knowledge, and private continuity.
 - The optional Windows-focused MO Desktop companion provides conversation,
   screen help, Dashboard, Files, Design/Board, Phone, SystemCare, voice, Shell,
-  and the Mologrthim operations floor through the same runtime owners and guards.
+  the Mologrthim operations floor and Inventory through the same runtime owners and guards.
 - MO Everywhere supplies the authenticated Hub, explicit portable
   conversations, bounded work controls, file transfer, schedules, and native
   Live Control. The Android companion is distributed only through Google Play;

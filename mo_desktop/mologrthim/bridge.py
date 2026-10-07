@@ -207,7 +207,7 @@ class MologrthimBridge:
             target = self._target(instance_id)
             queue_terminal_control("command", command, target, project_root=target["cwd"],
                                    expected_slot=target["slot"], config=self.config)
-        return self._result(send, f"{command} sent to that MO.")
+        return self._result(send, f"{command} is ready in that MO's terminal.")   # the Terminal prepares or opens it
 
     def new_mo(self, project: str = "", text: str = "") -> dict[str, Any]:
         """Start a normal MO Terminal; an assignment, if any, goes to it as its first request once it runs."""
