@@ -9,7 +9,7 @@ Page, scroll position and focused controls survive live theme changes.
 
 | Page | Native controls | Owner and application |
 | --- | --- | --- |
-| General | Startup, movement, executable allowlist, updates, reset/restart | Desktop live setters; startup shortcut owner; authored startup options apply on restart |
+| General | Startup, movement, executable allowlist, cube gestures, updates, reset/restart | Desktop live setters; startup shortcut owner; authored startup options apply on restart |
 | Appearance | Skin gallery, Desktop/Terminal samples, custom palettes, cube/panel geometry, effects, Terminal display | `interface.theming`, `DesktopVisualState`, typed Desktop settings; visuals live, Terminal display on reload |
 | Models & providers | Desktop choice or follow-provider, saved Terminal default, observed running Terminals and individual model changes, request/context budgets | Model catalog, preference overlay, existing heartbeat and exact terminal handoff; target and apply scope are explicit |
 | Voice & roles | Listening, speech, role, pace/output, recognition engine/model/device | Companion voice/role owners; live conversation controls, engine configuration on restart |

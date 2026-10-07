@@ -1286,8 +1286,24 @@ class CompanionSurface(
         if limit and not self._clipboard.start():
             log_event("Clipboard history listener unavailable", config=getattr(self._agent, "config", None))
 
+    def _cube_hold_action(self, corner: str) -> Any:
+        """What holding this corner's cube does, read from Settings at each press (General ->
+        Cube gestures): the screen selection, one of MO's own apps or toggles, or nothing."""
+        from mo_desktop.settings import load_settings
+
+        action = str(getattr(load_settings(self._config()).behavior, "hold_" + str(corner), "none") or "none")
+        if action == "capture":
+            return self._start_screen_selection
+        if action == "none":
+            return None
+        from mo_desktop.tray import TRAY_ITEMS
+
+        row = next((item for item in TRAY_ITEMS if item["id"] == action and item["kind"] in {"action", "toggle"}), None)
+        handler = getattr(self._app_catalog(), row["handler"], None) if row else None
+        return (lambda: handler(None, None)) if callable(handler) else None
+
     def open_clipboard(self) -> None:
-        """Ctrl+Shift+Alt+Z or the launcher: the clipboard history in the one panel."""
+        """Win+Shift+Z, a cube hold or the launcher: the clipboard history in the one panel."""
         self._post_gui_call(self._show_clipboard)
 
     def _show_clipboard(self) -> None:
@@ -2219,8 +2235,7 @@ class CompanionSurface(
                                      post=self._post_gui_call)
             self._cube.set_follow_params(settings.behavior.follow_distance, settings.behavior.follow_ease)
             self._modes = CompanionModes(self, self._cube, default_mode=settings.behavior.default_mode)
-            self._cube.set_hold_handlers(capture=self._start_screen_selection,
-                                        focus=lambda: self._tray and self._tray._on_toggle_focus())
+            self._cube.set_hold_resolver(self._cube_hold_action)
             from mo_desktop.overlay_compat import OverlayCompatibility
 
             self._overlay_compat = OverlayCompatibility(settings.behavior.keep_above_apps, acting=self._overlay_acting)
@@ -6108,7 +6123,8 @@ class CompanionSurface(
             self._hotkey_listener = keyboard.add_hotkey("win+alt+m", self.summon)
             log_event("Win+Alt+M hotkey registered", config=getattr(self._agent, "config", None))
             try:
-                self._clipboard_hotkey = keyboard.add_hotkey("ctrl+shift+alt+z", self.open_clipboard)
+                # Inside this running Desktop only: the key opens its clipboard, never another MO.
+                self._clipboard_hotkey = keyboard.add_hotkey("win+shift+z", self.open_clipboard)
             except Exception:
                 self._clipboard_hotkey = None
             _write_stderr("[companion] ready: Win+Alt+M registered (summon).\n")

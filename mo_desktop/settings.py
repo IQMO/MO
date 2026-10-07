@@ -67,6 +67,12 @@ class BehaviorSettings:
     # Exact executable basenames whose topmost overlays MO may rise above. Empty = normal Z-order.
     dim_level: float = 0.0         # MO's dim layer on displays without hardware brightness, 0..0.9
     clipboard_items: int = 50      # clipboard history kept in memory only; 0 turns it off
+    # What each cube's two-second hold does: "none", "capture" (screen selection) or a
+    # tray.TRAY_ITEMS app/toggle id (Settings -> General -> Cube gestures).
+    hold_top_left: str = "clipboard"
+    hold_top_right: str = "none"
+    hold_bottom_left: str = "capture"
+    hold_bottom_right: str = "focus_mode"
 
 
 @dataclass
@@ -173,6 +179,10 @@ def _normalize(settings: DesktopSettings) -> None:
     behavior.keep_above_apps = normalize_keep_above_apps(behavior.keep_above_apps)
     behavior.dim_level = _bounded_float(behavior.dim_level, defaults.behavior.dim_level, 0.0, 0.9)
     behavior.clipboard_items = _bounded_int(behavior.clipboard_items, defaults.behavior.clipboard_items, 0, 200)
+    for corner in ("top_left", "top_right", "bottom_left", "bottom_right"):
+        key = "hold_" + corner
+        value = str(getattr(behavior, key) or "").strip().lower()
+        setattr(behavior, key, value if value.replace("_", "").isalpha() and len(value) <= 32 else getattr(defaults.behavior, key))
     panel = settings.panel
     metrics = desktop_visual_metrics(panel)
     panel.padding = metrics.panel_padding

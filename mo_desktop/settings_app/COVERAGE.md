@@ -35,7 +35,7 @@ credential broker, not to the stdout request transport or MO conversation.
 
 | Page | Working native editor | Scope / boundary | Remaining dedicated or advanced setup |
 | --- | --- | --- | --- |
-| General | Startup shortcut, Desktop startup/tray, update checks, movement and executable allowlist, reset/restart | Account startup and Desktop; live setters vs next process are distinct | SystemCare preferences remain in its existing Settings |
+| General | Startup shortcut, Desktop startup/tray, update checks, movement and executable allowlist, cube gestures (each corner's hold), reset/restart | Account startup and Desktop; live setters vs next process are distinct | SystemCare preferences remain in its existing Settings |
 | Appearance | Skin gallery and paired previews, custom palette, cube/panel geometry/effects, Terminal display | Shared skin; live Desktop visuals; Terminal on reload | No parallel theme store |
 | Models & providers | Independent Desktop choice or follow-provider, saved Terminal default, each observed controllable Terminal, request/context budgets | Model catalog validates; Gateway owns Desktop request scope; exact live Terminal handoff and correlated receipt | Provider creation, endpoints, model catalogs, fallback routes and credentials retain authored configuration/canonical setup |
 | Voice & roles | Manual/continuous listening, typed speech, pace/output, spoken-reply provider, roles/default, recognition engine/model/device/beam/idle | Conversation changes live; worker configuration on restart; saving does not install an engine | Custom recognition paths and advanced engine arguments remain authored configuration |

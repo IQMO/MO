@@ -75,14 +75,12 @@ class CubeInteractionMixin:
         point = self._event_screen_point(event)
         self._pressed_cube_index = self.cube_at_screen(*point) if point is not None else None
         self._press_at = point
-        if (getattr(event, "num", 1) == 1 and self._pressed_cube_index is not None
-                and self._pressed_cube_index in (self._bottom_left_cube_index(), 3)):
+        resolver = getattr(self, "_hold_resolver", None)
+        corner = self._hold_corner(self._pressed_cube_index) if getattr(event, "num", 1) == 1 else None
+        self._hold_action = resolver(corner) if corner and callable(resolver) else None
+        if callable(self._hold_action):
             self._cube_hold_started_at = time.perf_counter()
             self._cube_hold_after = self._gui.schedule(_CUBE_HOLD_MS, self._fire_cube_hold)
-
-    def _bottom_left_cube_index(self) -> int | None:
-        bases = getattr(self, "_bases", ())
-        return min(range(len(bases)), key=lambda index: (-bases[index][1], bases[index][0])) if bases else None
 
     def _cancel_cube_hold(self) -> None:
         timer = getattr(self, "_cube_hold_after", None)
@@ -118,7 +116,7 @@ class CubeInteractionMixin:
             return
         if self.cube_at_screen(*point) != getattr(self, "_pressed_cube_index", None):
             return
-        callback = getattr(self, "_focus_hold" if self._pressed_cube_index == 3 else "_capture_hold", None)
+        callback = getattr(self, "_hold_action", None)
         if callable(callback):
             self._press_on_cube = False
             self._pressed_cube_index = None

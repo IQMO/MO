@@ -196,7 +196,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **Compact Dashboard** — *Right-click the cubes.* Home, Work, You and Systems at a glance, with project checks.
 - **Screen capture by hold** — *Hold a cube for two seconds, drag a rectangle.* A full-resolution snip you can preview and send to MO.
 - **Volume and brightness on the cubes** — *Scroll over the cubes* for Windows volume; *Shift + scroll* for the brightness of the screen they sit on (a laptop panel's own brightness, or MO's dim layer on an external screen).
-- **Clipboard history** — *Ctrl+Shift+Alt+Z.* What you copied, in the one panel: copy it again, ask MO about it, or remove it. Memory only; secrets are masked and never sent.
+- **Clipboard history** — *Win+Shift+Z, or hold the top-left cube.* What you copied, in the one panel: copy it again, ask MO about it, or remove it. Memory only; secrets are masked and never sent.
 - **Chase or rest** — *Ctrl-Ctrl.* The cubes follow your cursor, or stay where you left them.
 - **Body language** — *Automatic.* The cubes react to real events with their own emotes.
 - **Personality** — *Settings: moodiness, warmth, playfulness.* Tune how lively the companion is.

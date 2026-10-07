@@ -277,8 +277,8 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
         self._left_double: Callable[[], None] | None = None
         self._escape: Callable[[], None] | None = None
         self._cube_click: Callable[[int, str], bool | None] | None = None
-        self._capture_hold: Callable[[], None] | None = None
-        self._focus_hold: Callable[[], None] | None = None
+        # corner name -> what that cube's two-second hold does now (None: no hold there)
+        self._hold_resolver: Callable[[str], Callable[[], None] | None] | None = None
         self._cube_hold_after: Any = None
         self._cube_hold_started_at = 0.0
         self._pressed_cube_index: int | None = None
@@ -513,9 +513,23 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
             self._reposition()
             self._render(time.perf_counter())
 
-    def set_hold_handlers(self, *, capture: Callable[[], None], focus: Callable[[], None]) -> None:
-        """Share the stationary hold gesture between the two lower cubes."""
-        self._capture_hold, self._focus_hold = capture, focus
+    def set_hold_resolver(self, resolver: Callable[[str], Callable[[], None] | None] | None) -> None:
+        """``resolver(corner)`` answers, at each press, what that corner cube's two-second hold
+        does (read live from Settings), or None when the corner has no hold."""
+        self._hold_resolver = resolver
+
+    def _hold_corner(self, index: int | None) -> str | None:
+        """"top_left" / "top_right" / "bottom_left" / "bottom_right" for a corner cube; None for
+        the centre cube of a five-cube form."""
+        bases = list(getattr(self, "_bases", ()) or ())
+        if index is None or not 0 <= index < len(bases):
+            return None
+        cx = sum(x for x, _y in bases) / len(bases)
+        cy = sum(y for _x, y in bases) / len(bases)
+        bx, by = bases[index]
+        if abs(bx - cx) < 1 and abs(by - cy) < 1:
+            return None
+        return ("top" if by < cy else "bottom") + "_" + ("left" if bx < cx else "right")
 
     def hold_actuation_yield(self, owner: str, on: bool) -> None:
         """Yield while any owner needs it: a companion action, bound terminal activity,

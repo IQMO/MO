@@ -40,6 +40,14 @@ APP_GLYPHS = {"dashboard": "gauge", "shell": "terminal", "files": "folder", "cli
               "phone": "phone", "systemcare": "pulse",
               "settings": "settings", "mologrthim": "team"}
 
+# What a cube's two-second hold can do (Settings -> General -> Cube gestures): nothing, the screen
+# selection, or one of MO's own apps and toggles from TRAY_ITEMS below - one table, no second list.
+def hold_actions() -> tuple[tuple[str, str], ...]:
+    return (("none", "Nothing"), ("capture", "Screen selection")) + tuple(
+        (row["id"], row["label"]) for row in TRAY_ITEMS
+        if row["kind"] in {"action", "toggle"} and row["id"] not in {"show_hide", "run_at_startup"})
+
+
 # Hovering a launcher app shows at most three of these quick actions under its row:
 # (action id, label, glyph, CompanionTray handler). Trackpad lives here, not as its own app.
 QUICK_ACTIONS: "dict[str, tuple[tuple[str, str, str, str], ...]]" = {

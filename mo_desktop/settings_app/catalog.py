@@ -9,6 +9,11 @@ import math
 import re
 from typing import Any
 
+from mo_desktop.tray import hold_actions
+
+# A cube hold's choices come from MO's own quick-access table (tray.TRAY_ITEMS).
+_HOLD_CHOICES = hold_actions()
+
 # key, page, group, label, detail, control, constraints
 FIELDS = (
     ("character.size", "appearance", "Cube", "Size", "The original floating cube cluster.", "range", (56, 140, 2, "px")),
@@ -27,7 +32,11 @@ FIELDS = (
     ("behavior.follow_ease", "general", "Movement", "Follow response", "Lower values follow more gently.", "range", (.04, .4, .02, "")),
     ("behavior.keep_above_apps", "general", "Movement", "Keep above selected apps", "Exact executable names, separated by commas.", "text", ()),
     ("behavior.dim_level", "general", "Screen & clipboard", "Screen dim", "MO's dim layer on screens without hardware brightness; Shift + wheel over the cubes too.", "range", (0, .9, .05, "")),
-    ("behavior.clipboard_items", "general", "Screen & clipboard", "Clipboard history", "Copies kept in memory only, opened with Ctrl+Shift+Alt+Z; 0 turns it off.", "range", (0, 200, 10, "")),
+    ("behavior.clipboard_items", "general", "Screen & clipboard", "Clipboard history", "Copies kept in memory only, opened with Win+Shift+Z or a cube hold; 0 turns it off.", "range", (0, 200, 10, "")),
+    ("behavior.hold_top_left", "general", "Cube gestures", "Hold top-left cube", "Two seconds on this cube: it brightens, then opens this.", "select", _HOLD_CHOICES),
+    ("behavior.hold_top_right", "general", "Cube gestures", "Hold top-right cube", "Two seconds on this cube: it brightens, then opens this.", "select", _HOLD_CHOICES),
+    ("behavior.hold_bottom_left", "general", "Cube gestures", "Hold bottom-left cube", "Two seconds on this cube: it brightens, then opens this.", "select", _HOLD_CHOICES),
+    ("behavior.hold_bottom_right", "general", "Cube gestures", "Hold bottom-right cube", "Two seconds on this cube: it brightens, then opens this.", "select", _HOLD_CHOICES),
     ("voice.stt_enabled", "voice", "Listening & speech", "Hold to talk", "Press Alt, then hold Alt to speak.", "switch", ()),
     ("voice.chat_enabled", "voice", "Listening & speech", "Continuous voice chat", "Listen again after each spoken reply.", "switch", ()),
     ("voice.tts_enabled", "voice", "Listening & speech", "Speak typed replies", "Read replies to your typed messages aloud.", "switch", ()),
