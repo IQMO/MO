@@ -1039,8 +1039,11 @@ def _emit_scheduler_event(kind: str, payload: dict[str, Any]) -> None:
     try:
         monitor = get_monitor()
         if monitor:
-            data = {"kind": kind, "component": "scheduler"}
+            data = {"component": "scheduler"}
             data.update(payload or {})
+            if "kind" in (payload or {}):
+                data["job_kind"] = payload["kind"]   # a run's own kind must not overwrite the event's name
+            data["kind"] = kind
             monitor.emit("session_event", data)
     except Exception:
         traceback.print_exc()
