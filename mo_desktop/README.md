@@ -143,7 +143,7 @@ alpha windows and a single Windows message/timer loop. Clipboard, pointer and
 screen services no longer require Tk. Private profile Tk apps keep their
 widgets in an on-demand host on the same GUI thread; normal Desktop startup
 neither imports Tk nor creates an interpreter. Settings, Phone, Files, SystemCare
-and [Mologrthim](mologrthim/README.md) use the shared native WebView renderer. Shell owns its native control
+[Mologrthim](mologrthim/README.md) and [Inventory](inventory/README.md) use the shared native WebView renderer. Shell owns its native control
 strip; Windows file pickers and attached third-party windows retain their own chrome.
 
 ## What the companion can do

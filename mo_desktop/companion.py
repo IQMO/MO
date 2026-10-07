@@ -454,6 +454,7 @@ class CompanionSurface(
         # triggers. Unlike the voice persona, this is a real tool/lane scope.
         self._active_skill_role: Any = None
         self._role_workspace: Any = None      # Mologrthim's native floor window (separate process)
+        self._inventory_window: Any = None    # Inventory's native basket window (separate process)
         self._register_dashboard_sources()
         self._agent._dashboard_mail_request = self._dashboard_mail_request
 
@@ -1745,6 +1746,7 @@ class CompanionSurface(
             ("files", getattr(self, "_files_window", None)),
             ("phone", getattr(self, "_phone_window", None)),
             ("systemcare", getattr(self, "_systemcare_window", None)),
+            ("inventory", getattr(self, "_inventory_window", None)),
             ("role_workspace", getattr(self, "_role_workspace", None)),
             ("tray", getattr(self, "_tray", None)),
             ("settings", getattr(self, "_settings_panel", None)),
@@ -2380,10 +2382,11 @@ class CompanionSurface(
             if selection is not None:
                 selection.close()
             self._shutdown_private_desktop_apps()
-            view = getattr(self, "_role_workspace", None)
-            if view is not None:
-                view.destroy()
-                self._role_workspace = None
+            for name in ("_role_workspace", "_inventory_window"):
+                view = getattr(self, name, None)
+                if view is not None:
+                    view.destroy()
+                    setattr(self, name, None)
             host = getattr(self, "_tk_host", None)
             if host is not None:
                 host.close()
@@ -4060,6 +4063,27 @@ class CompanionSurface(
         """Open Mologrthim's floor (its own WebView process, like Files and SystemCare): every running MO, their
         specialists' checked work, candidates and MO Care. It reads records and acts only through MO's handoff."""
         self._post_gui_call(lambda: self._display_mologrthim(str(focus or "")))
+
+    def open_inventory(self) -> None:
+        """Open Inventory: a basket of everything MO did with the user; picked items go to a running MO Terminal's
+        composer as a prepared message (its own WebView process, like Files)."""
+        self._post_gui_call(self._display_inventory)
+
+    def _display_inventory(self) -> None:
+        from mo_desktop.inventory.window import InventoryWindow
+
+        window = getattr(self, "_inventory_window", None)
+        if window is None:
+            window = InventoryWindow(self._config())
+            self._inventory_window = window
+        options = self._app_launch_options("inventory")
+        try:
+            window.show(**options)
+        except Exception:
+            if options.get("on_ready"):
+                options["on_ready"](False)
+            raise
+        self._pulse_desktop_app("inventory")
 
     def _display_mologrthim(self, focus: str = "") -> None:
         from mo_desktop.mologrthim.window import MologrthimWindow

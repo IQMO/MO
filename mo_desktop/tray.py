@@ -27,18 +27,18 @@ from interface.desktop_ui import (
 TRAY_TOOLTIP = "MO Desktop"
 
 APP_GROUPS = (
-    ("Work", ("dashboard", "shell", "files", "clipboard", "design", "mologrthim")),
+    ("Work", ("dashboard", "shell", "files", "clipboard", "design", "mologrthim", "inventory")),
     ("Devices", ("phone",)),
     ("Care", ("systemcare",)),
     ("Your apps", ("settings",)),
 )
 APP_COLOR_ROLES = {"dashboard": "accent", "shell": "accent", "files": "ok", "clipboard": "accent",
                    "design": "warn", "phone": "accent",
-                   "systemcare": "ok", "settings": "muted", "mologrthim": "accent"}
+                   "systemcare": "ok", "settings": "muted", "mologrthim": "accent", "inventory": "ok"}
 # One distinct glyph per app (row 26, approved 2026-10-07).
 APP_GLYPHS = {"dashboard": "gauge", "shell": "terminal", "files": "folder", "clipboard": "clipboard", "design": "pen",
               "phone": "phone", "systemcare": "pulse",
-              "settings": "settings", "mologrthim": "team"}
+              "settings": "settings", "mologrthim": "team", "inventory": "tray"}
 
 # What a cube's two-second hold can do (Settings -> General -> Cube gestures): nothing, the screen
 # selection, or one of MO's own apps and toggles from TRAY_ITEMS below - one table, no second list.
@@ -69,6 +69,7 @@ TRAY_ITEMS: "tuple[dict[str, Any], ...]" = (
     {"id": "clipboard", "kind": "action", "label": "Clipboard", "handler": "_on_clipboard"},
     {"id": "design", "kind": "action", "label": "MO Design", "handler": "_on_design"},
     {"id": "mologrthim", "kind": "action", "label": "Mologrthim", "handler": "_on_mologrthim"},
+    {"id": "inventory", "kind": "action", "label": "Inventory", "handler": "_on_inventory"},
     {"id": "phone", "kind": "action", "label": "MO Phone", "handler": "_on_phone"},
     {"id": "systemcare", "kind": "action", "label": "MO SystemCare", "handler": "_on_systemcare"},
     {"id": "settings", "kind": "action", "label": "Settings", "handler": "_on_open_settings"},
@@ -441,6 +442,11 @@ class CompanionTray:
 
     def _on_mologrthim(self, _icon: Any, _item: Any) -> None:
         opener = getattr(self._companion, "open_mologrthim", None)
+        if callable(opener):
+            opener()
+
+    def _on_inventory(self, _icon: Any, _item: Any) -> None:
+        opener = getattr(self._companion, "open_inventory", None)
         if callable(opener):
             opener()
 

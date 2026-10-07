@@ -1,0 +1,18 @@
+<main class="inv-app">
+  <header class="mo-titlebar pywebview-drag-region">
+    <div class="mo-title-identity pywebview-drag-region">@@MARK@@<strong class="mo-title">Inventory</strong><span class="inv-sub pywebview-drag-region">everything you did with MO</span></div>
+    <div class="mo-title-actions">
+      <label class="inv-search">@@SEARCH@@<input id="search" type="search" placeholder="Search your work" aria-label="Search your work" spellcheck="false"><span id="found"></span></label>
+      <div class="mo-window-controls">@@WINDOW_CONTROLS@@</div>
+    </div>
+  </header>
+  <nav class="inv-chips" id="chips" aria-label="What to show"></nav>
+  <section class="inv-stage" id="stage">
+    <div class="basket" id="basket"><div class="basket-rim"></div></div>
+    <div class="cards" id="cards" aria-live="polite"></div>
+    <div class="inv-empty" id="empty" hidden></div>
+    <div class="inv-more" id="more" hidden></div>
+  </section>
+  <footer class="inv-terminals" id="terminals" aria-label="Send to a running MO terminal"></footer>
+  <div class="toast" id="toast" role="status" hidden></div>
+</main>

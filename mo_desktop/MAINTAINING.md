@@ -923,6 +923,9 @@ interaction clock must not become an always-running background animation.
   through the Terminal handoff, `mologrthim/floor.js` draws the floor. The Work cube,
   the tray, Project Architect activation and `/role show` open it through
   `MologrthimWindow`. See [Mologrthim](mologrthim/README.md).
+- Inventory (`inventory/`) is the same kind of WebView app: `InventoryReader` reads only existing records, the
+  bridge reads while visible and sends picked items as the Terminal's `request` handoff (a prepared composer
+  message). See [Inventory](inventory/README.md).
   The plus beside Close launches one fresh Terminal with Talk to MO enabled;
   it starts no message or work automatically. Discovery, exact typed handoff,
   startup and correlated acknowledgement reuse their existing owners. The

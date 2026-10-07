@@ -163,6 +163,7 @@ The Terminal: workspace and panes, code graph and maps, roles and workers, prese
 - **Redundancy scan** — *Ask for duplicates.* Finds duplicate and near-duplicate code.
 - **Graph for other agents** *(setup)* — *Add the mo-graph MCP server to Claude Code or others.* Other coding agents use MO's code graph.
 - **Mologrthim** — *Launcher → Mologrthim.* MO's operations floor: every running MO, their specialists' checked work and rank, candidates waiting for your hire, MO Care; assign work, hire or pause a goal through that MO.
+- **Inventory** — *Launcher → Inventory.* A basket of everything MO did with you, today first; search, pick several and drop them on a running MO terminal, where they wait in its composer.
 - **Background workers** — *Ask for parallel work; /activity.* Workers in their own sessions, with completion notices and conflict detection.
 - **Roles** — */role <name>.* Reusable perspectives that govern a conversation, workers or schedules.
 - **Project Architect** — */role project-architect.* Calibrates a project and dispatches specialists it registers from evidence.
