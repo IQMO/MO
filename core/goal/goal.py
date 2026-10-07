@@ -338,6 +338,7 @@ class GoalRunner:
     def __init__(self, agent: Any):
         self.agent = agent
         self._cancel_event = threading.Event()
+        self._pause_requested = False   # set by request_pause; honoured before the next step starts
         self.on_board_event: object = None
 
     def _agent_context_savings_chars(self) -> int:
@@ -357,6 +358,7 @@ class GoalRunner:
             return "Usage: /goal <task>"
 
         self._cancel_event = threading.Event()
+        self._pause_requested = False
 
         budget = budget or GoalBudget()
         run_id = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
@@ -407,6 +409,9 @@ class GoalRunner:
             return f"Goal is {plan.state}: {_format_goal_blocker(getattr(plan, 'stop_kind', ''), plan.stop_reason)}"
         if self._cancel_event.is_set():
             self._cancel_event = threading.Event()
+        if self._pause_requested:
+            self._pause_requested = False
+            return self._finish(plan, "paused", "paused by the user after the current step", record_learning=False)
         plan.finished_at = None
         board = getattr(self.agent, "_goal_task_board", None)
         if board is not None and str(getattr(board, "state", "") or "") == "paused":
@@ -414,6 +419,15 @@ class GoalRunner:
             board.updated_at = time.time()
             record_snapshot(board, "goal_resumed", source="goal", state="active")
         return self._run_iteration()
+
+    def request_pause(self) -> str:
+        """Pause after the current step: the running step finishes with its work and evidence, then no new
+        step starts. /goal stop is the hard stop that cancels the running step."""
+        plan = getattr(self.agent, "_goal_plan", None)
+        if not plan or not getattr(self.agent, "_goal_active", False):
+            return "No active goal."
+        self._pause_requested = True
+        return "[GOAL PAUSING] The current step finishes, then the goal pauses. Use /goal resume to continue."
 
     def stop(self) -> str:
         """Stop the active goal."""
@@ -886,8 +900,8 @@ class GoalRunner:
         self._persist(plan)
         return self._format_progress(plan)
 
-    def _finish(self, plan: GoalPlan, state: str, reason: str) -> str:
-        """Finalize the goal."""
+    def _finish(self, plan: GoalPlan, state: str, reason: str, *, record_learning: bool = True) -> str:
+        """Finalize the goal. A pause the user asked for records no learning finding."""
         plan.state = state
         plan.stop_reason = reason
         plan.stop_kind = _goal_blocker_kind(reason, state=state, feedback=getattr(plan, "auditor_feedback", ""))
@@ -900,7 +914,7 @@ class GoalRunner:
                     step.blocker = ""
                     step.blocker_kind = ""
             plan.auditor_feedback = ""
-        else:
+        elif record_learning:
             # Record durable learnings when a goal is blocked or paused.
             findings = [reason]
             if plan.auditor_feedback:

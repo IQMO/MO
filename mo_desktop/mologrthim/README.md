@@ -124,9 +124,10 @@ observation cadence. Hidden views do not sample or discover instances.
 Resource-only changes update their text and color in place. They do not repaint
 the room or the dimmed chooser; entering another load band updates its advice.
 
-Coordination pause is deliberately not exposed: the requested safe-boundary
-pause semantics require work in the existing orchestration owner. Closing the
-window never calls goal stop or changes worker execution.
+The safe-boundary pause lives in its orchestration owner: `/goal pause`
+(`GoalRunner.request_pause`) lets the running step finish and starts no new
+one; `/goal stop` stays the hard stop. The room does not offer the control yet.
+Closing the window never calls goal stop or changes worker execution.
 
 ## Backend work remains separate
 

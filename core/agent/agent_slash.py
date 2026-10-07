@@ -2846,6 +2846,9 @@ class AgentSlashCommands:
             text = runner.stop().replace("[GOAL STOPPED] ", "Goal stopped · ", 1)
             return SlashCommandResult(text, kind="report", action="goal_stopped")
 
+        if command == "pause":
+            return runner.request_pause().replace("[GOAL PAUSING] ", "Goal pausing · ", 1)
+
         if command in ("status", "info", ""):
             if self._goal_active:
                 if command == "":
@@ -2861,6 +2864,7 @@ class AgentSlashCommands:
                 return (
                     "No active goal.\n"
                     "Use: /goal <task> to start an autonomous goal.\n"
+                    "  /goal pause    — pause after the current step\n"
                     "  /goal stop     — stop active goal\n"
                     "  /goal status   — show progress\n"
                     "  Ctrl+G         — toggle background/foreground"

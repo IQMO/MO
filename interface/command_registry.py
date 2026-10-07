@@ -394,8 +394,9 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
         description="autonomous goal mode",
         category="Work",
         aliases=("/g",),
-        busy_args=("", "status", "info", "stop", "cancel", "abort"),
+        busy_args=("", "status", "info", "pause", "stop", "cancel", "abort"),
         subcommands=(
+            ("pause", "pause after the current step"),
             ("stop", "stop active goal"),
             ("status", "show goal progress"),
         ),
@@ -405,6 +406,7 @@ COMMANDS: tuple[SlashCommandSpec, ...] = (
             "/goal, /g         autonomous goal mode",
             "                  /goal <task>     start goal",
             "                  /goal            continue active goal",
+            "                  /goal pause      pause after the current step",
             "                  /goal stop       stop active goal",
             "                  /goal status     show progress",
             "                  Ctrl+G           background/foreground toggle",
