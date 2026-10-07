@@ -81,6 +81,16 @@ class FileDropTarget:
 
 def choose_path(hwnd: int, *, folder: bool) -> str | None:
     """Show the modern Windows picker, owned by the calling Desktop HWND."""
+    chosen = _pick(hwnd, folder=folder, multiple=False)
+    return chosen[0] if chosen else None
+
+
+def choose_paths(hwnd: int) -> list[str]:
+    """The same picker for several files at once (Ctrl- or Shift-click); [] when cancelled."""
+    return _pick(hwnd, folder=False, multiple=True)
+
+
+def _pick(hwnd: int, *, folder: bool, multiple: bool) -> list[str]:
     import ctypes as ct
     from ctypes import wintypes as wt
     from uuid import UUID
@@ -90,7 +100,7 @@ def choose_path(hwnd: int, *, folder: bool) -> str | None:
     ole.CoCreateInstance.argtypes = [ct.c_void_p, ct.c_void_p, wt.DWORD,
                                     ct.c_void_p, ct.POINTER(ct.c_void_p)]
     ole.CoTaskMemFree.argtypes = [ct.c_void_p]
-    dialog, item = ct.c_void_p(), ct.c_void_p()
+    dialog, item, items = ct.c_void_p(), ct.c_void_p(), ct.c_void_p()
 
     def method(obj: Any, slot: int, *types: Any) -> Any:
         vtable = ct.cast(obj, ct.POINTER(ct.POINTER(ct.c_void_p))).contents
@@ -109,24 +119,41 @@ def choose_path(hwnd: int, *, folder: bool) -> str | None:
         ole.CoCreateInstance(clsid, None, 1, iid, ct.byref(dialog))
         options = wt.DWORD()
         checked(method(dialog, 10, ct.POINTER(wt.DWORD))(dialog, ct.byref(options)))
-        # FORCEFILESYSTEM | PATHMUSTEXIST; PICKFOLDERS or FILEMUSTEXIST.
-        flags = options.value | 0x40 | 0x800 | (0x20 if folder else 0x1000)
+        # FORCEFILESYSTEM | PATHMUSTEXIST; PICKFOLDERS or FILEMUSTEXIST; ALLOWMULTISELECT.
+        flags = options.value | 0x40 | 0x800 | (0x20 if folder else 0x1000) | (0x200 if multiple else 0)
         checked(method(dialog, 9, wt.DWORD)(dialog, flags))
-        checked(method(dialog, 17, wt.LPCWSTR)(dialog, "Choose folder" if folder else "Choose file"))
+        checked(method(dialog, 17, wt.LPCWSTR)(dialog, "Choose folder" if folder else "Choose files" if multiple else "Choose file"))
         result = method(dialog, 3, wt.HWND)(dialog, hwnd)  # IModalWindow.Show
         if result & 0xffffffff == 0x800704C7:  # ERROR_CANCELLED
-            return None
+            return []
+
+        def file_path(shell_item: Any) -> str:
+            path = ct.c_void_p()
+            checked(method(shell_item, 5, wt.DWORD, ct.POINTER(ct.c_void_p))(
+                shell_item, 0x80058000, ct.byref(path)))  # IShellItem.GetDisplayName(SIGDN_FILESYSPATH)
+            try:
+                return ct.wstring_at(path)
+            finally:
+                ole.CoTaskMemFree(path)
+
         checked(result)
-        checked(method(dialog, 20, ct.POINTER(ct.c_void_p))(dialog, ct.byref(item)))
-        path = ct.c_void_p()
-        checked(method(item, 5, wt.DWORD, ct.POINTER(ct.c_void_p))(
-            item, 0x80058000, ct.byref(path)))  # SIGDN_FILESYSPATH
-        try:
-            return ct.wstring_at(path)
-        finally:
-            ole.CoTaskMemFree(path)
+        if not multiple:
+            checked(method(dialog, 20, ct.POINTER(ct.c_void_p))(dialog, ct.byref(item)))  # IFileDialog.GetResult
+            return [file_path(item)]
+        checked(method(dialog, 27, ct.POINTER(ct.c_void_p))(dialog, ct.byref(items)))  # IFileOpenDialog.GetResults
+        count = wt.DWORD()
+        checked(method(items, 7, ct.POINTER(wt.DWORD))(items, ct.byref(count)))      # IShellItemArray.GetCount
+        paths = []
+        for index in range(count.value):
+            entry = ct.c_void_p()
+            checked(method(items, 8, wt.DWORD, ct.POINTER(ct.c_void_p))(items, index, ct.byref(entry)))  # GetItemAt
+            try:
+                paths.append(file_path(entry))
+            finally:
+                method(entry, 2)(entry)  # IUnknown.Release
+        return paths
     finally:
-        for obj in (item, dialog):
+        for obj in (items, item, dialog):
             if obj:
                 method(obj, 2)(obj)  # IUnknown.Release
         ole.CoUninitialize()

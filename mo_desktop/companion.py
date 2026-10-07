@@ -2898,6 +2898,8 @@ class CompanionSurface(
             on_options_submit=choose, action_label="Back to Generate", on_action=self._display_input_dialog))
 
     def _show_media_output(self, row: dict, output: dict, session_id: str) -> None:
+        import os
+
         from mo_desktop.artifacts import attachment_panel_state
         from mo_desktop.options import Option, OptionSet
 
@@ -3271,6 +3273,17 @@ class CompanionSurface(
         if not sources:
             self._set_status("No files attached", self._visual_palette.warn)
             return
+        self._attach_dropped_files(sources)
+
+    def _on_panel_files_dropped(self, event: Any) -> None:
+        """Files dropped on the open panel (the composer or a reply): the cube's own import, so
+        under Generate they join the request's references (several at once)."""
+        from pathlib import Path
+        sources = [Path(item) for item in getattr(event, "paths", ()) or ()]
+        if not sources:
+            self._set_status("No files attached", self._visual_palette.warn)
+            return
+        self._cube_react("file_drop")
         self._attach_dropped_files(sources)
 
     def _choose_drop_destination(self, sources: list[Any]) -> None:
@@ -5063,18 +5076,19 @@ class CompanionSurface(
             self._visible = True
 
     def _attach_from_composer(self) -> None:
-        """The composer's attach button: Windows' file picker, then the same import as a drop."""
+        """The composer's attach button: Windows' file picker (several files at once, e.g. the
+        images for one Generate request), then the same import as a drop."""
         from pathlib import Path
-        from mo_desktop.native_files import choose_path
+        from mo_desktop.native_files import choose_paths
 
         bubble = getattr(self, "_bubble", None)
         owner = int(getattr(getattr(bubble, "_layered", None), "_native_hwnd", 0) or 0)
         try:
-            selected = choose_path(owner, folder=False)
+            selected = choose_paths(owner)
         except Exception:
-            selected = None
+            selected = []
         if selected:
-            self._attach_dropped_files([Path(selected)])
+            self._attach_dropped_files([Path(path) for path in selected])
 
     def _search_from_input(self, provider: str, text: str) -> bool:
         """Open the current composer text through the existing default-browser owner."""
@@ -5151,6 +5165,11 @@ class CompanionSurface(
             bubble._on_panel_tool = self._on_panel_tool_edit  # panel quick-tools -> core/imageedit
             bubble._on_panel_share = self._share_panel_image
             bubble._on_panel_send = self._send_attachment_to_mo
+            try:   # files dropped on the open panel import exactly like a drop on the cube
+                bubble._win.accept_files(drag=lambda _event: None, leave=lambda _event=None: None,
+                                         drop=self._on_panel_files_dropped)
+            except Exception:
+                _write_stderr(traceback.format_exc())
             self._bubble = bubble
             self._bubble_failure = ""
             return bubble
