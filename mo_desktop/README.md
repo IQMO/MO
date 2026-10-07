@@ -1,8 +1,8 @@
 # MO Desktop
 
-### Create: music, images and video
+### Generate: music, images and video
 
-Choose **Create** through the existing composer role switcher. It provides Kie
+Choose **Generate** through the existing composer role switcher. It provides Kie
 model/operation controls, purpose-labelled references, timestamped credits and
 real stage/elapsed progress. MO prepares, submits, waits and saves results.
 Ready result cards retain image previews or audio/video file cards beside result
@@ -13,7 +13,7 @@ viewer, not an embedded player. Outputs stay under the user's private
 Settings → Tools & connections.
 Reference sharing is optional: temporary Cloudflare links grant access to selected
 prepared copies; cleanup revokes local access, not provider retention. Originals
-and saved results stay. See [Create's complete contract](../core/media/README.md)
+and saved results stay. See [Generate's complete contract](../core/media/README.md)
 for supported Suno/Seedream/Seedance models, privacy, setup and verification limits.
 
 MO Desktop is an opt-in resident assistant and companion for MO Agent. It places MO's

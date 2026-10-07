@@ -1,4 +1,4 @@
-"""Presentation-only Create controls for the existing composer.
+"""Presentation-only Generate controls for the existing composer.
 
 The core catalog validates provider behavior. This module owns short labels and
 request-local choices, never generation, credentials or persistence.

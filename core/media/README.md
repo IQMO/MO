@@ -1,13 +1,13 @@
-# Native Create through Kie
+# Native Generate through Kie
 
-`media` owns cloud music, image and video jobs. Desktop **Create** is a role in
+`media` owns cloud music, image and video jobs. Desktop **Generate** is a role in
 the existing composer, not a separate application. Terminal uses the same job
 records with textual progress and local result paths. Existing `generate_image`
 backends and local explainer rendering remain independent.
 
 ## Setup and use
 
-1. Settings → Tools & connections → Create setup: save a Kie API key in the
+1. Settings → Tools & connections → Generate setup: save a Kie API key in the
    password field and enable creation. The native broker writes directly to the
    profile's canonical `credentials/providers.env` (`KIE_API_KEY` by default).
    Never paste keys in chat. Key values do not enter the Settings event pipe.
@@ -15,13 +15,13 @@ backends and local explainer rendering remain independent.
    reference helper and enable sharing. MO verifies the official Cloudflare
    release's published SHA-256 digest. No account, domain, manually run server
    or upload bucket is needed. Installation/enabling starts no tunnel or job.
-3. Choose Create through the composer role switcher. Choose operation/model,
+3. Choose Generate through the composer role switcher. Choose operation/model,
    attach or drop selected files, click reference chips to cycle purpose/remove,
    describe the result and send. Choices are captured at submission, including
    queued requests, and enforced independently of model prose.
 4. MO prepares copies, submits once, checks progress and saves results. The ready
    job card keeps image previews or audio/video file cards together with result
-   choices. Open Jobs / saved results in Create to revisit a variation, open/play
+   choices. Open Jobs / saved results in Generate to revisit a variation, open/play
    it with the system's local viewer, save another copy or prepare a continuation.
    Audio/video cards are not an embedded player or an actual waveform/poster.
    Preparing a continuation does not itself spend credits.
@@ -31,7 +31,7 @@ can use text-only jobs; reference jobs fail closed. Images use existing Pillow;
 audio/video work requires FFmpeg and FFprobe on PATH. Readiness reports missing
 tools without silently installing them; missing delivery tools block before
 paid submission. Desktop admits eight references per
-request, up to 500 MB per file in Create; ordinary attachments retain 20 MB.
+request, up to 500 MB per file in Generate; ordinary attachments retain 20 MB.
 Smaller provider limits are validated separately. MO never silently trims,
 resizes, changes models, discards references or switches upload hosts.
 
@@ -106,7 +106,7 @@ Submission intent precedes the single POST. Uncertainty records
 warning. Check Kie history before another paid request. Same-turn identical
 requests reuse the job; this is not provider-side exactly-once delivery.
 `list`/`status` are local. `wait` resumes an existing task's lookup/download,
-never submission. The Create skill repeats bounded waits while its turn runs.
+never submission. The Generate skill repeats bounded waits while its turn runs.
 After restart, choose Jobs → Resume status or ask MO to resume. There is no
 startup polling daemon. Stop halts local waiting, not the provider or billing;
 expired reference links are not silently regenerated.
@@ -129,7 +129,7 @@ owns file-only decoding; `references.py` owns temporary access and helper life;
 `jobs.py` owns session custody/recovery/cleanup; `setup.py` owns explicit verified
 installation. `tools/media.py` is a thin adapter. Existing Gateway/Agent callbacks,
 composer, Settings, credentials, attachment catalog and notice spine are reused.
-`core/skills/seeds/create/SKILL.md` owns the shipped MO workflow.
+`core/skills/seeds/generate/SKILL.md` owns the shipped MO workflow.
 
 No new SDK, Node dependency, browser automation or general upload service.
 Imports do no network, installation, process startup or heavy SDK loading.

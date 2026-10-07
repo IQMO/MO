@@ -36,7 +36,7 @@ from .model import (
 
 _UNIVERSAL_LEARNING_KINDS = frozenset({"evidence_first", "clean_finish", "communication_concise"})
 _SEED_ROOT = Path(__file__).resolve().parent / "seeds"
-_RETIRED_SEED_SLUGS = frozenset({"project-mapper", "desktop-conventions"})
+_RETIRED_SEED_SLUGS = frozenset({"project-mapper", "desktop-conventions", "create"})   # create: renamed generate
 _MIGRATED_LEARNED_SEED_SLUGS = frozenset({"native-desktop-action-owns-its-route"})
 _MASTERY_FIELDS = (
     "mastery_uses",

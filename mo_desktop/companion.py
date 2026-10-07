@@ -2831,7 +2831,7 @@ class CompanionSurface(
         elif value.get("error"):
             self._post_gui_call(lambda: self._cube_notice("Media needs attention", str(value["error"])))
         if value.get("state") in {"ready", "failed", "waiting", "submission_unknown"}:
-            self._refresh_create_credits()
+            self._refresh_generate_credits()
 
     def _show_media_jobs(self) -> None:
         from core.media.jobs import recent
@@ -2846,8 +2846,8 @@ class CompanionSurface(
             self._show_media_job(rows[labels.index(selected[0])]["id"], session_id)
             return True
         self._show_on_reply_surface("media jobs", lambda b: b.show(
-            "Create · this conversation" if rows else "No media jobs in this conversation yet.",
-            options=options, on_options_submit=choose, action_label="Back to Create", on_action=self._display_input_dialog))
+            "Generate · this conversation" if rows else "No media jobs in this conversation yet.",
+            options=options, on_options_submit=choose, action_label="Back to Generate", on_action=self._display_input_dialog))
 
     def _show_media_job(self, job_id: str, session_id: str) -> None:
         from core.media.jobs import status
@@ -2875,7 +2875,7 @@ class CompanionSurface(
         self._show_on_reply_surface("media job", lambda b: b.show(
             f"Kie · {row['model']} · {row['state']}\n{detail}", options=OptionSet("single", choices),
             presentation={"attachments": paths[:8], "attachment_state": attachment_panel_state(paths).value, "allow_tools": False},
-            on_options_submit=choose, action_label="Back to Create", on_action=self._display_input_dialog))
+            on_options_submit=choose, action_label="Back to Generate", on_action=self._display_input_dialog))
 
     def _show_media_output(self, row: dict, output: dict, session_id: str) -> None:
         from mo_desktop.artifacts import attachment_panel_state
@@ -2884,7 +2884,7 @@ class CompanionSurface(
         path = Path(output["path"])
         labels = [Option("Open / play", "Use the system's local viewer"), Option("Save a copy", "Choose a folder; never overwrite")]
         if output["kind"] == "video" or (output["kind"] == "audio" and output.get("track_id")):
-            labels.append(Option("Continue this result", "Prepare a new Create request; no charge until you send"))
+            labels.append(Option("Continue this result", "Prepare a new Generate request; no charge until you send"))
         def choose(selected):
             if session_id != str(self._ensure_desktop_session().session_id):
                 return False
@@ -2908,11 +2908,11 @@ class CompanionSurface(
                             self._post_gui_call(lambda: self._cube_notice("Copy not saved", "Destination exists or is unavailable; nothing overwritten"))
                     threading.Thread(target=save, name="mo-media-save", daemon=True).start()
             else:
-                self.set_voice_role("Create")
+                self.set_voice_role("Generate")
                 self._display_input_dialog()
-                self._bubble._create_selection = {"operation": "extend_video" if output["kind"] == "video" else "extend_music",
+                self._bubble._generate_selection = {"operation": "extend_video" if output["kind"] == "video" else "extend_music",
                     "model": row["model"], "options": {}, "parent_id": row["id"], "output_index": output["index"]}
-                self._bubble._create_progress = f"Continue result {output['index'] + 1} · add your next instructions"
+                self._bubble._generate_progress = f"Continue result {output['index'] + 1} · add your next instructions"
                 self._bubble._repaint()
                 return True
             self._show_media_output(row, output, session_id)
@@ -2933,7 +2933,7 @@ class CompanionSurface(
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(review["created_at"]))
         names = ", ".join(review["outputs_kept"]) or "No saved results"
         text = f"Media cleanup · {when}\n{names}\n{review['effect']}"
-        choices = OptionSet("single", [Option("Keep saved results", "Return to Create")])
+        choices = OptionSet("single", [Option("Keep saved results", "Return to Generate")])
         if review["can_revoke"]:
             choices.options.append(Option("Revoke reference access", "Prepared copies only; saved results stay"))
 
@@ -2951,13 +2951,13 @@ class CompanionSurface(
 
         self._show_on_reply_surface("media cleanup", lambda bubble: bubble.show(text, options=choices, on_options_submit=confirm))
 
-    def _refresh_create_credits(self) -> None:
-        if getattr(self, "_create_credit_busy", False):
+    def _refresh_generate_credits(self) -> None:
+        if getattr(self, "_generate_credit_busy", False):
             return
         from core.media.catalog import settings
         if settings(self._config()).get("enabled") is not True:
             return
-        self._create_credit_busy = True
+        self._generate_credit_busy = True
 
         def refresh():
             from core.media.kie import credits
@@ -2967,17 +2967,17 @@ class CompanionSurface(
             except Exception:
                 label = "Credits unavailable · retry"
             finally:
-                self._create_credit_busy = False
+                self._generate_credit_busy = False
             def present():
                 bubble = getattr(self, "_bubble", None)
                 if bubble:
-                    bubble._create_credit = label
+                    bubble._generate_credit = label
                     if getattr(bubble, "_mode", "") == "input":
                         bubble._repaint()
             self._post_gui_call(present)
         threading.Thread(target=refresh, name="mo-media-credits", daemon=True).start()
 
-    def _create_action(self, action: str) -> None:
+    def _generate_action(self, action: str) -> None:
         bubble = getattr(self, "_bubble", None)
         if not bubble:
             return
@@ -2985,12 +2985,12 @@ class CompanionSurface(
             self.open_settings_panel()
             return
         if action == "credits":
-            self._refresh_create_credits()
+            self._refresh_generate_credits()
             return
         if action == "privacy":
             from core.media.catalog import PRIVACY_NOTICE
             self._show_on_reply_surface("media privacy", lambda view: view.show(
-                PRIVACY_NOTICE, action_label="Back to Create", on_action=self._display_input_dialog))
+                PRIVACY_NOTICE, action_label="Back to Generate", on_action=self._display_input_dialog))
             return
         if action == "jobs":
             self._show_media_jobs()
@@ -3004,7 +3004,7 @@ class CompanionSurface(
             path = paths[index]
             order = {"image": ("reference", "subject", "first_frame", "last_frame", "remove"),
                      "audio": ("reference", "song", "remove"), "video": ("reference", "motion", "remove")}[kind_for(Path(path))]
-            roles = dict(getattr(bubble, "_create_reference_roles", {}))
+            roles = dict(getattr(bubble, "_generate_reference_roles", {}))
             role = roles.get(path, "reference")
             next_role = order[(order.index(role) + 1) % len(order)]
             if next_role == "remove":
@@ -3013,10 +3013,10 @@ class CompanionSurface(
                 roles.pop(path, None)
             else:
                 roles[path] = next_role
-            bubble._create_reference_roles = roles
+            bubble._generate_reference_roles = roles
         else:
-            from mo_desktop.create_controls import cycle
-            bubble._create_selection = cycle(bubble._create_selection, action, self._config())
+            from mo_desktop.generate_controls import cycle
+            bubble._generate_selection = cycle(bubble._generate_selection, action, self._config())
         bubble._repaint()
 
     def _show_attachment_panel(
@@ -3463,7 +3463,7 @@ class CompanionSurface(
             return
         session_id = str(getattr(session, "session_id", "") or "")
         turn_count = int(getattr(session, "turn_count", 0) or 0)
-        create_attachment = self._active_skill_role_label().casefold() == "create"
+        generate_attachment = self._active_skill_role_label().casefold() == "generate"
         selected = [Path(item) for item in raw[:MAX_ATTACHMENTS_PER_TURN]]
         initial_rejected = max(0, len(raw) - MAX_ATTACHMENTS_PER_TURN)
         self._set_status("Loading attachment…", self._visual_palette.accent)
@@ -3473,13 +3473,13 @@ class CompanionSurface(
             rejected = initial_rejected
             for item in selected:
                 try:
-                    if create_attachment:
+                    if generate_attachment:
                         from core.media.preparation import kind_for
                         kind_for(item)
                     record = import_attachment(
                         self._config(), item,
                         session_id=session_id, turn_count=turn_count,
-                        max_bytes=500 * 1024 * 1024 if create_attachment else MAX_ATTACHMENT_BYTES,
+                        max_bytes=500 * 1024 * 1024 if generate_attachment else MAX_ATTACHMENT_BYTES,
                     )
                     saved.append(Path(str(record["saved_path"])))
                 except (OSError, ValueError):
@@ -3496,7 +3496,7 @@ class CompanionSurface(
                     return
                 if not saved:
                     self._set_status(
-                        "No supported files attached — check file access and the " + ("500 MB" if create_attachment else "20 MB") + " limit",
+                        "No supported files attached — check file access and the " + ("500 MB" if generate_attachment else "20 MB") + " limit",
                         self._visual_palette.warn,
                     )
                     return
@@ -3507,7 +3507,7 @@ class CompanionSurface(
                     if rejected else ""
                 )
                 self._set_status(f"Attached: {names}{note}", self._visual_palette.ok)
-                if create_attachment:
+                if generate_attachment:
                     bubble = self._get_reply_bubble()
                     if bubble:
                         bubble._stash_input_draft()
@@ -3976,8 +3976,8 @@ class CompanionSurface(
         previous_id = str(getattr(previous, "role", "") or "").casefold()
         next_id = str(getattr(skill, "role", "") or "").casefold()
         self._active_skill_role = skill
-        if next_id == "create":
-            self._refresh_create_credits()
+        if next_id == "generate":
+            self._refresh_generate_credits()
         self._refresh_effective_role_character()
         if next_id == "project-architect":
             self._role_workspace_roles = self._desktop_roles()
@@ -4481,8 +4481,8 @@ class CompanionSurface(
         if str(label).startswith("media:"):
             def present_media_progress():
                 bubble = getattr(self, "_bubble", None)
-                if bubble and getattr(bubble, "_mode", "") == "input" and str(getattr(bubble, "_role_label", "")).casefold() == "create":
-                    bubble._create_progress = str(label)[7:]
+                if bubble and getattr(bubble, "_mode", "") == "input" and str(getattr(bubble, "_role_label", "")).casefold() == "generate":
+                    bubble._generate_progress = str(label)[7:]
                     bubble._repaint()
             self._post_gui_call(present_media_progress)
         """Record raw evidence and update the cube's shared glance label."""
@@ -5017,7 +5017,7 @@ class CompanionSurface(
         card, same smooth feel as the cube). The panel is the ONLY surface: if it cannot
         render, this records why and shows nothing."""
         self._ensure_desktop_session()   # restores the saved replies the composer's Up/Down browse
-        from mo_desktop.create_controls import initial_selection
+        from mo_desktop.generate_controls import initial_selection
         if self._show_on_reply_surface(
             "input",
             lambda bubble: bool(
@@ -5031,8 +5031,8 @@ class CompanionSurface(
                     on_role_select=self.set_voice_role,
                     role_label=self._active_skill_role_label() or (
                         self._voice_cfg.get("role", "") if self._voice_cfg.get("role_active") else ""),
-                    create_selection=initial_selection(self._config()),
-                    on_create_action=self._create_action,
+                    generate_selection=initial_selection(self._config()),
+                    on_generate_action=self._generate_action,
                 )
             ),
         ):
@@ -5080,16 +5080,16 @@ class CompanionSurface(
 
     def _submit_from_input(self, text: str) -> bool:
         bubble = getattr(self, "_bubble", None)
-        create = bool(bubble and self._active_skill_role_label().casefold() == "create")
+        generate = bool(bubble and self._active_skill_role_label().casefold() == "generate")
         selection = None
-        if create:
-            from mo_desktop.create_controls import request_selection
-            selection = request_selection(bubble._create_selection)
-            selection["references"] = [{"path": path, "role": getattr(bubble, "_create_reference_roles", {}).get(path, "reference")}
+        if generate:
+            from mo_desktop.generate_controls import request_selection
+            selection = request_selection(bubble._generate_selection)
+            selection["references"] = [{"path": path, "role": getattr(bubble, "_generate_reference_roles", {}).get(path, "reference")}
                                        for path in bubble._attachment_preview_paths]
-            text += "\n\n[Create controls for this request; preserve these choices: " + json.dumps(selection, ensure_ascii=False) + "]"
-            bubble._create_progress = "Preparing request · elapsed starts on submission"
-        return self._submit_text_request(text, source="submit", hide_input=False, preserve_panel=create, media_selection=selection)
+            text += "\n\n[Generate controls for this request; preserve these choices: " + json.dumps(selection, ensure_ascii=False) + "]"
+            bubble._generate_progress = "Preparing request · elapsed starts on submission"
+        return self._submit_text_request(text, source="submit", hide_input=False, preserve_panel=generate, media_selection=selection)
 
     def _reply_button_pressed(self, step: int = 0) -> None:
         """Open the composer; reply-history arrows stay on the reply card."""

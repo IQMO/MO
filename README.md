@@ -516,7 +516,7 @@ this default container.
 - Optional LSP diagnostics, code-structure compaction, and recoverable source
   skeletons for long sessions.
 - Inline terminal tables, charts, trees, images, and generated visual assets.
-- Optional [native Create through Kie](core/media/README.md): Suno music,
+- Optional [native Generate through Kie](core/media/README.md): Suno music,
   Seedream images and Seedance video, using the existing Desktop composer role
   and shared Terminal tools. Setup, temporary-reference privacy, saved results,
   continuation requirements and provider-verification limits are documented there.

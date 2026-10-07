@@ -61,11 +61,11 @@ changes use its GUI queue. Failed persistence is visibly unsaved.
 
 ## Verification and Design
 
-Create setup lives in Tools & connections: private key entry, readiness, creation
+Generate setup lives in Tools & connections: private key entry, readiness, creation
 and sharing opt-ins, music/video defaults and explicit reference-helper install.
 Only `media.*` configuration changes apply to the next request without reload;
 submitted provider options are already captured. Credit balance is not a quote.
-See [Create custody and requirements](../../core/media/README.md).
+See [Generate custody and requirements](../../core/media/README.md).
 
 Generate the Settings Design artifact from production `assets()` and safe sample
 data. The artifact's simulated adapter must say it does not save real settings.

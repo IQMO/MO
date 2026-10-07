@@ -9,7 +9,7 @@ when that source tree is present.
 
 ## Process and lane boundaries
 
-- Create is a shipped role in the existing composer, not another app. Its
+- Generate is a shipped role in the existing composer, not another app. Its
   presentation-only controls snapshot choices/references into the submitted
   request, including queued requests. `core/media/README.md` owns provider/job
   contracts. Reuse Settings, credentials, attachments, reply/options cards and

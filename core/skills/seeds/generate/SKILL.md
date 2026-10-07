@@ -1,7 +1,7 @@
 ---
-name: "Create"
-description: "Create music, images and videos through the user's configured Kie account in MO's existing composer"
-role: "Create"
+name: "Generate"
+description: "Generate music, images and videos through the user's configured Kie account in MO's existing composer"
+role: "Generate"
 triggers:
   - "Suno"
   - "Seedance"
@@ -19,10 +19,10 @@ Use the native `media` tool for requested Kie generation. Discover it with
 Keep existing still-image routes and the native explainer renderer available;
 honor the operator's chosen method instead of substituting this one.
 
-1. Read `media action=catalog` for readiness and supported models. Desktop Create
+1. Read `media action=catalog` for readiness and supported models. Desktop Generate
    controls and reference purposes belong to the submitted request, not the
    conversational language model. Respect them. Missing setup belongs in
-   Settings → Tools & connections → Create; never ask for a key in chat.
+   Settings → Tools & connections → Generate; never ask for a key in chat.
 2. Convert the requested idea into the supported operation and options. Routine
    preparation, progress checks and local saving are MO's work. Do not require
    the user to run servers, commands, manage URLs or repeat settings. Ask only

@@ -28,7 +28,7 @@ domain owners. These are configuration observations, not service-health claims.
 Unknown or malformed values are not echoed and can
 be replaced only with an admitted value. Snapshots never contain raw provider
 or server blocks, stored credential values, device tokens or private source content.
-Create's password field passes a newly entered Kie key directly to the local
+Generate's password field passes a newly entered Kie key directly to the local
 credential broker, not to the stdout request transport or MO conversation.
 
 ## Coverage by page
@@ -39,7 +39,7 @@ credential broker, not to the stdout request transport or MO conversation.
 | Appearance | Skin gallery and paired previews, custom palette, cube/panel geometry/effects, Terminal display | Shared skin; live Desktop visuals; Terminal on reload | No parallel theme store |
 | Models & providers | Independent Desktop choice or follow-provider, saved Terminal default, each observed controllable Terminal, request/context budgets | Model catalog validates; Gateway owns Desktop request scope; exact live Terminal handoff and correlated receipt | Provider creation, endpoints, model catalogs, fallback routes and credentials retain authored configuration/canonical setup |
 | Voice & roles | Manual/continuous listening, typed speech, pace/output, spoken-reply provider, roles/default, recognition engine/model/device/beam/idle | Conversation changes live; worker configuration on restart; saving does not install an engine | Custom recognition paths and advanced engine arguments remain authored configuration |
-| Tools & connections | Connected Chrome; MCP/profile admission; image backend; Telegram policy; Kie Create key entry, readiness, opt-ins, model defaults and verified helper install | Existing owners; Create settings apply next request; install starts no tunnel/job | FFmpeg/FFprobe must already be installed for audio/video; reference sharing currently Windows-only; Email setup remains in Dashboard |
+| Tools & connections | Connected Chrome; MCP/profile admission; image backend; Telegram policy; Kie Generate key entry, readiness, opt-ins, model defaults and verified helper install | Existing owners; Generate settings apply next request; install starts no tunnel/job | FFmpeg/FFprobe must already be installed for audio/video; reference sharing currently Windows-only; Email setup remains in Dashboard |
 | Projects & checks | Selected project LSP On/Off/Default; server executable/argument editor; global LSP default/timeout; graph enabled, initial build and turn context | LSP manager and project preference writer; command changes on reload; graph choices used on next operation | Dashboard owns read-only recorded checks, rules/knowledge views. Advanced LSP options remain authored configuration |
 | Permissions & privacy | Filesystem mode, execution/environment/secret safeguards, web/shell network, capture and pixel policy | Existing access/sandbox gates after reload/restart; no new permission authority | Root/host allowlists and exact provider routing stay authored; consent and grants remain explicit |
 | Memory & learning | Actual promotion/materialization/capture controls, skills/admission/matching/decay, semantic recall/backend/worker | Existing owners after reload/restart; no invented `learning.enabled` | Learning review, import and Undo remain in Dashboard; profile content uses existing profile editors; embedding endpoint/model setup stays authored |

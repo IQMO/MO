@@ -69,7 +69,7 @@ CONFIGURATION_GROUPS = (
     ("connections", "Image generation", "Generation is separate from reading images. Availability also depends on the configured backend and credentials.", (
         ("image.backend", "Generation backend", ("auto", "codex", "openai_compatible", "off")),
     )),
-    ("connections", "Create · Kie media", "Suno music, Seedream images and Seedance videos in the existing Create composer. Each requested generation may spend credits. Create setup checks the private provider key and optional reference helper.", (
+    ("connections", "Generate · Kie media", "Suno music, Seedream images and Seedance videos in the existing Generate composer. Each requested generation may spend credits. Generate setup checks the private provider key and optional reference helper.", (
         ("media.enabled", "Kie creation", "bool"),
         ("media.reference_sharing", "Temporary reference sharing", "bool"),
         ("media.music_model", "Suno model", ("V6", "V6_MINI", "V6_WILD")),
@@ -249,7 +249,7 @@ CONFIGURATION_HELP = {
     "media.enabled": "Allows requested cloud generation through your Kie credential. No job starts just by enabling this. Existing still-image backends remain unchanged.",
     "media.reference_sharing": "Selected prepared files can be fetched temporarily through Cloudflare by Kie and anyone holding their live links. MO revokes local access automatically, not provider copies. Originals and saved results are kept; no hosted-upload fallback.",
     "media.music_model": "Default for new Suno jobs. Continuations must match the selected parent's model. Singing-voice enrollment is a later feature.",
-    "media.video_model": "Default for new Seedance jobs. Create can override each request. Model-specific limits are validated before submission; exact motion is an output acceptance target, not an API guarantee.",
+    "media.video_model": "Default for new Seedance jobs. Generate can override each request. Model-specific limits are validated before submission; exact motion is an output acceptance target, not an API guarantee.",
     "telegram.enabled": "Allows the Telegram service to start. It needs configured credentials and pairing; enabling it alone does not grant chat access.",
     "telegram.dm_policy": "Controls who can reach MO through Telegram. Pairing requires approval, allowlist uses known users, and disabled blocks DM access.",
     "lsp.enabled": "Allows configured language servers to analyze code. Per-project choices can override this; servers use resources only when needed.",

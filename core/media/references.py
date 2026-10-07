@@ -87,10 +87,10 @@ class ReferenceLease:
         check_network(config, "https://api.trycloudflare.com")
         self.config = config
         if settings(config).get("reference_sharing") is not True:
-            raise ValueError("Reference sharing is off. Enable it in Create after reading the privacy notice.")
+            raise ValueError("Reference sharing is off. Enable it in Generate after reading the privacy notice.")
         executable = helper_path(config)
         if not executable:
-            raise ValueError("The optional reference helper is missing. Choose Install reference helper in Create.")
+            raise ValueError("The optional reference helper is missing. Choose Install reference helper in Generate.")
         root = Path(resolve_state_path("run/media", config))
         root.mkdir(parents=True, exist_ok=True)
         self.temporary = tempfile.TemporaryDirectory(prefix="references-", dir=root)

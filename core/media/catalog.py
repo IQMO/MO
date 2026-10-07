@@ -1,4 +1,4 @@
-"""Bounded Kie operation contracts shared by tools, Settings and Create.
+"""Bounded Kie operation contracts shared by tools, Settings and Generate.
 
 These are verified API contracts, not a live pricing catalog or a promise that
 an account can use a model. See README.md for sources and verification date.

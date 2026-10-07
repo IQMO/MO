@@ -225,7 +225,7 @@ class SettingsPanel(NativeAppWindow):
                 node[keys[-1]] = value
             if not persist_configuration(self.config, changes, remove=(key,) if value is None else (), update_runtime=key.startswith("media.")):
                 raise ValueError("Configuration was not saved; the previous value was kept.")
-            return {"message": "Saved · next Create request uses this; active jobs keep their settings." if key.startswith("media.") else "Saved · reload the affected Terminal or restart Desktop to apply.", "overview": self._overview()}
+            return {"message": "Saved · next Generate request uses this; active jobs keep their settings." if key.startswith("media.") else "Saved · reload the affected Terminal or restart Desktop to apply.", "overview": self._overview()}
         if action == "graph":
             from core.state.preferences import persist_graph_preferences
             key = str(payload.get("id") or "")
