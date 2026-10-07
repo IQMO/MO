@@ -64,6 +64,7 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 _COMPOSER_DOTS_RESERVE = 16
 _GENERATE_CONTROLS_H = 88     # Generate's two pill rows and status line: one height in every state
 _BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
+_CLICK_AWAY_POLL_MS = 30   # how often an open panel reads the left button for a click away
 BLUR_CARD_ALPHA = 226    # row 32: the card's see-through over Windows' blur (text stays crisp)
 _BROWSE_FADE_SECONDS = 0.15
 
@@ -180,6 +181,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._on_motion(event)
         elif kind == "leave":
             self._on_leave(event)
+        elif kind == "blur":
+            self._on_blur()
         elif kind == "close":
             self.hide()
 
@@ -3024,29 +3027,51 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._arm_click_away()
             return
         try:
-            from core.desktop.win32 import VK_LBUTTON, mouse_button_held
-            if mouse_button_held((VK_LBUTTON,)):
-                px, py = pointer_position()
-                x0, y0, x1, y1 = self._bounds
-                inside = (x0 <= px <= x1 and y0 <= py <= y1) or self._inside_docked_group(px, py)
-                near_cube = False
-                if self._cube is not None:
-                    try:
-                        cx, cy = self._cube.center()
-                        r = getattr(self._cube, "_size", 84)
-                        near_cube = (abs(px - cx) <= r and abs(py - cy) <= r)
-                    except Exception:
-                        near_cube = False
-                if not inside and not near_cube:
-                    self._stash_input_draft()   # click-away must not delete a half-typed message
-                    self.hide()
-                    return
+            if self._click_is_away():
+                self._stash_input_draft()   # click-away must not delete a half-typed message
+                self.hide()
+                return
         except Exception:
             pass
         try:
-            self._watch_after = self._gui.schedule(90, self._watch_click_away)
+            # Every 30 ms: a normal click (60-120 ms, press to release) can no longer fall between two
+            # reads; at 90 ms a quick click often did and the panel needed a second one (his report).
+            self._watch_after = self._gui.schedule(_CLICK_AWAY_POLL_MS, self._watch_click_away)
         except Exception:
             self._watch_after = None
+
+    def _click_is_away(self) -> bool:
+        """The left button is down outside this panel, the faces docked with it and the cubes."""
+        from core.desktop.win32 import VK_LBUTTON, mouse_button_held
+        if not mouse_button_held((VK_LBUTTON,)):
+            return False
+        px, py = pointer_position()
+        x0, y0, x1, y1 = self._bounds
+        if (x0 <= px <= x1 and y0 <= py <= y1) or self._inside_docked_group(px, py):
+            return False
+        if self._cube is not None:
+            try:
+                cx, cy = self._cube.center()
+                r = getattr(self._cube, "_size", 84)
+                if abs(px - cx) <= r and abs(py - cy) <= r:
+                    return False
+            except Exception:
+                pass
+        return True
+
+    def _on_blur(self) -> None:
+        """Focus went to another window. When a click elsewhere took it (the button is still down
+        as the message arrives), close at once rather than waiting for the next read; a keyboard
+        switch (Alt+Tab) holds no button and leaves the panel open, as before."""
+        if (not self._visible or not getattr(self, "_dismissible", True) or self._watch_after is None
+                or getattr(self._cube, "_launcher_active", False)):
+            return
+        try:
+            if self._click_is_away():
+                self._stash_input_draft()
+                self.hide()
+        except Exception:
+            pass
 
     def _inside_docked_group(self, px: int, py: int) -> bool:
         """A click on another docked face (composer, Dashboard, Focus) is not a click away:
