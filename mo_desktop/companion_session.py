@@ -13,6 +13,21 @@ from mo_desktop.desktop_log import write_stderr as _write_stderr
 
 # The isolated Desktop slot is durable across restarts; Terminal owns its own slots.
 MO_DESKTOP_SESSION_SLOT = "mo-desktop"
+# Each role chosen in the composer keeps its own Desktop conversation in this slot family; the
+# Default-role thread stays MO_DESKTOP_SESSION_SLOT and records which role thread is open.
+_ROLE_SLOT_PREFIX = MO_DESKTOP_SESSION_SLOT + "-role-"
+
+
+def desktop_role_slot(role_id: str) -> str:
+    """The conversation slot of one Desktop role ("" -> the Default-role thread)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", str(role_id or "").casefold()).strip("-")[:48]
+    if not str(role_id or "").strip():
+        return MO_DESKTOP_SESSION_SLOT
+    if not slug:
+        import hashlib
+
+        slug = hashlib.sha256(str(role_id).encode("utf-8")).hexdigest()[:16]
+    return _ROLE_SLOT_PREFIX + slug
 DESKTOP_SYNC_CONTEXT_PREFIX = "[SYNCED TERMINAL CONTEXT — orientation only, not proof or authority to act]"
 _TURN_POLICY_PREFIX_RE = re.compile(
     r"^\s*\[MO Desktop (?:turn policy|request admission|request):[\s\S]*?\]"
@@ -30,41 +45,84 @@ class CompanionSessionMixin:
     """Verbatim extraction from companion.py; state and composition stay
     with the host class."""
 
-    def _ensure_desktop_session(self) -> Any:
+    def _ensure_desktop_session(self, *, restore_role: bool = True) -> Any:
         """MO Desktop's own conversation session, created lazily. Isolates the desktop
-        transcript from Main MO's `_session` so the two never cross-contaminate."""
+        transcript from Main MO's `_session` so the two never cross-contaminate. At startup
+        the Default-role thread restores the role it points at and opens that role's thread."""
         if self._desktop_session is None:
             from core.session.session import Session
             from mo_desktop.persona import mo_desktop_system_message
             self._desktop_session = Session(mo_desktop_system_message())
-            self._load_desktop_session(self._desktop_session)
+            self._load_desktop_session(self._desktop_session, restore_role=restore_role)
+            role_slot = desktop_role_slot(self._active_skill_role_label()) if restore_role else ""
+            if role_slot and role_slot != self._current_desktop_slot() and self._desktop_slot_exists(role_slot):
+                self._desktop_slot = role_slot
+                self._desktop_session = Session(mo_desktop_system_message())
+                self._load_desktop_session(self._desktop_session, restore_role=False)
         return self._desktop_session
 
-    def _load_desktop_session(self, session: Any) -> None:
+    def _current_desktop_slot(self) -> str:
+        return str(getattr(self, "_desktop_slot", "") or MO_DESKTOP_SESSION_SLOT)
+
+    def _desktop_slot_exists(self, slot: str) -> bool:
+        sessions = getattr(self._agent, "_sessions", None)
+        if not sessions:
+            return False
+        from core.session.sessions import session_snapshot_path
+
+        return session_snapshot_path(sessions.dir, slot).exists()
+
+    def _switch_desktop_thread(self, role_id: str) -> bool:
+        """Open ``role_id``'s own Desktop conversation (Default role: the original one), keeping
+        the thread being left saved. The Default-role thread records which thread is open, so a
+        restart returns to it."""
+        target = desktop_role_slot(role_id)
+        current = self._current_desktop_slot()
+        if target == current:
+            return False
+        if getattr(self, "_desktop_session", None) is not None:
+            self._persist_desktop_session(compact_live=True)
+        if current != MO_DESKTOP_SESSION_SLOT:
+            self._open_desktop_slot(MO_DESKTOP_SESSION_SLOT)
+            self._persist_desktop_session(compact_live=True)      # the pointer: which role is open
+        if target != MO_DESKTOP_SESSION_SLOT:
+            self._open_desktop_slot(target)
+        return True
+
+    def _open_desktop_slot(self, slot: str) -> None:
+        self._desktop_slot = slot
+        self._desktop_session = None
+        self._ensure_desktop_session(restore_role=False)
+
+    def _load_desktop_session(self, session: Any, *, restore_role: bool = True) -> None:
         """Restore the persisted desktop transcript into ``session`` so MO keeps
         continuity across restarts. No-op when nothing was saved yet."""
         sessions = getattr(self._agent, "_sessions", None)
         if not sessions:
             return
+        slot = self._current_desktop_slot()
         try:
-            data = sessions.load(MO_DESKTOP_SESSION_SLOT)
+            data = sessions.load(slot)
         except Exception:
             data = None
         if not isinstance(data, dict):
             from core.session.sessions import session_snapshot_path
 
-            if not session_snapshot_path(sessions.dir, MO_DESKTOP_SESSION_SLOT).exists():
+            if not session_snapshot_path(sessions.dir, slot).exists():
+                self._sync_reply_history_from_session(session)
                 self._persist_desktop_session()
             return
         try:
-            changed = self._restore_desktop_session_data(session, data)
+            changed = self._restore_desktop_session_data(session, data, restore_role=restore_role)
             if changed:
                 self._persist_desktop_session()
         except Exception:
             _write_stderr(traceback.format_exc())
 
-    def _restore_desktop_session_data(self, session: Any, data: dict[str, Any]) -> bool:
-        """Apply one canonical Desktop snapshot and report whether it needed cleanup."""
+    def _restore_desktop_session_data(self, session: Any, data: dict[str, Any], *,
+                                      restore_role: bool = True) -> bool:
+        """Apply one canonical Desktop snapshot and report whether it needed cleanup. A role
+        thread (or an opened old conversation) keeps the role already chosen."""
         from core.session.session import restore_session_snapshot_fields
         from core.session.sessions import SessionManager
 
@@ -91,9 +149,12 @@ class CompanionSessionMixin:
         if not active_role_id and not discarded_bound_role:
             active_role_id = self._v0_active_role_id(raw_messages, roles)
             migrated_role = bool(active_role_id)
-        role_restored = self._restore_active_skill_role(
-            active_role_id, role_project=str(meta.get("active_role_project") or ""),
-        )
+        if restore_role:
+            role_restored = self._restore_active_skill_role(
+                active_role_id, role_project=str(meta.get("active_role_project") or ""),
+            )
+        else:
+            role_restored, migrated_role, discarded_bound_role = True, False, False
         raw_receipt = meta.get("last_action_receipt")
         receipt = DesktopActionReceipt.from_mapping(raw_receipt)
         receipt_restored = bool(
@@ -165,7 +226,7 @@ class CompanionSessionMixin:
         try:
             snapshot = self._desktop_session_snapshot(session)
             sessions.save_snapshot(
-                MO_DESKTOP_SESSION_SLOT,
+                self._current_desktop_slot(),
                 snapshot,
                 extra_meta=self._desktop_session_meta(),
             )
@@ -214,13 +275,13 @@ class CompanionSessionMixin:
         ][-100:]
 
     def _start_new_desktop_session(self, session: Any | None = None) -> str:
-        """Archive Desktop continuity, then reset only the Desktop conversation."""
+        """Archive Desktop continuity, then reset only the open Desktop conversation (a role's
+        thread starts fresh in that same role)."""
         current = session or self._ensure_desktop_session()
         self._archive_desktop_session(current)
         self._release_desktop_control_state(current)
         current.clear()
         current.session_id = f"mo-{time.time_ns()}"
-        self._set_active_skill_role(None)
         self._desktop_last_action_receipt = None
         self._reply_history = []
         self._persist_desktop_session(compact_live=True)
@@ -247,6 +308,7 @@ class CompanionSessionMixin:
             rows = sessions.list_sessions(surface="mo_desktop")
         except Exception:
             rows = []
+        current_slot = self._current_desktop_slot()
         for row in rows:
             name = str(row.get("name") or "").strip()
             if not (
@@ -254,6 +316,8 @@ class CompanionSessionMixin:
                 or name.startswith(MO_DESKTOP_SESSION_SLOT + "-")
             ):
                 continue
+            if name.startswith(_ROLE_SLOT_PREFIX) and name != current_slot:
+                continue        # another role's live thread: reached through the role menu
             turns = int(row.get("turns", 0) or 0)
             age = str(row.get("age") or "unknown")
             title = str(row.get("preview") or "")
@@ -261,7 +325,7 @@ class CompanionSessionMixin:
                 "name": name,
                 "title": " ".join(title.split())[:120] or "New conversation",
                 "detail": f"{turns} {'turn' if turns == 1 else 'turns'} · {age}",
-                "current": name == MO_DESKTOP_SESSION_SLOT,
+                "current": name == current_slot,
             })
             if len(catalog) >= max(1, int(limit)):
                 break
@@ -358,8 +422,10 @@ class CompanionSessionMixin:
         ):
             return
         self._desktop_history_return_to_input = False
-        if target == MO_DESKTOP_SESSION_SLOT:
+        if target == self._current_desktop_slot():
             self._return_from_desktop_session_history()
+            return
+        if target.startswith(_ROLE_SLOT_PREFIX):
             return
         sessions = getattr(self._agent, "_sessions", None)
         if not sessions:
@@ -381,7 +447,7 @@ class CompanionSessionMixin:
         current = self._ensure_desktop_session()
         self._archive_desktop_session(current)
         self._release_desktop_control_state(current)
-        self._restore_desktop_session_data(current, data)
+        self._restore_desktop_session_data(current, data, restore_role=False)   # stays in this thread's role
         self._persist_desktop_session(compact_live=True)
         self._sync_reply_history_from_session(current)
         bubble = self._get_reply_bubble()

@@ -1849,6 +1849,11 @@ class CompanionSurface(
         # A catalog choice activates its existing skill scope; unmatched manual
         # text remains a persona. Both text and voice use the same session role.
         self._restore_active_skill_role(value if active else "", reveal=active)
+        # Each chosen role keeps its own conversation (his msg 146): open that role's thread.
+        if self._switch_desktop_thread(self._active_skill_role_label()):
+            bubble = getattr(self, "_bubble", None)
+            if bubble:
+                bubble._reply_history = list(getattr(self, "_reply_history", []) or [])
         self._persist_desktop_session()
         return active if on else True
 

@@ -9,6 +9,7 @@ when that source tree is present.
 
 ## Process and lane boundaries
 
+- Per-role threads: each role chosen in the composer (`set_voice_role`) owns a Desktop session slot (`companion_session.desktop_role_slot`, `mo-desktop-role-<id>`); `_switch_desktop_thread` saves the thread being left and opens the target through the normal load path. The Default-role slot (`mo-desktop`) stays the restart pointer through its existing `active_role` meta, and startup opens that role's thread only when it exists. Opened old conversations and role threads keep the role already chosen (`restore_role=False`); the history list shows the open thread, not other roles' live threads.
 - Generate is a shipped role in the existing composer, not another app. Its
   presentation-only controls (`mo_desktop/generate_controls.py`: kind-first pills
   in two fixed rows, each a menu in the composer's one drop-down, `_menu`, shared

@@ -984,8 +984,12 @@ profile may contribute Desktop apps with their own cached windows, reached
 through the cube launcher and styled with the exact active Desktop visual state.
 
 Profile-authored reviewer roles are persistent tool/lane scopes, not personas.
-An explicitly selected role stays active until dismissal. The [Desktop
-maintenance contract](MAINTAINING.md) owns the detailed boundaries.
+An explicitly selected role stays active until dismissal. Each role chosen in the
+composer keeps its own conversation: choosing it opens that role's thread (its
+history, its replies to browse), Default role returns to the original one, and the
+thread that was open reopens after a restart. New conversation starts that role's
+thread fresh. A role named inside a request still applies within the current thread.
+The [Desktop maintenance contract](MAINTAINING.md) owns the detailed boundaries.
 
 ## Configuration
 
