@@ -541,11 +541,12 @@ class CubeMotionMixin:
     def _maybe_step_aside(self, px: float, py: float, previous: tuple[float, float] | None,
                           now: float, sw: int, sh: int) -> bool:
         """Chase only: step aside once when the pointer comes at the cubes over TEXT (the
-        system cursor is the text I-beam), with no button held: it is heading for the text
-        under them, not for MO. An arrow-cursor approach still catches them (aiming at MO); a
-        held button (a file dragged to MO, a selection under way) never moves them; and the
-        cubes catching up to a resting pointer never count. Following them there within the
-        quiet time keeps them put."""
+        system cursor is the text I-beam) or, moving, lands on their body, with no button
+        held: over the cubes the system cursor is their own arrow, so landing on them is the
+        surest sign of text beneath (his row 33). An arrow approach that has not reached them
+        still catches them; a held button (a file dragged to MO, a selection under way) never
+        moves them; the cubes catching up to a resting pointer never count. Following them
+        within the quiet time keeps them put, so a second approach clicks them."""
         if not getattr(self, "_follow_enabled", False) or previous is None:
             return False
         if now < float(getattr(self, "_dodge_quiet_until", 0.0) or 0.0):
@@ -556,7 +557,9 @@ class CubeMotionMixin:
         moved = math.hypot(mx, my)
         if moved < _DODGE_MIN_MOVE_PX or mx * (self._x - px) + my * (self._y - py) <= 0:
             return False   # resting, or moving away: only a pointer coming at the cubes counts
-        if not self._pointer_over_text():
+        half = float(self._size) / 2.0
+        on_body = abs(px - self._x) <= half and abs(py - self._y) <= half
+        if not (on_body or self._pointer_over_text()):
             return False
         try:
             from core.desktop.win32 import mouse_button_held
