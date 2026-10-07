@@ -6,6 +6,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from core.runtime.first_state import LaunchBuild
+
 from .view_model import FilesViewModel, LOCAL_SOURCE_ID, default_location_id
 
 
@@ -14,6 +16,7 @@ class FilesBridge:
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.model = FilesViewModel(config)
+        self._first_sources = LaunchBuild()
         self._lock = threading.RLock()
         self._window: Any = None
         self._transfer_rows: dict[str, dict[str, Any]] = {}
@@ -24,6 +27,11 @@ class FilesBridge:
 
     def attach_window(self, window: Any) -> None:
         self._window = window
+
+    def prefetch_sources(self) -> None:
+        """Ask the Hub for its sources while the window starts: the first board otherwise waited
+        on that HTTPS round trip (0.7-0.8 s measured to his server) before listing the local drive."""
+        self._first_sources.start(self.model.sources, name="mo-files-first-sources")
 
     def ui_ready(self) -> None:
         """Reveal the prepared board after its first render."""
@@ -60,7 +68,7 @@ class FilesBridge:
         self, source_id: str = "", location_id: str = "", path: str = "",
     ) -> dict[str, Any]:
         with self._lock:
-            sources = self.model.sources()
+            sources = self._first_sources.take(self.model.sources)
             online = [row for row in sources if row.get("online") is True]
             if not online:
                 raise RuntimeError("No MO Files source is currently online.")

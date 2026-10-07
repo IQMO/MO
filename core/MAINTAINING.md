@@ -426,7 +426,7 @@ search or copy the whole transcript store into the project index.
 - Multiple terminal MO instances are allowed. Each process gets a stable `MO_INSTANCE_ID` and its own default session slot (`main-<instance>`). Automatic prior-conversation projection excludes every conversation currently owned by another live Terminal process before reading its record; live siblings contribute only bounded heartbeat/taskboard coordination metadata. A cached closed conversation is hidden immediately if another Terminal reopens it. Explicit session restoration remains the only way to adopt that transcript or its taskboard.
 - Desktop heartbeat snapshots omit repository status. Repository state belongs to active Terminal or Role project work; the resident companion must not spawn Git on every periodic liveness pulse or ordinary conversation turn.
 - `core/runtime/first_state.py` owns the one launch-time first-state build: work an app's
-  first view waits on (the Dashboard's state) starts alongside its
+  first view waits on (the Dashboard's state, MO Files' Hub sources) starts alongside its
   window and is served once to the first request while fresh; later requests build anew.
   New Desktop apps reuse it rather than holding their own launch thread.
 - `core/runtime/resources.py` owns bounded Windows/Linux Health sampling for local

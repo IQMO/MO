@@ -60,6 +60,7 @@ def run(
     visuals = load_desktop_visual_state(loaded, refresh_skin=True)
     theme = studio_theme(config=loaded, visuals=visuals)
     bridge = FilesBridge(loaded)
+    bridge.prefetch_sources()   # the Hub round trip runs while the window starts
     bridge.on_status = lambda payload: print(json.dumps(payload), flush=True)
     shell = _shell(theme, {"source_id": source_id, "location_id": location_id})
     window = webview.create_window(
