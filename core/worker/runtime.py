@@ -474,8 +474,9 @@ def _role_overlay(role_skill) -> str:
 
 
 def _record_role_outcome(role_skill, state: str) -> None:
-    """Feed the role worker's outcome back to its skill mastery, so 'sticking'
-    becomes measurable (success on completion, correction on block/error)."""
+    """Count a finished run on the role worker's skill pack ('use'). Success or correction comes only
+    from the lead's check of the report (role_work verify), never from the worker finishing: a report
+    nobody checked is not a success."""
     if role_skill is None:
         return
     source = str(getattr(role_skill, "source", "") or "")
@@ -483,7 +484,7 @@ def _record_role_outcome(role_skill, state: str) -> None:
         return
     try:
         from ..skills import record_skill_outcome
-        record_skill_outcome(source, "success" if state == "completed" else "correction")
+        record_skill_outcome(source, "use")
     except Exception:
         pass
 

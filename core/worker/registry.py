@@ -34,6 +34,8 @@ class WorkerRecord:
     finished_at: float = 0.0
     result_report: str = ""
     project_root: str = ""
+    verdict: str = ""          # "accepted" | "rejected": the lead's check of the report (role_work verify)
+    verdict_reason: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -121,6 +123,17 @@ class WorkerRegistry:
         self._emit(record)
         return record
 
+    def set_verdict(self, worker_id: str, verdict: str, reason: str) -> WorkerRecord | None:
+        """Record the lead's check of a finished report; only this decides success or correction."""
+        record = self._records.get(worker_id or "")
+        if record is None or verdict not in {"accepted", "rejected"}:
+            return None
+        record.verdict = verdict
+        record.verdict_reason = redact_monitor_text(reason, 300)
+        record.updated_at = time.time()
+        self._emit(record)
+        return record
+
     def get(self, worker_id: str | None) -> WorkerRecord | None:
         return self._records.get(worker_id or "")
 
@@ -174,6 +187,8 @@ class WorkerRegistry:
             "claimed_paths": [redact_monitor_text(path, 160) for path in record.claimed_paths[:10]],
             "result_summary": redact_monitor_text(record.result_summary, 240),
             "evidence": [redact_monitor_text(item, 160) for item in record.evidence[:8]],
+            "verdict": record.verdict,
+            "verdict_reason": record.verdict_reason,
         })
 
 

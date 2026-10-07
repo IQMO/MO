@@ -699,6 +699,11 @@ search or copy the whole transcript store into the project index.
   its own snapshot owner. Specialist operations retain their Project Architect
   prerequisite and ordinary lane guards. A role change returns its new contract
   to the current provider turn; subsequent turns resolve persisted metadata.
+- A specialist worker finishing (and a scheduled role run) counts only as a use
+  on its pack. Success or correction comes from the Project Architect's check:
+  `role_work` `verify` (`accept`/`reject` with the evidence) on a completed
+  worker, once per report; the verdict is stored on the worker record and its
+  `worker_event`, so a specialist's track record holds only checked work.
 - Questions about previously implemented features remain bounded lookups unless
   they also request current work. `work_signals` checks that distinction before
   lexical inflection normalization can turn historical verbs into build work;

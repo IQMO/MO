@@ -309,7 +309,6 @@ class SchedulerService:
         session_name = str(
             job.get("session") or job.get("session_name") or f"scheduler-{_job_id(job)}"
         )
-        state = "completed"
         result = ""
         try:
             with _scheduler_turn_scope(
@@ -319,12 +318,10 @@ class SchedulerService:
                 role=role_skill,
             ):
                 result = self.gateway.run_turn(objective, route_source="scheduler")
-        except Exception:
-            state = "blocked"
-            raise
         finally:
             try:
-                record_skill_outcome(getattr(role_skill, "source", ""), "success" if state == "completed" else "correction")
+                # A scheduled run counts as a use; nobody checked its report, so it is not a success.
+                record_skill_outcome(getattr(role_skill, "source", ""), "use")
             except Exception:
                 pass
         return str(result or "")

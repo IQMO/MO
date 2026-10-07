@@ -1712,7 +1712,7 @@ class AgentTurnDispatchMixin:
         args = arguments if isinstance(arguments, dict) else {}
         active_role = self._active_role()
         action = str(args.get("action") or "").strip().lower()
-        if action not in {"activate", "off", "show", "list", "register", "dispatch", "status", "wait"}:
+        if action not in {"activate", "off", "show", "list", "register", "dispatch", "status", "wait", "verify"}:
             return "[ROLE WORK BLOCKED] unsupported role_work action."
 
         # Opening the existing workspace from a fresh conversation selects its
@@ -1948,8 +1948,30 @@ class AgentTurnDispatchMixin:
                 return f"[ROLE WORK BLOCKED] {record.note or 'worker could not start'}"
             return (
                 f"[ROLE WORKER STARTED] id={record.id} · role={specialist.role} · state={record.state}. "
-                "Use role_work status/wait for the report, then audit it before accepting or assigning revision work."
+                "Use role_work status/wait for the report, audit it against the sources, then record role_work "
+                "verify with accept or reject and the evidence-based reason before assigning revision work."
             )
+
+        if action == "verify":
+            record = registry.get(worker_id) if worker_id else None
+            if record is None or not belongs_to_project(record):
+                return "[ROLE WORKER NOT FOUND] no matching project-architect worker record is available."
+            if record.state != "completed":
+                return f"[ROLE WORK BLOCKED] {record.id} is {record.state}; verify a worker only after it completed with a report."
+            if record.verdict:
+                return f"[ROLE WORK BLOCKED] {record.id} already has a verdict: {record.verdict}."
+            verdict = {"accept": "accepted", "accepted": "accepted",
+                       "reject": "rejected", "rejected": "rejected"}.get(str(args.get("verdict") or "").strip().lower())
+            reason = " ".join(str(args.get("reason") or "").split())[:300]
+            if not verdict or not reason:
+                return "[ROLE WORK BLOCKED] verify requires verdict accept or reject and the evidence-based reason."
+            registry.set_verdict(record.id, verdict, reason)
+            specialist = resolve_role(record.role, roots, profile=profile, project_cwd=current_project) if record.role else None
+            if specialist is not None and specialist.source:
+                from ..skills import record_skill_outcome
+
+                record_skill_outcome(specialist.source, "success" if verdict == "accepted" else "correction")
+            return f"[ROLE WORKER VERIFIED] id={record.id} · role={record.role or 'worker'} · {verdict} · {reason}"
 
         if action in {"status", "wait"}:
             if action == "wait" and not worker_id:
