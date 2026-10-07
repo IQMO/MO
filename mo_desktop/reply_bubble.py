@@ -1242,6 +1242,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             from interface.desktop_widgets import _monitor_work_area
             from mo_desktop.focus import cube_geometry
             self._cube_face_size = (card_w, H-2*int(design.shadow_pad))
+            if getattr(self, "_rest_face_height", None) is None:
+                self._rest_face_height = self._cube_face_size[1]
             dx, dy, cw, ch = self.cube_extent()
             area = focus._area if focus is not None else _monitor_work_area(self._cube._win)
             _, center = cube_geometry((cx, cy), area or (0, 0, sw, sh), self._cube._size,
@@ -1458,6 +1460,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             or getattr(self, "_panel_state", PanelState.REPLY) != state
             or bool(getattr(self, "_cube_closing", False))
         )
+        if mode == "input" and transition:
+            self._rest_face_height = None      # a fresh composer measures its rest height again
         self._cube_closing = False
         self._mode = mode
         self._panel_state = state
@@ -2329,14 +2333,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         cb(text)
 
     def _on_wheel(self, event: Any) -> str:
-        if getattr(self, "_face", "panel") == "dashboard" and getattr(self, "_dashboard_max_scroll", 0):
-            # The docked Dashboard fitted to a shorter column scrolls its content in place.
-            notch = -40 if int(getattr(event, "delta", 0) or 0) > 0 else 40
-            current = int(getattr(self, "_dashboard_scroll", 0) or 0)
-            self._dashboard_scroll = max(0, min(int(self._dashboard_max_scroll), current + notch))
-            if self._dashboard_scroll != current:
-                self._repaint()
-            return "break"
         if getattr(self, "_role_menu_open", False):
             direction = -1 if getattr(event, "delta", 0) > 0 else 1
             self._role_scroll = max(0, min(len(self._role_choices)-getattr(self, "_role_capacity", 3), self._role_scroll+direction))
@@ -2781,10 +2777,18 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             top = by1-half-edge/2
             composer = getattr(self._cube, "_composer_controller", None)
             if composer is not None:
-                top = min(top, composer.cube_extent()[1])
+                top = min(top, composer.rest_top())
             return bx0-half+edge/2-width, top, width, height
         bx, by = self._cube._bases[1]
         return bx-half-edge/2, by-half+edge/2-height, width, height
+
+    def rest_top(self) -> float:
+        """The composer's top as it opened. A Dashboard beside it lines up here, so the composer
+        growing as he types never moves or stretches it (only the composer changes size, msg 165)."""
+        _width, height = getattr(self, "_cube_face_size", (0, 0))
+        rest = getattr(self, "_rest_face_height", None) or height
+        _bx, by = self._cube._bases[1]
+        return by-self._cube._size/2+self._cube._cube_edge/2-rest
 
     def _follow_group_center(self, center: tuple[int, int], focus: Any) -> None:
         """Move the cubes to the clamped group centre and re-place the other docked faces."""
