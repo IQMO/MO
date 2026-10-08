@@ -532,6 +532,7 @@ class CompanionSurface(
         if self._gui_ready.wait(timeout=_GUI_START_TIMEOUT_SECONDS) and self._gui is not None:
             self._try_register_hotkey()
             self._start_live_control_host()
+            self._refresh_generate_credits()      # Generate shows its balance the moment it opens
             return True
         self._running = False
         if self._tray:
@@ -1847,7 +1848,6 @@ class CompanionSurface(
     def set_voice_role(self, role: str) -> None:
         value = re.sub(r"[\r\n]+", " ", str(role or "")).strip()[:500]
         self.set_voice_role_active(bool(value), selected_role=value)
-        self._read_generate_credits_if_stale()
 
     def conversation_role_options(self) -> tuple[str, ...]:
         """Return the profile roles already available to Desktop settings."""
@@ -2870,20 +2870,61 @@ class CompanionSurface(
             self._refresh_generate_credits()
 
     def _show_media_jobs(self) -> None:
+        """Saved results open as a compact list inside the Generate composer (the button toggles it):
+        each result plays, saves or continues from its row, and its title opens the job's own card
+        (status, cleanup). Clip frames for the thumbnails are read off the GUI lane."""
         from core.media.jobs import recent
-        from mo_desktop.options import Option, OptionSet
+        from core.media.preparation import kind_for
+        from mo_desktop.generate_controls import _short_model
 
+        bubble = getattr(self, "_bubble", None)
+        if not bubble:
+            return
+        if getattr(bubble, "_results_open", False):
+            bubble.show_results(None)
+            return
         session_id = str(self._ensure_desktop_session().session_id)
-        rows = recent(self._config(), session_id)
-        labels = [f"{i + 1}. {r['operation']} · {r['state']}" for i, r in enumerate(rows)]
-        options = OptionSet("single", [Option(label, time.strftime("%d %b %H:%M", time.localtime(r["created_at"])))
-                                       for label, r in zip(labels, rows)])
-        def choose(selected):
-            self._show_media_job(rows[labels.index(selected[0])]["id"], session_id)
-            return True
-        self._show_on_reply_surface("media jobs", lambda b: b.show(
-            "Generate · this conversation" if rows else "No media jobs in this conversation yet.",
-            options=options, on_options_submit=choose, action_label="Back to Generate", on_action=self._display_input_dialog))
+        items = []
+        for row in recent(self._config(), session_id)[:8]:
+            when = time.strftime("%H:%M", time.localtime(row["created_at"]))
+            model = _short_model(str(row.get("model") or ""))
+            outputs = [o for o in row.get("outputs") or [] if Path(o["path"]).is_file()]
+            for output in outputs:
+                try:
+                    kind = kind_for(Path(output["path"]))
+                except ValueError:
+                    kind = "file"
+                items.append({"job": row["id"], "index": output["index"], "path": str(output["path"]), "kind": kind,
+                              "title": f"{ {'audio': 'Song'}.get(kind, kind.title())} {output['index'] + 1}", "detail": f"{model} · {when}",
+                              "continue": output["kind"] == "video" or (output["kind"] == "audio" and bool(output.get("track_id")))})
+            if not outputs:
+                items.append({"job": row["id"], "index": -1, "path": "", "kind": "", "title": str(row["operation"]).replace("_", " ").title(),
+                              "detail": f"{row['state']} · {when}", "continue": False})
+        bubble.show_results(items)
+        paths = [item["path"] for item in items if item["kind"] == "video"]
+        if paths:
+            def read_frames():
+                glance = _glance_at(paths)
+                self._post_gui_call(lambda: bubble.add_glance(glance))
+            threading.Thread(target=read_frames, name="mo-media-frames", daemon=True).start()
+
+    def _result_action(self, value: str) -> None:
+        """One action from a row of the compact Saved results list."""
+        from core.media.jobs import status
+
+        verb, _sep, number = value.partition(":")
+        bubble = getattr(self, "_bubble", None)
+        items = list(getattr(bubble, "_results", None) or [])
+        if not number.isdigit() or not 0 <= int(number) < len(items):
+            return
+        item, session_id = items[int(number)], str(self._ensure_desktop_session().session_id)
+        if verb == "open":
+            self._show_media_job(item["job"], session_id)
+            return
+        row = status(self._config(), item["job"], session_id)
+        output = next((o for o in row.get("outputs") or [] if o["index"] == item["index"]), None)
+        if output is not None:
+            self._media_output_action(row, output, session_id, verb)
 
     def _show_media_job(self, job_id: str, session_id: str) -> None:
         from core.media.jobs import status
@@ -2913,9 +2954,43 @@ class CompanionSurface(
             presentation={"attachments": paths[:8], "attachment_state": attachment_panel_state(paths).value, "allow_tools": False},
             on_options_submit=choose, action_label="Back to Generate", on_action=self._display_input_dialog))
 
-    def _show_media_output(self, row: dict, output: dict, session_id: str) -> None:
+    def _media_output_action(self, row: dict, output: dict, session_id: str, action: str) -> bool:
+        """Play, save a copy of, or continue one saved result: the owner of the result card's choices
+        and the compact list's row icons."""
         import os
 
+        if session_id != str(self._ensure_desktop_session().session_id):
+            return False
+        path = Path(output["path"])
+        if action == "play":
+            try:
+                os.startfile(str(path))
+            except OSError:
+                self._cube_notice("Could not open", "Choose a local media viewer")
+        elif action == "save":
+            from mo_desktop.native_files import choose_path
+            folder = choose_path(int(getattr(getattr(self._bubble, "_layered", None), "_native_hwnd", 0) or 0), folder=True)
+            if folder:
+                def save():
+                    import shutil
+                    try:
+                        with path.open("rb") as source, (Path(folder) / path.name).open("xb") as target:
+                            shutil.copyfileobj(source, target, 256 * 1024)
+                        self._post_gui_call(lambda: self._cube_notice("Copy saved", "Private original retained"))
+                    except OSError:
+                        self._post_gui_call(lambda: self._cube_notice("Copy not saved", "Destination exists or is unavailable; nothing overwritten"))
+                threading.Thread(target=save, name="mo-media-save", daemon=True).start()
+        elif action == "continue":
+            self.set_voice_role("Generate")
+            self._display_input_dialog()
+            self._bubble.show_results(None)
+            self._bubble._generate_selection = {"operation": "extend_video" if output["kind"] == "video" else "extend_music",
+                "model": row["model"], "options": {}, "parent_id": row["id"], "output_index": output["index"]}
+            self._bubble._generate_progress = f"Continue result {output['index'] + 1} · add your next instructions"
+            self._bubble._repaint()
+        return True
+
+    def _show_media_output(self, row: dict, output: dict, session_id: str) -> None:
         from mo_desktop.artifacts import attachment_panel_state
         from mo_desktop.options import Option, OptionSet
 
@@ -2923,37 +2998,14 @@ class CompanionSurface(
         labels = [Option("Open / play", "Use the system's local viewer"), Option("Save a copy", "Choose a folder; never overwrite")]
         if output["kind"] == "video" or (output["kind"] == "audio" and output.get("track_id")):
             labels.append(Option("Continue this result", "Prepare a new Generate request; no charge until you send"))
+        actions = {"Open / play": "play", "Save a copy": "save", "Continue this result": "continue"}
+
         def choose(selected):
-            if session_id != str(self._ensure_desktop_session().session_id):
+            action = actions[selected[0]]
+            if not self._media_output_action(row, output, session_id, action):
                 return False
-            action = selected[0]
-            if action == "Open / play":
-                try:
-                    os.startfile(str(path))
-                except OSError:
-                    self._cube_notice("Could not open", "Choose a local media viewer")
-            elif action == "Save a copy":
-                from mo_desktop.native_files import choose_path
-                folder = choose_path(int(getattr(getattr(self._bubble, "_layered", None), "_native_hwnd", 0) or 0), folder=True)
-                if folder:
-                    def save():
-                        import shutil
-                        try:
-                            with path.open("rb") as source, (Path(folder) / path.name).open("xb") as target:
-                                shutil.copyfileobj(source, target, 256 * 1024)
-                            self._post_gui_call(lambda: self._cube_notice("Copy saved", "Private original retained"))
-                        except OSError:
-                            self._post_gui_call(lambda: self._cube_notice("Copy not saved", "Destination exists or is unavailable; nothing overwritten"))
-                    threading.Thread(target=save, name="mo-media-save", daemon=True).start()
-            else:
-                self.set_voice_role("Generate")
-                self._display_input_dialog()
-                self._bubble._generate_selection = {"operation": "extend_video" if output["kind"] == "video" else "extend_music",
-                    "model": row["model"], "options": {}, "parent_id": row["id"], "output_index": output["index"]}
-                self._bubble._generate_progress = f"Continue result {output['index'] + 1} · add your next instructions"
-                self._bubble._repaint()
-                return True
-            self._show_media_output(row, output, session_id)
+            if action != "continue":
+                self._show_media_output(row, output, session_id)
             return True
         self._show_on_reply_surface("media output", lambda b: b.show(
             f"Result {output['index'] + 1} · {path.name}\nSaved locally. Provider copies are not deleted by MO cleanup.",
@@ -2989,11 +3041,15 @@ class CompanionSurface(
 
         self._show_on_reply_surface("media cleanup", lambda bubble: bubble.show(text, options=choices, on_options_submit=confirm))
 
-    def _refresh_generate_credits(self) -> None:
-        if getattr(self, "_generate_credit_busy", False):
-            return
+    def _refresh_generate_credits(self, *, detail: bool = False) -> None:
+        """Read the Kie balance off the GUI lane. The composer keeps showing the last balance until
+        this one lands; with no balance to show it says so ("Credits —"). ``detail`` (a click on the
+        pill) also shows the full balance and when it was read, or why there is none."""
         from core.media.catalog import settings
         if settings(self._config()).get("enabled") is not True:
+            self._show_generate_credit("Credits —", "Generate is off · Provider settings" if detail else "")
+            return
+        if getattr(self, "_generate_credit_busy", False):
             return
         self._generate_credit_busy = True
         self._generate_credit_at = time.time()
@@ -3002,19 +3058,26 @@ class CompanionSurface(
             from core.media.kie import credits
             try:
                 balance = credits(self._config())
-                label = f"{balance['credits']:g} cr"
+                value = float(balance["credits"])
+                label = f"{value:.1f} cr"
+                full = f"{value:,g} credits · read {time.strftime('%H:%M', time.localtime(balance['checked_at']))}"
             except Exception:
-                label = "Credits · retry"
+                label, full = "Credits —", "Kie balance unavailable · check the key in Provider settings"
             finally:
                 self._generate_credit_busy = False
-            def present():
-                bubble = getattr(self, "_bubble", None)
-                if bubble:
-                    bubble._generate_credit = label
-                    if getattr(bubble, "_mode", "") == "input":
-                        bubble._repaint()
-            self._post_gui_call(present)
+            self._post_gui_call(lambda: self._show_generate_credit(label, full if detail else ""))
         threading.Thread(target=refresh, name="mo-media-credits", daemon=True).start()
+
+    def _show_generate_credit(self, label: str, detail: str = "") -> None:
+        self._generate_credit_label = label
+        bubble = getattr(self, "_bubble", None)
+        if not bubble:
+            return
+        bubble._generate_credit = label
+        if detail:
+            bubble.show_credit_detail(detail)
+        elif getattr(bubble, "_mode", "") == "input":
+            bubble._repaint()
 
     def _refine_generate_prompt(self, bubble: Any) -> None:
         """Generate's Refine: MO's own prompt enhancer (the Terminal's Ctrl+E) with the Generate
@@ -3089,10 +3152,13 @@ class CompanionSurface(
                 self.open_settings_panel(page="models")
             return
         if action == "credits":
-            self._refresh_generate_credits()
+            self._refresh_generate_credits(detail=True)
             return
         if action == "jobs":
             self._show_media_jobs()
+            return
+        if action == "result":
+            self._result_action(value)
             return
         if action.startswith("reference:"):
             from core.media.preparation import kind_for
@@ -4989,10 +5055,10 @@ class CompanionSurface(
             self._read_generate_credits_if_stale()
 
     def _read_generate_credits_if_stale(self) -> None:
-        """Generate shows its balance on the composer: read it when Generate opens, at most every
-        ten minutes (a click on the balance reads it at once)."""
+        """Generate shows its balance on the composer: read it again when Generate opens, at most
+        once a minute (a click on the balance reads it at once)."""
         if (self._active_skill_role_label().casefold() == "generate"
-                and time.time() - float(getattr(self, "_generate_credit_at", 0.0) or 0.0) > 600):
+                and time.time() - float(getattr(self, "_generate_credit_at", 0.0) or 0.0) > 60):
             self._refresh_generate_credits()
 
     def _attach_from_composer(self) -> None:
@@ -5092,6 +5158,7 @@ class CompanionSurface(
             bubble._on_panel_tool = self._on_panel_tool_edit  # panel quick-tools -> core/imageedit
             bubble._on_panel_share = self._share_panel_image
             bubble._on_panel_send = self._send_attachment_to_mo
+            bubble._generate_credit = getattr(self, "_generate_credit_label", "")
             try:   # files dropped on the open panel import exactly like a drop on the cube
                 bubble._win.accept_files(drag=lambda _event: None, leave=lambda _event=None: None,
                                          drop=self._on_panel_files_dropped)

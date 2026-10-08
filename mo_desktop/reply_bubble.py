@@ -63,6 +63,8 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # the composer, and the cross-fade between messages.
 _COMPOSER_DOTS_RESERVE = 16
 _GENERATE_ROW_H = 28          # one row of a picked kind's choice pills (none under Auto)
+_RESULT_ROW_H = 34            # one row of the compact Saved results list
+_RESULT_ROWS = 4              # rows shown at once; the list scrolls past them
 _GENERATE_STATUS_H = 23       # the progress line, only while a job or Refine reports something
 _BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
 _CLICK_AWAY_POLL_MS = 30   # how often an open panel reads the left button for a click away
@@ -412,34 +414,100 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                    fill=(*colour, 255), width=max(1, ss), joint="curve")
         return int(left / ss), int(top / ss), int((left + width) / ss), int((top + height) / ss)
 
-    def _draw_privacy_shield(self, d: Any, x: float, y: float, size: float) -> None:
+    def _draw_privacy_mark(self, d: Any, x: float, y: float, size: float) -> None:
+        """Generate's privacy: a small '!' in a ring at the top right."""
+        ss = int(getattr(self, "_ss", _SS) or _SS)
         on = self._hovering("generate:privacy") or bool(getattr(self, "_privacy_open", False))
-        colour = self._cyan if on else self._muted
-        cx, w = x + size / 2, size * 0.8
-        d.polygon([(cx, y), (cx + w / 2, y + size * 0.2), (cx + w / 2, y + size * 0.52), (cx, y + size),
-                   (cx - w / 2, y + size * 0.52), (cx - w / 2, y + size * 0.2)],
-                  outline=(*colour, 255), width=max(1, int(size / 8)))
+        colour = (*(self._cyan if on else self._muted), 255)
+        d.ellipse((x, y, x + size, y + size), outline=colour, width=max(1, ss))
+        cx = x + size / 2
+        d.line([(cx, y + size * 0.26), (cx, y + size * 0.58)], fill=colour, width=max(1, int(1.3 * ss)))
+        d.ellipse((cx - 0.8 * ss, y + size * 0.7, cx + 0.8 * ss, y + size * 0.7 + 1.6 * ss), fill=colour)
 
-    def _draw_privacy_veil(self, d: Any, img: Any, box: Any) -> None:
-        """Privacy, plainly: the panel dims the way browsing earlier replies does and says what
-        happens to attached files. Any click or key returns to the composer."""
-        from PIL import Image, ImageDraw
-        from mo_desktop.generate_controls import PRIVACY_LINES
+    # ---- Generate's credits detail and the compact Saved results list ------------------------------
+    def show_credit_detail(self, text: str, seconds: float = 4.0) -> None:
+        """A click on the credits pill: the full balance and when it was read (or why there is none),
+        in a small label under the pill for a few seconds."""
+        self._credit_detail, self._credit_detail_until = str(text or ""), time.monotonic() + seconds
+        self._repaint()
+        try:
+            self._gui.schedule(int(seconds * 1000) + 60, self._repaint)
+        except Exception:
+            pass
+
+    def show_results(self, items: list[dict] | None) -> None:
+        """Open Saved results as a compact list in the composer's text area (``None`` closes it)."""
+        self._results_open = items is not None
+        self._results = list(items or [])
+        self._results_scroll = 0
+        self._menu = None
+        self._repaint()
+
+    def add_glance(self, glance: dict[str, dict]) -> None:
+        self._chip_glance = {**(getattr(self, "_chip_glance", None) or {}), **(glance or {})}
+        if getattr(self, "_results_open", False):
+            self._repaint()
+
+    def _draw_results(self, d: Any, img: Any, left: float, top: float, width: float) -> None:
+        """Rows of the compact Saved results list: a click on a row plays it; its icons save a copy,
+        continue it (clips and songs that can) and open the job's own card."""
+        from interface.desktop_brand import make_glyph_icon
+        from PIL import Image, ImageOps
 
         ss = int(getattr(self, "_ss", _SS) or _SS)
-        veil = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        ImageDraw.Draw(veil).rounded_rectangle(box, radius=int(self._visuals.metrics.panel_corner_radius) * ss,
-                                               fill=(*self._card, 238))
-        img.alpha_composite(veil)
-        padding = int(self._visuals.metrics.panel_padding) * ss
-        width = box[2] - box[0] - 2 * padding
-        lines = [("Privacy", self._font, self._cyan)] + [(line, self._sfont, self._text) for line in PRIVACY_LINES]
-        heights = [22 * ss] + [17 * ss] * len(PRIVACY_LINES)
-        y = (box[1] + box[3]) / 2 - sum(heights) / 2
-        for (text, font, colour), height in zip(lines, heights):
-            d.text((box[0] + padding, y), card.fit_text(d, text, width, font), font=font, fill=(*colour, 255))
-            y += height
-        self._hit = {"privacy_close": (int(box[0] / ss), int(box[1] / ss), int(box[2] / ss), int(box[3] / ss))}
+        items = list(getattr(self, "_results", None) or [])
+        font = getattr(self, "_sfont", None) or self._font
+        if not items:
+            d.text((left, top + 6 * ss), "No results in this conversation yet.", font=font, fill=(*self._muted, 255))
+            return
+        first = int(getattr(self, "_results_scroll", 0))
+        radius = int(self._visuals.metrics.button_corner_radius) * ss
+        thumb_size, row_h = 26 * ss, _RESULT_ROW_H * ss
+        for slot, number in enumerate(range(first, min(len(items), first + _RESULT_ROWS))):
+            item, y = items[number], top + slot * row_h
+            play_key, right = f"result_play:{number}", left + width
+            if self._hovering(play_key):
+                d.rounded_rectangle((left - 4 * ss, y, right, y + row_h - 4 * ss), radius=radius, fill=(*self._entry, 255))
+            tx, ty = int(left), int(y + (row_h - 4 * ss - thumb_size) / 2)
+            glance = (getattr(self, "_chip_glance", None) or {}).get(item["path"], {})
+            picture = None
+            if item["kind"] == "image":
+                picture = self._chip_thumbnail(item["path"], thumb_size)
+            elif item["kind"] == "video" and glance.get("frame") is not None:
+                picture = ImageOps.fit(glance["frame"], (thumb_size, thumb_size), Image.LANCZOS)
+            if picture is not None:
+                img.alpha_composite(picture, (tx, ty))
+                if item["kind"] == "video":
+                    self._play_mark(d, tx + thumb_size / 2 - 5 * ss, ty + thumb_size / 2 - 5 * ss, 10 * ss)
+            elif item["kind"] in {"video", "audio"}:
+                self._play_mark(d, tx + 3 * ss, ty + 3 * ss, thumb_size - 6 * ss)
+            else:
+                d.ellipse((tx + 10 * ss, ty + 10 * ss, tx + 16 * ss, ty + 16 * ss), fill=(*self._muted, 255))
+            icons = [("details", f"result_open:{number}")]
+            if item.get("continue"):
+                icons.insert(0, ("chevron_right", f"result_continue:{number}"))
+            if item["path"]:
+                icons.insert(0, ("copy", f"result_save:{number}"))
+            ix = right - len(icons) * 22 * ss
+            text_left, text_right = left + thumb_size + 8 * ss, ix - 6 * ss
+            d.text((text_left, y + 2 * ss), card.fit_text(d, item["title"], text_right - text_left, font), font=font,
+                   fill=(*self._text, 255))
+            d.text((text_left, y + 15 * ss), card.fit_text(d, item["detail"], text_right - text_left, font), font=font,
+                   fill=(*self._muted, 255))
+            for glyph, key in icons:
+                colour = self._cyan if self._hovering(key) else self._muted
+                img.alpha_composite(make_glyph_icon(glyph, 14 * ss, color="#%02x%02x%02x" % tuple(colour[:3])),
+                                    (int(ix + 4 * ss), int(y + (row_h - 4 * ss - 14 * ss) / 2)))
+                self._hit[key] = (int(ix / ss), int(y / ss), int((ix + 22 * ss) / ss), int((y + row_h - 4 * ss) / ss))
+                ix += 22 * ss
+            if item["path"] or item["job"]:
+                self._hit[play_key if item["path"] else f"result_open:{number}"] = (
+                    int(left / ss), int(y / ss), int(text_right / ss), int((y + row_h - 4 * ss) / ss))
+        if len(items) > _RESULT_ROWS:                            # the list scrolls; a thin thumb shows where
+            track = _RESULT_ROWS * row_h - 8 * ss
+            thumb = max(8 * ss, track * _RESULT_ROWS / len(items))
+            y = top + (track - thumb) * first / max(1, len(items) - _RESULT_ROWS)
+            d.rounded_rectangle((left + width + 3 * ss, y, left + width + 4 * ss, y + thumb), radius=ss, fill=(*self._muted, 180))
 
     def _open_attachment_file(self) -> None:
         """The media card's play mark: open the clip or song in the system's local player, as Saved
@@ -965,6 +1033,17 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if browse_head:
             head = card.fit_text(probe, browse_head, max(1, int(wrap_width or content_width)) * ss, self._font)
             lines = [[(head, False)]] + [[] for _line in lines[1:]]
+        privacy = generate_mode and bool(getattr(self, "_privacy_open", False))
+        if privacy:   # read like a browsed reply: its lines in the text area, the panel dimmed around them
+            from mo_desktop.generate_controls import PRIVACY_LINES
+            lines = [[(card.fit_text(probe, text, max(1, int(wrap_width or content_width)) * ss, self._font), False)]
+                     for text in PRIVACY_LINES]
+            visible_count = len(lines)
+        results = generate_mode and bool(getattr(self, "_results_open", False)) and not privacy
+        if results:   # Saved results: a compact list in the text area while it is open
+            shown_rows = max(1, min(len(getattr(self, "_results", None) or []), _RESULT_ROWS))
+            lines = [[] for _row in range(-(-shown_rows * _RESULT_ROW_H // line_h))]
+            visible_count = len(lines)
         text_h = (text_budget if fixed_reply else
                   max(int(design.min_text_height), min(int(design.max_text_height), visible_count * line_h)))
         panel_radius = int(self._visuals.metrics.panel_corner_radius)
@@ -1057,11 +1136,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
             if generate_mode:
                 menu_owner = str((open_menu or {}).get("owner", ""))
-                # Beside the role: the kind, the provider and the credits; privacy is the shield at the right.
-                shield_x = box[2] - panel_padding * ss - 14 * ss
-                self._draw_privacy_shield(d, shield_x, ay - 7 * ss, 14 * ss)
-                _set_hit("generate:privacy", (int(shield_x / ss) - 5, int(ay / ss) - 10, int(shield_x / ss) + 19,
-                                              int(ay / ss) + 13), min_width=26, min_height=26)
+                # Beside the role: the kind, the provider and the credits; privacy is the '!' at the right.
+                shield_x = box[2] - panel_padding * ss - 11 * ss
+                self._draw_privacy_mark(d, shield_x, ay - 4 * ss, 11 * ss)
+                _set_hit("generate:privacy", (int(shield_x / ss) - 4, int(ay / ss) - 8, int(shield_x / ss) + 15,
+                                              int(ay / ss) + 11), min_width=24, min_height=24)
                 left, limit = role_right + 5 * ss, shield_x - 8 * ss
                 for index, (key, text) in enumerate(generate_top):
                     reserve = (34 + 5) * ss * (len(generate_top) - index - 1)
@@ -1069,6 +1148,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     _set_hit("generate:" + key, self._draw_generate_pill(d, key, text, left, ay - 8 * ss, width, 20 * ss,
                                                                           menu_owner))
                     left += width + 5 * ss
+                detail = str(getattr(self, "_credit_detail", "") or "")
+                if detail and time.monotonic() < float(getattr(self, "_credit_detail_until", 0.0)) and "generate:credits" in self._hit:
+                    pill = self._hit["generate:credits"]
+                    label_w = d.textlength(detail, font=self._sfont) + 16 * ss
+                    lx = max(box[0] + panel_padding * ss, min(pill[2] * ss - label_w, box[2] - panel_padding * ss - label_w))
+                    ly = pill[3] * ss + 4 * ss
+                    d.rounded_rectangle((lx, ly, lx + label_w, ly + 19 * ss), radius=button_radius,
+                                        fill=(*self._entry, 255), outline=(*self._edge, 120), width=max(1, ss))
+                    d.text((lx + 8 * ss, ly + 1 * ss), detail, font=self._sfont, fill=(*self._text, 255))
                 cy = ay + 22 * ss
                 for row in generate_rows:                          # a picked kind's choices, in order
                     left = ax
@@ -1118,7 +1206,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # body / input text
         ty = pad + body_top * ss
         tx = ax
-        fill = self._muted if (placeholder and not browse_head) or attachment_caption else self._text
+        fill = self._muted if (placeholder and not browse_head and not privacy) or attachment_caption else self._text
         body_font = self._sfont if attachment_caption else self._font
         content_r = pad + panel_padding * ss + int(content_width) * ss
         if preview is not None:
@@ -1158,6 +1246,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         text_y = ty
         if is_input:
             self._input_text_top = int(text_y // ss)    # where a height glide splits the finished card
+        if results:
+            self._draw_results(d, img, ax, text_y, content_width * ss)
         for idx, ln in enumerate(lines):
             mail_heading = mail_reply and self._scroll_line + idx == 0
             if mail_heading:
@@ -1197,7 +1287,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                             lx += float(d.textlength(part, font=font))
             if idx < len(lines) - 1:
                 ty += int(design.line_height) * ss
-        if is_input and not browsing and not bool(getattr(self, "_select_all", False)):
+        if is_input and not browsing and not privacy and not results and not bool(getattr(self, "_select_all", False)):
             caret_spans = caret_lines[-1] if caret_lines else [("", False)]
             caret_plain = plain_spans(caret_spans)
             caret_display, caret_rtl = shape_line(caret_plain)
@@ -1386,7 +1476,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                                   int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
                     from interface.desktop_brand import make_glyph_icon
                     results_x = spark_x - 8 * ss - 15 * ss        # Saved results: a button, not a menu item
-                    color = self._cyan if self._hovering("generate:jobs") else self._muted
+                    color = self._cyan if (self._hovering("generate:jobs") or getattr(self, "_results_open", False)) else self._muted
                     img.alpha_composite(make_glyph_icon("folder", 15 * ss, color="#%02x%02x%02x" % tuple(color)),
                                         (int(results_x), int(cyy - 2 * ss)))
                     _set_hit("generate:jobs", (int(results_x / ss) - 4, int((cyy - 5 * ss) / ss), int(results_x / ss) + 19,
@@ -1408,7 +1498,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                         fill=(*self._entry, 255), outline=(*self._edge, 120), width=max(1, ss))
                     d.text((tip_left + 8 * ss, cyy - 3 * ss), card.fit_text(d, tip, tip_right - tip_left - 16 * ss, self._sfont),
                            font=self._sfont, fill=(*self._muted, 255))
-                if dots:
+                if dots and not results:
                     # MO's earlier replies: three dots at the right edge, centred, an arrow above and
                     # below. The bottom dot is your draft, the middle one MO's last reply, the top one
                     # anything older; the upper half moves back, the lower half forward.
@@ -1526,8 +1616,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                         fill=(*col, 255), width=max(1, ss))
                 _set_hit("sessions", (int(hx / ss), int(hy / ss) - 2, int(hx / ss) + 18, int(hy / ss) + 16),
                          min_width=26, min_height=26)
-        if generate_mode and getattr(self, "_privacy_open", False):
-            self._draw_privacy_veil(ImageDraw.Draw(img), img, box)
+        if privacy:   # the same dimming as browsing earlier replies; any click or key returns
+            self._dim_around_browse_line(img, box, panel_radius * ss, pad + body_top * ss, line_h * len(lines) * ss, ss)
+            self._hit = {"privacy_close": (int(box[0] / ss), int(box[1] / ss), int(box[2] / ss), int(box[3] / ss))}
         finished = card.finish(img, ss)   # premultiply-then-downscale (shared primitive)
         fade_from = getattr(self, "_browse_from", None) if is_input else None
         if fade_from is not None:
@@ -2386,7 +2477,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # or returning from another panel consumes its stashed draft.
         if not already_composing:
             self._menu = None
-            self._privacy_open = False
+            self._privacy_open = self._results_open = False
             self._body = str(getattr(self, "_input_draft", "") or "")
             self._cursor = len(self._body)
             self._select_all = False
@@ -2515,6 +2606,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._privacy_open = False                    # any key returns from the privacy note
             self._repaint()
             return "break"
+        if self._mode == "input" and getattr(self, "_results_open", False):
+            self._results_open = False                    # the list closes; typing goes on into the draft
+            if ks == "Escape":
+                self._repaint()
+                return "break"
         if self._mode == "input" and getattr(self, "_menu", None) is not None:
             if ks == "Escape":
                 self._menu = None
@@ -2708,6 +2804,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
         elif key == "preview_play":
             self._open_attachment_file()
+        elif key.startswith(("result_play:", "result_save:", "result_continue:", "result_open:")):
+            callback = getattr(self, "_on_generate_action", None)
+            if callable(callback):
+                verb, _sep, number = key.partition(":")
+                callback("result", f"{verb[len('result_'):]}:{number}")
         elif key.startswith("generate:"):
             self._toggle_generate_menu(key)
         elif key.startswith("glance_remove:"):              # the preview's X removes that file with its chip
@@ -2987,6 +3088,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             direction = -1 if getattr(event, "delta", 0) > 0 else 1
             limit = max(0, len(open_menu["choices"])-getattr(self, "_menu_capacity", 3))
             open_menu["scroll"] = max(0, min(limit, int(open_menu.get("scroll", 0))+direction))
+            self._repaint()
+            return "break"
+        if getattr(self, "_results_open", False):         # the Saved results list scrolls a row at a time
+            limit = max(0, len(getattr(self, "_results", None) or []) - _RESULT_ROWS)
+            self._results_scroll = max(0, min(limit, int(getattr(self, "_results_scroll", 0))
+                                              + (-1 if getattr(event, "delta", 0) > 0 else 1)))
             self._repaint()
             return "break"
         delta = int(getattr(event, "delta", 0) or 0)

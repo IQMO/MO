@@ -4,9 +4,10 @@
 
 Choose **Generate** through the existing composer role switcher. Beside the role sit the kind
 (Auto, Song, Image, Video), the provider (Kie; its menu opens Settings → Models & providers) and
-the credits balance (read when Generate opens, a click reads it again), all filled drop-down pills
-with no stroke; a shield at the top right dims the panel and says plainly what happens to attached
-files. Nothing is reserved under Auto: a picked kind's choices (its model, type and options) take
+the credits balance (read when MO Desktop starts and Generate opens, shown at once, "Credits —"
+when there is none; a click reads it again and shows the full balance and its time under the pill),
+all filled drop-down pills with no stroke; a small "!" at the top right dims the panel exactly as
+browsing earlier replies does and says plainly what happens to attached files. Nothing is reserved under Auto: a picked kind's choices (its model, type and options) take
 only the rows they need, a progress line appears only while a job or Refine reports, and the
 composer grows with the prompt and while a drop-down needs room, gliding each time. A References pill for
 purpose-labelled files (each dropped or picked file also sits in the sentence at the caret as a
@@ -14,7 +15,8 @@ chip named [Video1], [Image1] or [Audio1] with its role — a clip defaults to m
 to subject for a video; clicking a chip opens References, deleting it removes the file and the
 other names stay on their files; resting the pointer on a chip shows a small preview in the card
 — the picture, a clip's first frame or the media mark, with name, length, size and an X that removes the file; Seedance reads
-the names), a Saved results button and a
+the names), a Saved results button that opens a compact list in the same panel (a click on a
+row plays the result; its icons save a copy, continue it and open the job's card) and a
 Refine sparkle by Send that rewrites the draft through MO's prompt enhancer under
 the Generate skill's refining rules (press again to restore it), and real
 stage/elapsed progress. The

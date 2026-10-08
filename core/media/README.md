@@ -29,7 +29,7 @@ backends and local explainer rendering remain independent.
    skill's "Refining a request" rules: same goal and scope, precise for the
    chosen generator; press it again for your own words. Attached files get
    one References pill whose menu sets each file's purpose or removes it; the
-   shield at the top right explains privacy and a footer button opens saved
+   small "!" at the top right explains privacy and a footer button lists saved
    results. Describe the result
    and send. Choices are captured at submission, including queued requests, and
    enforced independently of model prose.

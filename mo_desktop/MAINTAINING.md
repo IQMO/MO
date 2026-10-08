@@ -15,7 +15,9 @@ when that source tree is present.
   the role — kind, provider, credits — and `option_pills` flowed into only the rows a
   picked kind needs, each a menu in the composer's one drop-down, `_menu`, shared
   with the role selector; the card grows while a drop-down needs room; privacy is
-  the shield's veil, saved results a footer button) snapshot choices/references into the submitted
+  the '!' using the browse dimming (`_dim_around_browse_line`), saved results a compact list in
+  the text area whose rows go through `companion._media_output_action`, the one owner of play, save
+  and continue) snapshot choices/references into the submitted
   request, including queued requests. `core/media/README.md` owns provider/job
   contracts. Reuse Settings, credentials, attachments, reply/options cards and
   notices; run preparation, polling, credit reads and installation off the GUI
