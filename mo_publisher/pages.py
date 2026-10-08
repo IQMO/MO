@@ -111,7 +111,7 @@ LANDING = r'''<div class="landing">
 <input class="pick" type="radio" name="model" id="m-ollama" aria-label="Ollama, offline">
 <section class="hero" aria-labelledby="hero-h">
 <div>
-<p class="kicker"><span class="cubes" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="eyebrow">MO Agent · open source · MIT</span></p>
+<p class="kicker"><span class="cubes" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="eyebrow">MO Agent · source-available</span></p>
 <h1 id="hero-h">Your model can change. Your work stays.</h1>
 <p class="lead">One local agent runtime. Honest progress. Reachable everywhere. MO keeps the tools, the safety, your memory and the proof, whichever model is thinking.</p>
 <div class="actions"><a class="btn primary" href="#install">Install MO</a><a class="btn" href="#different">Why MO</a></div>

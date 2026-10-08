@@ -3,8 +3,8 @@
 MO Agent is an owner-maintained product for people who install and use it. It is
 not community-governed and does not maintain a contributor roadmap.
 
-The MIT license permits use, modification, and redistribution. That license does
-not imply that upstream pull requests or unsolicited implementation work will be
+The PolyForm Shield license lets you use, change and share MO for any purpose
+except providing a competing product. It does not imply that upstream pull requests or unsolicited implementation work will be
 reviewed or accepted. Please do not open a pull request unless the maintainer has
 explicitly requested that exact change.
 

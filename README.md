@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/IQMO/MO/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/IQMO/MO/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white">
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-2ea44f"></a>
+  <a href="LICENSE"><img alt="PolyForm Shield License 1.0.0" src="https://img.shields.io/badge/License-PolyForm%20Shield%201.0.0-2ea44f"></a>
 </p>
 
 MO is a local agent runtime around the AI model you choose. The model proposes;
@@ -942,9 +942,9 @@ APKs or provide the Play app's updater.
 
 ### Project model
 
-MO Agent is an owner-maintained open-source product for users, not a
-community-governed development project. The tracked repository is the product
-source; there is no reduced public fork maintained in parallel. Private profile
+MO Agent is an owner-maintained, source-available product for users, not a
+community-governed development project. The tracked repository is the complete
+product source. Private profile
 state, operator extensions, maintainer verification, and Android client sources
 remain outside the tracked product boundary. Android is distributed publicly
 only through Google Play; owner-device builds remain private local custody.
@@ -1000,4 +1000,7 @@ Hub data are managed separately from uninstalling this local copy.
 
 ## License
 
-MO Agent is licensed under the MIT License. See [LICENSE](LICENSE).
+MO Agent is source-available under the PolyForm Shield License 1.0.0: you may
+use, change and share it for any purpose except providing a product that
+competes with MO Agent. See [LICENSE](LICENSE). Copies published up to commit
+`b7e94b3a` (9 October 2026) were released under the MIT License and keep it.
