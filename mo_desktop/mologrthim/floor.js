@@ -282,7 +282,8 @@ function specialist(xs, t, labels) {
   const st = s.state, bob = reduced ? 0 : Math.sin(t * 2.2 + k) * .04 + (st === 'blocked' ? -.14 : 0);
   for (let r = 0; r < s.rank; r++) plateTier(x, y, r, color);
   const lift = .12 + s.rank * .07 + bob;
-  const box = cube(x, y, .68, color, {lift, edge: st === 'blocked' ? rgba(theme.error, .95) : null, alpha: st === 'blocked' ? .82 : 1});
+  const box = cube(x, y, .68, color, {lift, edge: st === 'blocked' ? rgba(theme.error, .95) : null,
+    alpha: st === 'blocked' ? .82 : st === 'interrupted' ? .55 : 1});
   if (st === 'working' && !reduced) orbit(x, y, lift, color, t, .55);
   if (st === 'blocked') alarm(box);
   if (st === 'verified') check(box);
@@ -290,9 +291,10 @@ function specialist(xs, t, labels) {
   if (state.selected && state.selected.type === 'specialist' && state.selected.id === s.cwd + '|' + s.role) ring(x, y, .65, theme.brand, t, true);
   state.hits.push({type: 'specialist', id: s.cwd + '|' + s.role, x: box.x, y: box.y - 12, w: box.w, h: box.h + 12});
   const sub = st === 'working' ? 'working' : st === 'blocked' ? 'blocked' : st === 'reported' ? 'report waits for the check' :
-    st === 'verified' ? 'verified' : st === 'corrected' ? 'corrected' : 'idle';
-  const col = st === 'blocked' || st === 'corrected' ? theme.error : st === 'reported' ? theme.warn : st === 'verified' ? theme.ok : theme.brand;
-  const id = s.cwd + '|' + s.role, shown = ['working', 'blocked', 'reported'].includes(st)
+    st === 'interrupted' ? 'stopped: its MO closed' : st === 'verified' ? 'verified' : st === 'corrected' ? 'corrected' : 'idle';
+  const col = st === 'blocked' || st === 'corrected' ? theme.error : st === 'reported' || st === 'interrupted' ? theme.warn
+    : st === 'verified' ? theme.ok : theme.brand;
+  const id = s.cwd + '|' + s.role, shown = ['working', 'blocked', 'reported', 'interrupted'].includes(st)
     || (state.selected && state.selected.id === id) || (state.hover && state.hover.id === id);
   // F1: notable specialists carry a label; quiet ones show theirs on hover or selection.
   if (shown) labels.push(() => tag(box.top.x, box.y - 6, s.name, `${sub}${s.verified ? ` · rank ${s.rank}` : ''}`, col, col, {type: 'specialist', id}));
@@ -438,7 +440,7 @@ function renderPanel(force = false) {
       <div class="rank-row">${[1, 2, 3].map(r => `<i class="${s.rank >= r ? 'on' : ''}"></i>`).join('')}<span>${s.verified ? `rank ${s.rank} · ${s.points} points from verified work` : 'no checked work yet'}</span></div>
       <div class="stat-grid"><div class="stat"><b>${s.runs}</b><small>runs</small></div><div class="stat"><b>${s.verified}</b><small>verified</small></div>
       <div class="stat"><b>${s.corrected}</b><small>corrected</small></div><div class="stat"><b>${esc(s.usual || '—')}</b><small>usual work</small></div></div>
-      <div class="panel-kicker">Now</div><p class="panel-text ${s.now ? '' : 'dim'}">${esc(s.now || (s.state === 'reported' ? 'report waits for the architect\'s check' : 'idle'))}</p>
+      <div class="panel-kicker">Now</div><p class="panel-text ${s.now ? '' : 'dim'}">${s.state === 'interrupted' ? 'Stopped unreported, its MO closed: ' : ''}${esc(s.now || (s.state === 'reported' ? 'report waits for the architect\'s check' : 'idle'))}</p>
       <div class="panel-kicker">Last report</div><p class="panel-text ${s.last_report ? '' : 'dim'}">${esc(s.last_report || 'no report yet')}</p>
       ${s.last_verdict ? `<p class="panel-text dim">${s.last_verdict === 'accepted' ? 'verified by the architect' : 'refused by the architect'}${s.last_reason ? ': ' + esc(clip(s.last_reason, 200)) : ''}</p>` : ''}
       <div class="panel-kicker">Responsibility</div><p class="panel-text dim">${esc(s.focus)}</p>

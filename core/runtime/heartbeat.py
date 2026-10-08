@@ -267,6 +267,8 @@ def build_heartbeat_snapshot(
         "instance_id": get_instance_id(),
         "note": redact_monitor_text(note, 240),
         "pid": os.getpid(),
+        # The run id this process stamps on its monitor events: readers tell work left open by a closed MO from live work.
+        "monitor_run": str(getattr(get_monitor(), "run_id", "") or ""),
         "cwd": redact_monitor_text(os.getcwd(), 260),
         "session_id": redact_monitor_text(session_id, 120),
         "slot": redact_monitor_text(_active_session_slot(agent), 80),

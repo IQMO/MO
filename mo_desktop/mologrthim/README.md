@@ -26,7 +26,10 @@ how hard the task was (simple 1, moderate 2, complex 3, measured from the work
 the worker did) − 2 × each correction; tiers at 5, 15 and 35 points. A report
 nobody checked counts as a run only. A specialist with no checked work says so.
 Worker events written before the project root was recorded match a specialist
-only when exactly one open project has that role.
+only when exactly one open project has that role. Work still open when its MO
+closed or crashed shows as stopped, not working: each heartbeat names its
+process's monitor run (`monitor_run`), and an open worker event whose run no
+live MO names never reported.
 
 ## Acting from the floor
 

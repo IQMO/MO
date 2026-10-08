@@ -95,7 +95,7 @@ class FloorObserver:
                         continue
                     if row.get("type") in _MONITOR_TYPES:
                         entry["rows"].append({"type": row["type"], "ts": float(row.get("ts") or 0.0),
-                                              "payload": row.get("payload") or {}})
+                                              "run": str(row.get("run_id") or ""), "payload": row.get("payload") or {}})
                 entry["offset"] += end
             self._files[key] = entry
             rows.extend(entry["rows"])
@@ -152,8 +152,11 @@ class FloorObserver:
 
         now = time.time()
         mos: list[dict[str, Any]] = []
+        live_runs: set[str] = set()
         for item in recent_instance_snapshots(self.config, current_pid=-1, max_age_seconds=300, limit=16):
             surface = normalize_runtime_surface(item.get("surface"))
+            if item.get("pid_alive") and item.get("monitor_run"):
+                live_runs.add(str(item["monitor_run"]))
             if not item.get("pid_alive") or (surface != "terminal" and surface not in DESKTOP_SURFACES):
                 continue
             turn = item.get("turn") if isinstance(item.get("turn"), dict) else {}
@@ -183,7 +186,7 @@ class FloorObserver:
                 continue
             wid = str(payload.get("worker_id") or "")
             if wid and (wid not in workers or row["ts"] >= workers[wid]["ts"]):
-                workers[wid] = {**payload, "ts": row["ts"]}
+                workers[wid] = {**payload, "ts": row["ts"], "run": row.get("run", "")}
 
         projects = sorted({m["cwd"] for m in mos if m["cwd"] and not m["desktop"]})
         roles_by_project = {project: self._project_roles(project) for project in projects}
@@ -208,17 +211,20 @@ class FloorObserver:
                 reported = [w for w in history if w.get("state") == "completed"]
                 last = reported[-1] if reported else {}
                 state = str(latest.get("state") or "")
+                if state in {"offered", "accepted", "running"} and latest.get("run") not in live_runs:
+                    state = "interrupted"   # its MO closed mid-run: the work never reported
                 specialists.append({
                     "project": Path(project).name, "cwd": project, "role": role_id,
                     "name": str(getattr(role, "name", "") or role_id),
                     "focus": str(getattr(role, "description", "") or ""),
                     "state": ("working" if state in {"offered", "accepted", "running"} else
+                              "interrupted" if state == "interrupted" else
                               "blocked" if state == "blocked" else
                               "verified" if latest.get("verdict") == "accepted" else
                               "corrected" if latest.get("verdict") == "rejected" else
                               "reported" if state == "completed" else "idle"),
                     "now": redact_monitor_text(str(latest.get("objective") or ""), 220) if state in {
-                        "offered", "accepted", "running", "blocked"} else "",
+                        "offered", "accepted", "running", "blocked", "interrupted"} else "",
                     "note": redact_monitor_text(str(latest.get("note") or ""), 160),
                     "last_report": redact_monitor_text(str(last.get("result_summary") or ""), 260),
                     "last_verdict": str(last.get("verdict") or ""),
