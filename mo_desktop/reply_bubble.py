@@ -722,7 +722,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         for path in paths:
             if path in known or path not in names:
                 continue
-            roles.setdefault(path, default_role(path, operation))
+            role = default_role(path, operation)
+            if role == "motion" and "motion" in roles.values():   # one clip drives the motion; the next is a reference
+                role = "reference"
+            roles.setdefault(path, role)
             body = str(getattr(self, "_body", "") or "")
             cursor = max(0, min(len(body), int(getattr(self, "_cursor", len(body)) or 0)))
             insert = ("" if not body[:cursor] or body[:cursor].endswith(" ") else " ") + names[path] + " "

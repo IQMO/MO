@@ -70,6 +70,23 @@ def _number(value: Any, low: float, high: float, label: str, *, integer=False) -
     return int(value) if integer else value
 
 
+def reference_limits(operation: str, model: str) -> dict:
+    """How many references of each kind one request may carry, its total where the provider counts
+    one, and for Seedance the seconds of clips (and of sound) together: the one owner of these numbers
+    for build_payload, reference preparation and the composer's check when files are dropped."""
+    if operation in {"video", "extend_video"}:
+        two_five = str(model).endswith("2-5")
+        return {"image": 30 if two_five else 9, "video": 10 if two_five else 3, "audio": 10 if two_five else 3,
+                "seconds": 30 if two_five else 15}
+    if operation == "music":
+        return {"image": 5, "video": 1, "audio": 10, "total": 10}
+    if operation == "cover":
+        return {"image": 0, "video": 0, "audio": 1, "total": 1}
+    if operation == "edit_image":
+        return {"image": 14, "video": 0, "audio": 0, "total": 14}
+    return {"image": 0, "video": 0, "audio": 0, "total": 0}
+
+
 def build_payload(operation: str, model: str, options: dict, references: list[dict]) -> dict:
     """Validate before publishing media; URLs come only from the reference owner.
 
@@ -143,7 +160,9 @@ def build_payload(operation: str, model: str, options: dict, references: list[di
                     raise ValueError("These advanced song controls require custom mode.")
                 if not references and not (opts.get("style") or opts.get("lyrics")):
                     raise ValueError("A song idea also needs a style, lyrics or a reference.")
-                if len(by_kind["image"]) > 5 or len(by_kind["video"]) > 1 or len(references) + bool(opts.get("style")) + bool(opts.get("lyrics")) > 10:
+                limits = reference_limits(operation, model)
+                if (len(by_kind["image"]) > limits["image"] or len(by_kind["video"]) > limits["video"]
+                        or len(references) + bool(opts.get("style")) + bool(opts.get("lyrics")) > limits["total"]):
                     raise ValueError("Song references exceed the selected operation's attachment limit.")
                 opts.update({kind + "_urls": urls for kind, urls in by_kind.items() if urls})
         elif operation == "cover":
@@ -177,9 +196,9 @@ def build_payload(operation: str, model: str, options: dict, references: list[di
                 raise ValueError("Strict first/last frames cannot be combined with other references; choose a supported mode.")
             opts.update({r["role"] + "_url": r["url"] for r in frames})
         else:
-            limits = (30, 10, 10) if model.endswith("2-5") else (9, 3, 3)
-            for (kind, urls), limit in zip(by_kind.items(), limits):
-                if len(urls) > limit:
+            limits = reference_limits(operation, model)
+            for kind, urls in by_kind.items():
+                if len(urls) > limits[kind]:
                     raise ValueError(f"Too many {kind} references for the selected model.")
                 if urls:
                     opts["reference_" + kind + "_urls"] = urls
@@ -191,7 +210,7 @@ def build_payload(operation: str, model: str, options: dict, references: list[di
         if operation == "image" and references:
             raise ValueError("Choose reference image editing to use image references.")
         if operation == "edit_image":
-            if not 1 <= len(references) <= 14 or len(by_kind["image"]) != len(references):
+            if not 1 <= len(references) <= reference_limits(operation, model)["image"] or len(by_kind["image"]) != len(references):
                 raise ValueError("Reference editing needs 1–14 images and no audio/video.")
             opts["image_urls"] = by_kind["image"]
         opts.setdefault("aspect_ratio", "1:1")

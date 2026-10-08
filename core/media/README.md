@@ -46,7 +46,9 @@ audio/video work requires FFmpeg and FFprobe on PATH. Readiness reports missing
 tools without silently installing them; missing delivery tools block before
 paid submission. Desktop admits eight references per
 request, up to 500 MB per file in Generate; ordinary attachments retain 20 MB.
-Smaller provider limits are validated separately. MO never silently trims,
+Smaller provider limits are validated separately (`catalog.reference_limits` owns the counts per
+kind and Seedance's seconds together; the Desktop composer checks them when files are dropped, the
+core again before any paid step). MO never silently trims,
 resizes, changes models, discards references or switches upload hosts.
 
 ## Operations

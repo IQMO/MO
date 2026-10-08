@@ -22,7 +22,7 @@ import sys
 from core.runtime.subprocess_flags import apply_windows_hidden_process_flags, bind_windows_child_lifetime
 from core.state.paths import resolve_state_path
 from core.utils.atomic_write import atomic_write_text
-from .catalog import settings
+from .catalog import reference_limits, settings
 from .preparation import prepare
 
 _LEASES: dict[str, "ReferenceLease"] = {}
@@ -121,7 +121,8 @@ class ReferenceLease:
                 self.files[route] = {"path": path, "size": info["bytes"], "remaining": 250,
                                      "mime": {"image": "image/png", "audio": "audio/wav", "video": "video/mp4"}[info["kind"]]}
                 self.references.append({"kind": info["kind"], "role": ref.get("role", "reference"), "route": route})
-            if operation in {"video", "extend_video"} and any(v > (30 if model.endswith("2-5") else 15) for v in total.values()):
+            seconds = reference_limits(operation, model).get("seconds")
+            if seconds and any(v > seconds for v in total.values()):
                 raise ValueError("Combined motion/audio reference duration exceeds the selected model's limit.")
             self.server = _ReferenceServer(("127.0.0.1", 0), self._handler())
             self.server.daemon_threads = False

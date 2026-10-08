@@ -3186,6 +3186,8 @@ class CompanionSurface(
             if next_role == "remove":
                 bubble._remove_reference(index)              # its name leaves the sentence; the others keep their files
             else:
+                if next_role == "motion":                    # one clip drives the motion; another becomes a reference
+                    roles = {other: ("reference" if value == "motion" else value) for other, value in roles.items()}
                 roles[path] = next_role
                 bubble._generate_reference_roles = roles
         else:
@@ -3702,8 +3704,12 @@ class CompanionSurface(
                     if bubble:
                         bubble._stash_input_draft()
                         pending = list(getattr(bubble, "_input_attachments", []))
+                        kept = saved
+                        if generate_attachment:     # only what the chosen generator can take joins the request
+                            kept = self._fit_generate_references(getattr(bubble, "_generate_selection", None) or {},
+                                                                 pending, saved, {**(getattr(bubble, "_chip_glance", None) or {}), **glance})
                         self._display_input_dialog()
-                        bubble._input_attachments = list(dict.fromkeys([*pending, *(str(p) for p in saved)]))[:MAX_ATTACHMENTS_PER_TURN]
+                        bubble._input_attachments = list(dict.fromkeys([*pending, *(str(p) for p in kept)]))[:MAX_ATTACHMENTS_PER_TURN]
                         bubble._attachment_preview_paths = list(bubble._input_attachments)
                         bubble._chip_glance = {**(getattr(bubble, "_chip_glance", None) or {}), **glance}
                         bubble.place_new_references(pending)     # each new file sits in the sentence at the caret
@@ -3722,6 +3728,59 @@ class CompanionSurface(
             self._post_gui_call(finish_import)
 
         threading.Thread(target=import_in_background, daemon=True).start()
+
+    def _fit_generate_references(self, selection: dict, pending: list[str], saved: list[Any],
+                                 glance: dict[str, dict]) -> list[Any]:
+        """Keep only the dropped files the chosen generator can take: its count per kind (and in all),
+        and for Seedance the seconds of clips and of sound together (core.media.catalog.reference_limits,
+        which the core checks again at Send). The rest are not added, and MO says why; Auto leaves the
+        choice to Send, where the request's words pick the generator."""
+        from core.media.catalog import reference_limits
+        from core.media.preparation import kind_for
+        from mo_desktop.generate_controls import _short_model
+
+        operation = selection.get("operation")
+        if not operation:
+            return list(saved)
+        limits = reference_limits(str(operation), str(selection.get("model") or ""))
+        counts = {"image": 0, "video": 0, "audio": 0}
+        seconds = {"video": 0.0, "audio": 0.0}
+
+        def kind_and_length(path: Any) -> tuple[str, float]:
+            try:
+                kind = kind_for(Path(str(path)))
+            except ValueError:
+                return "", 0.0
+            return kind, float((glance.get(str(path), {}).get("info") or {}).get("duration") or 0.0)
+
+        for path in pending:
+            kind, length = kind_and_length(path)
+            if kind:
+                counts[kind] += 1
+                if kind in seconds:
+                    seconds[kind] += length
+        kept, reason = [], ""
+        for path in saved:
+            kind, length = kind_and_length(path)
+            total = sum(counts.values())
+            if not kind or counts[kind] + 1 > limits[kind]:
+                reason = reason or (f"{_short_model(str(selection.get('model') or ''))} takes up to {limits[kind]} "
+                                    f"reference {'clip' if kind == 'video' else kind}{'s' if limits[kind] != 1 else ''}"
+                                    if kind and limits[kind] else "This kind of request takes no such file")
+            elif "total" in limits and total + 1 > limits["total"]:
+                reason = reason or f"This request takes up to {limits['total']} references"
+            elif kind in seconds and limits.get("seconds") and seconds[kind] + length > limits["seconds"]:
+                reason = reason or (f"{_short_model(str(selection.get('model') or ''))} takes {limits['seconds']} s "
+                                    f"of {'clips' if kind == 'video' else 'sound'} in all")
+            else:
+                kept.append(path)
+                counts[kind] += 1
+                if kind in seconds:
+                    seconds[kind] += length
+        refused = [Path(str(path)).name for path in saved if path not in kept]
+        if refused:
+            self._cube_notice("Not added: " + ", ".join(refused), reason)
+        return kept
 
     def _send_attachment_to_mo(self, saved: list[Any]) -> None:
         """Ask MO about a dropped file in the one living panel (no file card in front of it)."""
