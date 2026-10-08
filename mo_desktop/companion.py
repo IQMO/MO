@@ -3044,10 +3044,12 @@ class CompanionSurface(
     def _refresh_generate_credits(self, *, detail: bool = False) -> None:
         """Read the Kie balance off the GUI lane. The composer keeps showing the last balance until
         this one lands; with no balance to show it says so ("Credits —"). ``detail`` (a click on the
-        pill) also shows the full balance and when it was read, or why there is none."""
+        pill) also shows the exact balance in the pill, or says beside the cubes why there is none."""
         from core.media.catalog import settings
         if settings(self._config()).get("enabled") is not True:
-            self._show_generate_credit("Credits —", "Generate is off · Provider settings" if detail else "")
+            self._show_generate_credit("Credits —")
+            if detail:
+                self._cube_notice("Generate is off", "Turn it on in Provider settings")
             return
         if getattr(self, "_generate_credit_busy", False):
             return
@@ -3059,13 +3061,17 @@ class CompanionSurface(
             try:
                 balance = credits(self._config())
                 value = float(balance["credits"])
-                label = f"{value:.1f} cr"
-                full = f"{value:,g} credits · read {time.strftime('%H:%M', time.localtime(balance['checked_at']))}"
+                label, full = f"{value:.1f} cr", f"{value:,g} cr"         # a click shows the exact balance
             except Exception:
-                label, full = "Credits —", "Kie balance unavailable · check the key in Provider settings"
+                label, full = "Credits —", ""
             finally:
                 self._generate_credit_busy = False
-            self._post_gui_call(lambda: self._show_generate_credit(label, full if detail else ""))
+
+            def present():
+                self._show_generate_credit(label, full if detail else "")
+                if detail and not full:      # no balance: say why beside the cubes, as media problems do
+                    self._cube_notice("Kie balance unavailable", "Check the key in Provider settings")
+            self._post_gui_call(present)
         threading.Thread(target=refresh, name="mo-media-credits", daemon=True).start()
 
     def _show_generate_credit(self, label: str, detail: str = "") -> None:
@@ -3076,7 +3082,7 @@ class CompanionSurface(
         bubble._generate_credit = label
         if detail:
             bubble.show_credit_detail(detail)
-        elif getattr(bubble, "_mode", "") == "input":
+        elif getattr(bubble, "_visible", False) and getattr(bubble, "_mode", "") == "input":
             bubble._repaint()
 
     def _refine_generate_prompt(self, bubble: Any) -> None:

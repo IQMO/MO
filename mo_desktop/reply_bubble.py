@@ -415,7 +415,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         return int(left / ss), int(top / ss), int((left + width) / ss), int((top + height) / ss)
 
     def _draw_privacy_mark(self, d: Any, x: float, y: float, size: float) -> None:
-        """Generate's privacy: a small '!' in a ring at the top right."""
+        """Generate's privacy: a small '!' in a ring, with the icons by Send."""
         ss = int(getattr(self, "_ss", _SS) or _SS)
         on = self._hovering("generate:privacy") or bool(getattr(self, "_privacy_open", False))
         colour = (*(self._cyan if on else self._muted), 255)
@@ -426,14 +426,20 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     # ---- Generate's credits detail and the compact Saved results list ------------------------------
     def show_credit_detail(self, text: str, seconds: float = 4.0) -> None:
-        """A click on the credits pill: the full balance and when it was read (or why there is none),
-        in a small label under the pill for a few seconds."""
+        """A click on the credits pill: the pill itself shows the exact balance for a few seconds,
+        then the short balance again."""
         self._credit_detail, self._credit_detail_until = str(text or ""), time.monotonic() + seconds
-        self._repaint()
+        self._repaint_open_composer()
         try:
-            self._gui.schedule(int(seconds * 1000) + 60, self._repaint)
+            self._gui.schedule(int(seconds * 1000) + 60, self._repaint_open_composer)
         except Exception:
             pass
+
+    def _repaint_open_composer(self) -> None:
+        """Repaint only while the composer is still on screen: a timer must never bring a closed panel
+        back (an empty reply card appeared that way, his screenshot 2026-10-08)."""
+        if getattr(self, "_visible", False) and getattr(self, "_mode", "") == "input":
+            self._repaint()
 
     def show_results(self, items: list[dict] | None) -> None:
         """Open Saved results as a compact list in the composer's text area (``None`` closes it)."""
@@ -441,12 +447,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._results = list(items or [])
         self._results_scroll = 0
         self._menu = None
-        self._repaint()
+        self._repaint_open_composer()
 
     def add_glance(self, glance: dict[str, dict]) -> None:
         self._chip_glance = {**(getattr(self, "_chip_glance", None) or {}), **(glance or {})}
         if getattr(self, "_results_open", False):
-            self._repaint()
+            self._repaint_open_composer()
 
     def _draw_results(self, d: Any, img: Any, left: float, top: float, width: float) -> None:
         """Rows of the compact Saved results list: a click on a row plays it; its icons save a copy,
@@ -921,7 +927,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         generate_pills: list[tuple[str, str]] = []
         if generate_mode and getattr(self, "_generate_selection", None):
             from mo_desktop.generate_controls import option_pills, top_pills
-            generate_top = top_pills(self._generate_selection, str(getattr(self, "_generate_credit", "") or ""))
+            credit = str(getattr(self, "_generate_credit", "") or "")
+            if time.monotonic() < float(getattr(self, "_credit_detail_until", 0.0) or 0.0):
+                credit = str(getattr(self, "_credit_detail", "") or credit)      # a click: the full balance, briefly
+            generate_top = top_pills(self._generate_selection, credit)
             generate_pills = option_pills(self._generate_selection, len(getattr(self, "_attachment_preview_paths", [])))
         caret_rect: tuple[int, int, int, int] | None = None
         shown = self._body if (self._body or not is_input) else ""
@@ -1150,27 +1159,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
             if generate_mode:
                 menu_owner = str((open_menu or {}).get("owner", ""))
-                # Beside the role: the kind, the provider and the credits; privacy is the '!' at the right.
-                shield_x = box[2] - panel_padding * ss - 11 * ss
-                self._draw_privacy_mark(d, shield_x, ay - 4 * ss, 11 * ss)
-                _set_hit("generate:privacy", (int(shield_x / ss) - 4, int(ay / ss) - 8, int(shield_x / ss) + 15,
-                                              int(ay / ss) + 11), min_width=24, min_height=24)
-                left, limit = role_right + 5 * ss, shield_x - 8 * ss
+                # Beside the role: the kind, the provider and the credits (privacy's '!' sits with the icons by Send).
+                left, limit = role_right + 5 * ss, box[2] - panel_padding * ss
                 for index, (key, text) in enumerate(generate_top):
                     reserve = (34 + 5) * ss * (len(generate_top) - index - 1)
                     width = max(34 * ss, min(self._pill_width(d, key, text), limit - left - reserve))
                     _set_hit("generate:" + key, self._draw_generate_pill(d, key, text, left, ay - 8 * ss, width, 20 * ss,
                                                                           menu_owner))
                     left += width + 5 * ss
-                detail = str(getattr(self, "_credit_detail", "") or "")
-                if detail and time.monotonic() < float(getattr(self, "_credit_detail_until", 0.0)) and "generate:credits" in self._hit:
-                    pill = self._hit["generate:credits"]
-                    label_w = d.textlength(detail, font=self._sfont) + 16 * ss
-                    lx = max(box[0] + panel_padding * ss, min(pill[2] * ss - label_w, box[2] - panel_padding * ss - label_w))
-                    ly = pill[3] * ss + 4 * ss
-                    d.rounded_rectangle((lx, ly, lx + label_w, ly + 19 * ss), radius=button_radius,
-                                        fill=(*self._entry, 255), outline=(*self._edge, 120), width=max(1, ss))
-                    d.text((lx + 8 * ss, ly + 1 * ss), detail, font=self._sfont, fill=(*self._text, 255))
                 cy = ay + 22 * ss
                 for row in generate_rows:                          # a picked kind's choices, in order
                     left = ax
@@ -1495,17 +1491,23 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                         (int(results_x), int(cyy - 2 * ss)))
                     _set_hit("generate:jobs", (int(results_x / ss) - 4, int((cyy - 5 * ss) / ss), int(results_x / ss) + 19,
                                                int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
+                    privacy_x = results_x - 8 * ss - 12 * ss      # privacy: a small '!' with the other icons
+                    self._draw_privacy_mark(d, privacy_x, cyy - 0.5 * ss, 12 * ss)
+                    _set_hit("generate:privacy", (int(privacy_x / ss) - 4, int((cyy - 5 * ss) / ss), int(privacy_x / ss) + 16,
+                                                  int((cyy + 16 * ss) / ss)), min_width=24, min_height=28)
                 # MO's own hover label for the icon-only controls, drawn in the card itself the way
                 # Focus reveals a pin's name: no Windows tooltip window, no delay timer.
                 tip, tip_right = "", 0
                 if callable(getattr(self, "_on_attach", None)) and self._hovering("attach"):
                     tip = "Add references · several at once" if generate_mode else "Attach files · several at once"
-                    tip_right = (results_x if generate_mode else clip_x) - 6 * ss   # never over the other icons
+                    tip_right = (privacy_x if generate_mode else clip_x) - 6 * ss   # never over the other icons
                 if generate_mode and self._hovering("generate:enhance"):
                     tip = "Refining the prompt…" if busy else "Refine the prompt"
-                    tip_right = results_x - 6 * ss
+                    tip_right = privacy_x - 6 * ss
                 if generate_mode and self._hovering("generate:jobs"):
-                    tip, tip_right = "Saved results", results_x - 6 * ss
+                    tip, tip_right = "Saved results", privacy_x - 6 * ss
+                if generate_mode and self._hovering("generate:privacy"):
+                    tip, tip_right = "Privacy", privacy_x - 6 * ss
                 if tip:
                     tip_left = max(box[0] + panel_padding * ss, tip_right - d.textlength(tip, font=self._sfont) - 16 * ss)
                     d.rounded_rectangle((tip_left, cyy - 4 * ss, tip_right, cyy + 15 * ss), radius=button_radius,
@@ -1521,19 +1523,19 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     low, high = box[1] + 40 * ss, cyy - 30 * ss
                     mid = (box[1] + box[3]) // 2
                     mid = min(max(mid, low), high) if low <= high else (box[1] + cyy) // 2
-                    for index in range(3):
+                    for index in range(3):                         # quiet: dim dots, the lit one softly cyan
                         dot_y = mid + (index - 1) * 6 * ss
                         hot = (index < 2 and self._hovering("dots_up")) or (index == 2 and self._hovering("dots_down"))
-                        alpha = 210 if index == lit or hot else 95
+                        alpha = 150 if index == lit or hot else 60
                         color = self._cyan if index == lit or hot else self._muted
-                        d.ellipse([dot_x - 2 * ss, dot_y - 2 * ss, dot_x + 2 * ss, dot_y + 2 * ss], fill=(*color, alpha))
-                    for direction, key in ((-1, "dots_up"), (1, "dots_down")):     # dimmed, clear arrows
-                        tip_y = mid + direction * 21 * ss
+                        d.ellipse([dot_x - 1.6 * ss, dot_y - 1.6 * ss, dot_x + 1.6 * ss, dot_y + 1.6 * ss], fill=(*color, alpha))
+                    for direction, key in ((-1, "dots_up"), (1, "dots_down")):     # small, dimmed arrows
+                        tip_y = mid + direction * 18 * ss
                         hot = self._hovering(key)
-                        color, alpha = (self._cyan, 255) if hot else (self._muted, 170)
-                        d.line([(dot_x - 4 * ss, tip_y - direction * 2.5 * ss), (dot_x, tip_y + direction * 1.5 * ss),
-                                (dot_x + 4 * ss, tip_y - direction * 2.5 * ss)], fill=(*color, alpha),
-                               width=max(1, int(1.4 * ss)), joint="curve")
+                        color, alpha = (self._cyan, 220) if hot else (self._muted, 150)
+                        d.line([(dot_x - 3 * ss, tip_y - direction * 1.8 * ss), (dot_x, tip_y + direction * 1.2 * ss),
+                                (dot_x + 3 * ss, tip_y - direction * 1.8 * ss)], fill=(*color, alpha),
+                               width=max(1, int(1.2 * ss)), joint="curve")
                     mid_y = int(mid / ss)
                     _set_hit("dots_up", (int(dot_x / ss) - 9, mid_y - 27, int(dot_x / ss) + 9, mid_y))
                     _set_hit("dots_down", (int(dot_x / ss) - 9, mid_y, int(dot_x / ss) + 9,
