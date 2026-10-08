@@ -436,6 +436,7 @@ class NativeLayeredWindow(LayeredWindow):
     """One native alpha surface: passive effects or an explicitly interactive panel."""
 
     _WS_POPUP = 0x80000000
+    _WS_EX_TOPMOST = 0x00000008
     _WS_EX_TRANSPARENT = 0x00000020
     _WS_EX_TOOLWINDOW = 0x00000080
     _WS_EX_LAYERED = 0x00080000
@@ -475,6 +476,12 @@ class NativeLayeredWindow(LayeredWindow):
             exstyle |= self._WS_EX_TRANSPARENT
         if not self._interactive or not activate:
             exstyle |= self._WS_EX_NOACTIVATE
+        if not self._target_hwnd:
+            # Born in the always-on-top band it lives in: Windows can ignore a later HWND_TOPMOST
+            # request (measured on his PC 2026-10-08: SetWindowPos returned success, the flag stayed
+            # off), which left the cubes behind ordinary windows. Surfaces placed behind a target
+            # window keep that window's band.
+            exstyle |= self._WS_EX_TOPMOST
         hwnd = api.user32.CreateWindowExW(
             exstyle,
             "Static",
