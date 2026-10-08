@@ -31,13 +31,13 @@ def require_tools(operation: str, references: list[dict]) -> None:
         required.update(("ffmpeg", "ffprobe"))
     missing = sorted(binary for binary in required if not shutil.which(binary))
     if missing:
-        raise ValueError("Required local media tools are missing: " + ", ".join(missing) + ". Check Generate setup; no job was submitted.")
+        raise ValueError("Required local media tools are missing: " + ", ".join(missing) + ". Check Settings → Models & providers → Generate provider; no job was submitted.")
 
 
 def _run(binary: str, args: list[str], *, timeout: int = 90) -> str:
     exe = shutil.which(binary)
     if not exe:
-        raise ValueError(f"{binary} is required for this media operation; use Generate setup.")
+        raise ValueError(f"{binary} is required for this media operation; see Settings → Models & providers → Generate provider.")
     kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
     apply_windows_hidden_process_flags(kwargs)
     try:

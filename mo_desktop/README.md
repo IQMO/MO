@@ -2,18 +2,19 @@
 
 ### Generate: music, images and video
 
-Choose **Generate** through the existing composer role switcher. Its controls are
-two pill rows with no standing sentence (under Auto the second shows only "Song, Image,
-Video"; a progress line appears only while a job or Refine reports), and it grows with
-the prompt like the normal composer, gliding to each new line: drop-down pills, kind first (Auto, Song, Image, Video), then only that
-kind's choices in order (each kind shows its model), a References pill for
+Choose **Generate** through the existing composer role switcher. Beside the role sit the kind
+(Auto, Song, Image, Video), the provider (Kie; its menu opens Settings → Models & providers) and
+the credits balance (read when Generate opens, a click reads it again), all filled drop-down pills
+with no stroke; a shield at the top right dims the panel and says plainly what happens to attached
+files. Nothing is reserved under Auto: a picked kind's choices (its model, type and options) take
+only the rows they need, a progress line appears only while a job or Refine reports, and the
+composer grows with the prompt and while a drop-down needs room, gliding each time. A References pill for
 purpose-labelled files (each dropped or picked file also sits in the sentence at the caret as a
 chip named [Video1], [Image1] or [Audio1] with its role — a clip defaults to motion and a picture
 to subject for a video; clicking a chip opens References, deleting it removes the file and the
 other names stay on their files; resting the pointer on a chip shows a small preview in the card
 — the picture, a clip's first frame or the media mark, with name, length, size and an X that removes the file; Seedance reads
-the names), a dot pill for credits, setup,
-privacy and saved results, a
+the names), a Saved results button and a
 Refine sparkle by Send that rewrites the draft through MO's prompt enhancer under
 the Generate skill's refining rules (press again to restore it), and real
 stage/elapsed progress. The
@@ -198,7 +199,7 @@ preference, automatic activation, or new hotkey.
 The lower-right cube expands into a compact icon-and-title window list. The
 composer similarly expands upward from the upper-right cube, using its existing
 input card, draft, controls and transition clock. As text wraps it grows upward a line at a time, gliding over the
-panel transition time instead of jumping; nothing in the card is scaled. Roles come from the current profile catalog and are selected in a compact opaque dropdown at the role control. The composer's own cube is its search switch: each click turns it, one at a time, from MO chat into Google, YouTube and Google Translate, shown by their brand marks (the same text and default-browser action; the selected service colors the edge), and the composer returns to MO chat each time it opens. Its controls are icons without strokes: a paperclip (Windows' file picker, imported like a drop) next to Send and three dim dots above Send. Up/Down or the dots show MO's earlier replies in the composer itself, which never changes size: a short reply shows whole, a long one its head, the rest of the panel goes dark around that line (never the screen) and is not clickable (a click there returns to normal; a click on the lit message opens it in full), and the history button appears at the top; typing, Enter, Escape or Down past the newest returns to the draft. With both open, the two left
+panel transition time instead of jumping; nothing in the card is scaled. Roles come from the current profile catalog and are selected in a compact opaque dropdown at the role control. The composer's own cube is its search switch: each click turns it, one at a time, from MO chat into Google, YouTube and Google Translate, shown by their brand marks (the same text and default-browser action; the selected service colors the edge), and the composer returns to MO chat each time it opens. Its controls are icons without strokes: a paperclip (Windows' file picker, imported like a drop) next to Send and three dim dots at the right edge, centred, with an arrow above and below. Up/Down or the dots show MO's earlier replies in the composer itself, which never changes size: a short reply shows whole, a long one its head, the rest of the panel goes dark around that line (never the screen) and is not clickable (a click there returns to normal; a click on the lit message opens it in full), and the history button appears at the top; typing, Enter, Escape or Down past the newest returns to the draft. With both open, the two left
 cubes remain visible. Its small cube control folds the composer back. The single
 cube at the top of Focus folds the list
 back into the four-cube form. Its lower-right cube is then slightly larger and

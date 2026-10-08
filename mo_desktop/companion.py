@@ -1847,6 +1847,7 @@ class CompanionSurface(
     def set_voice_role(self, role: str) -> None:
         value = re.sub(r"[\r\n]+", " ", str(role or "")).strip()[:500]
         self.set_voice_role_active(bool(value), selected_role=value)
+        self._read_generate_credits_if_stale()
 
     def conversation_role_options(self) -> tuple[str, ...]:
         """Return the profile roles already available to Desktop settings."""
@@ -2189,8 +2190,9 @@ class CompanionSurface(
                 live_applied = False
         return {"saved": saved, "live_applied": live_applied}
 
-    def open_settings_panel(self) -> None:
-        """Open the compact MO Desktop settings panel (from the tray)."""
+    def open_settings_panel(self, page: str = "") -> None:
+        """Open the compact MO Desktop settings panel (from the tray), optionally at a section."""
+        self._settings_open_page = str(page or "")
         with self._settings_open_lock:
             if self._settings_open_pending:
                 return
@@ -2207,7 +2209,7 @@ class CompanionSurface(
             if getattr(self, "_settings_panel", None) is None:
                 self._settings_panel = SettingsPanel(self)
             options = self._app_launch_options("settings")
-            self._settings_panel.open(**options)
+            self._settings_panel.open(page=getattr(self, "_settings_open_page", ""), **options)
             self._pulse_desktop_app("settings")
         except Exception:
             if options.get("on_ready"):
@@ -2994,14 +2996,15 @@ class CompanionSurface(
         if settings(self._config()).get("enabled") is not True:
             return
         self._generate_credit_busy = True
+        self._generate_credit_at = time.time()
 
         def refresh():
             from core.media.kie import credits
             try:
                 balance = credits(self._config())
-                label = f"{balance['credits']:g} cr · {time.strftime('%H:%M', time.localtime(balance['checked_at']))}"
+                label = f"{balance['credits']:g} cr"
             except Exception:
-                label = "Credits unavailable · retry"
+                label = "Credits · retry"
             finally:
                 self._generate_credit_busy = False
             def present():
@@ -3071,26 +3074,22 @@ class CompanionSurface(
         threading.Thread(target=refine, name="mo-generate-refine", daemon=True).start()
 
     def _generate_action(self, action: str, value: str = "") -> None:
-        """One pick from a Generate drop-down. More and References carry their own action
-        (credits, setup, privacy, jobs; reference:<i>); every other pill sets its choice."""
+        """One Generate control: Refine, the credits pill, Saved results and the provider's
+        settings act at once; References carry reference:<i>; every other pill sets its choice."""
         bubble = getattr(self, "_bubble", None)
         if not bubble:
             return
-        if action in {"more", "refs"}:
+        if action == "refs":
             action, value = value, ""
         if action == "enhance":
             self._refine_generate_prompt(bubble)
             return
-        if action == "setup":
-            self.open_settings_panel()
+        if action == "provider":
+            if value == "settings":                       # the provider's key lives with the model providers
+                self.open_settings_panel(page="models")
             return
         if action == "credits":
             self._refresh_generate_credits()
-            return
-        if action == "privacy":
-            from core.media.catalog import PRIVACY_NOTICE
-            self._show_on_reply_surface("media privacy", lambda view: view.show(
-                PRIVACY_NOTICE, action_label="Back to Generate", on_action=self._display_input_dialog))
             return
         if action == "jobs":
             self._show_media_jobs()
@@ -4987,6 +4986,14 @@ class CompanionSurface(
             ),
         ):
             self._visible = True
+            self._read_generate_credits_if_stale()
+
+    def _read_generate_credits_if_stale(self) -> None:
+        """Generate shows its balance on the composer: read it when Generate opens, at most every
+        ten minutes (a click on the balance reads it at once)."""
+        if (self._active_skill_role_label().casefold() == "generate"
+                and time.time() - float(getattr(self, "_generate_credit_at", 0.0) or 0.0) > 600):
+            self._refresh_generate_credits()
 
     def _attach_from_composer(self) -> None:
         """The composer's attach button: Windows' file picker (several files at once, e.g. the

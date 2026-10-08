@@ -52,9 +52,11 @@
           </section>
           <div class="page-action"><button class="quiet" data-action="show_cube">Show my cubes</button></div>
         </section>
-        <section data-section="connections" class="page-section">
-          <section class="setting-group" data-search="create kie suno seedance music video images privacy key cloudflare">
-            <div class="group-heading"><h2>Generate setup · Kie</h2><button class="quiet" id="media-refresh">Check readiness</button></div>
+        <section data-section="models" class="page-section">
+          <section class="setting-group"><div class="group-heading"><h2>Running MO</h2><button class="quiet" id="refresh-models">Refresh instances</button></div><div id="running-models"></div></section>
+          <section class="setting-group"><div class="group-heading"><h2>Model selection</h2></div><p class="group-description">Choose where this change applies. A Terminal default is separate from the model already running in each open Terminal.</p><div id="model-target"></div><div id="model-controls"></div><div class="group-actions"><button id="apply-model" class="button primary">Save model choice</button><button id="follow-model" class="quiet">Follow Terminal provider</button><span class="muted" id="model-note"></span></div></section>
+          <section class="setting-group" data-search="generate provider create kie suno seedance music video images privacy key cloudflare">
+            <div class="group-heading"><h2>Generate provider · Kie</h2><button class="quiet" id="media-refresh">Check readiness</button></div>
             <p class="group-description">Use your own Kie account. The key is saved directly in MO's private provider credential store, never in chat or diagnostics.</p>
             <div class="group-actions"><input id="media-key" type="password" autocomplete="off" spellcheck="false" aria-label="Kie API key" placeholder="Paste your Kie API key"><button id="media-key-save" class="button">Save key privately</button></div>
             <p id="media-status" class="muted">Readiness not checked.</p>
@@ -62,10 +64,6 @@
             <div class="group-actions"><button id="media-install" class="quiet">Install optional reference helper</button></div>
             <p class="muted">Installation downloads a checksum-verified Cloudflare helper only when you confirm. MO starts and stops it as needed; no server or domain setup. Audio/video preparation also requires FFmpeg and FFprobe. The no-account tunnel has no uptime guarantee; failure never falls back to another upload host.</p>
           </section>
-        </section>
-        <section data-section="models" class="page-section">
-          <section class="setting-group"><div class="group-heading"><h2>Running MO</h2><button class="quiet" id="refresh-models">Refresh instances</button></div><div id="running-models"></div></section>
-          <section class="setting-group"><div class="group-heading"><h2>Model selection</h2></div><p class="group-description">Choose where this change applies. A Terminal default is separate from the model already running in each open Terminal.</p><div id="model-target"></div><div id="model-controls"></div><div class="group-actions"><button id="apply-model" class="button primary">Save model choice</button><button id="follow-model" class="quiet">Follow Terminal provider</button><span class="muted" id="model-note"></span></div></section>
         </section>
         <section data-section="projects" class="page-section"><section class="setting-group"><div class="group-heading"><h2>Language servers by project</h2></div><p class="group-description">Default follows the authored LSP policy. On and Off apply to the selected project only; diagnostics still require a configured server.</p><div id="lsp-controls"></div></section><section class="setting-group"><div class="group-heading"><h2>Project graph</h2></div><p class="group-description">These profile preferences apply to the next graph operation. Explicit environment switches take precedence.</p><div id="graph-controls"></div></section><section class="setting-group"><div class="group-heading"><h2>Language-server setup</h2></div><p class="group-description" id="lsp-servers"></p><details class="server-editor"><summary>Add or update a language server</summary><p class="scope-note">Choose an executable already installed on this machine. Updating a language preserves its other options. Existing command arguments stay private until you replace them here.</p><form id="lsp-server-form"><label>Language<input type="text" id="lsp-language" placeholder="python" maxlength="40" required></label><label>Executable<input type="text" id="lsp-command" placeholder="pylsp" maxlength="1000" required></label><label>Arguments · one per line<textarea id="lsp-args" rows="3" placeholder="--stdio"></textarea></label><button class="button primary">Save server configuration</button></form></details></section></section>
         <section data-section="connections" class="page-section">

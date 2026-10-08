@@ -7,7 +7,7 @@ backends and local explainer rendering remain independent.
 
 ## Setup and use
 
-1. Settings → Tools & connections → Generate setup: save a Kie API key in the
+1. Settings → Models & providers → Generate provider · Kie: save a Kie API key in the
    password field and enable creation. The native broker writes directly to the
    profile's canonical `credentials/providers.env` (`KIE_API_KEY` by default).
    Never paste keys in chat. Key values do not enter the Settings event pipe.
@@ -15,10 +15,11 @@ backends and local explainer rendering remain independent.
    reference helper and enable sharing. MO verifies the official Cloudflare
    release's published SHA-256 digest. No account, domain, manually run server
    or upload bucket is needed. Installation/enabling starts no tunnel or job.
-3. Choose Generate through the composer role switcher. Its controls are two rows
-   of drop-down pills (under Auto the second shows only "Song, Image, Video"); a
-   progress line appears only while a job or Refine reports, and like the normal
-   composer it grows with the prompt, gliding to each new line. Pick the kind first
+3. Choose Generate through the composer role switcher. Beside the role sit the
+   kind, the provider (Kie) and the credits balance; nothing is reserved under
+   Auto, a picked kind's choices take only the rows they need, a progress line
+   appears only while a job or Refine reports, and like the normal composer it
+   grows with the prompt, gliding to each new line. Pick the kind first
    (Auto, Song, Image or Video; Auto lets the request's words decide); only that
    kind's choices then appear, in order (type, its model: Suno, Seedream or
    Seedance, then duration/resolution/aspect, quality/aspect or vocals). Files
@@ -27,8 +28,9 @@ backends and local explainer rendering remain independent.
    with MO's own prompt enhancer (the Terminal's Ctrl+E), guided by the Generate
    skill's "Refining a request" rules: same goal and scope, precise for the
    chosen generator; press it again for your own words. Attached files get
-   one References pill whose menu sets each file's purpose or removes it; the dot
-   pill holds credits, Kie setup, privacy and saved results. Describe the result
+   one References pill whose menu sets each file's purpose or removes it; the
+   shield at the top right explains privacy and a footer button opens saved
+   results. Describe the result
    and send. Choices are captured at submission, including queued requests, and
    enforced independently of model prose.
 4. MO prepares copies, submits once, checks progress and saves results. The ready

@@ -17,7 +17,8 @@ class SettingsPanel(NativeAppWindow):
         super().__init__(getattr(getattr(companion, "_agent", None), "config", {}))
         self._hwnd = 0
 
-    def open(self, *, on_source: Any = None, on_started: Any = None, on_ready: Any = None) -> None:
+    def open(self, *, on_source: Any = None, on_started: Any = None, on_ready: Any = None, page: str = "") -> None:
+        self._open_page = str(page or "")        # a section to open at (Generate's Provider settings: models)
         super().show(on_source=on_source, on_started=on_started, on_ready=on_ready)
 
     def snapshot(self) -> dict[str, Any]:
@@ -57,6 +58,7 @@ class SettingsPanel(NativeAppWindow):
         except PackageNotFoundError:
             build = "development checkout"
         return {
+            "page": self.__dict__.pop("_open_page", ""),
             "version": build,
             "controls": controls(values), "skin": theming.get_skin_name(),
             "skins": [{"id": key, "label": theming.skin_display_name(key),

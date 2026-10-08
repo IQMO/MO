@@ -61,7 +61,7 @@ changes use its GUI queue. Failed persistence is visibly unsaved.
 
 ## Verification and Design
 
-Generate setup lives in Tools & connections: private key entry, readiness, creation
+Generate's provider lives in Models & providers (Generate provider · Kie, beside the model providers and in the same provider credential store): private key entry, readiness, creation
 and sharing opt-ins, music/video defaults and explicit reference-helper install.
 Only `media.*` configuration changes apply to the next request without reload;
 submitted provider options are already captured. Credit balance is not a quote.

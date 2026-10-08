@@ -103,7 +103,7 @@ def create(config: dict, session_id: str, turn_id: str, *, operation: str, model
     from .references import ReferenceLease, revoke
 
     if settings(config).get("enabled") is not True:
-        raise ValueError("Media creation is off. Enable Kie generation in MO Settings or Generate setup.")
+        raise ValueError("Media creation is off. Enable Kie generation in Settings → Models & providers → Generate provider.")
     if not session_id or not turn_id:
         raise ValueError("Media generation requires a live conversation and request identity.")
     kie.check_network(config, kie.API_ORIGIN)

@@ -67,7 +67,14 @@ OPTION_ORDER = {"song": ("instrumental",), "image": ("quality", "aspect_ratio"),
                 "video": ("duration", "resolution", "aspect_ratio")}
 DEFAULTS = {"song": {"instrumental": False}, "image": {"quality": "basic", "aspect_ratio": "1:1"},
             "video": {"duration": 5, "resolution": "720p", "aspect_ratio": "16:9"}}
-MORE = (("credits", ""), ("setup", "Kie setup"), ("privacy", "Privacy"), ("jobs", "Saved results"))
+PROVIDERS = (("kie", "Kie"),)            # core/media generates through Kie; its key lives with the model providers
+# What the composer's privacy icon says, plainly (core.media.catalog.PRIVACY_NOTICE is the full contract).
+PRIVACY_LINES = (
+    "Files stay on this PC until you send.",
+    "Sending gives Kie a copy by a short link.",
+    "MO then closes it; Kie keeps its copy.",
+    "Results stay 14 days at Kie.",
+)
 
 
 def kind_of(operation: str | None) -> str:
@@ -130,24 +137,28 @@ def _option_values(key: str, model: str) -> tuple:
     }[key]
 
 
-def pill_rows(selection: dict, reference_count: int = 0) -> list[list[tuple[str, str]]]:
-    """Two rows, always: [kind, model, references?, more] and the picked kind's type and
-    options in order (empty under Auto, where the composer shows a one-line hint). Every picked
-    kind shows its model (Suno, Seedream, Seedance), even when it has only one."""
+def top_pills(selection: dict, credit: str = "") -> list[tuple[str, str]]:
+    """The composer's top row beside the role: the kind (Auto first), the provider and the credits
+    balance, shown rather than kept in a menu (his order 2026-10-08)."""
+    return [("kind", dict(KINDS)[kind_of(selection.get("operation"))]), ("provider", dict(PROVIDERS)["kie"]),
+            ("credits", credit or "Credits")]
+
+
+def option_pills(selection: dict, reference_count: int = 0) -> list[tuple[str, str]]:
+    """The picked kind's choices in order (its model, type, then options), and the References
+    pill once files are attached; nothing under Auto, where the request's words decide. The
+    composer flows these into as many rows as they need."""
     operation = selection.get("operation")
     kind = kind_of(operation)
-    first = [("kind", dict(KINDS)[kind])]
+    pills: list[tuple[str, str]] = []
     if kind:
-        first.append(("model", _short_model(selection.get("model") or "")))
-    if reference_count:
-        first.append(("refs", f"{reference_count} reference{'s' if reference_count != 1 else ''}"))
-    first.append(("more", "More"))
-    second: list[tuple[str, str]] = []
-    if kind:
-        second.append(("type", OPERATIONS[operation][0]))
+        pills.append(("model", _short_model(selection.get("model") or "")))
+        pills.append(("type", OPERATIONS[operation][0]))
         options = {**DEFAULTS[kind], **dict(selection.get("options", {}))}
-        second.extend((key, _option_label(key, options[key])) for key in OPTION_ORDER[kind])
-    return [first, second]
+        pills.extend((key, _option_label(key, options[key])) for key in OPTION_ORDER[kind])
+    if reference_count:
+        pills.append(("refs", f"{reference_count} reference{'s' if reference_count != 1 else ''}"))
+    return pills
 
 
 _REFINE_HEADING = "## Refining a request"
@@ -181,8 +192,7 @@ def refine_guidance(skill_body: str, selection: dict, references: list[tuple[str
     return f"{rules}\n\nThis request: {target}."
 
 
-def menu(selection: dict, key: str, *, references: list[tuple[str, str]] = (),
-         credit: str = "Credits · refresh") -> tuple[list[tuple[str, str]], str]:
+def menu(selection: dict, key: str, *, references: list[tuple[str, str]] = ()) -> tuple[list[tuple[str, str]], str]:
     """The drop-down behind one pill: ``(choices as (value, label), selected value)``."""
     operation = selection.get("operation")
     kind = kind_of(operation)
@@ -192,8 +202,8 @@ def menu(selection: dict, key: str, *, references: list[tuple[str, str]] = (),
         return [(op, OPERATIONS[op][0]) for op in TYPES[kind]], str(operation)
     if key == "model":
         return [(m, _short_model(m)) for m in OPERATIONS[operation][1]], str(selection.get("model") or "")
-    if key == "more":
-        return [(value, credit if value == "credits" else label) for value, label in MORE], ""
+    if key == "provider":
+        return [*PROVIDERS, ("settings", "Provider settings")], "kie"
     if key == "refs":
         return [(f"reference:{index}", f"{role} · {name}") for index, (role, name) in enumerate(references)], ""
     current = {**DEFAULTS[kind], **dict(selection.get("options", {}))}.get(key)

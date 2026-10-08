@@ -78,7 +78,7 @@ CONFIGURATION_GROUPS = (
     ("connections", "Image generation", "Generation is separate from reading images. Availability also depends on the configured backend and credentials.", (
         ("image.backend", "Generation backend", ("auto", "codex", "openai_compatible", "off")),
     )),
-    ("connections", "Generate · Kie media", "Suno music, Seedream images and Seedance videos in the existing Generate composer. Each requested generation may spend credits. Generate setup checks the private provider key and optional reference helper.", (
+    ("models", "Generate · Kie models and sharing", "Suno music, Seedream images and Seedance videos in the existing Generate composer. Each requested generation may spend credits. Generate provider above checks the private provider key and optional reference helper.", (
         ("media.enabled", "Kie creation", "bool"),
         ("media.reference_sharing", "Temporary reference sharing", "bool"),
         ("media.music_model", "Suno model", ("V6", "V6_MINI", "V6_WILD")),

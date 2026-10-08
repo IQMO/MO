@@ -240,6 +240,7 @@
   }
   function render(next) {
     const first = !state; state = next;
+    if (next.page && descriptions[next.page]) page = next.page;   // opened at a section (Generate's Provider settings)
     if (first) buildControls();
     else state.controls.forEach(field => { const binding = bindings.get(field.id); if (!binding.root.contains(document.activeElement)) binding.update(field.value); });
     $('startup').checked = state.startup;

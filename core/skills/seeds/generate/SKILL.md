@@ -22,7 +22,7 @@ honor the operator's chosen method instead of substituting this one.
 1. Read `media action=catalog` for readiness and supported models. Desktop Generate
    controls and reference purposes belong to the submitted request, not the
    conversational language model. Respect them. Missing setup belongs in
-   Settings → Tools & connections → Generate; never ask for a key in chat.
+   Settings → Models & providers → Generate provider; never ask for a key in chat.
 2. Convert the requested idea into the supported operation and options. Routine
    preparation, progress checks and local saving are MO's work. Do not require
    the user to run servers, commands, manage URLs or repeat settings. Ask only
