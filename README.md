@@ -71,7 +71,7 @@ Task truth, verification, final gates, goals and reviews run on evidence.
 
 - **Done means proven** — *Automatic.* A task only closes with tool evidence; unverified results are said plainly.
 - **Live taskboard** — *Automatic for real work.* Rows with dependencies and approval gates; resume where you left off.
-- **Goals** — */goal <task>.* Autonomous multi-step work audited against your own rules; Ctrl+G sends it to the background.
+- **Goals** — */goal <task>.* Autonomous multi-step work audited against your own rules; Ctrl+G sends it to the background; /goal pause lets the current step finish, then pauses.
 - **Project Review Team** — */prt.* A review of your changes with evidence and a score; confirmed issues handed back for fixing.
 - **PRT on GitHub** *(setup)* — *Enable GitHub delivery.* Posts PR reviews and a status check, answers PR questions, plans issues.
 - **Docs stay in step** — *Automatic.* Flags code changes whose documentation wasn't updated.
@@ -86,7 +86,7 @@ Saved, resumable, honest sessions; portable conversations; continuity across sur
 - **Interrupted work is kept** — *Automatic.* If a turn is cut off (stop, crash or power loss), your request and the tool work already done stay in history, marked interrupted; nothing resumes on its own.
 - **Continuity** — *"What were we busy with?".* Answers from real runtime state, then memory; resumable banners.
 - **Handoff instead of forgetting** — *Automatic on long sessions.* Long contexts continue without destructive compaction.
-- **Several terminals at once** — *Open another terminal; /heartbeat instances.* Each terminal keeps its own conversation; MO sees what its sibling terminals are doing and checks before touching shared work.
+- **Several terminals at once** — *Open another terminal; /heartbeat instances.* Each terminal keeps its own conversation; MO sees what its sibling terminals and MO Desktop are doing, checks before touching shared work, and running MOs can message each other (delivered once, never as an instruction).
 - **Portable sessions** — */session share.* Named conversations that move between surfaces.
 - **Continuity across surfaces** *(setup)* — *Automatic once your Hub is set up.* Each surface shares a short note of intent, outcome and next step through your Hub, so the phone, Desktop or another terminal knows where things stand; never raw transcripts, tool output or secrets.
 - **Continue on…** *(closed test)* — *History → Continue on.* Move a conversation to the terminal, Desktop, another phone or Telegram.
