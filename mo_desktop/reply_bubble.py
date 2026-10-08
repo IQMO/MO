@@ -699,7 +699,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 menu_owner = str((open_menu or {}).get("owner", ""))
                 for row_index, row in enumerate(generate_rows):
                     if not row:
-                        hint = "Pick Song, Image or Video for its model and options, or just describe it"
+                        hint = "Generate an image, a video or a song"
                         d.text((ax, cy + 4 * ss), card.fit_text(d, hint, content_width * ss, self._sfont),
                                font=self._sfont, fill=(*self._muted, 255))
                     left, gap = ax, 5 * ss
