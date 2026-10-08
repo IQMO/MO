@@ -28,6 +28,7 @@ from .preparation import prepare
 _LEASES: dict[str, "ReferenceLease"] = {}
 _LOCK = threading.RLock()
 REFERENCE_TTL = 1800
+_PUBLISH_GRACE = 6.0     # seconds after cloudflared registers the tunnel before this computer's first DNS lookup
 
 
 class _ReferenceServer(ThreadingHTTPServer):
@@ -104,6 +105,8 @@ class ReferenceLease:
         self.files: dict[str, dict] = {}
         self.references: list[dict] = []
         self.base_url = ""
+        self.ready_at = 0.0
+        self.registered_at = 0.0
         self.ready = threading.Event()
         self.health_path = "/ready/" + secrets.token_hex(32)
         try:
@@ -156,29 +159,46 @@ class ReferenceLease:
             if self.closed or (cancel is not None and cancel.is_set()):
                 self.close()
                 raise InterruptedError("Reference preparation stopped before submission.")
-            if self.ready.wait(.5):
-                failure = "Temporary reference sharing could not be reached; nothing was submitted."
-                try:
-                    check_network(self.config, self.base_url)
-                    conn, target = _connection(self.base_url + self.health_path)
-                    try:
-                        conn.request("GET", target)
-                        response = conn.getresponse()
-                        if response.status == 200 and response.read(16) == b"ready":
-                            return [{"kind": r["kind"], "role": r["role"], "url": self.base_url + r["route"]}
-                                    for r in self.references]
-                    finally:
-                        conn.close()
-                except socket.gaierror:
-                    failure = "This computer could not resolve the temporary reference hostname. Check DNS/network availability; nothing was submitted."
-                except (OSError, ValueError, http.client.HTTPException):
-                    pass
+            if not self.ready.wait(.5):
+                continue
+            if not self._lookup_allowed():
                 if cancel is not None:
-                    cancel.wait(1)
+                    cancel.wait(.25)
                 else:
-                    time.sleep(1)
+                    time.sleep(.25)
+                continue
+            failure = "Temporary reference sharing could not be reached; nothing was submitted."
+            try:
+                check_network(self.config, self.base_url)
+                conn, target = _connection(self.base_url + self.health_path)
+                try:
+                    conn.request("GET", target)
+                    response = conn.getresponse()
+                    if response.status == 200 and response.read(16) == b"ready":
+                        return [{"kind": r["kind"], "role": r["role"], "url": self.base_url + r["route"]}
+                                for r in self.references]
+                finally:
+                    conn.close()
+            except socket.gaierror:
+                failure = "This computer could not resolve the temporary reference hostname. Check DNS/network availability; nothing was submitted."
+            except (OSError, ValueError, http.client.HTTPException):
+                pass
+            if cancel is not None:
+                cancel.wait(1)
+            else:
+                time.sleep(1)
         self.close()
         raise ValueError(failure)
+
+    def _lookup_allowed(self) -> bool:
+        """A quick tunnel's hostname is published a moment after cloudflared registers the tunnel, and how long that
+        takes varies. Asked earlier, DNS answers 'does not exist' and a home router keeps that answer for minutes
+        (measured 2026-10-08 on his PC: asked at once, every lookup failed for 75 s; Cloudflare's public DNS answered
+        2.4 s after the address appeared; seven first lookups 3-4 s after registration all resolved). So this
+        computer's first lookup waits twice that after registration, or after the address if no registration line
+        is seen."""
+        start = float(getattr(self, "registered_at", 0.0) or 0.0) or float(getattr(self, "ready_at", 0.0) or 0.0)
+        return bool(start) and time.monotonic() >= start + _PUBLISH_GRACE
 
     def _read_tunnel(self):
         try:
@@ -186,7 +206,10 @@ class ReferenceLease:
                 match = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com\b", line)
                 if match and not self.ready.is_set():
                     self.base_url = match.group(0)
+                    self.ready_at = time.monotonic()
                     self.ready.set()
+                if "Registered tunnel connection" in line and not self.registered_at:
+                    self.registered_at = time.monotonic()
                 # Always drain, but never retain or log capability URLs.
         finally:
             self.close()

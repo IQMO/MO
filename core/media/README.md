@@ -82,7 +82,9 @@ not a Suno singing identity. Kling is not a fallback.
 - Quick Tunnels have no uptime guarantee. Setup failure submits nothing. A later
   outage preserves the task identity and never causes automatic paid resubmission.
   Failed local DNS resolution is reported without exposing the temporary hostname.
-  MO does not change DNS settings or silently bypass the system resolver.
+  MO does not change DNS settings or silently bypass the system resolver. Its first
+  lookup of the temporary hostname waits about 6 s after the tunnel registers: asked
+  earlier, a home router can keep a "does not exist" answer for minutes.
 - Reference/result URLs and raw provider payloads do not enter job records or
   model results. Credentials go only to the fixed Kie API origin. Downloads carry
   no API credentials and check policy, redirects and public DNS addresses at the
