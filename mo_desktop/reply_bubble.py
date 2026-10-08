@@ -2453,15 +2453,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if getattr(self, "_mode", "reply") == "input" and bool(getattr(self, "_visible", False)):
             self._stash_input_draft()
         self._keyboard_hit = ""
-        was_status = getattr(self, "_panel_state", None) == PanelState.STATUS
-        previous = str(getattr(self, "_status_text", "") or "")
         transition = self._prepare_panel_show("status", PanelState.STATUS)
         self._status_text = " ".join(str(text or "").split())[:120]
-        # This turn's earlier steps, shown dim under the current one; a new turn starts empty.
-        trail = list(getattr(self, "_status_trail", []) or []) if was_status else []
-        if was_status and previous and previous != self._status_text and (not trail or trail[-1] != previous):
-            trail.append(previous)
-        self._status_trail = trail[-3:]
         return self._repaint_for_panel_show(transition)
 
     def show_session_history(
