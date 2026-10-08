@@ -440,6 +440,7 @@ mo_desktop:
     chat_enabled: false             # continuous listen -> reply -> listen; manual double-Alt stays separate
     conversation_provider: ""       # provider name for fast spoken replies; empty = MO's active provider
     speech_rate: 1.0                # Piper pace multiplier from 0.5 to 2.0; 1.0 keeps the model default
+    spoken_max_chars: 320           # how much of a reply is spoken (80-4000); raise it to hear whole passages, e.g. a book read aloud
     arabic_model: ""                # absolute path to an Arabic Piper voice (.onnx + .onnx.json) you placed; empty = Arabic stays unspoken
     clone_model: ""                 # absolute path to YOUR OWN trained RVC voice (.pth); empty = MO's plain voice
     clone_index: ""                 # optional matching .index for the clone

@@ -167,7 +167,7 @@ The Terminal: workspace and panes, code graph and maps, roles and workers, prese
 - **Background workers** — *Ask for parallel work; /activity.* Workers in their own sessions, with completion notices and conflict detection.
 - **Roles** — */role <name>.* Reusable perspectives that govern a conversation, workers or schedules.
 - **Project Architect** — */role project-architect.* Calibrates a project and dispatches specialists it registers from evidence.
-- **Life-story book** — *Activate the life-story role.* MO interviews you one question at a time and writes your book (PDF, EPUB or print), never inventing facts.
+- **Book Writer** — */role activate book-writer.* MO writes a book on any subject you pick (PDF, EPUB or print), keeps your library of books, and reads them aloud on request; it never invents facts about real people or events.
 - **Game Collaboration** — */game start.* A game project's questions, decisions, proposals and approvals, kept in one place.
 - **Skins and window effects** — *Settings.* Pick or make a skin, and a window effect for every MO window.
 - **Prompt enhancer** — *Ctrl+E while typing.* Rewrites your own request more clearly before you send it.
@@ -638,7 +638,7 @@ this default container.
   focused verification, followed by reassessment until the target is met or
   further progress is blocked with a reason and actual score.
 - Persistent scheduled turns, goals, roles, and approved private scripts.
-- Profile-authored skill-backed roles govern interactive conversations and background work. `Project Architect` coordinates project-bound specialist packs through MO's existing worker runtime; `Life Story Book Writer` resumes from `BOOK-STATE.md` in the user-selected workspace and follows the user's chosen production format. Role packs do not replace MO's sandbox, authority, or confirmation gates.
+- Profile-authored skill-backed roles govern interactive conversations and background work. `Project Architect` coordinates project-bound specialist packs through MO's existing worker runtime; `Book Writer` keeps the user's library in `LIBRARY.md` in their chosen books folder, resumes each book from its `BOOK-STATE.md`, and follows the user's chosen production format. Role packs do not replace MO's sandbox, authority, or confirmation gates.
 - Optional resumable cross-surface file cargo with stable device targeting,
   sender retry custody, chunk and whole-file verification, and target receipts.
 - Bounded MO Files views on Desktop and Android discover the current hub, each

@@ -1046,6 +1046,7 @@ Common settings:
 | `voice.stt_worker_timeout_seconds` | `180` | Whisper worker request ceiling |
 | `voice.tts_enabled` | `false` | Also speak replies to typed requests |
 | `voice.speech_rate` | `1.0` | Piper speaking pace multiplier (0.5–2.0; 1.0 preserves the installed voice's default pace) |
+| `voice.spoken_max_chars` | `320` | How much of a reply is spoken (80–4000); longer replies end with "The full answer is in the bubble." Raise it to hear whole passages, such as a book read aloud. The visible reply never changes |
 | `voice.chat_enabled` | `false` | Continuous listen → reply → listen mode, separate from manual double-Alt input |
 | `voice.conversation_provider` | `""` | Configured provider name that answers spoken requests (a fast, non-reasoning model works best); empty uses MO's active provider. Settings → Voice → **Spoken replies** changes it live |
 | `voice.arabic_model` | `""` | Absolute path to an Arabic Piper voice (`.onnx` with its `.onnx.json`) you placed yourself; empty keeps Arabic unspoken |

@@ -896,9 +896,11 @@ interaction clock must not become an always-running background animation.
   specialist registration, dispatch and reports still require Project Architect.
   Desktop text and voice reuse the same role packs and their isolated session
   metadata; a tool selection updates that Desktop role without changing Terminal.
-  The Life Story Book Writer resumes its manuscript
-  from the selected workspace's `BOOK-STATE.md`; a Design preview is separate
-  from a verified PDF, EPUB or print export.
+  The Book Writer keeps its library in the chosen books folder's `LIBRARY.md`
+  and resumes each book from that book's `BOOK-STATE.md`; reading aloud is a
+  plain-prose reply spoken by the existing voice path (`voice.spoken_max_chars`
+  bounds it); a Design preview is separate from a verified PDF, EPUB or print
+  export.
 - A role's cube character follows its name (`characters.character_for_role`, matched by
   neutral kind, never a profile-specific name): coach/reviewer roles get the watching face;
   writer roles turn the four cubes into three short lines of text and a caret, in the skin's
