@@ -23,7 +23,10 @@ when that source tree is present.
   `ReplyBubble._remove_reference` is the one removal owner (chip menu, Backspace/Delete,
   clearing the sentence, Generate's References menu), keeping each other name on its file.
   Generate sends the names to the provider as written; elsewhere `_submit_from_input` appends
-  the attached-files note so MO hears which file each name means.
+  the attached-files note so MO hears which file each name means. A chip's hover preview is
+  drawn in the card (`_draw_chip_glance`, reusing `_image_attachment_preview`) from facts and a
+  clip's first frame that `companion._glance_at` reads once in the import thread — never
+  FFmpeg on hover or on the GUI lane.
   Results, continuation and cleanup bind exact session/job/variation identities.
   Do not claim provider deletion, a countdown, voice enrollment or live UI/provider
   acceptance from configuration or mock tests.

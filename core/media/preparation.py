@@ -140,12 +140,21 @@ def prepare(source: Path, directory: Path, index: int, operation: str, model: st
     return target, clean_info
 
 
+def _decode_frame(source: Path, target: Path, pick: list[str], *, timeout: int) -> None:
+    _run("ffmpeg", ["-v", "error", "-nostdin", "-threads", "1", "-protocol_whitelist", "file,pipe",
+                     "-format_whitelist", _DEMUXERS, "-i", str(source), "-map", "0:v:0",
+                     "-an", "-sn", "-dn", "-map_metadata", "-1", "-threads", "1",
+                     *pick, "-y", str(target)], timeout=timeout)
+
+
 def final_frame(source: Path, target: Path) -> None:
     """Decode the actual final frame, without a guessed timestamp or provider thumbnail."""
     if probe(source)["kind"] != "video":
         raise ValueError("Video continuation needs a video parent.")
-    _run("ffmpeg", ["-v", "error", "-nostdin", "-threads", "1", "-protocol_whitelist", "file,pipe",
-                     "-format_whitelist", _DEMUXERS, "-i", str(source), "-map", "0:v:0",
-                     "-an", "-sn", "-dn", "-map_metadata", "-1", "-threads", "1",
-                     "-update", "1", "-y", str(target)], timeout=120)
+    _decode_frame(source, target, ["-update", "1"], timeout=120)
     probe(target)
+
+
+def first_frame(source: Path, target: Path) -> None:
+    """Decode a clip's first frame for a local preview; nothing leaves this computer."""
+    _decode_frame(source, target, ["-frames:v", "1"], timeout=30)

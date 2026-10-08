@@ -367,14 +367,94 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
             img.alpha_composite(make_glyph_icon("file", size, color="#%02x%02x%02x" % tuple(self._cyan[:3])), (tx, ty))
         else:
-            d.ellipse((tx, ty, tx + size, ty + size), fill=(*self._cyan, 235))
-            d.polygon([(tx + 5 * ss, ty + 3.5 * ss), (tx + 5 * ss, ty + size - 3.5 * ss), (tx + size - 3 * ss, ty + size / 2)],
-                      fill=(*self._card, 255))
+            self._play_mark(d, tx, ty, size)
         lx = x + (4 + 16 + 5) * ss
         d.text((lx, y + 3 * ss), label, font=font, fill=(*self._text, 255))
         d.text((lx + self._text_width(d, label, font) + 5 * ss, y + 3 * ss), role, font=font, fill=(*self._cyan, 255))
         self._hit[f"chip:{info['index']}"] = (int(x / ss), int(top / ss), int((x + width) / ss), int(bottom / ss))
         return width
+
+    def _play_mark(self, d: Any, x: float, y: float, size: float) -> None:
+        """MO's media mark (the media card's play disc) at any size."""
+        d.ellipse((x, y, x + size, y + size), fill=(*self._cyan, 235))
+        d.polygon([(x + size * .36, y + size * .25), (x + size * .36, y + size * .75), (x + size * .79, y + size / 2)],
+                  fill=(*self._card, 255))
+
+    def _draw_chip_glance(self, d: Any, img: Any, box: Any, rect: tuple[int, int, int, int], index: int) -> None:
+        """A quick look at the file under the pointer, drawn in the card like the hover labels (no Windows
+        tooltip window, no timer) above or below its chip: the picture itself, a clip's first frame or MO's media
+        mark, with its name and what it is beside it."""
+        from pathlib import Path
+        from PIL import Image, ImageDraw
+
+        paths = [str(p) for p in getattr(self, "_attachment_preview_paths", []) or []]
+        if not 0 <= index < len(paths):
+            return
+        path, ss = paths[index], int(getattr(self, "_ss", _SS) or _SS)
+        name = next((n for n, info in (self._chips or {}).items() if info["index"] == index), "")
+        kind = self._chips[name]["kind"] if name else "file"
+        glance = self.__dict__.setdefault("_chip_glance", {}).setdefault(path, {})
+        info = glance.get("info") or {}
+        if not info and kind == "image":
+            try:
+                with Image.open(path) as source:              # header only; the pixels load once, cached below
+                    info = glance["info"] = {"width": source.width, "height": source.height}
+            except OSError:
+                pass
+        margin, pad, gap = 6 * ss, 6 * ss, 8 * ss
+        x0, y0, x1, y1 = (int(v) * ss for v in rect)
+        above, below = y0 - box[1] - 2 * margin, box[3] - y1 - 2 * margin
+        height = min(84 * ss, max(above, below))
+        if height < 34 * ss:
+            return
+        side = (height - 2 * pad) // ss                       # the picture's logical box: as tall as fits
+        picture = None
+        if kind == "image":
+            picture = self._image_attachment_preview((path,), min(side * 16 // 9, 150), side)
+        elif kind == "video" and glance.get("frame") is not None:
+            cache = self.__dict__.setdefault("_glance_frames", {})
+            key = (path, side, ss)
+            if key not in cache:
+                frame = glance["frame"].copy()
+                frame.thumbnail((min(side * 16 // 9, 150) * ss, side * ss), Image.LANCZOS)
+                mark = max(12 * ss, min(frame.width, frame.height) // 3)
+                self._play_mark(ImageDraw.Draw(frame), (frame.width - mark) / 2, (frame.height - mark) / 2, mark)
+                cache[key] = frame
+            picture = cache[key]
+        try:
+            size = int(info.get("bytes") or Path(path).stat().st_size)
+        except OSError:
+            size = 0
+        facts = [kind.title()]
+        if info.get("duration"):
+            seconds = int(round(float(info["duration"])))
+            facts.append(f"{seconds // 60}:{seconds % 60:02d}")
+        if info.get("width") and info.get("height"):
+            facts.append(f"{info['width']}×{info['height']}")
+        if size:
+            facts.append(f"{size / 1048576:.1f} MB" if size >= 1048576 else f"{max(1, size // 1024)} KB")
+        details = " · ".join(facts)
+        mark_size = min(side, 36) * ss
+        pic_w = picture.width if picture is not None else (mark_size if kind in {"video", "audio"} else 0)
+        pic_h = picture.height if picture is not None else mark_size
+        font = getattr(self, "_sfont", None) or self._font
+        room = box[2] - box[0] - 2 * margin - 2 * pad - (pic_w + gap if pic_w else 0)
+        title = card.fit_text(d, Path(path).name, room, font)
+        details = card.fit_text(d, details, room, font)
+        text_w = max(self._text_width(d, title, font), self._text_width(d, details, font))
+        width = 2 * pad + (pic_w + gap if pic_w else 0) + text_w
+        left = max(box[0] + margin, min(x0, box[2] - margin - width))
+        top = y0 - margin - height if above >= below else y1 + margin
+        d.rounded_rectangle((left, top, left + width, top + height), radius=int(self._visuals.metrics.button_corner_radius) * ss,
+                            fill=(*self._card, 255), outline=(*self._edge, 255), width=max(1, ss))
+        px, py = int(left + pad), int(top + (height - pic_h) / 2)
+        if picture is not None:
+            img.alpha_composite(picture.convert("RGBA"), (px, py))
+        elif kind in {"video", "audio"}:
+            self._play_mark(d, px, py, mark_size)
+        tx = left + pad + (pic_w + gap if pic_w else 0)
+        d.text((tx, top + height / 2 - 15 * ss), title, font=font, fill=(*self._text, 255))
+        d.text((tx, top + height / 2 + 1 * ss), details, font=font, fill=(*self._muted, 255))
 
     def _reference_edge(self, cursor: int, step: int) -> tuple[int, int] | None:
         """The reference name just before (step -1) or after (+1) the cursor, as ``(start, end)``."""
@@ -1273,6 +1353,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     _set_hit("down", (int(dot_x / ss) - 10, int(mid_y / ss), int(dot_x / ss) + 8, int((mid_y + 14 * ss) / ss)),
                              min_width=28)
 
+        hovered = str(getattr(self, "_hover", "") or getattr(self, "_keyboard_hit", "") or "")
+        if is_input and not open_menu and hovered.startswith("chip:") and hovered in self._hit:
+            self._draw_chip_glance(d, img, box, self._hit[hovered], int(hovered[len("chip:"):]))
         if open_menu and open_menu.get("owner") in self._hit:
             # One opaque drop-down under its control (the role selector or a Generate pill);
             # it never resizes or replaces the composer and scrolls when it cannot fit.

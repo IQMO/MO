@@ -116,6 +116,33 @@ def _attached_files_note(paths: list[Any], names: dict[str, str] | None = None) 
             "Read them with your file tools when relevant.]")
 
 
+def _glance_at(paths: list[Any]) -> dict[str, dict]:
+    """What the composer shows when the pointer rests on a file's chip, read once off the GUI lane: its media
+    facts and, for a clip, its first frame. Without FFmpeg, or for any other file, only the name and size."""
+    import tempfile
+
+    from core.media.preparation import first_frame, kind_for, probe
+
+    glance: dict[str, dict] = {}
+    for path in (Path(str(p)) for p in paths):
+        entry: dict[str, Any] = {}
+        try:
+            entry["info"] = probe(path)
+            if kind_for(path) == "video":
+                from PIL import Image
+
+                with tempfile.TemporaryDirectory(prefix="mo-glance-") as folder:
+                    target = Path(folder) / "frame.png"
+                    first_frame(path, target)
+                    with Image.open(target) as frame:
+                        frame.thumbnail((480, 480))
+                        entry["frame"] = frame.convert("RGBA")
+        except (OSError, ValueError):
+            pass
+        glance[str(path)] = entry
+    return glance
+
+
 # A file dropped within this long after MO's last turn belongs to the live conversation. MO
 # inspects and asks either way; this only decides whether the question is framed against that
 # conversation or asked cold. It must never silence the answer — a silent drop reads as a
@@ -3577,6 +3604,7 @@ class CompanionSurface(
                     rejected += 1
             for temporary in cleanup:
                 Path(temporary).unlink(missing_ok=True)
+            glance = _glance_at(saved) if generate_attachment or composing else {}   # chip hover, read here once
 
             def finish_import() -> None:
                 try:
@@ -3606,6 +3634,7 @@ class CompanionSurface(
                         self._display_input_dialog()
                         bubble._input_attachments = list(dict.fromkeys([*pending, *(str(p) for p in saved)]))[:MAX_ATTACHMENTS_PER_TURN]
                         bubble._attachment_preview_paths = list(bubble._input_attachments)
+                        bubble._chip_glance = {**(getattr(bubble, "_chip_glance", None) or {}), **glance}
                         bubble.place_new_references(pending)     # each new file sits in the sentence at the caret
                         bubble._repaint()
                     return
