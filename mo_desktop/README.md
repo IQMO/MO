@@ -652,7 +652,9 @@ MO's four-cube mark centred in it with what MO heard and what it is doing
 ("got it…", "opening Paint…") and that turn's earlier steps dim beneath, then
 the answer in the same card. Every reply fills that one card
 size; a long answer and its choices scroll inside it while the buttons stay in
-place, and a short answer leaves space. The same card carries input, choices, files and
+place, and a short answer leaves space. A notice outside any turn ("No speech detected.", a
+microphone that would not start) keeps a card its own size instead of sitting alone in that one.
+The same card carries input, choices, files and
 Dashboard, with icon controls. Only one surface shows at a time: while a card
 is open, MO's progress stays off the screen (the cubes show it is working) and
 new notices wait until the card closes. The cube-side glance keeps volume, sync

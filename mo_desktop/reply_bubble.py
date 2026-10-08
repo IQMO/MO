@@ -843,8 +843,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         line_h = max(1, int(design.line_height))
         minimum_text = max(line_h, int(design.min_text_height))
         available_h = max(minimum_text, card_budget - preview_h - frame_h)
-        # Replies keep one card size: text and options share what the fixed height leaves.
+        # Replies keep one card size through a turn: text and options share what the fixed height
+        # leaves. A notice outside any turn keeps its own size (his day-1 look, row 165 is per turn).
         fixed_reply = (not is_input and preview is None and not attachment_caption
+                       and not getattr(self, "_fit_reply", False)
                        and getattr(self, "_panel_state", None) in (PanelState.REPLY, PanelState.FOOTERLESS))
         if fixed_reply:
             available_h = max(minimum_text, int(design.reply_card_height) - (frame_h - 2 * int(design.shadow_pad)))
@@ -2144,12 +2146,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         options: Any = None,
         on_options_submit: Callable[[list[str]], bool | None] | None = None,
         presentation: dict[str, Any] | None = None,
+        fit: bool = False,
     ) -> bool:
         """Show MO's reply. ``history`` = MO's replies (oldest->newest, current last) so the
         card's ↑/↓ can browse back through what MO said. ``controls=False`` yields a FOOTERLESS
         card — a genuine walkthrough, or transient tool-streaming prose — not a walkthrough by
-        itself."""
+        itself. ``fit`` sizes the card to its text: a notice outside any turn ("No speech
+        detected.") never sits alone in the turn's fixed-size card."""
         self._keyboard_hit = ""
+        self._fit_reply = bool(fit)
         self._stash_input_draft()   # a reply arriving mid-compose must not drop the draft
         state = PanelState.FOOTERLESS if not controls else PanelState.REPLY
         transition = self._prepare_panel_show("reply", state, controls=controls)

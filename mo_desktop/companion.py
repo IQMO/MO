@@ -4872,9 +4872,9 @@ class CompanionSurface(
         if msg:
             log_event(f"status: {msg}", config=self._config())
 
-    def _show_reply_dialog(self, text: str) -> None:
+    def _show_reply_dialog(self, text: str, *, fit: bool = False) -> None:
         safe = redact_sensitive_text(str(text or "").strip()) or "No response."
-        self._post_gui_call(lambda: self._display_reply_dialog(safe))
+        self._post_gui_call(lambda: self._display_reply_dialog(safe, fit=fit))
 
     def _render_reply_dialog(self, text: str, *, follow_tail: bool = False,
                              controls: bool = True) -> None:
@@ -5211,6 +5211,7 @@ class CompanionSurface(
         controls: bool = True,
         options: Any = None,
         on_options_submit: Callable[[list[str]], bool | None] | None = None,
+        fit: bool = False,
     ) -> bool:
         """Show MO's reply on the layered bubble (seeded with MO's reply history so the
         card's ↑/↓ can browse back). Returns True if it handled it. Called on every
@@ -5237,6 +5238,7 @@ class CompanionSurface(
                 options=options,
                 presentation=presentation,
                 on_options_submit=(on_options_submit or self._submit_options) if options is not None else None,
+                fit=fit,
             )),
         ):
             return False
@@ -5297,7 +5299,7 @@ class CompanionSurface(
             self._reply_history.append(dict(message))
             del self._reply_history[:-100]
 
-    def _display_reply_dialog(self, text: str, *, controls: bool = True) -> None:
+    def _display_reply_dialog(self, text: str, *, controls: bool = True, fit: bool = False) -> None:
         from mo_desktop.options import OPTIONS_MARKER, parse_options
 
         raw = str(text or "").strip()
@@ -5309,7 +5311,7 @@ class CompanionSurface(
         shown = (
             self._present_reply(visible, controls=controls, options=options)
             if options is not None
-            else self._present_reply(visible, controls=controls)
+            else self._present_reply(visible, controls=controls, fit=fit)
         )
         if shown:
             return
