@@ -188,6 +188,31 @@ def role_font(role: str = "small") -> Any:
                      round(points*4/3*SS))
 
 
+def height_frame(image: Any, height: int, split: int) -> Any:
+    """One frame of a finished card at another height, cut from it without scaling anything.
+
+    Rows above ``split`` (top shadow, border, header) stay at the top; the rows below stay anchored
+    at the bottom (text, footer, bottom border). A shorter frame hides rows just below ``split``; a
+    taller one repeats the clean row just above it, so type is never stretched."""
+    from PIL import Image
+
+    width, full = image.size
+    height, split = max(1, int(height)), max(1, min(int(split), full - 1))
+    if height == full:
+        return image
+    frame = Image.new(image.mode, (width, height), (0, 0, 0, 0))
+    frame.paste(image.crop((0, 0, width, min(split, height))), (0, 0))
+    below = full - split
+    if height > full:
+        row = image.crop((0, split - 1, width, split))
+        for y in range(split, split + height - full):
+            frame.paste(row, (0, y))
+        frame.paste(image.crop((0, split, width, full)), (0, height - below))
+    elif height > split:
+        frame.paste(image.crop((0, full - (height - split), width, full)), (0, split))
+    return frame
+
+
 def fold_frame(source: Any, target: Any, size: tuple[int, int], amount: float, *,
                start_color: tuple, end_color: tuple, start_radius: float, end_radius: float) -> Any:
     """Morph the shell and reveal natural-size content, without stretching type."""

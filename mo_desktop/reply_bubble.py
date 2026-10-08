@@ -807,6 +807,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 )
                 ty += preview.size[1] + (actions_h + preview_gap) * ss
         text_y = ty
+        if is_input:
+            self._input_text_top = int(text_y // ss)    # where a height glide splits the finished card
         for idx, ln in enumerate(lines):
             mail_heading = mail_reply and self._scroll_line + idx == 0
             if mail_heading:
@@ -1358,6 +1360,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             img_x = round(source_x+(img_x-source_x)*progress)
             img_y = round(source_y+(img_y-source_y)*progress)
             W, H = size
+        if composer and not morphing:
+            img, img_y, H = self._composer_height_glide(img, img_x, img_y, H)
+            self._bounds = (card_left, img_y + int(design.shadow_pad),
+                            card_left + card_w, img_y + H - int(design.shadow_pad))
+        else:
+            self._cancel_composer_glide()
+            self._composer_shown = None          # an opening or another panel starts from its own size
         if composer or dashboard_face:   # the source pixels its cubes are launched from
             self._cube_published = (img, img_x, img_y)
             extent = tuple(self.cube_extent()) if not morphing else getattr(self, "_last_face_extent", None)
@@ -1390,7 +1399,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         except Exception:
             pass
         self._publish_visibility(ok)
-        self._place_blur_backdrop(bool(ok and not morphing))
+        self._place_blur_backdrop(bool(ok and not morphing and getattr(self, "_composer_glide", None) is None))
         if starting_transition:
             self._transition_pending_start = False
             if ok:
@@ -1400,6 +1409,79 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 self._transition_started_at = 0.0
         self._last_input_blit_position = (img_x, img_y) if ok and self._mode == "input" else None
         return ok
+
+    def _composer_height_glide(self, img: Any, img_x: int, img_y: int, height: int) -> tuple[Any, int, int]:
+        """The composer grows with its text; a new or removed line glides over the panel transition
+        time instead of jumping (his order 2026-10-08). Frames are cut from the finished card
+        (card.height_frame), so nothing is scaled or rendered again."""
+        shown = getattr(self, "_composer_shown", None)
+        glide = getattr(self, "_composer_glide", None)
+        split = int(getattr(self, "_input_text_top", 0) or 0)
+        if glide is not None and (glide["x"], glide["y1"], glide["h1"]) == (img_x, img_y, height):
+            glide["image"], glide["split"] = img, split          # typing on the same line mid-glide
+            return self._composer_glide_frame()
+        if shown is None or shown[0] != img_x or split <= 0 or (shown[1], shown[2]) == (img_y, height):
+            self._cancel_composer_glide()
+            self._composer_shown = (img_x, img_y, height)
+            return img, img_y, height
+        self._cancel_composer_glide()
+        self._composer_glide = {"started": time.perf_counter(), "x": img_x, "y0": shown[1], "h0": shown[2],
+                                "y1": img_y, "h1": height, "image": img, "split": split}
+        try:
+            self._composer_glide_after = self._gui.schedule(16, self._composer_glide_tick, frame=True)
+        except Exception:
+            self._composer_glide = None
+            self._composer_shown = (img_x, img_y, height)
+            return img, img_y, height
+        return self._composer_glide_frame()
+
+    def _composer_glide_frame(self) -> tuple[Any, int, int]:
+        glide = self._composer_glide
+        raw = min(1.0, (time.perf_counter() - glide["started"]) / max(0.001, self._transition_seconds()))
+        amount = raw * raw * (3.0 - 2.0 * raw)          # the panel transition's own easing
+        if raw >= 1.0:
+            self._composer_glide = None
+            image, y, height = glide["image"], glide["y1"], glide["h1"]
+        else:
+            y = round(glide["y0"] + (glide["y1"] - glide["y0"]) * amount)
+            height = round(glide["h0"] + (glide["h1"] - glide["h0"]) * amount)
+            image = card.height_frame(glide["image"], height, glide["split"])
+        self._composer_shown = (glide["x"], y, height)
+        return image, y, height
+
+    def _composer_glide_tick(self) -> None:
+        self._composer_glide_after = None
+        glide = getattr(self, "_composer_glide", None)
+        if glide is None or self._mode != "input" or not bool(getattr(self, "_visible", False)):
+            self._cancel_composer_glide()
+            return
+        image, y, height = self._composer_glide_frame()
+        x = glide["x"]
+        pad = int(getattr(self, "_design", DEFAULT_BUBBLE_DESIGN).shadow_pad)
+        if self._layered.blit(image, x, y, premultiplied=True, position=True):
+            self._last_layered_geometry = (x, y, image.width, height)
+            self._last_input_blit_position = (x, y)
+            self._bounds = (x + pad, y + pad, x + image.width - pad, y + height - pad)
+            self._layered.set_input_bounds(self._bounds)
+            if getattr(self._cube, "_composer_controller", None) is self:
+                self._cube_published = (image, x, y)
+        if getattr(self, "_composer_glide", None) is not None:
+            try:
+                self._composer_glide_after = self._gui.schedule(16, self._composer_glide_tick, frame=True)
+            except Exception:
+                self._composer_glide = None
+        else:
+            self._place_blur_backdrop(True)
+
+    def _cancel_composer_glide(self) -> None:
+        after = getattr(self, "_composer_glide_after", None)
+        self._composer_glide_after = None
+        self._composer_glide = None
+        if after is not None:
+            try:
+                self._gui.cancel(after)
+            except Exception:
+                pass
 
     def _blur_enabled(self) -> bool:
         """The approved blur-behind hybrid applies with the default 'hybrid' window effect."""
@@ -1491,6 +1573,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def _repaint_cached_input_caret(self) -> bool:
         """Blit the cached input card with the current caret state only."""
+        if getattr(self, "_composer_glide", None) is not None:
+            return True             # a height glide owns these frames; the caret blinks again after it
         if self._mode != "input" or not self._visible or self._transition_progress() < 1.0:
             return False
         position = getattr(self, "_last_input_blit_position", None)

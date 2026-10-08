@@ -15,8 +15,9 @@ backends and local explainer rendering remain independent.
    reference helper and enable sharing. MO verifies the official Cloudflare
    release's published SHA-256 digest. No account, domain, manually run server
    or upload bucket is needed. Installation/enabling starts no tunnel or job.
-3. Choose Generate through the composer role switcher. The composer keeps one
-   size: two rows of drop-down pills and a status line. Pick the kind first
+3. Choose Generate through the composer role switcher. Its controls keep one
+   size: two rows of drop-down pills and a status line; like the normal composer
+   it grows with the prompt, gliding to each new line. Pick the kind first
    (Auto, Song, Image or Video; Auto lets the request's words decide); only that
    kind's choices then appear, in order (type, its model: Suno, Seedream or
    Seedance, then duration/resolution/aspect, quality/aspect or vocals). Files
