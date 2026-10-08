@@ -62,7 +62,8 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # The composer's earlier-message browse: room kept for the three dots above Send, the dim behind
 # the composer, and the cross-fade between messages.
 _COMPOSER_DOTS_RESERVE = 16
-_GENERATE_CONTROLS_H = 88     # Generate's two pill rows and status line: one height in every state
+_GENERATE_ROWS_H = 65         # Generate's two pill rows (in Auto the second holds the short description)
+_GENERATE_STATUS_H = 23       # the progress line, only while a job or Refine reports something
 _BROWSE_DIM_ALPHA = 205    # row 31: how dark (black) the panel goes around the browsed message's line
 _CLICK_AWAY_POLL_MS = 30   # how often an open panel reads the left button for a click away
 BLUR_CARD_ALPHA = 226    # row 32: the card's see-through over Windows' blur (text stays crisp)
@@ -774,7 +775,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         image_inset = max(6, panel_padding//2)
         body_top = image_inset if image_card else int(design.accent_top)+13
         if generate_mode:
-            body_top += _GENERATE_CONTROLS_H     # fixed: two pill rows and the status line
+            body_top += _GENERATE_ROWS_H + (_GENERATE_STATUS_H if getattr(self, "_generate_progress", "") else 0)
         rich_text = (not is_input) and (not placeholder) and not attachment_caption
         wrap_text = shown if not placeholder else "Type a message…"
         mail_reply = rich_text and shown.startswith(("**Gmail / ", "**Outlook / "))
@@ -964,7 +965,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 menu_owner = str((open_menu or {}).get("owner", ""))
                 for row_index, row in enumerate(generate_rows):
                     if not row:
-                        hint = "Generate an image, a video or a song"
+                        hint = "Song, Image, Video"
                         d.text((ax, cy + 4 * ss), card.fit_text(d, hint, content_width * ss, self._sfont),
                                font=self._sfont, fill=(*self._muted, 255))
                     left, gap = ax, 5 * ss
@@ -997,8 +998,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                         _set_hit(hit, (int(left/ss), int(cy/ss), int(right/ss), int(cy/ss) + 22))
                         left = right + gap
                     cy += 28 * ss
-                note = getattr(self, "_generate_progress", "References stay local until you send")
-                d.text((ax, cy + 2 * ss), card.fit_text(d, note, content_width * ss, self._sfont), font=self._sfont, fill=(*self._muted, 255))
+                note = getattr(self, "_generate_progress", "")
+                if note:                                           # progress only; no standing sentence
+                    d.text((ax, cy + 2 * ss), card.fit_text(d, note, content_width * ss, self._sfont), font=self._sfont, fill=(*self._muted, 255))
 
         if not is_input and not image_card and callable(getattr(self, "_on_session_history", None)):
             hcol = self._cyan if self._hovering("sessions") else self._muted

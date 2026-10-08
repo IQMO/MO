@@ -2,9 +2,10 @@
 
 ### Generate: music, images and video
 
-Choose **Generate** through the existing composer role switcher. Its controls keep
-one size (it grows with the prompt like the normal composer, gliding to each new
-line): drop-down pills, kind first (Auto, Song, Image, Video), then only that
+Choose **Generate** through the existing composer role switcher. Its controls are
+two pill rows with no standing sentence (under Auto the second shows only "Song, Image,
+Video"; a progress line appears only while a job or Refine reports), and it grows with
+the prompt like the normal composer, gliding to each new line: drop-down pills, kind first (Auto, Song, Image, Video), then only that
 kind's choices in order (each kind shows its model), a References pill for
 purpose-labelled files (each dropped or picked file also sits in the sentence at the caret as a
 chip named [Video1], [Image1] or [Audio1] with its role — a clip defaults to motion and a picture
