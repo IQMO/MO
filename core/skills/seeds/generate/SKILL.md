@@ -31,6 +31,9 @@ honor the operator's chosen method instead of substituting this one.
 3. Use only selected/authorized local references. Do not inspect them with a
    model merely to transport them. Their purpose can come from the user's text
    or the composer's reference labels. Never read private prompt/media stores.
+   Names like [Video1], [Image1] or [Audio1] in the request are the composer's
+   chips: the selected references of that kind in their listed order. Keep each
+   name exactly where the user put it in the generator prompt; Seedance reads them.
    A reference song inspiring a new composition uses `music` non-custom mode;
    a melody-preserving cover uses `cover`. A theme is not literal lyrics: custom
    mode's prompt is sung as lyrics. Non-custom generation also needs a style,
@@ -83,6 +86,7 @@ generator follows accurately. It keeps the user's goal; it never changes the sco
 - Keep the subject, every named element, constraint and the language of any
   lyrics or on-screen text. Add no subject, character, object, story beat or
   style the user did not ask for or clearly imply, and drop nothing.
+- Keep reference names such as [Video1] and [Image1] exactly, in the same place.
 - Make what the draft implies explicit for the chosen kind, only where it serves
   that goal:
   - Song (Suno): genre and era, mood, tempo feel, instruments, vocal type and

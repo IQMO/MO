@@ -7,7 +7,57 @@ credentials or persistence.
 """
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from core.media.catalog import OPERATIONS, default_model, settings
+
+# In-sentence references (his request 2026-10-08): a dropped file sits in the prompt as [Video1], [Image1] or
+# [Audio1], numbered per kind in attachment order. That is also the order the core sends each kind to the
+# provider, which reads these names (Seedance 2.0; checked with a real job 2026-10-08).
+REFERENCE_TOKEN = re.compile(r"\[(Image|Video|Audio|File)([1-9][0-9]?)\]")
+_KIND_WORD = {"image": "Image", "video": "Video", "audio": "Audio", "file": "File"}
+
+
+def reference_tokens(paths: list[str]) -> dict[str, str]:
+    """``{name: path}`` for the attached files, numbered per kind in attachment order. Any other file (a PDF
+    in the normal composer) is a File; Generate only ever holds pictures, clips and sound."""
+    from core.media.preparation import kind_for
+
+    counts: dict[str, int] = {}
+    names: dict[str, str] = {}
+    for path in paths:
+        try:
+            kind = kind_for(Path(str(path)))
+        except ValueError:
+            kind = "file"
+        counts[kind] = counts.get(kind, 0) + 1
+        names[f"[{_KIND_WORD[kind]}{counts[kind]}]"] = str(path)
+    return names
+
+
+def default_role(path: str, operation: str | None) -> str:
+    """A dropped clip drives a video's motion and a picture is its subject; otherwise a plain reference."""
+    from core.media.preparation import kind_for
+
+    if kind_of(operation) != "video":
+        return "reference"
+    try:
+        return {"video": "motion", "image": "subject"}.get(kind_for(Path(str(path))), "reference")
+    except ValueError:
+        return "reference"
+
+
+def renumber_references(text: str, before: dict[str, str], after: dict[str, str]) -> str:
+    """Keep each name on its file when the attachments change; a removed file's name leaves the sentence."""
+    new_name = {path: name for name, path in after.items()}
+
+    def swap(match: re.Match) -> str:
+        path = before.get(match.group(0))
+        return new_name.get(path, "") if path else match.group(0)
+
+    changed = REFERENCE_TOKEN.sub(swap, str(text or ""))
+    return re.sub(r" {2,}", " ", changed) if changed != text else changed
 
 KINDS = (("", "Auto"), ("song", "Song"), ("image", "Image"), ("video", "Video"))
 TYPES = {"song": ("music", "cover", "extend_music"), "image": ("image", "edit_image"),
@@ -126,7 +176,8 @@ def refine_guidance(skill_body: str, selection: dict, references: list[tuple[str
     else:
         target = "Auto, no kind chosen yet: infer it from the draft without changing the draft's goal"
     if references:
-        target += "; references: " + ", ".join(f"{role} ({name})" for role, name in references)
+        target += ("; references: " + ", ".join(f"{role} ({name})" for role, name in references)
+                   + "; keep names like [Video1] and [Image1] exactly where the draft puts them")
     return f"{rules}\n\nThis request: {target}."
 
 

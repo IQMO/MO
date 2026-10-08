@@ -283,8 +283,175 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _line_width(self, draw: Any, spans: list[tuple[str, bool]]) -> float:
         bold_font = getattr(self, "_bfont", getattr(self, "_font", None))
         font = getattr(self, "_font", bold_font)
+        if getattr(self, "_chips", None):   # Generate: a reference name is as wide as its chip
+            return sum(self._chip_width(draw, name) if name else self._text_width(draw, part, bold_font if bold else font)
+                       for text, bold in spans if text for part, name in self._chip_parts(text) if part or name)
         return sum(self._text_width(draw, text, bold_font if bold else font)
                    for text, bold in spans if text)
+
+    # ---- in-sentence references (Generate): [Video1] sits in the sentence as a chip ----------------
+    def _reference_chip_map(self, generate: bool) -> dict[str, dict]:
+        """The composer's attached files by their in-sentence name; a role shows only in Generate."""
+        from mo_desktop.generate_controls import reference_tokens
+
+        paths = [str(p) for p in getattr(self, "_attachment_preview_paths", []) or []]
+        roles = getattr(self, "_generate_reference_roles", {}) or {}
+        return {name: {"path": path, "index": paths.index(path), "generate": generate,
+                       "role": roles.get(path, "reference") if generate else "",
+                       "kind": name[1:-1].rstrip("0123456789").lower()}
+                for name, path in reference_tokens(paths).items()}
+
+    def _chip_parts(self, text: str) -> list[tuple[str, str]]:
+        """Plain parts and the reference names drawn as chips, in order: ``(text, "")`` or ``("", name)``."""
+        chips = getattr(self, "_chips", None)
+        if not chips:
+            return [(text, "")]
+        from mo_desktop.generate_controls import REFERENCE_TOKEN
+
+        parts, last = [], 0
+        for match in REFERENCE_TOKEN.finditer(text):
+            if match.group(0) in chips:
+                if match.start() > last:
+                    parts.append((text[last:match.start()], ""))
+                parts.append(("", match.group(0)))
+                last = match.end()
+        if last < len(text):
+            parts.append((text[last:], ""))
+        return parts or [(text, "")]
+
+    def _chip_texts(self, name: str) -> tuple[str, str]:
+        info = self._chips[name]
+        number = name[1:-1][len(info["kind"]):]
+        role = {"first_frame": "first frame", "last_frame": "last frame"}.get(info["role"], info["role"])
+        return f"{info['kind'].title()} {number}", role
+
+    def _chip_width(self, draw: Any, name: str) -> float:
+        ss = int(getattr(self, "_ss", _SS) or _SS)
+        font = getattr(self, "_sfont", None) or self._font
+        label, role = self._chip_texts(name)
+        role_width = (5 * ss + self._text_width(draw, role, font)) if role else 0
+        return (4 + 16 + 5 + 7) * ss + self._text_width(draw, label, font) + role_width
+
+    def _chip_thumbnail(self, path: str, size: int) -> Any:
+        cache = self.__dict__.setdefault("_chip_thumbs", {})
+        if (path, size) not in cache:
+            try:
+                from PIL import Image, ImageOps
+
+                with Image.open(path) as source:
+                    thumb = source.convert("RGBA")
+                cache[(path, size)] = ImageOps.fit(thumb, (size, size), Image.LANCZOS)   # fills its square
+            except Exception:
+                cache[(path, size)] = None
+        return cache[(path, size)]
+
+    def _draw_reference_chip(self, d: Any, img: Any, x: float, y: int, name: str) -> float:
+        """One reference chip at the text position: its picture (or MO's play mark for clips and sound), its
+        name and, in Generate, its role. Clicking it opens Generate's References menu (role or remove), else Remove."""
+        ss = int(getattr(self, "_ss", _SS) or _SS)
+        design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
+        font = getattr(self, "_sfont", None) or self._font
+        info = self._chips[name]
+        label, role = self._chip_texts(name)
+        width = self._chip_width(d, name)
+        top, bottom = y + 1 * ss, y + int(design.line_height) * ss - 2 * ss
+        d.rounded_rectangle((x, top, x + width - 2 * ss, bottom), radius=6 * ss, fill=(*self._entry, 255),
+                            outline=(*self._cyan, 150), width=max(1, ss))
+        size = 14 * ss
+        tx, ty = int(x + 4 * ss), int(top + (bottom - top - size) / 2)
+        thumb = self._chip_thumbnail(info["path"], size) if info["kind"] == "image" else None
+        if thumb is not None:
+            img.alpha_composite(thumb, (tx + (size - thumb.width) // 2, ty + (size - thumb.height) // 2))
+        elif info["kind"] == "file":
+            from interface.desktop_brand import make_glyph_icon
+
+            img.alpha_composite(make_glyph_icon("file", size, color="#%02x%02x%02x" % tuple(self._cyan[:3])), (tx, ty))
+        else:
+            d.ellipse((tx, ty, tx + size, ty + size), fill=(*self._cyan, 235))
+            d.polygon([(tx + 5 * ss, ty + 3.5 * ss), (tx + 5 * ss, ty + size - 3.5 * ss), (tx + size - 3 * ss, ty + size / 2)],
+                      fill=(*self._card, 255))
+        lx = x + (4 + 16 + 5) * ss
+        d.text((lx, y + 3 * ss), label, font=font, fill=(*self._text, 255))
+        d.text((lx + self._text_width(d, label, font) + 5 * ss, y + 3 * ss), role, font=font, fill=(*self._cyan, 255))
+        self._hit[f"chip:{info['index']}"] = (int(x / ss), int(top / ss), int((x + width) / ss), int(bottom / ss))
+        return width
+
+    def _reference_edge(self, cursor: int, step: int) -> tuple[int, int] | None:
+        """The reference name just before (step -1) or after (+1) the cursor, as ``(start, end)``."""
+        if not getattr(self, "_chips", None):
+            return None
+        from mo_desktop.generate_controls import REFERENCE_TOKEN
+
+        for match in REFERENCE_TOKEN.finditer(str(self._body or "")):
+            if match.group(0) in self._chips and (match.end() == cursor if step < 0 else match.start() == cursor):
+                return match.start(), match.end()
+        return None
+
+    def place_new_references(self, previous: list[str]) -> None:
+        """Each newly attached file sits in the sentence at the caret as its name ([Video1], [Image1]); a clip
+        defaults to driving the motion and a picture to being the subject when a video is chosen."""
+        from mo_desktop.generate_controls import default_role, reference_tokens
+
+        paths = [str(p) for p in getattr(self, "_attachment_preview_paths", []) or []]
+        names = {path: name for name, path in reference_tokens(paths).items()}
+        roles = dict(getattr(self, "_generate_reference_roles", {}) or {})
+        operation = (getattr(self, "_generate_selection", None) or {}).get("operation")
+        known = {str(p) for p in previous}
+        for path in paths:
+            if path in known or path not in names:
+                continue
+            roles.setdefault(path, default_role(path, operation))
+            body = str(getattr(self, "_body", "") or "")
+            cursor = max(0, min(len(body), int(getattr(self, "_cursor", len(body)) or 0)))
+            insert = ("" if not body[:cursor] or body[:cursor].endswith(" ") else " ") + names[path] + " "
+            self._body = body[:cursor] + insert + body[cursor:]
+            self._cursor = cursor + len(insert)
+        self._generate_reference_roles = roles
+        self._refresh_chips(True)
+
+    def _remove_reference(self, index: int) -> None:
+        """One attached file leaves the composer: its name leaves the sentence and every other name stays on
+        its own file (removing [Image1] makes [Image2] the new [Image1])."""
+        from mo_desktop.generate_controls import reference_tokens, renumber_references
+
+        paths = [str(p) for p in getattr(self, "_attachment_preview_paths", []) or []]
+        if not 0 <= index < len(paths):
+            return
+        before = reference_tokens(paths)
+        path = paths.pop(index)
+        after = reference_tokens(paths)
+        body = str(getattr(self, "_body", "") or "")
+        cursor = max(0, min(len(body), int(getattr(self, "_cursor", len(body)) or 0)))
+        self._body = renumber_references(body, before, after)
+        self._cursor = min(len(self._body), len(renumber_references(body[:cursor], before, after)))
+        self._attachment_preview_paths = paths
+        self._input_attachments = list(paths)
+        roles = dict(getattr(self, "_generate_reference_roles", {}) or {})
+        roles.pop(path, None)
+        self._generate_reference_roles = roles
+        self._refresh_chips(getattr(self, "_mode", "") == "input")   # the names moved: never act on old ones
+
+    def _forget_references_left_out(self) -> None:
+        """A chip deleted from the sentence (Backspace, Delete, cut or typing over everything) takes its file with
+        it, so what is sent is always what the sentence shows."""
+        chips = getattr(self, "_chips", None) or {}
+        shown = getattr(self, "_chip_names_shown", None) or set()
+        if not chips or not shown:
+            return
+        from mo_desktop.generate_controls import REFERENCE_TOKEN
+
+        present = {match.group(0) for match in REFERENCE_TOKEN.finditer(str(getattr(self, "_body", "") or ""))}
+        for index in sorted((chips[name]["index"] for name in shown - present if name in chips), reverse=True):
+            self._remove_reference(index)
+
+    def _refresh_chips(self, composing: bool) -> None:
+        """The composer's chips for this draw, and which of them the sentence currently shows."""
+        from mo_desktop.generate_controls import REFERENCE_TOKEN
+
+        generate = str(getattr(self, "_role_label", "")).casefold() == "generate"
+        self._chips = self._reference_chip_map(generate) if composing else {}
+        self._chip_names_shown = {match.group(0) for match in REFERENCE_TOKEN.finditer(str(getattr(self, "_body", "") or ""))
+                                  if match.group(0) in self._chips}
 
     def _wrap_spans(self, draw: Any, text: str, *, rich: bool = False, width: int | None = None) -> list[list[tuple[str, bool]]]:
         limit = int(width if width is not None else self._content_width(draw, text, rich=rich)) * int(getattr(self, '_ss', _SS) or _SS)
@@ -485,6 +652,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         probe = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
         is_input = self._mode == "input"
         generate_mode = is_input and str(getattr(self, "_role_label", "")).casefold() == "generate"
+        self._refresh_chips(is_input)
         generate_rows = []
         if generate_mode and getattr(self, "_generate_selection", None):
             from mo_desktop.generate_controls import pill_rows
@@ -839,9 +1007,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                         if attachment_caption
                         else getattr(self, "_bfont", self._font) if bold else self._font
                     )
-                    d.text((lx, ty), piece, font=font,
-                           fill=(*(self._cyan if mail_heading else fill), 255))
-                    lx += float(d.textlength(piece, font=font))
+                    for part, name in self._chip_parts(piece):   # a plain piece unless Generate chips exist
+                        if name and not placeholder:
+                            lx += self._draw_reference_chip(d, img, lx, ty, name)
+                        elif part:
+                            d.text((lx, ty), part, font=font,
+                                   fill=(*(self._cyan if mail_heading else fill), 255))
+                            lx += float(d.textlength(part, font=font))
             if idx < len(lines) - 1:
                 ty += int(design.line_height) * ss
         if is_input and not browsing and not bool(getattr(self, "_select_all", False)):
@@ -2197,9 +2369,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             if self._select_all:
                 self._cursor = 0 if ks in {"Left", "Home"} else len(self._body)
             elif ks == "Left":
-                self._cursor = max(0, self._cursor - 1)
+                chip = self._reference_edge(self._cursor, -1)      # a chip is one step
+                self._cursor = chip[0] if chip else max(0, self._cursor - 1)
             elif ks == "Right":
-                self._cursor = min(len(self._body), self._cursor + 1)
+                chip = self._reference_edge(self._cursor, 1)
+                self._cursor = chip[1] if chip else min(len(self._body), self._cursor + 1)
             elif ks == "Home":
                 self._cursor = 0
             else:
@@ -2212,11 +2386,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 self._body = ""
                 self._cursor = 0
                 self._select_all = False
-            elif ks == "BackSpace" and self._cursor > 0:
-                self._body = self._body[:self._cursor - 1] + self._body[self._cursor:]
-                self._cursor -= 1
-            elif ks == "Delete" and self._cursor < len(self._body):
-                self._body = self._body[:self._cursor] + self._body[self._cursor + 1:]
+            else:
+                chip = self._reference_edge(self._cursor, -1 if ks == "BackSpace" else 1)
+                if chip:                  # a chip leaves the sentence whole and takes its file with it
+                    self._remove_reference(self._chips[self._body[chip[0]:chip[1]]]["index"])
+                elif ks == "BackSpace" and self._cursor > 0:
+                    self._body = self._body[:self._cursor - 1] + self._body[self._cursor:]
+                    self._cursor -= 1
+                elif ks == "Delete" and self._cursor < len(self._body):
+                    self._body = self._body[:self._cursor] + self._body[self._cursor + 1:]
         else:
             ch = getattr(event, "char", "")
             if ch and ch.isprintable() and ch not in ("\r", "\n", "\t"):
@@ -2237,6 +2415,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._cursor = cursor + len(str(text))
 
     def _finish_input_edit(self) -> None:
+        self._forget_references_left_out()
         self._keyboard_hit = ""
         self._caret = True
         self._repaint()
@@ -2310,6 +2489,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 callback("enhance", "")
         elif key.startswith("generate:"):
             self._toggle_generate_menu(key)
+        elif key.startswith("chip:"):   # a chip opens Generate's References menu (role or remove), elsewhere Remove
+            if str(getattr(self, "_role_label", "")).casefold() == "generate" and getattr(self, "_generate_selection", None):
+                self._toggle_generate_menu("generate:refs")
+            else:
+                self._toggle_menu(key, (("remove", "Remove"),), "")
         elif key == "collapse":
             self.collapse_to_cube()
         elif key == "role":
@@ -2527,8 +2711,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._generate_reference_roles = {}
             self._repaint()
         else:
+            attached = list(getattr(self, "_attachment_preview_paths", []) or [])
             self.hide()
+            self._attachment_preview_paths = attached    # hide() clears them; the files in the sentence go with it
             cb(text)
+            self._attachment_preview_paths = []
         self._input_draft = ""      # submitted to MO — the draft must not reappear
         self._input_attachments = []
 
@@ -2543,9 +2730,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         from pathlib import Path
         from mo_desktop.generate_controls import menu
 
+        from mo_desktop.generate_controls import reference_tokens
+
         roles = getattr(self, "_generate_reference_roles", {}) or {}
-        references = [(roles.get(path, "reference"), Path(path).name)
-                      for path in getattr(self, "_attachment_preview_paths", [])]
+        paths = [str(p) for p in getattr(self, "_attachment_preview_paths", [])]
+        named = {path: name for name, path in reference_tokens(paths).items()}
+        references = [(roles.get(path, "reference"), f"{named.get(path, '')} {Path(path).name}".strip()) for path in paths]
         choices, selected = menu(self._generate_selection, hit[len("generate:"):], references=references,
                                  credit=getattr(self, "_generate_credit", "Credits · refresh"))
         self._toggle_menu(hit, tuple(choices), selected)
@@ -2565,6 +2755,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             callback = getattr(self, "_on_generate_action", None)
             if callable(callback):
                 callback(owner[len("generate:"):], value)
+        elif owner.startswith("chip:") and value == "remove":
+            self._remove_reference(int(owner[len("chip:"):]))
         self._repaint()
 
     def _on_wheel(self, event: Any) -> str:

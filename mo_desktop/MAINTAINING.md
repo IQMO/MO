@@ -18,6 +18,12 @@ when that source tree is present.
   contracts. Reuse Settings, credentials, attachments, reply/options cards and
   notices; run preparation, polling, credit reads and installation off the GUI
   lane. Reference attachment does not ask a model to inspect the content.
+- Composer files are in-sentence chips in every role: `generate_controls.reference_tokens`
+  names them per kind in attachment order ([Image1], [Video1], [Audio1], [File1]) and
+  `ReplyBubble._remove_reference` is the one removal owner (chip menu, Backspace/Delete,
+  clearing the sentence, Generate's References menu), keeping each other name on its file.
+  Generate sends the names to the provider as written; elsewhere `_submit_from_input` appends
+  the attached-files note so MO hears which file each name means.
   Results, continuation and cleanup bind exact session/job/variation identities.
   Do not claim provider deletion, a countdown, voice enrollment or live UI/provider
   acceptance from configuration or mock tests.

@@ -6,7 +6,11 @@ Choose **Generate** through the existing composer role switcher. Its controls ke
 one size (it grows with the prompt like the normal composer, gliding to each new
 line): drop-down pills, kind first (Auto, Song, Image, Video), then only that
 kind's choices in order (each kind shows its model), a References pill for
-purpose-labelled files, a dot pill for credits, setup, privacy and saved results, a
+purpose-labelled files (each dropped or picked file also sits in the sentence at the caret as a
+chip named [Video1], [Image1] or [Audio1] with its role — a clip defaults to motion and a picture
+to subject for a video; clicking a chip opens References, deleting it removes the file and the
+other names stay on their files; Seedance reads the names), a dot pill for credits, setup,
+privacy and saved results, a
 Refine sparkle by Send that rewrites the draft through MO's prompt enhancer under
 the Generate skill's refining rules (press again to restore it), and real
 stage/elapsed progress. The
@@ -717,7 +721,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |
 | **Win+Shift+Z** (or holding the top-left cube, or the Clipboard app) | Open the clipboard history in the one panel: newest first, text, images and file lists; click a row to copy it again, ask MO about it, remove it, or Clear all. Each copy is read a moment later, once per burst, so the app that copied and a paste right after it go first. Kept in memory only, never on disk; a copy an app marks as not for clipboard history (password managers do) is never recorded, and one that looks like a secret is masked and never offered to MO. Windows' own Win+V is untouched |
 | **Esc** while MO acts on the computer | Stop it: a Desktop turn gets Panic Stop; a local MO Terminal using the computer gets its own Esc (the typed stop control). An Esc MO itself presses while acting, or one pressed in an MO Desktop panel (closing the composer), never stops anything |
-| Drop files on the cube or the open panel | Attach locally (several at once; the composer's attach button also picks several); MO reads them and answers in the one panel. Under Generate they join the request's references. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
+| Drop files on the cube or the open panel | Attach locally (several at once; the composer's attach button also picks several); MO reads them and answers in the one panel. While the composer is open (any role, including Book Writer) or through its attach button, each file instead joins the sentence at the caret as a chip ([Image1], [File1]; click for Remove, Backspace deletes it with its file) and goes with **Send**, MO told which file each name means; under Generate they are the request's references. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
 
 Screen selections are saved under the active private profile's ordinary
 `media/attachments/gallery` catalog and appear in MO Files. Escape or right-click

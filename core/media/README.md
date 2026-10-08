@@ -54,7 +54,7 @@ resizes, changes models, discards references or switches upload hosts.
 | Cover | One source song; melody-preserving cover, not merely inspiration. |
 | Extend track | Exact saved variation, returned track ID and matching model. No invented ID or upload fallback. |
 | Image / reference edit | Seedream 4.5 text-to-image or 1–14 image references; Desktop currently admits eight. |
-| Video / motion | Seedance 2.0/2.5 with supported subject-image, motion-video and audio references. Exact motion is an acceptance target, not a guarantee. |
+| Video / motion | Seedance 2.0/2.5 with supported subject-image, motion-video and audio references. Exact motion is an acceptance target, not a guarantee. The prompt can name references as [Image1], [Video1] or [Audio1], numbered per kind in the order sent (Desktop's composer chips); Seedance reads them. |
 | Continue video | Decode the parent's actual final frame locally. Alone it becomes the NEW first frame; with extra references it becomes the first image reference, explicitly described in the prompt. The latter is best-effort, not strict first-frame continuity. |
 
 Seedance 2.0 supports 4–15 seconds or automatic duration and up to 4K; 2.5

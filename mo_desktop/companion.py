@@ -109,6 +109,13 @@ def _issue_report_button_label() -> str:
     return ISSUE_REPORT_BUTTON_LABEL
 
 
+def _attached_files_note(paths: list[Any], names: dict[str, str] | None = None) -> str:
+    """How MO hears about attached files; a composer chip's name ([Image1], [File1]) precedes its path."""
+    listed = " | ".join(f"{names[str(path)]} {path}" if names and str(path) in names else str(path) for path in paths)
+    return (f"[Operator attached {len(paths)} file(s) to {DESKTOP_NAME}: {listed}. "
+            "Read them with your file tools when relevant.]")
+
+
 # A file dropped within this long after MO's last turn belongs to the live conversation. MO
 # inspects and asks either way; this only decides whether the question is framed against that
 # conversation or asked cold. It must never silence the answer — a silent drop reads as a
@@ -3003,7 +3010,9 @@ class CompanionSurface(
                 bubble._repaint()
             return
         roles = getattr(bubble, "_generate_reference_roles", {}) or {}
-        references = [(roles.get(path, "reference"), Path(path).name)
+        from mo_desktop.generate_controls import reference_tokens
+        named = {path: name for name, path in reference_tokens(list(getattr(bubble, "_attachment_preview_paths", []) or [])).items()}
+        references = [(roles.get(path, "reference"), f"{named.get(path, '')} {Path(path).name}".strip())
                       for path in getattr(bubble, "_attachment_preview_paths", []) or []]
         selection = dict(getattr(bubble, "_generate_selection", None) or {})
         skill_body = str(getattr(getattr(self, "_active_skill_role", None), "body", "") or "")
@@ -3066,18 +3075,21 @@ class CompanionSurface(
             if not 0 <= index < len(paths):
                 return
             path = paths[index]
+            try:
+                kind = kind_for(Path(path))
+            except ValueError:
+                kind = ""                                    # a file Generate cannot use can only be removed
             order = {"image": ("reference", "subject", "first_frame", "last_frame", "remove"),
-                     "audio": ("reference", "song", "remove"), "video": ("reference", "motion", "remove")}[kind_for(Path(path))]
+                     "audio": ("reference", "song", "remove"),
+                     "video": ("reference", "motion", "remove")}.get(kind, ("reference", "remove"))
             roles = dict(getattr(bubble, "_generate_reference_roles", {}))
             role = roles.get(path, "reference")
-            next_role = order[(order.index(role) + 1) % len(order)]
+            next_role = order[(order.index(role) + 1) % len(order)] if role in order else "remove"
             if next_role == "remove":
-                bubble._attachment_preview_paths = [p for p in paths if p != path]
-                bubble._input_attachments = list(bubble._attachment_preview_paths)
-                roles.pop(path, None)
+                bubble._remove_reference(index)              # its name leaves the sentence; the others keep their files
             else:
                 roles[path] = next_role
-            bubble._generate_reference_roles = roles
+                bubble._generate_reference_roles = roles
         else:
             from mo_desktop.generate_controls import choose
             bubble._generate_selection = choose(bubble._generate_selection, action, value, self._config())
@@ -3524,7 +3536,7 @@ class CompanionSurface(
             target=_send, name="mo-desktop-file-transfer", daemon=True
         ).start()
 
-    def _attach_dropped_files(self, raw: list[Any], *, cleanup: tuple[Any, ...] = ()) -> None:
+    def _attach_dropped_files(self, raw: list[Any], *, cleanup: tuple[Any, ...] = (), into_composer: bool = False) -> None:
         """Import dropped files off the UI thread and bind the result to its source chat.
 
         ``cleanup`` names MO's own temporary sources (a clipboard image), deleted once imported."""
@@ -3539,6 +3551,10 @@ class CompanionSurface(
         session_id = str(getattr(session, "session_id", "") or "")
         turn_count = int(getattr(session, "turn_count", 0) or 0)
         generate_attachment = self._active_skill_role_label().casefold() == "generate"
+        open_bubble = getattr(self, "_bubble", None)
+        # The composer's paperclip, or a drop while writing, puts the files in the sentence.
+        composing = into_composer or bool(open_bubble and getattr(open_bubble, "_visible", False)
+                                          and getattr(open_bubble, "_mode", "") == "input")
         selected = [Path(item) for item in raw[:MAX_ATTACHMENTS_PER_TURN]]
         initial_rejected = max(0, len(raw) - MAX_ATTACHMENTS_PER_TURN)
         self._set_status("Loading attachment…", self._visual_palette.accent)
@@ -3582,7 +3598,7 @@ class CompanionSurface(
                     if rejected else ""
                 )
                 self._set_status(f"Attached: {names}{note}", self._visual_palette.ok)
-                if generate_attachment:
+                if generate_attachment or composing:
                     bubble = self._get_reply_bubble()
                     if bubble:
                         bubble._stash_input_draft()
@@ -3590,6 +3606,7 @@ class CompanionSurface(
                         self._display_input_dialog()
                         bubble._input_attachments = list(dict.fromkeys([*pending, *(str(p) for p in saved)]))[:MAX_ATTACHMENTS_PER_TURN]
                         bubble._attachment_preview_paths = list(bubble._input_attachments)
+                        bubble.place_new_references(pending)     # each new file sits in the sentence at the caret
                         bubble._repaint()
                     return
                 from mo_desktop.artifacts import attachment_panel_state
@@ -3617,11 +3634,7 @@ class CompanionSurface(
             return
         from core.session.session import PRESENTATION_KEY
         session = self._ensure_desktop_session()
-        session.add_user(
-            f"[Operator attached {len(saved)} file(s) to {DESKTOP_NAME}: "
-            + " | ".join(str(path) for path in saved)
-            + ". Read them with your file tools when relevant.]"
-        )
+        session.add_user(_attached_files_note(saved))
         if getattr(session, "messages", None):
             session.messages[-1][PRESENTATION_KEY] = {"attachments": [str(path) for path in saved]}
         self._persist_desktop_session()
@@ -4959,7 +4972,7 @@ class CompanionSurface(
         except Exception:
             selected = []
         if selected:
-            self._attach_dropped_files([Path(path) for path in selected])
+            self._attach_dropped_files([Path(path) for path in selected], into_composer=True)
 
     def _search_from_input(self, provider: str, text: str) -> bool:
         """Open the current composer text through the existing default-browser owner."""
@@ -4998,6 +5011,13 @@ class CompanionSurface(
                                        for path in bubble._attachment_preview_paths]
             text += "\n\n[Generate controls for this request; preserve these choices: " + json.dumps(selection, ensure_ascii=False) + "]"
             bubble._generate_progress = "Preparing request · elapsed starts on submission"
+        elif bubble and getattr(bubble, "_attachment_preview_paths", None):
+            # Files in the sentence travel with it: MO hears which file each chip's name means.
+            from mo_desktop.generate_controls import reference_tokens
+
+            paths = [str(path) for path in bubble._attachment_preview_paths]
+            named = {path: name for name, path in reference_tokens(paths).items()}
+            text += "\n\n" + _attached_files_note(paths, named)
         return self._submit_text_request(text, source="submit", hide_input=False, preserve_panel=generate, media_selection=selection)
 
     def _reply_button_pressed(self, step: int = 0) -> None:
