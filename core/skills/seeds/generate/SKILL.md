@@ -2,6 +2,7 @@
 name: "Generate"
 description: "Generate music, images and videos through the user's configured Kie account in MO's existing composer"
 role: "Generate"
+role_hint: "Describe a video, image or song…"
 triggers:
   - "Suno"
   - "Seedance"

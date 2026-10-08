@@ -5054,11 +5054,21 @@ class CompanionSurface(
                         self._voice_cfg.get("role", "") if self._voice_cfg.get("role_active") else ""),
                     generate_selection=initial_selection(self._config()),
                     on_generate_action=self._generate_action,
+                    role_hints=self._role_hints(),
                 )
             ),
         ):
             self._visible = True
             self._read_generate_credits_if_stale()
+
+    def _role_hints(self) -> dict[str, str]:
+        """Each role's own words for the empty composer (its SKILL.md role_hint), by role label."""
+        hints = {}
+        for skill in self._desktop_roles():
+            label = str(getattr(skill, "role", "") or getattr(skill, "name", "") or "").strip()
+            if label and getattr(skill, "role_hint", ""):
+                hints[label] = str(skill.role_hint)
+        return hints
 
     def _read_generate_credits_if_stale(self) -> None:
         """Generate shows its balance on the composer: read it again when Generate opens, at most

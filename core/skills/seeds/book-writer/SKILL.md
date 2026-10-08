@@ -10,6 +10,7 @@ triggers:
 provenance: "seed"
 approval: "shipped"
 role: "book-writer"
+role_hint: "Let's write… ✍️"
 role_tools:
   - "mcp__*"
 role_verify: "Only mark content ready when it matches the user's approved material, page status, and the chosen production format."

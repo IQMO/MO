@@ -534,6 +534,58 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                    font=self._sfont, fill=(*self._text, 255))
         self._hit = {"privacy_close": (int(box[0] / ss), int(box[1] / ss), int(box[2] / ss), int(box[3] / ss))}
 
+    # ---- the empty composer's hint: each role's own words, in italic, a little dimmer ---------------
+    _SEARCH_HINTS = {"google": "Search Google…", "youtube": "Search YouTube…", "translate": "Translate with Google…"}
+    _DEFAULT_HINT = "Type a message…"                              # the default composer, unchanged
+
+    def _composer_hint(self) -> str:
+        """The search mode's words, else the chosen role's own hint, else the default "Type a message…"."""
+        search = self._composer_search_provider()
+        if search:
+            return self._SEARCH_HINTS[search]
+        role = str(getattr(self, "_role_label", "") or "")
+        return str((getattr(self, "_role_hints", None) or {}).get(role, "") or self._DEFAULT_HINT)
+
+    def _hint_fonts(self, ss: int) -> tuple[Any, Any]:
+        from mo_desktop.fonts import load_font
+
+        cache = self.__dict__.setdefault("_hint_font_cache", {})
+        if ss not in cache:
+            italic = load_font(("segoeuii.ttf", "ariali.ttf", "segoeui.ttf", "arial.ttf"), 13 * ss)
+            try:
+                from PIL import ImageFont
+
+                emoji = ImageFont.truetype("seguiemj.ttf", 12 * ss)
+            except OSError:
+                emoji = None                                       # no colour emoji font: the words alone
+            cache[ss] = (italic, emoji)
+        return cache[ss]
+
+    def _draw_composer_hint(self, d: Any, x: float, y: float, text: str, width: float) -> None:
+        ss = int(getattr(self, "_ss", _SS) or _SS)
+        italic, emoji = self._hint_fonts(ss)
+        colour = (*self._muted, 200)                               # a little dimmer than other muted text
+        runs, current, is_emoji = [], "", None
+        for ch in str(text or ""):
+            pictograph = ord(ch) >= 0x2190 and (ord(ch) >= 0x1F000 or 0x2190 <= ord(ch) <= 0x2BFF) or ch in "\ufe0f\u200d"
+            if is_emoji is not None and pictograph != is_emoji:
+                runs.append((current, is_emoji))
+                current = ""
+            current, is_emoji = current + ch, pictograph
+        if current:
+            runs.append((current, bool(is_emoji)))
+        right = x + width
+        for part, pictograph in runs:
+            if pictograph:
+                if emoji is None:
+                    continue
+                d.text((x, y + 1 * ss), part, font=emoji, embedded_color=True)
+                x += d.textlength(part, font=emoji)
+            else:
+                fitted = card.fit_text(d, part, max(1, right - x), italic)
+                d.text((x, y), fitted, font=italic, fill=colour)
+                x += d.textlength(fitted, font=italic)
+
     def _open_attachment_file(self) -> None:
         """The media card's play mark: open the clip or song in the system's local player, as Saved
         results' Open / play does."""
@@ -960,7 +1012,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             body_top += ((_GENERATE_ROW_H * len(generate_rows) + 9) if (generate_rows or progress) else 0) + \
                 (_GENERATE_STATUS_H if progress else 0)
         rich_text = (not is_input) and (not placeholder) and not attachment_caption
-        wrap_text = shown if not placeholder else "Type a message…"
+        hint = self._composer_hint() if placeholder else ""
+        wrap_text = shown if not placeholder else hint
         mail_reply = rich_text and shown.startswith(("**Gmail / ", "**Outlook / "))
         # The three dots sit above Send, so the composer's text wraps short of them.
         wrap_width = (self._content_width(probe, wrap_text, rich=rich_text) - _COMPOSER_DOTS_RESERVE) if dots else None
@@ -971,7 +1024,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             cached = (wrap_key, self._wrap_spans(probe, wrap_text, rich=rich_text, width=wrap_width))
             self._wrapped_body = cached
         all_lines = cached[1]
-        content_width = self._content_width(probe, shown if not placeholder else "Type a message…",
+        content_width = self._content_width(probe, shown if not placeholder else hint,
                                             rich=rich_text)
         option_rows = list(getattr(self, "_options", []) or []) if not is_input else []
         option_key = (tuple((option.label, option.detail) for option in option_rows), content_width, ss, id(self._font))
@@ -1258,7 +1311,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._input_text_top = int(text_y // ss)    # where a height glide splits the finished card
         if results:
             self._draw_results(d, img, ax, text_y, content_width * ss)
-        for idx, ln in enumerate(lines):
+        hinted = placeholder and not browse_head and not results and hint != self._DEFAULT_HINT   # the default stays as it was
+        if hinted:
+            self._draw_composer_hint(d, tx, ty, hint, content_width * ss)
+        for idx, ln in enumerate([] if hinted else lines):
             mail_heading = mail_reply and self._scroll_line + idx == 0
             if mail_heading:
                 heading_fill = tuple(int(base * 0.88 + accent * 0.12)
@@ -2462,8 +2518,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         on_attach: Callable[[], None] | None = None,
         generate_selection: dict | None = None,
         on_generate_action: Callable[[str], None] | None = None,
+        role_hints: dict[str, str] | None = None,
     ) -> bool:
         already_composing = bool(getattr(self, "_visible", False)) and self._mode == "input"
+        if role_hints is not None:
+            self._role_hints = dict(role_hints)     # each role's own empty-composer hint (its SKILL.md role_hint)
         if history is not None:
             # The composer's Up/Down browse MO's replies from the saved conversation,
             # not only the replies this process has shown since it started.

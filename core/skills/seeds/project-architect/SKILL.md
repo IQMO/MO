@@ -8,6 +8,7 @@ triggers:
 provenance: "seed"
 approval: "shipped"
 role: "project-architect"
+role_hint: "What are we building?"
 role_tools:
   - "mcp__*"
 role_verify: "Verify specialist claims against current project sources and required tests before acceptance."

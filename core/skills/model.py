@@ -42,6 +42,7 @@ class Skill:
     role_tools: tuple[str, ...] = ()
     role_lane: str = ""
     role_verify: str = ""
+    role_hint: str = ""        # the composer's empty-text hint while this role is chosen (MO Desktop)
     project_root: str = ""
 
 
@@ -85,6 +86,7 @@ def _parse_skill(path: Path) -> Skill | None:
             role_tools=_coerce_triggers(meta.get("role_tools")),
             role_lane=str(meta.get("role_lane") or "").strip(),
             role_verify=str(meta.get("role_verify") or "").strip(),
+            role_hint=str(meta.get("role_hint") or "").strip()[:80],
             project_root=str(meta.get("project_root") or "").strip(),
         )
     return None
