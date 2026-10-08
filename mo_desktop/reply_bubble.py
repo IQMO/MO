@@ -509,6 +509,25 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             y = top + (track - thumb) * first / max(1, len(items) - _RESULT_ROWS)
             d.rounded_rectangle((left + width + 3 * ss, y, left + width + 4 * ss, y + thumb), radius=ss, fill=(*self._muted, 180))
 
+    def _draw_privacy_band(self, img: Any, box: Any, panel_radius: int, panel_padding: int, ss: int) -> None:
+        """Generate's privacy, the way browsing earlier replies looks: the panel keeps its size and dims
+        (_dim_around_browse_line) around one lit band in the middle that says plainly what happens to
+        attached files. Any click or key returns."""
+        from PIL import ImageDraw
+        from mo_desktop.generate_controls import PRIVACY_LINES
+
+        step = 15 * ss
+        block = step * len(PRIVACY_LINES)
+        top = int((box[1] + box[3]) / 2 - block / 2)
+        d = ImageDraw.Draw(img)
+        d.rectangle((box[0] + 2 * ss, top - 4 * ss, box[2] - 2 * ss, top + block + 4 * ss), fill=(*self._card, 255))   # the border stays
+        self._dim_around_browse_line(img, box, panel_radius * ss, top, block, ss)
+        width = box[2] - box[0] - 2 * panel_padding * ss
+        for index, text in enumerate(PRIVACY_LINES):
+            d.text((box[0] + panel_padding * ss, top + index * step), card.fit_text(d, text, width, self._sfont),
+                   font=self._sfont, fill=(*self._text, 255))
+        self._hit = {"privacy_close": (int(box[0] / ss), int(box[1] / ss), int(box[2] / ss), int(box[3] / ss))}
+
     def _open_attachment_file(self) -> None:
         """The media card's play mark: open the clip or song in the system's local player, as Saved
         results' Open / play does."""
@@ -1033,12 +1052,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if browse_head:
             head = card.fit_text(probe, browse_head, max(1, int(wrap_width or content_width)) * ss, self._font)
             lines = [[(head, False)]] + [[] for _line in lines[1:]]
-        privacy = generate_mode and bool(getattr(self, "_privacy_open", False))
-        if privacy:   # read like a browsed reply: its lines in the text area, the panel dimmed around them
-            from mo_desktop.generate_controls import PRIVACY_LINES
-            lines = [[(card.fit_text(probe, text, max(1, int(wrap_width or content_width)) * ss, self._font), False)]
-                     for text in PRIVACY_LINES]
-            visible_count = len(lines)
+        privacy = generate_mode and bool(getattr(self, "_privacy_open", False))   # drawn last, at this size
         results = generate_mode and bool(getattr(self, "_results_open", False)) and not privacy
         if results:   # Saved results: a compact list in the text area while it is open
             shown_rows = max(1, min(len(getattr(self, "_results", None) or []), _RESULT_ROWS))
@@ -1206,7 +1220,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # body / input text
         ty = pad + body_top * ss
         tx = ax
-        fill = self._muted if (placeholder and not browse_head and not privacy) or attachment_caption else self._text
+        fill = self._muted if (placeholder and not browse_head) or attachment_caption else self._text
         body_font = self._sfont if attachment_caption else self._font
         content_r = pad + panel_padding * ss + int(content_width) * ss
         if preview is not None:
@@ -1498,7 +1512,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                         fill=(*self._entry, 255), outline=(*self._edge, 120), width=max(1, ss))
                     d.text((tip_left + 8 * ss, cyy - 3 * ss), card.fit_text(d, tip, tip_right - tip_left - 16 * ss, self._sfont),
                            font=self._sfont, fill=(*self._muted, 255))
-                if dots and not results:
+                if dots and not results and not privacy:
                     # MO's earlier replies: three dots at the right edge, centred, an arrow above and
                     # below. The bottom dot is your draft, the middle one MO's last reply, the top one
                     # anything older; the upper half moves back, the lower half forward.
@@ -1616,9 +1630,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                         fill=(*col, 255), width=max(1, ss))
                 _set_hit("sessions", (int(hx / ss), int(hy / ss) - 2, int(hx / ss) + 18, int(hy / ss) + 16),
                          min_width=26, min_height=26)
-        if privacy:   # the same dimming as browsing earlier replies; any click or key returns
-            self._dim_around_browse_line(img, box, panel_radius * ss, pad + body_top * ss, line_h * len(lines) * ss, ss)
-            self._hit = {"privacy_close": (int(box[0] / ss), int(box[1] / ss), int(box[2] / ss), int(box[3] / ss))}
+        if privacy:   # browsing's dimming at this size: a lit band in the middle carries the lines
+            self._draw_privacy_band(img, box, panel_radius, panel_padding, ss)
         finished = card.finish(img, ss)   # premultiply-then-downscale (shared primitive)
         fade_from = getattr(self, "_browse_from", None) if is_input else None
         if fade_from is not None:

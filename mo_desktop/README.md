@@ -6,8 +6,8 @@ Choose **Generate** through the existing composer role switcher. Beside the role
 (Auto, Song, Image, Video), the provider (Kie; its menu opens Settings → Models & providers) and
 the credits balance (read when MO Desktop starts and Generate opens, shown at once, "Credits —"
 when there is none; a click reads it again and shows the full balance and its time under the pill),
-all filled drop-down pills with no stroke; a small "!" at the top right dims the panel exactly as
-browsing earlier replies does and says plainly what happens to attached files. Nothing is reserved under Auto: a picked kind's choices (its model, type and options) take
+all filled drop-down pills with no stroke; a small "!" at the top right dims the panel at its size,
+exactly as browsing earlier replies does, and says plainly in a lit band what happens to attached files. Nothing is reserved under Auto: a picked kind's choices (its model, type and options) take
 only the rows they need, a progress line appears only while a job or Refine reports, and the
 composer grows with the prompt and while a drop-down needs room, gliding each time. A References pill for
 purpose-labelled files (each dropped or picked file also sits in the sentence at the caret as a
