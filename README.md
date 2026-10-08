@@ -226,6 +226,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **Game Mode** — *Game Session in the tray.* The PC set up for gaming, then restored.
 - **Care actions** — *From a plan.* Startup items and services, Windows repair, disk optimisation, DNS, updates, app leftovers, browser history, Recycle Bin, drivers and PATH duplicates.
 - **Scheduled care** — *Schedule a scan.* Care jobs that run on schedule without a model turn.
+- **MO Care** — *Automatic, every 15 minutes.* MO watches its own background without a model (provider and turn errors, workers that ended blocked, apps that failed to open, failed scheduled jobs, failing offline checks) and reports each problem once in MO Desktop or the terminal; Investigate opens a terminal.
 - **Care for your projects and servers** — *Choose a project or host.* Inspection of selected projects and configured servers.
 
 ### Life and making things
@@ -238,6 +239,7 @@ Mail, Life records and money, schedules, MO Design, visuals, images and explaine
 - **Schedules and reminders** — */schedule add <when> :: <task>.* Plain reminders, timed MO turns and scripts, delivered to Desktop or Telegram.
 - **MO Design Studio and Board** — *Launcher → Design.* Sketch on a shared Board with MO; MO proposes, you accept; live previews; send the result to a terminal or a background Goal.
 - **Images** *(setup)* — *"Make an image of…" / "crop this".* Generate, edit and show images.
+- **Generate** *(setup)* — *Composer → Generate; pick image, video or song.* Seedream images, Seedance video and Suno music through your Kie.ai key, with dropped references and Refine to sharpen the prompt.
 - **Diagrams** — */visualize.* JSON, YAML, Markdown or folders as Mermaid or ASCII diagrams.
 - **Explainer videos** — *"Make an explainer about…".* Narrated videos with captions, rendered locally.
 
