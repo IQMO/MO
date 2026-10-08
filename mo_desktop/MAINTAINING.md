@@ -25,7 +25,7 @@ when that source tree is present.
   Generate sends the names to the provider as written; elsewhere `_submit_from_input` appends
   the attached-files note so MO hears which file each name means. A chip's hover preview is
   drawn in the card (`_draw_chip_glance`, reusing `_image_attachment_preview`) from facts and a
-  clip's first frame that `companion._glance_at` reads once in the import thread — never
+  clip's first frame that `companion._glance_at` reads once (its X, `glance_remove:<i>`, goes through `_remove_reference`; the preview owns the hits under it and the gap to its chip) in the import thread — never
   FFmpeg on hover or on the GUI lane.
   Results, continuation and cleanup bind exact session/job/variation identities.
   Do not claim provider deletion, a countdown, voice enrollment or live UI/provider

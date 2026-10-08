@@ -10,7 +10,7 @@ purpose-labelled files (each dropped or picked file also sits in the sentence at
 chip named [Video1], [Image1] or [Audio1] with its role — a clip defaults to motion and a picture
 to subject for a video; clicking a chip opens References, deleting it removes the file and the
 other names stay on their files; resting the pointer on a chip shows a small preview in the card
-— the picture, a clip's first frame or the media mark, with name, length, size; Seedance reads
+— the picture, a clip's first frame or the media mark, with name, length, size and an X that removes the file; Seedance reads
 the names), a dot pill for credits, setup,
 privacy and saved results, a
 Refine sparkle by Send that rewrites the draft through MO's prompt enhancer under
@@ -723,7 +723,7 @@ does not create a raw memory, learning, prompt, rule, or credential editor.
 | **Shift** + mouse wheel over cube | Brightness of the display under the cubes: a built-in panel that Windows drives gets its real brightness; any other display gets MO's own dim layer (click-through, excluded from screen capture, below the cubes) |
 | **Win+Shift+Z** (or holding the top-left cube, or the Clipboard app) | Open the clipboard history in the one panel: newest first, text, images and file lists; click a row to copy it again, ask MO about it, remove it, or Clear all. Each copy is read a moment later, once per burst, so the app that copied and a paste right after it go first. Kept in memory only, never on disk; a copy an app marks as not for clipboard history (password managers do) is never recorded, and one that looks like a secret is masked and never offered to MO. Windows' own Win+V is untouched |
 | **Esc** while MO acts on the computer | Stop it: a Desktop turn gets Panic Stop; a local MO Terminal using the computer gets its own Esc (the typed stop control). An Esc MO itself presses while acting, or one pressed in an MO Desktop panel (closing the composer), never stops anything |
-| Drop files on the cube or the open panel | Attach locally (several at once; the composer's attach button also picks several); MO reads them and answers in the one panel. While the composer is open (any role, including Book Writer) or through its attach button, each file instead joins the sentence at the caret as a chip ([Image1], [File1]; point at it for a small preview, click for Remove, Backspace deletes it with its file) and goes with **Send**, MO told which file each name means; under Generate they are the request's references. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
+| Drop files on the cube or the open panel | Attach locally (several at once; the composer's attach button also picks several); MO reads them and answers in the one panel. While the composer is open (any role, including Book Writer) or through its attach button, each file instead joins the sentence at the caret as a chip ([Image1], [File1]; point at it for a small preview with an X that removes the file, click for Remove, Backspace deletes it with its file) and goes with **Send**, MO told which file each name means; under Generate they are the request's references. An image shows its preview first and goes to MO with **Send** (image Tools); a separate paired-device transfer stays an explicit choice |
 
 Screen selections are saved under the active private profile's ordinary
 `media/attachments/gallery` catalog and appear in MO Files. Escape or right-click

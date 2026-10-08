@@ -438,11 +438,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         pic_w = picture.width if picture is not None else (mark_size if kind in {"video", "audio"} else 0)
         pic_h = picture.height if picture is not None else mark_size
         font = getattr(self, "_sfont", None) or self._font
-        room = box[2] - box[0] - 2 * margin - 2 * pad - (pic_w + gap if pic_w else 0)
+        close_w = 18 * ss                                     # the X that removes this file, top right
+        room = box[2] - box[0] - 2 * margin - 2 * pad - (pic_w + gap if pic_w else 0) - close_w
         title = card.fit_text(d, Path(path).name, room, font)
         details = card.fit_text(d, details, room, font)
         text_w = max(self._text_width(d, title, font), self._text_width(d, details, font))
-        width = 2 * pad + (pic_w + gap if pic_w else 0) + text_w
+        width = 2 * pad + (pic_w + gap if pic_w else 0) + text_w + close_w
         left = max(box[0] + margin, min(x0, box[2] - margin - width))
         top = y0 - margin - height if above >= below else y1 + margin
         d.rounded_rectangle((left, top, left + width, top + height), radius=int(self._visuals.metrics.button_corner_radius) * ss,
@@ -455,6 +456,20 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         tx = left + pad + (pic_w + gap if pic_w else 0)
         d.text((tx, top + height / 2 - 15 * ss), title, font=font, fill=(*self._text, 255))
         d.text((tx, top + height / 2 + 1 * ss), details, font=font, fill=(*self._muted, 255))
+        from interface.desktop_brand import make_glyph_icon
+
+        remove_key = f"glance_remove:{index}"
+        cx, cy = int(left + width - pad - 10 * ss), int(top + pad - 1 * ss)
+        colour = self._text if self._hovering(remove_key) else self._muted
+        img.alpha_composite(make_glyph_icon("close", 10 * ss, color="#%02x%02x%02x" % tuple(colour[:3])), (cx, cy))
+        # The preview takes the pointer like the drop-down does: nothing under it is hit, the pointer can
+        # cross from the chip onto it (the gap between them belongs to it) and stay while it reaches the X.
+        panel = (left / ss, top / ss, (left + width) / ss, (top + height) / ss)
+        self._hit = {key: bounds for key, bounds in self._hit.items() if key == f"chip:{index}" or not (
+            bounds[0] < panel[2] and bounds[2] > panel[0] and bounds[1] < panel[3] and bounds[3] > panel[1])}
+        self._hit[remove_key] = (int(cx / ss) - 7, int(cy / ss) - 7, int(cx / ss) + 17, int(cy / ss) + 17)
+        bridge_top, bridge_bottom = (panel[1], y0 / ss) if top < y0 else (y1 / ss, panel[3])
+        self._hit[f"glance:{index}"] = (int(panel[0]), int(bridge_top), int(panel[2]), int(bridge_bottom))
 
     def _reference_edge(self, cursor: int, step: int) -> tuple[int, int] | None:
         """The reference name just before (step -1) or after (+1) the cursor, as ``(start, end)``."""
@@ -1354,8 +1369,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                              min_width=28)
 
         hovered = str(getattr(self, "_hover", "") or getattr(self, "_keyboard_hit", "") or "")
-        if is_input and not open_menu and hovered.startswith("chip:") and hovered in self._hit:
-            self._draw_chip_glance(d, img, box, self._hit[hovered], int(hovered[len("chip:"):]))
+        prefix, _sep, number = hovered.rpartition(":")
+        if (is_input and not open_menu and prefix in {"chip", "glance", "glance_remove"} and number.isdigit()
+                and f"chip:{number}" in self._hit):   # the preview stays while the pointer is on it or its X
+            self._draw_chip_glance(d, img, box, self._hit[f"chip:{number}"], int(number))
         if open_menu and open_menu.get("owner") in self._hit:
             # One opaque drop-down under its control (the role selector or a Generate pill);
             # it never resizes or replaces the composer and scrolls when it cannot fit.
@@ -2572,6 +2589,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 callback("enhance", "")
         elif key.startswith("generate:"):
             self._toggle_generate_menu(key)
+        elif key.startswith("glance_remove:"):              # the preview's X removes that file with its chip
+            self._remove_reference(int(key.rpartition(":")[2]))
+            self._hover = self._keyboard_hit = ""
+            self._repaint()
         elif key.startswith("chip:"):   # a chip opens Generate's References menu (role or remove), elsewhere Remove
             if str(getattr(self, "_role_label", "")).casefold() == "generate" and getattr(self, "_generate_selection", None):
                 self._toggle_generate_menu("generate:refs")
@@ -3220,7 +3241,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         self._hover = key
         try:
-            self._win.set_cursor("hand" if key else "arrow")
+            self._win.set_cursor("hand" if key and not key.startswith("glance:") else "arrow")   # a preview only shows
         except Exception:
             pass
         self._repaint()
