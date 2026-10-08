@@ -164,6 +164,8 @@ LANDING = r'''<div class="landing">
 <div><h3>Private, and it learns you openly</h3><p>Everything lives in your private MO home; credentials never enter the model's context; learning is reviewable.</p></div>
 <div><h3>Deep project work</h3><p>A structural code graph, project mapping and rules, goals with an auditor, background workers and a review team that hands confirmed findings back for fixing.</p></div>
 <div><h3>It uses your computer with you</h3><p>Actions on real windows, tabs and controls, each returning its own proof; risky actions ask once.</p></div>
+<div><h3>Several MOs, one team</h3><p>Running MOs see each other's work and recent files, message each other, never run two full test suites at once, and hire specialists whose checked work earns rank.</p></div>
+<div><h3>It watches its own back</h3><p>MO Care checks MO's background every 15 minutes without a model and reports each problem once, with evidence.</p></div>
 </div></section>
 
 <section id="wont" aria-labelledby="wont-h"><p class="eyebrow">By design</p><h2 id="wont-h">What MO won't do</h2>
@@ -184,16 +186,16 @@ LANDING = r'''<div class="landing">
 <li><span class="id">P4</span><h3>Reachable everywhere</h3><p>Your own Hub, the Android app, remote terminals, Live Control, files and transfers, Telegram and a headless service.</p></li>
 <li><span class="id">P5</span><h3>Private, and it learns you</h3><p>Profile, terms, memory, reviewable learning, skills and moving in from other agents.</p></li>
 <li><span class="id">P6</span><h3>Safe by design</h3><p>One sandbox for every tool call, exact confirmations, secrets kept out, untrusted content fenced.</p></li>
-<li><span class="id">P7</span><h3>The engineering workbench</h3><p>The Terminal: workspace and panes, code graph and maps, roles and workers.</p></li>
-<li><span class="id">P8</span><h3>It uses your computer with you</h3><p>Computer use, MO Desktop and its apps, voice, MO Shell and PC care.</p></li>
-<li><span class="id">P9</span><h3>Life and making things</h3><p>Mail, Life records and money, schedules, MO Design, visuals, images and explainer videos.</p></li>
+<li><span class="id">P7</span><h3>The engineering workbench</h3><p>The Terminal: workspace and panes, code graph and maps, roles and workers, hired specialists and MOs working as a team.</p></li>
+<li><span class="id">P8</span><h3>It uses your computer with you</h3><p>Computer use, MO Desktop and its apps (the operations floor, Inventory), voice, MO Shell, PC care and MO Care.</p></li>
+<li><span class="id">P9</span><h3>Life and making things</h3><p>Mail, Life records and money, schedules, MO Design, visuals, images, Generate (images, video and music) and explainer videos.</p></li>
 <li><span class="id">P10</span><h3>Setup and operations</h3><p>Install, health, credentials, updates, settings and optional public pages.</p></li>
 </ol></section>
 
 <section id="surfaces" aria-labelledby="surfaces-h"><p class="eyebrow">Where it runs</p><h2 id="surfaces-h">One runtime, every surface</h2>
 <div class="cards">
 <div class="card"><h3>MO Terminal <span class="tag main">main workbench</span></h3><p>Coding, research, files, goals, reviews and automation in your real projects.</p></div>
-<div class="card"><h3>MO Desktop <span class="tag">optional · Windows</span></h3><p>A resident assistant: Dashboard, design, screen help, voice and files.</p></div>
+<div class="card"><h3>MO Desktop <span class="tag">optional · Windows</span></h3><p>A resident assistant: Dashboard, design, screen help, voice and files, the operations floor and Inventory.</p></div>
 <div class="card"><h3>MO Shell <span class="tag">optional · Windows</span></h3><p>Keeps the terminal beside the app you are working in.</p></div>
 <div class="card"><h3>MO Everywhere <span class="tag test">closed test</span></h3><p>The Android app reaches your own Hub. <a href="#android">More about the app</a>.</p></div>
 <div class="card"><h3>Telegram</h3><p>Conversation and approvals through your own bot.</p></div>
