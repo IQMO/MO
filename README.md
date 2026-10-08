@@ -193,6 +193,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **Desktop recipes** — *Recorded step sequences.* Transparent replay of known desktop steps.
 - **Living panel** — *Left-click the cubes* (again to close). One panel grows from the cubes: type, attach, choose; replies appear in place.
 - **The swallow** — *Drag a file near the cubes and drop it.* Their mouth opens by distance and they swallow the file; it's attached to your message.
+- **Files in your sentence** — *Drop or attach a file while you write.* It sits where you are typing as a named chip ([Image1], [Video1], [File1]); point at it for a small preview, Backspace removes it, and MO is told which file each name means.
 - **App launcher** — *Double-click the cubes.* Four grouped app tiles (Work, Devices, Care, Your apps); add your own files and folders; drag to arrange.
 - **Compact Dashboard** — *Right-click the cubes.* Home, Work, You and Systems at a glance, with project checks.
 - **Screen capture by hold** — *Hold a cube for two seconds, drag a rectangle.* A full-resolution snip you can preview and send to MO.
@@ -239,7 +240,7 @@ Mail, Life records and money, schedules, MO Design, visuals, images and explaine
 - **Schedules and reminders** — */schedule add <when> :: <task>.* Plain reminders, timed MO turns and scripts, delivered to Desktop or Telegram.
 - **MO Design Studio and Board** — *Launcher → Design.* Sketch on a shared Board with MO; MO proposes, you accept; live previews; send the result to a terminal or a background Goal.
 - **Images** *(setup)* — *"Make an image of…" / "crop this".* Generate, edit and show images.
-- **Generate** *(setup)* — *Composer → Generate; pick image, video or song.* Seedream images, Seedance video and Suno music through your Kie.ai key, with dropped references and Refine to sharpen the prompt.
+- **Generate** *(setup)* — *Composer → Generate; pick image, video or song.* Seedream images, Seedance video and Suno music through your Kie.ai key: references named in your sentence ("the motion of [Video1] on [Image1]"), checked against what the model takes as you drop them, Refine to sharpen the prompt, your credits shown, and saved results that play from the composer.
 - **Diagrams** — */visualize.* JSON, YAML, Markdown or folders as Mermaid or ASCII diagrams.
 - **Explainer videos** — *"Make an explainer about…".* Narrated videos with captions, rendered locally.
 
