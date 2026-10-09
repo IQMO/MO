@@ -636,9 +636,6 @@ def main(argv: list[str] | None = None):
     if runtime_lane:
         print("MO startup error: runtime lane requires a one-shot prompt", file=sys.stderr)
         sys.exit(2)
-    if "--ux" in args or os.environ.get("MO_NEXT_UX", "").strip().lower() in {"1", "true", "yes", "on"}:
-        print("MO UX surface was removed; use `mo` for the interface terminal TUI.", file=sys.stderr)
-        sys.exit(2)
     config_error_cls, provider_error_cls, provider_error_cleaner = _load_provider_errors()
     agent_factory, gateway_cls = _load_agent_runtime()
     try:
