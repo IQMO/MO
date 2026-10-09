@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from core.dashboard.projection import _mapping
 from core.runtime.heartbeat import read_recent_heartbeats
 from core.runtime.surface_identity import normalize_runtime_surface
 from core.state.paths import HEARTBEAT_LEDGER_PATH, resolve_state_path
@@ -152,13 +153,13 @@ def _remote_dashboard_snapshot(
     only aggregate owner counts and fixed labels; it never forwards those local
     strings, paths, profile prose, provider/model details, or artifact locations.
     """
-    source = snapshot if isinstance(snapshot, dict) else {}
-    work = source.get("work") if isinstance(source.get("work"), dict) else {}
-    learning = source.get("learning") if isinstance(source.get("learning"), dict) else {}
-    work_learning = source.get("work_learning") if isinstance(source.get("work_learning"), dict) else {}
-    graph = source.get("graph") if isinstance(source.get("graph"), dict) else {}
-    runtime = source.get("runtime") if isinstance(source.get("runtime"), dict) else {}
-    mail = source.get("mail") if isinstance(source.get("mail"), dict) else {}
+    source = _mapping(snapshot)
+    work = _mapping(source.get("work"))
+    learning = _mapping(source.get("learning"))
+    work_learning = _mapping(source.get("work_learning"))
+    graph = _mapping(source.get("graph"))
+    runtime = _mapping(source.get("runtime"))
+    mail = _mapping(source.get("mail"))
     mail_state = str(mail.get("state") or "").strip().lower()
     if mail_state not in {"disabled", "secure_storage_unavailable", "client_missing", "reconnect_required", "disconnected", "connected", "sync_unknown"}:
         mail_state = "disabled"
