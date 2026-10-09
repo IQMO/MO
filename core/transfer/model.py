@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from core.state.attachments import safe_attachment_name
+from core.state.attachments import MAX_ATTACHMENT_BYTES, safe_attachment_name
 from core.utils.number_utils import as_bounded_int
 
 
 DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024
-TURN_CONTEXT_MAX_BYTES = 20 * 1024 * 1024
+# The turn_context purpose is catalog-only and keeps the attachment ceiling
+# (core/MAINTAINING.md); the catalog owns that number.
+TURN_CONTEXT_MAX_BYTES = MAX_ATTACHMENT_BYTES
 DEFAULT_CHUNK_BYTES = 8 * 1024 * 1024
 DEFAULT_HUB_QUOTA_BYTES = 10 * 1024 * 1024 * 1024
 DEFAULT_TTL_SECONDS = 24 * 60 * 60
