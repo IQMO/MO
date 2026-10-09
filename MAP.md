@@ -66,7 +66,7 @@ Compact orientation only. [`AGENTS.md`](AGENTS.md) owns repository work rules; c
 
 ## Public/private boundary
 
-- Runtime state is private by default under `~/.mo`, `MO_HOME`, or `MO_STATE_HOME`; explicit project-local opt-in is owned by `core/state/paths.py`.
+- Runtime state is private by default under `~/.mo` or `MO_STATE_HOME`; explicit project-local opt-in is owned by `core/state/paths.py`.
 - `memory/` holds profile, learning, sessions, work, and surface state; `logs/`, `run/`, `cache/`, and `media/` own their named generated data.
 - `personal/` is opaque: MO does not index, migrate, synchronize, inspect, or delete it automatically.
 - Private profile-extension records live under `~/.mo/operator` (or explicit profile overrides) and are never tracked or shipped.

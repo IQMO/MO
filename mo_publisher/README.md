@@ -33,7 +33,7 @@ remain a separate future boundary.
 Run `uvicorn mo_publisher.app:create_app --factory --host 127.0.0.1` with a
 deployment-selected port, `--no-access-log --no-proxy-headers`, one worker, and
 an independent absolute `MO_STATE_HOME`. Restrict the service OS user to this
-home and public source. `MO_HOME` must not redirect the store into the Hub home.
+home and public source.
 Runtime data uses `core.state.paths.resolve_state_path()`; reports are never
 checked into source or placed in a publicly served directory.
 

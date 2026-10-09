@@ -173,7 +173,7 @@ def _ensure_config(path: Path, report: InitReport) -> None:
 
 
 def _pin_runtime_home(path: Path, home: Path) -> None:
-    """Make generated configs self-contained for explicit MO_HOME/init runs."""
+    """Make generated configs self-contained for explicit MO_STATE_HOME/init runs."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:

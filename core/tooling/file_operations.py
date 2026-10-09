@@ -22,8 +22,7 @@ def default_file_ops_path() -> Path:
     """Active file-ops ledger: private state home or explicit project-relative state.
 
     Resolves through ``path_defaults`` so the ledger follows the same private-home
-    rules as the rest of MO's state (``MO_STATE_HOME`` *and* ``MO_HOME``), instead
-    of only honoring ``MO_STATE_HOME`` and otherwise polluting the project tree.
+    rules as the rest of MO's state instead of polluting the project tree.
     """
     return Path(resolve_state_path(str(FILE_OPS_PATH), default=str(FILE_OPS_PATH)))
 _READ_TOOLS = {"read_file"}

@@ -15,7 +15,6 @@ services:
     cap_drop:
       - ALL
     environment:
-      MO_HOME: /home/user/.mo
       MO_STATE_HOME: /home/user/.mo
       MO_CONFIG: /home/user/.mo/config.yaml
       MO_PROJECT_CWD: /workspace

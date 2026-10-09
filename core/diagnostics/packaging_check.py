@@ -54,7 +54,6 @@ def check_packaging(root: str | Path | None = None) -> list[str]:
 
     for required in (
         "USER user",
-        "MO_HOME=/home/user/.mo",
         "MO_STATE_HOME=/home/user/.mo",
         "MO_PROJECT_CWD=/workspace",
         'ENTRYPOINT ["/usr/bin/tini", "--", "python", "/app/mo_service.py"]',
@@ -100,7 +99,6 @@ def check_packaging(root: str | Path | None = None) -> list[str]:
 
     environment = service.get("environment") if isinstance(service.get("environment"), dict) else {}
     expected_environment = {
-        "MO_HOME": "/home/user/.mo",
         "MO_STATE_HOME": "/home/user/.mo",
         "MO_CONFIG": "/home/user/.mo/config.yaml",
         "MO_PROJECT_CWD": "/workspace",

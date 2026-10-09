@@ -10,7 +10,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
-    MO_HOME=/home/user/.mo \
     MO_STATE_HOME=/home/user/.mo \
     MO_CONFIG=/home/user/.mo/config.yaml \
     MO_PROJECT_CWD=/workspace

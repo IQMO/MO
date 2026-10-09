@@ -106,7 +106,6 @@ def main() -> int:
     if not re.fullmatch(r"[0-9a-f]{32}", options.request):
         raise ValueError("Invalid SystemCare permission request")
     os.environ["MO_STATE_HOME"] = str(Path(options.home).resolve(strict=True))
-    os.environ.pop("MO_HOME", None)
     from core.runtime.backend_monitor import BackendMonitor, set_monitor
     set_monitor(BackendMonitor())
     from core.state.paths import resolve_state_path

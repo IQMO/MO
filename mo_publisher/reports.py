@@ -34,10 +34,7 @@ def configured_store():
     state_home = Path(os.environ.get("MO_STATE_HOME", ""))
     if not state_home.is_absolute() or os.environ.get("MO_STATE_LOCAL"):
         raise RuntimeError("Publisher needs a dedicated absolute MO_STATE_HOME")
-    path = Path(resolve_state_path("memory/surfaces/publisher-reports.sqlite"))
-    if not path.resolve().is_relative_to(state_home.resolve()):
-        raise RuntimeError("Publisher state must stay in its dedicated home; check MO_HOME")
-    return ReportStore(path)
+    return ReportStore(Path(resolve_state_path("memory/surfaces/publisher-reports.sqlite")))
 
 
 def canonical_uuid(value: str) -> str:

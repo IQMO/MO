@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 import traceback
 
-from ..state.paths import ENV_MO_STATE_HOME, resolve_state_path
+from ..state.paths import resolve_state_path
 from ..utils.number_utils import cache_hit_percentage
 from .surface_identity import DESKTOP_SURFACES, normalize_runtime_surface
 from ..utils.text_safety import (
@@ -679,9 +679,6 @@ class BackendMonitor:
         configured = os.environ.get("MO_BACKEND_MONITOR_DIR")
         if configured:
             return Path(configured)
-        state_home = os.environ.get(ENV_MO_STATE_HOME, "").strip()
-        if state_home:
-            return Path(state_home) / "logs" / "monitor"
         return Path(resolve_state_path("logs/monitor"))
 
     @staticmethod

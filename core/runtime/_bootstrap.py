@@ -19,7 +19,7 @@ def bootstrap(caller_file: str, invoked_as: str = "mo") -> str:
 
     Returns the resolved AGENT_ROOT path so callers don't recompute it.
     """
-    _MO_HOME = os.environ.get("MO_HOME") or os.path.join(os.path.expanduser("~"), ".mo")
+    _MO_HOME = os.environ.get("MO_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".mo")
     sys.pycache_prefix = os.path.join(_MO_HOME, "cache", "pycache")
 
     from core.utils.text_safety import configure_utf8_stdio

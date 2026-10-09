@@ -498,7 +498,7 @@ def _print_cli_help() -> None:
     print("  mo --explainer <init|validate|check|narrate|sheet|render|status> ...")
     print()
     print("Startup:")
-    print("  Run `mo` from a project folder. MO preserves that project cwd and keeps private state under ~/.mo or MO_HOME.")
+    print("  Run `mo` from a project folder. MO preserves that project cwd and keeps private state under ~/.mo or MO_STATE_HOME.")
     print()
     print(build_help_text())
 

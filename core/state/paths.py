@@ -10,7 +10,6 @@ ENV_DEFAULT_ROOTS = "MO_DEFAULT_ROOTS"
 ENV_CODEX_AUTH_PATH = "MO_CODEX_AUTH_PATH"
 ENV_CODEX_AUTH_PATH_COMPAT = "CODEX_AUTH_PATH"
 ENV_MO_CONFIG = "MO_CONFIG"
-ENV_MO_HOME = "MO_HOME"
 ENV_MO_PROJECT_CWD = "MO_PROJECT_CWD"
 ENV_MO_STATE_HOME = "MO_STATE_HOME"
 ENV_MO_STATE_LOCAL = "MO_STATE_LOCAL"  # opt OUT of private-by-default → project-relative state
@@ -31,7 +30,7 @@ def mo_home(config: dict[str, Any] | None = None) -> Path:
     This is where user state belongs for installed runtimes.
     Relative runtime state resolves here when private state is enabled.
 
-    Precedence: explicit process environment (``MO_HOME``/``MO_STATE_HOME``) >
+    Precedence: explicit process environment (``MO_STATE_HOME``) >
     config ``runtime.home`` > ``~/.mo`` — matching ``local_extension_root``.
     An env override is per-process intent (isolated E2E homes depend on it);
     a config value pinning the home must not defeat it, or an isolated probe
@@ -44,7 +43,7 @@ def mo_home(config: dict[str, Any] | None = None) -> Path:
         configured = str(((cfg.get("runtime") or {}).get("home")) or "").strip()
     except Exception:
         configured = ""
-    raw = os.getenv(ENV_MO_HOME) or os.getenv(ENV_MO_STATE_HOME) or configured or "~/.mo"
+    raw = os.getenv(ENV_MO_STATE_HOME) or configured or "~/.mo"
     return Path(raw).expanduser().resolve(strict=False)
 
 

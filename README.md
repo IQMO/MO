@@ -591,7 +591,7 @@ diagnose runtime and provider setup without displaying credential values.
 Your private `~/.mo` home is separate from the checkout. Keep it to preserve
 configuration, memory, and conversations for a later installation. Delete that
 home only if you intend to erase those records and credentials; a configured
-`runtime.home`, `MO_HOME`, or `MO_STATE_HOME` may point elsewhere. Never delete
+`runtime.home` or `MO_STATE_HOME` may point elsewhere. Never delete
 a parent folder containing other data. Provider accounts and separately hosted
 Hub data are managed separately from uninstalling this local copy.
 
