@@ -19,18 +19,13 @@ from __future__ import annotations
 
 import shutil
 
+# Raster rendering is possible exactly when Pillow is importable; the edit leg
+# (core.imageedit) already owns that one probe.
+from core.imageedit import available
+
 UPPER_HALF_BLOCK = "▀"  # ▀
 DEFAULT_MAX_COLS = 100
 MIN_COLS = 8
-
-
-def available() -> bool:
-    """True when raster rendering is possible (Pillow importable)."""
-    try:
-        import PIL  # noqa: F401
-        return True
-    except Exception:
-        return False
 
 
 def terminal_cols(fallback: int = 80) -> int:

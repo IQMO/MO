@@ -52,16 +52,6 @@
       "removal": "intentional-permanent: separate lane state prevents cross-capability authority coupling"
     },
     {
-      "id": "python-function:93133fdab64112ad",
-      "members": [
-        "core/imageedit.py::available",
-        "core/visualize/terminal_image.py::available"
-      ],
-      "reason": "Two optional image features probe different dependencies and keep feature-local error boundaries.",
-      "behavior_owner": "image editing and terminal visualization feature boundaries",
-      "removal": "intentional-permanent: tiny feature-local availability probes avoid a generic dependency abstraction"
-    },
-    {
       "id": "renamed-token-block:08afd390a51a3d55",
       "members": [
         "interface/skins/cold.py",
