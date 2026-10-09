@@ -50,6 +50,9 @@ class SettingsPanel(NativeAppWindow):
                        "voice.clone_status": own_voice.status_text(voice, getattr(self._c, "_speech", None)),
                        "voice.microphone": own_voice.microphone_text(),
                        "voice.record": self._voice_recording().status()})
+        from mo_desktop.voice import make_voice
+
+        values.update({"voice.trainer": make_voice.trainer_text(voice), "voice.make": make_voice.progress(voice)})
         agent = self._c._agent
         catalog = model_catalog_projection(agent, allow_live=False)
         try:
@@ -207,7 +210,7 @@ class SettingsPanel(NativeAppWindow):
         # Slow enumeration uses the existing pipe reader; live Desktop changes
         # are posted to their existing GUI owner without another worker pool.
         if action in {"devices", "chrome_status", "chrome_repair", "chrome_remove", "model", "models_status", "configuration", "lsp", "media_status", "media_install",
-                      "record_status", "record_start", "record_stop", "record_cancel"}:
+                      "record_status", "record_start", "record_stop", "record_cancel", "make_start", "make_stop", "make_status"}:
             run()
         elif self._c._post_gui_call(run) is False and self.is_running():
             self._send({"cmd": "result", "request_id": request_id,
@@ -228,14 +231,28 @@ class SettingsPanel(NativeAppWindow):
         if action == "snapshot":
             return {"state": self.snapshot()}
         if action.startswith("record_"):        # Settings › Voice › Record my voice (own_voice.VoiceRecording)
+            from mo_desktop.voice import make_voice
+
             session = self._voice_recording()
+            voice = dict(getattr(self._c, "_voice_cfg", {}) or {})
             if action == "record_start":
                 return {"recording": session.start(payload.get("step"))}
-            if action == "record_stop":
-                return {"recording": session.stop()}
+            if action == "record_stop":                 # enough good speech enables Make my voice at once
+                return {"recording": session.stop(), "making": make_voice.progress(voice)}
             if action == "record_cancel":
                 session.cancel()
             return {"recording": session.status()}
+        if action.startswith("make_"):          # Settings › Voice › Make my voice (make_voice, a background process)
+            from mo_desktop.voice import make_voice
+
+            voice = dict(getattr(self._c, "_voice_cfg", {}) or {})
+            if action == "make_start":
+                making = make_voice.start({**voice, "_config_path": str(self.config.get("_config_path") or "")})
+                self._c.watch_voice_making()            # Desktop speaks in the new voice when it's ready
+                return {"making": making}
+            if action == "make_stop":
+                return {"making": make_voice.stop(voice)}
+            return {"making": make_voice.progress(voice)}
         if action in {"preview", "save"}:
             return self._setting(str(payload.get("id") or ""), payload.get("value"), save=action == "save")
         if action == "terminal":

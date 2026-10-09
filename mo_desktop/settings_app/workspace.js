@@ -233,11 +233,27 @@
           const last = view.last;
           if (last) { note.textContent = last.advice; if (last.status === 'ok') step = Math.min(step + 1, (view.steps || []).length); }
         }
+        if (result.ok && result.making) bindings.get('voice.make')?.update(result.making);
         show();
       };
       back.onclick = () => { step = Math.max(0, step - 1); note.textContent = ''; show(); };
       next.onclick = () => { step = Math.min(step + 1, (view.steps || []).length); note.textContent = ''; show(); };
       update = value => { view = value || {}; if (step === null) step = view.next || 0; show(); };
+    } else if (field.kind === 'maker') {          // Make my voice: a background process; MO speaks in the voice when done
+      const text = element('p', 'muted'), actions = element('div', 'group-actions');
+      const make = element('button', 'button', 'Make my voice'), stop = element('button', 'quiet', 'Stop');
+      make.type = 'button'; stop.type = 'button'; actions.append(make, stop); control.append(text, actions);
+      let view = {}, timer = 0;
+      const show = () => {
+        text.textContent = view.message || '';
+        make.hidden = Boolean(view.running); stop.hidden = !view.running; make.disabled = !view.can_start;
+        make.textContent = view.resume_from === 'train' && ['interrupted', 'stopped', 'failed'].includes(view.stage) ? 'Continue making my voice' : 'Make my voice';
+        clearTimeout(timer);
+        if (view.running) timer = setTimeout(async () => { const result = await act('make_status'); if (result.ok && result.making) { view = result.making; show(); } }, 10000);
+      };
+      make.onclick = async () => { make.disabled = true; const result = await act('make_start'); if (result.ok && result.making) view = result.making; show(); };
+      stop.onclick = async () => { stop.disabled = true; const result = await act('make_stop'); stop.disabled = false; if (result.ok && result.making) view = result.making; show(); };
+      update = value => { view = value || {}; show(); };
     } else if (field.kind === 'color') {
       const follow = element('input', 'settings-switch'), label = element('label', 'muted', 'Follow skin'); follow.type = 'checkbox';
       follow.setAttribute('aria-label', 'Follow skin color'); input = element('input'); input.type = 'color';

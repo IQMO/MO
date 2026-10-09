@@ -223,7 +223,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **Voice commands** — *Say stop, repeat, or what are you doing (English or Arabic).* Instant control without a model call.
 - **Continuous Voice Chat** — *Tray toggle.* Hands-free listen, answer, listen.
 - **Hands to a task** — *"Open my report and…".* Anything needing tools is handed to MO in your own words and spoken back when done.
-- **Your own voice** *(setup)* — *Settings → Voice → Your voice.* Choose a voice clone you trained and MO speaks in your voice; it says whether it loaded, and never ships anyone's cloned voice.
+- **Your own voice** *(setup)* — *Settings → Voice → Your voice.* Record yourself reading short lines, and MO makes your voice with the trainer installed on your computer (Applio), then speaks in it; or choose a voice clone you trained. It says whether your voice loaded, and never ships anyone's cloned voice.
 - **Arabic speech** *(setup)* — *Settings → Voice → Arabic voice.* Arabic replies spoken through an Arabic voice you placed; never misread by the English voice.
 - **MO Shell** — *Launcher → Shell.* A floating native window for your MO terminal, attached to one window you choose; in a fresh conversation MO names the attached app and asks how it can help.
 - **SystemCare app** — *Launcher → SystemCare.* The PC-care workspace.

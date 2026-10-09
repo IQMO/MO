@@ -446,6 +446,7 @@ mo_desktop:
     clone_index: ""                 # optional matching .index for the clone
     clone_pitch: 0                  # semitones from -24 to 24 between the plain voice and the clone
     clone_backend: vulkan           # audio.cpp build under <voice root>/engines: vulkan, cuda or cpu
+    trainer_path: ""                # folder of an installed Applio that Settings > Voice > Make my voice runs; empty = none
     output_device: default          # system default, or an exact output-device name from Settings
     role: ""                        # Default/empty, a discovered profile role, or bounded custom text
     role_active: false              # pause/resume the selected conversation role

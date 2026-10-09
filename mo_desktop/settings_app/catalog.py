@@ -52,6 +52,8 @@ FIELDS = (
     ("voice.clone_status", "voice", "Your voice", "Status", "Whether your voice loaded.", "status", ()),
     ("voice.microphone", "voice", "Your voice", "Microphone", "What MO listens and records with.", "status", ()),
     ("voice.record", "voice", "Your voice", "Record my voice", "Read short lines aloud, then talk freely. MO records and checks each clip.", "recorder", ()),
+    ("voice.trainer", "voice", "Your voice", "Trainer", "The program on this computer that turns your recordings into your voice.", "status", ()),
+    ("voice.make", "voice", "Your voice", "Make my voice", "MO trains your voice in the background and speaks in it when it's ready.", "maker", ()),
 )
 BY_ID = {row[0]: row for row in FIELDS}
 
@@ -366,7 +368,7 @@ def validate_value(key: str, value: Any) -> Any:
     elif kind == "color":
         if not isinstance(value, str) or (value != "skin" and re.fullmatch(r"#[0-9a-fA-F]{6}", value) is None):
             raise ValueError("Choose a color or follow the skin")
-    elif kind in {"status", "recorder"}:
+    elif kind in {"status", "recorder", "maker"}:
         raise ValueError("This row only shows state")
     elif kind == "choice":           # membership is checked against this computer's choices by the host
         if not isinstance(value, str) or len(value) > 1000:

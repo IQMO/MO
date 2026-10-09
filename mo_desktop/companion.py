@@ -526,6 +526,7 @@ class CompanionSurface(
             return False
         self._init_speech_output()
         self._init_voice()
+        self.watch_voice_making()              # a voice being made in the background is announced when ready
         self._init_tray()
         thread = threading.Thread(target=self._gui_loop, name="mo-desktop", daemon=True)
         self._gui_thread = thread

@@ -186,11 +186,54 @@ class CompanionVoiceMixin:
                 pass
         self._speech_state = "idle"
 
+    def watch_voice_making(self, *, interval: float = 15.0) -> None:
+        """While MO makes the operator's voice in the background, look at its progress now and then. When it is
+        ready, switch to it and say so in it; when it fails, say why beside the cubes. Each run is told once."""
+        watcher = getattr(self, "_voice_making_watch", None)
+        if watcher is not None and watcher.is_alive():
+            return
+
+        def watch() -> None:
+            from mo_desktop.voice import make_voice
+
+            while True:
+                try:
+                    state = make_voice.progress(self._voice_cfg)
+                except Exception:
+                    return
+                if state["running"]:
+                    time.sleep(interval)
+                    continue
+                if state["stage"] in {"done", "failed"} and not state.get("announced"):
+                    make_voice.mark_announced(self._voice_cfg)
+                    if state["stage"] == "done":
+                        self._post_gui_call(lambda path=str(state.get("voice") or ""): self._use_new_own_voice(path))
+                    else:
+                        self._set_status(str(state.get("message") or "Making your voice failed"), self._visual_palette.warn)
+                return
+
+        self._voice_making_watch = threading.Thread(target=watch, name="mo-voice-making-watch", daemon=True)
+        self._voice_making_watch.start()
+
+    def _use_new_own_voice(self, path: str) -> None:
+        """The voice made from the operator's recordings is ready: switch to it, load it, and speak in it once."""
+        log_event("own voice made; switching to it", config=getattr(self._agent, "config", None))
+        self._set_status("Your voice is ready · loading it now", self._visual_palette.ok)
+        self._announce_own_voice = True
+        self.set_own_voice("clone_model", path)
+        if getattr(self, "_speech", None) is None:
+            self._init_speech_output(force=True)
+
     def _on_voice_clone_event(self, state: str) -> None:
         """The operator's own voice loaded or failed. MO never goes silent for it (the plain voice speaks
         meanwhile), so the outcome is logged and said once beside the cubes, with the worker's reason."""
         error = str(getattr(getattr(self, "_speech", None), "clone_error", "") or "")
         log_event(f"voice clone {state}" + (f": {error}" if error else ""), config=getattr(self._agent, "config", None))
+        if state == "ready" and getattr(self, "_announce_own_voice", False):
+            self._announce_own_voice = False             # a newly made voice introduces itself, once
+            speech = getattr(self, "_speech", None)
+            if speech is not None:
+                speech.speak("This is your voice now. If it sounds too high or too low, change the pitch in Settings.")
         if state == "ready":
             self._set_status("Speaking in your own voice.", self._visual_palette.ok)
         elif state == "failed":

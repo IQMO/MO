@@ -28,6 +28,7 @@ DEFAULT_PREFERENCES = {
     "mo_desktop.voice.clone_index": "",
     "mo_desktop.voice.clone_pitch": 0,
     "mo_desktop.voice.clone_backend": "vulkan",
+    "mo_desktop.voice.trainer_path": "",
     "mo_desktop.computer_use.pixel_policy": "configured_providers",
     "mcp.enabled": True,
     "local_extensions.enabled": False,

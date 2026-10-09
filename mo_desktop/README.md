@@ -948,7 +948,15 @@ Voice is optional and lazy:
   microphone's own rate, checks each clip (too short, quiet, loud or noisy, with
   what to do) and keeps only good clips, privately, in
   `<voice root>/profiles/my-voice/recordings/`; about five minutes of good
-  speech is enough to make a voice. Every spoken
+  speech is enough to make a voice. **Make my voice** then does the rest with
+  the trainer installed on this computer (`voice.trainer_path`, an installed
+  Applio; the **Trainer** row says what was found): one background process at
+  below-normal priority prepares the good clips, extracts and trains (RVC v2,
+  40 kHz, HiFi-GAN, from Applio's pretrained voice), copies the voice and its
+  index into `profiles/my-voice`, saves it as your speaking voice and removes
+  its own training folder. It survives a Desktop restart; Stop or an
+  interruption can be continued from the last checkpoint. When the voice is
+  ready MO switches to it and says a sentence in it. Every spoken
   sentence is then converted through audio.cpp's `rvc` family. MO
   keeps speaking in its plain voice while the clone loads (a minute or two on
   a small GPU), and for any sentence the clone cannot convert. The clone runs in
@@ -1092,6 +1100,7 @@ Common settings:
 | `voice.clone_index` | `""` | Optional matching retrieval index (`.index`) |
 | `voice.clone_pitch` | `0` | Pitch shift in semitones (−24…24) from the plain voice to the clone |
 | `voice.clone_backend` | `vulkan` | Which installed audio.cpp build runs the clone: `vulkan`, `cuda` or `cpu` |
+| `voice.trainer_path` | `""` | Folder of an installed Applio that Make my voice runs (its own `core.py` and interpreter); empty means no trainer |
 
 The complete disabled example is in
 [`config.example.yaml`](../config.example.yaml). Additional runtime fields are
