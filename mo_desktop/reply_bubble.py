@@ -1083,19 +1083,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         line_h = max(1, int(design.line_height))
         minimum_text = max(line_h, int(design.min_text_height))
         available_h = max(minimum_text, card_budget - preview_h - frame_h)
-        # Replies keep one card size through a turn: text and options share what the fixed height
-        # leaves. A notice outside any turn keeps its own size (his day-1 look, row 165 is per turn).
-        fixed_reply = (not is_input and preview is None and not attachment_caption
-                       and not getattr(self, "_fit_reply", False)
-                       and getattr(self, "_panel_state", None) in (PanelState.REPLY, PanelState.FOOTERLESS))
-        if fixed_reply:
-            available_h = max(minimum_text, int(design.reply_card_height) - (frame_h - 2 * int(design.shadow_pad)))
         options_h = min(options_content_h + 8, max(48, available_h - minimum_text)) if option_rows else 0
         self._max_options_scroll = max(0, options_content_h - (options_h - 8)) if option_rows else 0
         self._options_scroll = max(0, min(int(getattr(self, "_options_scroll", 0)), self._max_options_scroll))
         self._options_region = None
-        text_budget = (max(minimum_text, available_h - options_h) if fixed_reply
-                       else max(minimum_text, min(int(design.max_text_height), available_h - options_h)))
+        text_budget = max(minimum_text, min(int(design.max_text_height), available_h - options_h))
         max_visible = max(1, text_budget // line_h)
         visible_count = max(1, min(len(all_lines), max_visible))
         self._max_scroll_line = max(0, len(all_lines) - visible_count)
@@ -1123,8 +1115,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             shown_rows = max(1, min(len(getattr(self, "_results", None) or []), _RESULT_ROWS))
             lines = [[] for _row in range(-(-shown_rows * _RESULT_ROW_H // line_h))]
             visible_count = len(lines)
-        text_h = (text_budget if fixed_reply else
-                  max(int(design.min_text_height), min(int(design.max_text_height), visible_count * line_h)))
+        text_h = max(int(design.min_text_height), min(int(design.max_text_height), visible_count * line_h))
         panel_radius = int(self._visuals.metrics.panel_corner_radius)
         card_w = int(content_width) + 2 * panel_padding
         card_h = (
@@ -1310,8 +1301,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                               int((py + preview.size[1]) / ss)))
                 ty += preview.size[1] + (actions_h + preview_gap) * ss
         text_y = ty
-        if is_input:
-            self._input_text_top = int(text_y // ss)    # where a height glide splits the finished card
+        self._glide_split = int(text_y // ss)    # where a height glide splits the finished card (composer and reply)
         if results:
             self._draw_results(d, img, ax, text_y, content_width * ss)
         hinted = placeholder and not browse_head and not results and hint != self._DEFAULT_HINT   # the default stays as it was
@@ -1904,13 +1894,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             img_x = round(source_x+(img_x-source_x)*progress)
             img_y = round(source_y+(img_y-source_y)*progress)
             W, H = size
-        if composer and not morphing:
-            img, img_y, H = self._composer_height_glide(img, img_x, img_y, H)
+        if (composer or self._mode == "reply") and not morphing:   # composer and replies resize smoothly
+            img, img_y, H = self._panel_height_glide(img, img_x, img_y, H)
             self._bounds = (card_left, img_y + int(design.shadow_pad),
                             card_left + card_w, img_y + H - int(design.shadow_pad))
         else:
-            self._cancel_composer_glide()
-            self._composer_shown = None          # an opening or another panel starts from its own size
+            self._cancel_panel_glide()
+            self._panel_shown = None          # an opening or another panel starts from its own size
         if composer or dashboard_face:   # the source pixels its cubes are launched from
             self._cube_published = (img, img_x, img_y)
             extent = tuple(self.cube_extent()) if not morphing else getattr(self, "_last_face_extent", None)
@@ -1943,7 +1933,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         except Exception:
             pass
         self._publish_visibility(ok)
-        self._place_blur_backdrop(bool(ok and not morphing and getattr(self, "_composer_glide", None) is None))
+        self._place_blur_backdrop(bool(ok and not morphing and getattr(self, "_panel_glide", None) is None))
         if starting_transition:
             self._transition_pending_start = False
             if ok:
@@ -1954,73 +1944,74 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._last_input_blit_position = (img_x, img_y) if ok and self._mode == "input" else None
         return ok
 
-    def _composer_height_glide(self, img: Any, img_x: int, img_y: int, height: int) -> tuple[Any, int, int]:
-        """The composer grows with its text; a new or removed line glides over the panel transition
-        time instead of jumping (his order 2026-10-08). Frames are cut from the finished card
-        (card.height_frame), so nothing is scaled or rendered again."""
-        shown = getattr(self, "_composer_shown", None)
-        glide = getattr(self, "_composer_glide", None)
-        split = int(getattr(self, "_input_text_top", 0) or 0)
+    def _panel_height_glide(self, img: Any, img_x: int, img_y: int, height: int) -> tuple[Any, int, int]:
+        """The composer and replies follow their text; a new or removed line glides over the panel
+        transition time instead of jumping (his orders 2026-10-08 and 2026-10-09). Frames are cut from
+        the finished card (card.height_frame), so nothing is scaled or rendered again."""
+        shown = getattr(self, "_panel_shown", None)
+        glide = getattr(self, "_panel_glide", None)
+        split = int(getattr(self, "_glide_split", 0) or 0)
         if glide is not None and (glide["x"], glide["y1"], glide["h1"]) == (img_x, img_y, height):
             glide["image"], glide["split"] = img, split          # typing on the same line mid-glide
-            return self._composer_glide_frame()
+            return self._panel_glide_frame()
         if shown is None or shown[0] != img_x or split <= 0 or (shown[1], shown[2]) == (img_y, height):
-            self._cancel_composer_glide()
-            self._composer_shown = (img_x, img_y, height)
+            self._cancel_panel_glide()
+            self._panel_shown = (img_x, img_y, height)
             return img, img_y, height
-        self._cancel_composer_glide()
-        self._composer_glide = {"started": time.perf_counter(), "x": img_x, "y0": shown[1], "h0": shown[2],
+        self._cancel_panel_glide()
+        self._panel_glide = {"started": time.perf_counter(), "x": img_x, "y0": shown[1], "h0": shown[2],
                                 "y1": img_y, "h1": height, "image": img, "split": split}
         try:
-            self._composer_glide_after = self._gui.schedule(16, self._composer_glide_tick, frame=True)
+            self._panel_glide_after = self._gui.schedule(16, self._panel_glide_tick, frame=True)
         except Exception:
-            self._composer_glide = None
-            self._composer_shown = (img_x, img_y, height)
+            self._panel_glide = None
+            self._panel_shown = (img_x, img_y, height)
             return img, img_y, height
-        return self._composer_glide_frame()
+        return self._panel_glide_frame()
 
-    def _composer_glide_frame(self) -> tuple[Any, int, int]:
-        glide = self._composer_glide
+    def _panel_glide_frame(self) -> tuple[Any, int, int]:
+        glide = self._panel_glide
         raw = min(1.0, (time.perf_counter() - glide["started"]) / max(0.001, self._transition_seconds()))
         amount = raw * raw * (3.0 - 2.0 * raw)          # the panel transition's own easing
         if raw >= 1.0:
-            self._composer_glide = None
+            self._panel_glide = None
             image, y, height = glide["image"], glide["y1"], glide["h1"]
         else:
             y = round(glide["y0"] + (glide["y1"] - glide["y0"]) * amount)
             height = round(glide["h0"] + (glide["h1"] - glide["h0"]) * amount)
             image = card.height_frame(glide["image"], height, glide["split"])
-        self._composer_shown = (glide["x"], y, height)
+        self._panel_shown = (glide["x"], y, height)
         return image, y, height
 
-    def _composer_glide_tick(self) -> None:
-        self._composer_glide_after = None
-        glide = getattr(self, "_composer_glide", None)
-        if glide is None or self._mode != "input" or not bool(getattr(self, "_visible", False)):
-            self._cancel_composer_glide()
+    def _panel_glide_tick(self) -> None:
+        self._panel_glide_after = None
+        glide = getattr(self, "_panel_glide", None)
+        if glide is None or self._mode not in ("input", "reply") or not bool(getattr(self, "_visible", False)):
+            self._cancel_panel_glide()
             return
-        image, y, height = self._composer_glide_frame()
+        image, y, height = self._panel_glide_frame()
         x = glide["x"]
         pad = int(getattr(self, "_design", DEFAULT_BUBBLE_DESIGN).shadow_pad)
         if self._layered.blit(image, x, y, premultiplied=True, position=True):
             self._last_layered_geometry = (x, y, image.width, height)
-            self._last_input_blit_position = (x, y)
+            if self._mode == "input":
+                self._last_input_blit_position = (x, y)
             self._bounds = (x + pad, y + pad, x + image.width - pad, y + height - pad)
             self._layered.set_input_bounds(self._bounds)
             if getattr(self._cube, "_composer_controller", None) is self:
                 self._cube_published = (image, x, y)
-        if getattr(self, "_composer_glide", None) is not None:
+        if getattr(self, "_panel_glide", None) is not None:
             try:
-                self._composer_glide_after = self._gui.schedule(16, self._composer_glide_tick, frame=True)
+                self._panel_glide_after = self._gui.schedule(16, self._panel_glide_tick, frame=True)
             except Exception:
-                self._composer_glide = None
+                self._panel_glide = None
         else:
             self._place_blur_backdrop(True)
 
-    def _cancel_composer_glide(self) -> None:
-        after = getattr(self, "_composer_glide_after", None)
-        self._composer_glide_after = None
-        self._composer_glide = None
+    def _cancel_panel_glide(self) -> None:
+        after = getattr(self, "_panel_glide_after", None)
+        self._panel_glide_after = None
+        self._panel_glide = None
         if after is not None:
             try:
                 self._gui.cancel(after)
@@ -2117,7 +2108,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def _repaint_cached_input_caret(self) -> bool:
         """Blit the cached input card with the current caret state only."""
-        if getattr(self, "_composer_glide", None) is not None:
+        if getattr(self, "_panel_glide", None) is not None:
             return True             # a height glide owns these frames; the caret blinks again after it
         if self._mode != "input" or not self._visible or self._transition_progress() < 1.0:
             return False
@@ -2416,15 +2407,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         options: Any = None,
         on_options_submit: Callable[[list[str]], bool | None] | None = None,
         presentation: dict[str, Any] | None = None,
-        fit: bool = False,
     ) -> bool:
         """Show MO's reply. ``history`` = MO's replies (oldest->newest, current last) so the
         card's ↑/↓ can browse back through what MO said. ``controls=False`` yields a FOOTERLESS
         card — a genuine walkthrough, or transient tool-streaming prose — not a walkthrough by
-        itself. ``fit`` sizes the card to its text: a notice outside any turn ("No speech
-        detected.") never sits alone in the turn's fixed-size card."""
+        itself. The card is sized to its text (long text scrolls inside a capped height)."""
         self._keyboard_hit = ""
-        self._fit_reply = bool(fit)
         self._stash_input_draft()   # a reply arriving mid-compose must not drop the draft
         state = PanelState.FOOTERLESS if not controls else PanelState.REPLY
         transition = self._prepare_panel_show("reply", state, controls=controls)

@@ -568,11 +568,11 @@ class CompanionVoiceMixin:
             if cube is not None:
                 self._post_gui_call(lambda: cube.show_bubble("voice off — Settings"))
             else:
-                self._show_reply_dialog("Voice input is off in mo_desktop.voice.stt_enabled", fit=True)
+                self._show_reply_dialog("Voice input is off in mo_desktop.voice.stt_enabled")
             return
         if voice is None or not voice.recording_configured:
             self._set_status(self._voice_input_unavailable_message(), self._visual_palette.warn)
-            self._show_reply_dialog(self._voice_input_unavailable_message(), fit=True)
+            self._show_reply_dialog(self._voice_input_unavailable_message())
             return
         if self._recording_voice:
             # second voice gesture → stop, transcribe, submit
@@ -624,7 +624,7 @@ class CompanionVoiceMixin:
             msg = f"Could not start the microphone — {reason}" if reason \
                 else "Could not start the microphone — check OS mic permissions."
             self._set_status(msg, self._visual_palette.error)
-            self._show_reply_dialog(msg, fit=True)
+            self._show_reply_dialog(msg)
 
     def _start_voice_chat_listening(self) -> None:
         """Open the mic only between turns and spoken replies while Voice Chat is active."""
@@ -682,8 +682,7 @@ class CompanionVoiceMixin:
                 heard = " ".join(text.split())[:160]
                 self._set_status("I didn't catch that clearly — please repeat.", self._visual_palette.warn)
                 self._show_reply_dialog(
-                    f'I didn\'t catch that clearly — I heard: "{heard}". Say it again, or type it.',
-                    fit=True,
+                    f'I didn\'t catch that clearly — I heard: "{heard}". Say it again, or type it.'
                 )
                 log_event(
                     f"voice transcription rejected; reason={reason[:48]}; chars={len(text)}",
@@ -721,7 +720,7 @@ class CompanionVoiceMixin:
                               config=getattr(self._agent, "config", None))
                     return
                 self._set_status(message, self._visual_palette.error)
-                self._show_reply_dialog(message, fit=True)   # outside any turn: a card its own size
+                self._show_reply_dialog(message)
                 log_event(f"voice transcription did not produce a request; chars={len(message)}",
                           config=getattr(self._agent, "config", None))
 

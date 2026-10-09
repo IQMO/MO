@@ -89,9 +89,6 @@ class BubbleDesign:
     line_height: int = 21
     min_text_height: int = 22
     max_text_height: int = 230
-    # One card height for every reply and the status line (his msg 165): long text and
-    # option rows scroll inside it, the buttons stay pinned, a short reply leaves space.
-    reply_card_height: int = 260
     footer_height: int = 30
     dock_overlap: int = 8
     shadow_blur: int = 8

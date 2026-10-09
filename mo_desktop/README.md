@@ -656,10 +656,9 @@ new windows.
 
 One panel grows out of the cubes for a whole turn: while MO works it is one small
 line, MO's four-cube mark and what it is doing ("got it…", "opening Paint…"),
-sized to the text; the answer then grows from it into the reply card. Every reply
-fills that one card size; a long answer and its choices scroll inside it while the buttons stay in
-place, and a short answer leaves space. A notice outside any turn ("No speech detected.", a
-microphone that would not start) keeps a card its own size instead of sitting alone in that one.
+sized to the text; the answer then grows from it into a card sized to the answer:
+a short answer stays small, and a long answer and its choices scroll inside a capped
+height while the buttons stay in place.
 The same card carries input, choices, files and
 Dashboard, with icon controls. Only one surface shows at a time: while a card
 is open, MO's progress stays off the screen (the cubes show it is working) and
