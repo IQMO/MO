@@ -947,7 +947,9 @@ Voice is optional and lazy:
   their pitch flag as `True` get a fixed copy under `<voice root>/cache/clone/`;
   the original is never modified. On a small laptop GPU conversion takes about
   as long as the sentence itself, so the first word comes 2–3 s later than with
-  the plain voice. Use only a voice you have the right to use.
+  the plain voice. MO says beside the cubes when your voice is ready, or why it
+  did not load (it then keeps its own voice), and logs it; asking MO whether
+  your voice works answers from that state. Use only a voice you have the right to use.
 - Continuous Voice Chat explicitly loops listen → reply → speak → listen while
   its separate switch is enabled. Manual double-Alt capture does not enable that
   loop. Voice Chat re-arms even when a turn produces no audio.

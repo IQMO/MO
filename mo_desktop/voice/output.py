@@ -186,6 +186,9 @@ class SpeechOutput:
         self._speaking_generation = -1
         self._sample_rate = 0
         self.level = 0.0  # RMS of the slice just played (0..~0.3, the recorder's scale); the cubes read it
+        # The user's own voice (voice.clone_model): off, loading, ready or failed, with the worker's reason.
+        self.clone_state = "off"
+        self.clone_error = ""
         # The open utterance: speed, clauses sent, clauses still synthesizing,
         # and whether more may follow (see ``begin``/``say``/``finish``).
         self._utterance: dict[str, Any] | None = None
@@ -411,6 +414,12 @@ class SpeechOutput:
                     # The worker has finished synthesizing, but the player still
                     # owns queued PCM. Only that thread can declare audible idle.
                     self._enqueue_done(generation)
+            elif event == "clone":
+                # Reported apart from playback (clone_loading/ready/failed): a clone that fails keeps the
+                # plain voice speaking, so without this the operator could not tell which voice they hear.
+                self.clone_state = str(message.get("state") or "off")
+                self.clone_error = str(message.get("error") or "")
+                self._notify("clone_" + self.clone_state)
             elif event in {"error", "fatal"}:
                 self._notify("error")
         self._stop_playback()

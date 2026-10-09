@@ -130,6 +130,7 @@ class CompanionVoiceMixin:
                 speech is not None and getattr(speech, "running", False)
             ),
             "speech_state": str(getattr(self, "_speech_state", "idle") or "idle"),
+            "own_voice_clone": str(getattr(speech, "clone_state", "off") or "off") if speech is not None else "off",
         }
         evidence = json.dumps(state, ensure_ascii=True, separators=(",", ":"))
         return (
@@ -182,7 +183,21 @@ class CompanionVoiceMixin:
                 pass
         self._speech_state = "idle"
 
+    def _on_voice_clone_event(self, state: str) -> None:
+        """The operator's own voice loaded or failed. MO never goes silent for it (the plain voice speaks
+        meanwhile), so the outcome is logged and said once beside the cubes, with the worker's reason."""
+        error = str(getattr(getattr(self, "_speech", None), "clone_error", "") or "")
+        log_event(f"voice clone {state}" + (f": {error}" if error else ""), config=getattr(self._agent, "config", None))
+        if state == "ready":
+            self._set_status("Speaking in your own voice.", self._visual_palette.ok)
+        elif state == "failed":
+            self._set_status("Your voice didn't load; MO speaks with its own voice." + (f" ({error[:120]})" if error else ""),
+                             self._visual_palette.warn)
+
     def _on_speech_event(self, event: str) -> None:
+        if str(event or "").startswith("clone_"):     # the clone's own state, never the playback state
+            self._on_voice_clone_event(str(event)[len("clone_"):])
+            return
         previous_state = getattr(self, "_speech_state", "idle")
         self._speech_state = str(event or "idle")
         cube = getattr(self, "_cube", None)

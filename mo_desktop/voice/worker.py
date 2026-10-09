@@ -126,6 +126,8 @@ def main() -> int:
                     # One sentence at a time in the user's own voice; the plain
                     # voice speaks a sentence the clone could not convert.
                     audio = clone.convert(audio) or audio
+                    if not clone.ready:      # its server died: say so once, then speak plainly
+                        _emit("clone", state=clone.state, error=clone.error)
                     if epoch[0] != request_epoch:
                         cancelled = True
                         break
