@@ -87,6 +87,14 @@ def reference_limits(operation: str, model: str) -> dict:
     return {"image": 0, "video": 0, "audio": 0, "total": 0}
 
 
+def most_references() -> int:
+    """The most files any generator here takes in one request. Desktop Generate admits this many; the
+    chosen generator's own reference_limits then decide what joins, at drop and again at Send."""
+    return max(limits.get("total", limits["image"] + limits["video"] + limits["audio"])
+               for limits in (reference_limits(op, model) for op, (_label, models, _endpoint) in OPERATIONS.items()
+                              for model in models))
+
+
 def build_payload(operation: str, model: str, options: dict, references: list[dict]) -> dict:
     """Validate before publishing media; URLs come only from the reference owner.
 
@@ -101,15 +109,17 @@ def build_payload(operation: str, model: str, options: dict, references: list[di
     for ref in references:
         if ref.get("kind") not in {"image", "video", "audio"}:
             raise ValueError("Each reference needs an image, video or audio kind.")
-        if ref.get("role", "reference") not in {"reference", "subject", "motion", "song", "first_frame", "last_frame"}:
+        if ref.get("role", "reference") not in {"reference", "subject", "motion", "song", "voice", "music",
+                                                "first_frame", "last_frame"}:
             raise ValueError("Unknown reference purpose.")
         if ref.get("role") in {"first_frame", "last_frame"} and ref["kind"] != "image":
             raise ValueError("First and last frames must be images.")
         role = ref.get("role", "reference")
-        if role == "subject" and ref["kind"] != "image" or role == "motion" and ref["kind"] != "video" or role == "song" and ref["kind"] != "audio":
+        if (role == "subject" and ref["kind"] != "image" or role == "motion" and ref["kind"] != "video"
+                or role in {"song", "voice", "music"} and ref["kind"] != "audio"):
             raise ValueError("Reference purpose does not match its media type.")
-        if role in {"first_frame", "last_frame", "motion"} and operation not in {"video", "extend_video"}:
-            raise ValueError("Frame and motion controls belong to video generation.")
+        if role in {"first_frame", "last_frame", "motion", "voice", "music"} and operation not in {"video", "extend_video"}:
+            raise ValueError("Frame, motion, voice and music purposes belong to video generation.")
     by_kind = {kind: [r["url"] for r in references if r["kind"] == kind]
                for kind in ("image", "video", "audio")}
     music = operation in {"music", "cover", "extend_music"}
@@ -202,6 +212,9 @@ def build_payload(operation: str, model: str, options: dict, references: list[di
                     raise ValueError(f"Too many {kind} references for the selected model.")
                 if urls:
                     opts["reference_" + kind + "_urls"] = urls
+            # Seedance takes sound only beside a picture or a clip (ByteDance's reference rules).
+            if by_kind["audio"] and not (by_kind["image"] or by_kind["video"]):
+                raise ValueError("A sound reference needs a picture or a clip with it.")
         if not opts.get("prompt"):
             raise ValueError("Describe the intended video.")
     else:

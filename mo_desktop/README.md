@@ -12,13 +12,18 @@ exactly as browsing earlier replies does, and says plainly in a lit band what ha
 only the rows they need, a progress line appears only while a job or Refine reports, and the
 composer grows with the prompt and while a drop-down needs room, gliding each time. A References pill for
 purpose-labelled files (each dropped or picked file also sits in the sentence at the caret as a
-chip named [Video1], [Image1] or [Audio1] with its role — the first clip defaults to motion (one clip
-drives the motion; the next is a reference) and a picture to subject for a video; files beyond what the
-chosen generator takes (Seedance 2.0: 9 pictures, 3 clips and 15 s of clips in all) are not added and
-MO says why; clicking a chip opens References, deleting it removes the file and the
+chip named [Video1], [Image1] or [Audio1] with its role and its look — a picture, a clip's first
+frame with a small play mark, or the media disc with a short sound level for sound. For a video the
+first clip defaults to motion (one clip drives the motion; the next is a reference) and a picture to
+subject; a sound's purpose steps through reference, voice (the subject lip-syncs it) and music (the
+motion follows it). Picking another kind gives the files that kind's roles. Generate takes as many
+files as the largest generator does (Seedance 2.5: 50); files beyond what the chosen generator takes
+(Seedream: 14 pictures; Seedance 2.0: 9 pictures, 3 clips, 3 sounds, 15 s of clips and 15 s of sound)
+are not added and MO says why, and a new choice that cannot take files already there names them to
+remove before Send. Clicking a chip opens References, deleting it removes the file and the
 other names stay on their files; resting the pointer on a chip shows a small preview in the card
 — the picture, a clip's first frame or the media mark, with name, length, size and an X that removes the file; Seedance reads
-the names), a Saved results button that opens a compact list in the same panel (a click on a
+the names), a Sound pill for a video's own synchronized sound (on by default), a Saved results button that opens a compact list in the same panel (a click on a
 row plays the result; its icons save a copy, continue it and open the job's card) and a
 Refine sparkle by Send that rewrites the draft through MO's prompt enhancer under
 the Generate skill's refining rules (press again to restore it), and real

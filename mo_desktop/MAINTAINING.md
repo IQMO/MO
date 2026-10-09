@@ -36,8 +36,16 @@ when that source tree is present.
   contracts. Reuse Settings, credentials, attachments, reply/options cards and
   notices; run preparation, polling, credit reads and installation off the GUI
   lane. Reference attachment does not ask a model to inspect the content.
-- Generate checks dropped files against `core.media.catalog.reference_limits` (`companion._fit_generate_references`;
-  Auto leaves it to Send) and keeps one clip in the motion role.
+- Generate admits `core.media.catalog.most_references()` files per request (the chat composer keeps
+  `MAX_ATTACHMENTS_PER_TURN`) and checks dropped files against `core.media.catalog.reference_limits`
+  (`companion._fit_generate_references`; Auto leaves it to Send). Picking another kind or model checks
+  them again and names what to remove before Send, never dropping a file. `generate_controls` owns the
+  roles: `default_roles` (one clip in the motion role; a kind change re-applies the new kind's
+  defaults) and `role_cycle` (a sound in a video steps through voice and music, elsewhere song). A
+  pick keeps its default's type (`choose`), so a new boolean option such as Sound needs only its
+  `DEFAULTS`/`OPTION_ORDER` row, label and values.
+- `ReplyBubble._play_mark(kind)` is the one media mark: the disc with the play triangle, or a short
+  level of bars for sound. A clip's chip shows its first frame from `_chip_glance` (`_chip_thumbnail`).
 - Composer files are in-sentence chips in every role: `generate_controls.reference_tokens`
   names them per kind in attachment order ([Image1], [Video1], [Audio1], [File1]) and
   `ReplyBubble._remove_reference` is the one removal owner (chip menu, Backspace/Delete,

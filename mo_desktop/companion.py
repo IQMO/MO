@@ -3168,19 +3168,13 @@ class CompanionSurface(
             self._result_action(value)
             return
         if action.startswith("reference:"):
-            from core.media.preparation import kind_for
+            from mo_desktop.generate_controls import role_cycle
             index = int(action.split(":")[1])
             paths = bubble._attachment_preview_paths
             if not 0 <= index < len(paths):
                 return
             path = paths[index]
-            try:
-                kind = kind_for(Path(path))
-            except ValueError:
-                kind = ""                                    # a file Generate cannot use can only be removed
-            order = {"image": ("reference", "subject", "first_frame", "last_frame", "remove"),
-                     "audio": ("reference", "song", "remove"),
-                     "video": ("reference", "motion", "remove")}.get(kind, ("reference", "remove"))
+            order = role_cycle(path, (getattr(bubble, "_generate_selection", None) or {}).get("operation"))
             roles = dict(getattr(bubble, "_generate_reference_roles", {}))
             role = roles.get(path, "reference")
             next_role = order[(order.index(role) + 1) % len(order)] if role in order else "remove"
@@ -3192,8 +3186,19 @@ class CompanionSurface(
                 roles[path] = next_role
                 bubble._generate_reference_roles = roles
         else:
-            from mo_desktop.generate_controls import choose
+            from mo_desktop.generate_controls import choose, default_roles, kind_of
+            before = bubble._generate_selection or {}
             bubble._generate_selection = choose(bubble._generate_selection, action, value, self._config())
+            after = bubble._generate_selection
+            paths = [str(path) for path in getattr(bubble, "_attachment_preview_paths", []) or []]
+            if paths and kind_of(before.get("operation")) != kind_of(after.get("operation")):
+                # Roles mean different things per kind: the files take the new kind's defaults, as if dropped now.
+                bubble._generate_reference_roles = default_roles(paths, after.get("operation"))
+                bubble._refresh_chips(True)
+            if paths and (before.get("operation"), before.get("model")) != (after.get("operation"), after.get("model")):
+                # Files the new choice cannot take stay in the sentence for the operator to remove; Send refuses them.
+                self._fit_generate_references(after, [], paths, getattr(bubble, "_chip_glance", None) or {},
+                                              title="Remove before Send")
         bubble._repaint()
 
     def _show_attachment_panel(
@@ -3656,8 +3661,13 @@ class CompanionSurface(
         # The composer's paperclip, or a drop while writing, puts the files in the sentence.
         composing = into_composer or bool(open_bubble and getattr(open_bubble, "_visible", False)
                                           and getattr(open_bubble, "_mode", "") == "input")
-        selected = [Path(item) for item in raw[:MAX_ATTACHMENTS_PER_TURN]]
-        initial_rejected = max(0, len(raw) - MAX_ATTACHMENTS_PER_TURN)
+        if generate_attachment:              # as many as a generator here takes; the chosen one's limits fit them below
+            from core.media.catalog import most_references
+            most = most_references()
+        else:
+            most = MAX_ATTACHMENTS_PER_TURN
+        selected = [Path(item) for item in raw[:most]]
+        initial_rejected = max(0, len(raw) - most)
         self._set_status("Loading attachment…", self._visual_palette.accent)
 
         def import_in_background() -> None:
@@ -3710,7 +3720,7 @@ class CompanionSurface(
                             kept = self._fit_generate_references(getattr(bubble, "_generate_selection", None) or {},
                                                                  pending, saved, {**(getattr(bubble, "_chip_glance", None) or {}), **glance})
                         self._display_input_dialog()
-                        bubble._input_attachments = list(dict.fromkeys([*pending, *(str(p) for p in kept)]))[:MAX_ATTACHMENTS_PER_TURN]
+                        bubble._input_attachments = list(dict.fromkeys([*pending, *(str(p) for p in kept)]))[:most]
                         bubble._attachment_preview_paths = list(bubble._input_attachments)
                         bubble._chip_glance = {**(getattr(bubble, "_chip_glance", None) or {}), **glance}
                         bubble.place_new_references(pending)     # each new file sits in the sentence at the caret
@@ -3731,11 +3741,12 @@ class CompanionSurface(
         threading.Thread(target=import_in_background, daemon=True).start()
 
     def _fit_generate_references(self, selection: dict, pending: list[str], saved: list[Any],
-                                 glance: dict[str, dict]) -> list[Any]:
+                                 glance: dict[str, dict], *, title: str = "Not added") -> list[Any]:
         """Keep only the dropped files the chosen generator can take: its count per kind (and in all),
         and for Seedance the seconds of clips and of sound together (core.media.catalog.reference_limits,
         which the core checks again at Send). The rest are not added, and MO says why; Auto leaves the
-        choice to Send, where the request's words pick the generator."""
+        choice to Send, where the request's words pick the generator. ``title`` names what the operator
+        does about the rest (a new choice keeps them in the sentence: "Remove before Send")."""
         from core.media.catalog import reference_limits
         from core.media.preparation import kind_for
         from mo_desktop.generate_controls import _short_model
@@ -3780,7 +3791,7 @@ class CompanionSurface(
                     seconds[kind] += length
         refused = [Path(str(path)).name for path in saved if path not in kept]
         if refused:
-            self._cube_notice("Not added: " + ", ".join(refused), reason)
+            self._cube_notice(f"{title}: " + ", ".join(refused), reason)
         return kept
 
     def _send_attachment_to_mo(self, saved: list[Any]) -> None:

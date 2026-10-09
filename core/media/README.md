@@ -22,7 +22,7 @@ backends and local explainer rendering remain independent.
    grows with the prompt, gliding to each new line. Pick the kind first
    (Auto, Song, Image or Video; Auto lets the request's words decide); only that
    kind's choices then appear, in order (type, its model: Suno, Seedream or
-   Seedance, then duration/resolution/aspect, quality/aspect or vocals). Files
+   Seedance, then duration/resolution/aspect/sound, quality/aspect or vocals). Files
    dropped on the open composer or picked together with its attach button all
    join the request. The sparkle beside the attach button refines the draft
    with MO's own prompt enhancer (the Terminal's Ctrl+E), guided by the Generate
@@ -44,8 +44,9 @@ Windows currently owns crash-safe optional reference sharing. Other platforms
 can use text-only jobs; reference jobs fail closed. Images use existing Pillow;
 audio/video work requires FFmpeg and FFprobe on PATH. Readiness reports missing
 tools without silently installing them; missing delivery tools block before
-paid submission. Desktop admits eight references per
-request, up to 500 MB per file in Generate; ordinary attachments retain 20 MB.
+paid submission. Desktop Generate admits as many references per request as the
+largest generator takes (`catalog.most_references`, which the core also enforces), up to
+500 MB per file; ordinary attachments retain eight per turn and 20 MB.
 Smaller provider limits are validated separately (`catalog.reference_limits` owns the counts per
 kind and Seedance's seconds together; the Desktop composer checks them when files are dropped, the
 core again before any paid step). MO never silently trims,
@@ -58,8 +59,8 @@ resizes, changes models, discards references or switches upload hosts.
 | New song | Suno V6, V6_MINI, V6_WILD through Kie. Non-custom ideas also require style, lyrics or references. Custom mode supports literal lyrics/advanced options, not attachments. |
 | Cover | One source song; melody-preserving cover, not merely inspiration. |
 | Extend track | Exact saved variation, returned track ID and matching model. No invented ID or upload fallback. |
-| Image / reference edit | Seedream 4.5 text-to-image or 1–14 image references; Desktop currently admits eight. |
-| Video / motion | Seedance 2.0/2.5 with supported subject-image, motion-video and audio references. Exact motion is an acceptance target, not a guarantee. The prompt can name references as [Image1], [Video1] or [Audio1], numbered per kind in the order sent (Desktop's composer chips); Seedance reads them. |
+| Image / reference edit | Seedream 4.5 text-to-image or 1–14 image references. |
+| Video / motion | Seedance 2.0/2.5 with supported subject-image, motion-video and audio references. A sound's purpose is a reference, the voice the subject lip-syncs or the music the motion follows; all go to Seedance as reference audio, and sound needs at least one picture or clip beside it (checked before any paid step). `generate_audio` (Desktop's Sound pill, on by default) asks for the video's own synchronized sound. Exact motion is an acceptance target, not a guarantee. The prompt can name references as [Image1], [Video1] or [Audio1], numbered per kind in the order sent (Desktop's composer chips); Seedance reads them. |
 | Continue video | Decode the parent's actual final frame locally. Alone it becomes the NEW first frame; with extra references it becomes the first image reference, explicitly described in the prompt. The latter is best-effort, not strict first-frame continuity. |
 
 Seedance 2.0 supports 4–15 seconds or automatic duration and up to 4K; 2.5

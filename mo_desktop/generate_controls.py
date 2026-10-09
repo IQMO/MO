@@ -48,6 +48,32 @@ def default_role(path: str, operation: str | None) -> str:
         return "reference"
 
 
+def default_roles(paths: list[str], operation: str | None, roles: dict[str, str] | None = None) -> dict[str, str]:
+    """Every file's role, keeping those already set: a new file gets its default for the chosen kind and
+    only one clip drives the motion (the next one is a reference)."""
+    roles = dict(roles or {})
+    for path in paths:
+        if path not in roles:
+            role = default_role(path, operation)
+            roles[path] = "reference" if role == "motion" and "motion" in roles.values() else role
+    return roles
+
+
+def role_cycle(path: str, operation: str | None) -> tuple[str, ...]:
+    """The purposes one file steps through in the References menu, then remove. A sound in a video is the
+    voice its subject lip-syncs or the music its motion follows; elsewhere it is a song."""
+    from core.media.preparation import kind_for
+
+    try:
+        kind = kind_for(Path(str(path)))
+    except ValueError:
+        return ("reference", "remove")                  # a file Generate cannot use can only be removed
+    if kind == "audio":
+        return ("reference", "voice", "music", "remove") if kind_of(operation) == "video" else ("reference", "song", "remove")
+    return {"image": ("reference", "subject", "first_frame", "last_frame", "remove"),
+            "video": ("reference", "motion", "remove")}[kind]
+
+
 def renumber_references(text: str, before: dict[str, str], after: dict[str, str]) -> str:
     """Keep each name on its file when the attachments change; a removed file's name leaves the sentence."""
     new_name = {path: name for name, path in after.items()}
@@ -64,9 +90,9 @@ TYPES = {"song": ("music", "cover", "extend_music"), "image": ("image", "edit_im
          "video": ("video", "extend_video")}
 # Each kind's options, in the order its pills appear.
 OPTION_ORDER = {"song": ("instrumental",), "image": ("quality", "aspect_ratio"),
-                "video": ("duration", "resolution", "aspect_ratio")}
+                "video": ("duration", "resolution", "aspect_ratio", "generate_audio")}
 DEFAULTS = {"song": {"instrumental": False}, "image": {"quality": "basic", "aspect_ratio": "1:1"},
-            "video": {"duration": 5, "resolution": "720p", "aspect_ratio": "16:9"}}
+            "video": {"duration": 5, "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": True}}
 PROVIDERS = (("kie", "Kie"),)            # core/media generates through Kie; its key lives with the model providers
 # What the composer's privacy icon says, plainly (core.media.catalog.PRIVACY_NOTICE is the full contract).
 PRIVACY_LINES = (
@@ -121,6 +147,8 @@ def _option_label(key: str, value) -> str:
         return "Auto length" if value == -1 else f"{value}s"
     if key == "instrumental":
         return "Instrumental" if value else "Vocals"
+    if key == "generate_audio":                        # the video's own synchronized sound
+        return "Sound on" if value else "Sound off"
     if key == "quality":
         return str(value).capitalize()
     return str(value)
@@ -134,6 +162,7 @@ def _option_values(key: str, model: str) -> tuple:
         "aspect_ratio": ("1:1", "16:9", "9:16", "4:3", "3:4", "21:9"),
         "quality": ("basic", "high"),
         "instrumental": (False, True),
+        "generate_audio": (True, False),
     }[key]
 
 
@@ -236,6 +265,7 @@ def choose(selection: dict, key: str, value: str, config: dict) -> dict:
     kind = kind_of(current.get("operation"))
     if key not in OPTION_ORDER.get(kind, ()):
         return current
-    current["options"][key] = (int(value) if key == "duration" else value == "True" if key == "instrumental"
+    default = DEFAULTS[kind][key]                      # a pick keeps its default's type (bool before int)
+    current["options"][key] = (value == "True" if isinstance(default, bool) else int(value) if isinstance(default, int)
                                else value)
     return current

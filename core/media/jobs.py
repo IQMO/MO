@@ -22,7 +22,7 @@ from core.runtime.lock import file_byte_lock
 from core.state.paths import resolve_state_path
 from core.utils.atomic_write import atomic_write_json
 from core.utils.file_hash import file_sha256
-from .catalog import PRIVACY_NOTICE, build_payload, default_model, settings
+from .catalog import PRIVACY_NOTICE, build_payload, default_model, most_references, settings
 from . import kie
 
 _LOCK = threading.RLock()
@@ -113,7 +113,7 @@ def create(config: dict, session_id: str, turn_id: str, *, operation: str, model
         raise ValueError("Media options must be an object.")
     options = dict(options or {})
     refs = [dict(ref) for ref in (references or [])]
-    if len(refs) > 50:
+    if len(refs) > most_references():
         raise ValueError("Too many media references.")
     for ref in refs:
         path = Path(str(ref.get("path") or "")).expanduser().resolve(strict=True)

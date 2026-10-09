@@ -97,8 +97,9 @@ generator follows accurately. It keeps the user's goal; it never changes the sco
     keep from it and what to change.
   - Video (Seedance): the subject, then its action and motion in order, camera
     framing and movement, setting, light and pacing within the chosen length.
-    With references, say which gives the subject and which gives the motion. One
-    continuous shot unless the user asks for cuts.
+    With references, say which gives the subject and which gives the motion. With
+    a sound reference, say what it drives: speech the subject lip-syncs (voice) or
+    music the motion follows (music). One continuous shot unless the user asks for cuts.
 - Write a direct description, not instructions to MO: no headings, lists or
   quality boilerplate such as "8k, masterpiece".
 - A draft that is already precise changes little.

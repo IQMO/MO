@@ -336,13 +336,18 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         return (4 + 16 + 5 + 7) * ss + self._text_width(draw, label, font) + role_width
 
     def _chip_thumbnail(self, path: str, size: int) -> Any:
+        """A picture, or a clip's first frame read once for the quick look (_chip_glance), filling its square."""
         cache = self.__dict__.setdefault("_chip_thumbs", {})
         if (path, size) not in cache:
             try:
                 from PIL import Image, ImageOps
 
-                with Image.open(path) as source:
-                    thumb = source.convert("RGBA")
+                frame = ((getattr(self, "_chip_glance", None) or {}).get(path) or {}).get("frame")
+                if frame is not None:
+                    thumb = frame
+                else:
+                    with Image.open(path) as source:
+                        thumb = source.convert("RGBA")
                 cache[(path, size)] = ImageOps.fit(thumb, (size, size), Image.LANCZOS)   # fills its square
             except Exception:
                 cache[(path, size)] = None
@@ -363,15 +368,17 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                             outline=(*self._cyan, 150), width=max(1, ss))
         size = 14 * ss
         tx, ty = int(x + 4 * ss), int(top + (bottom - top - size) / 2)
-        thumb = self._chip_thumbnail(info["path"], size) if info["kind"] == "image" else None
+        thumb = self._chip_thumbnail(info["path"], size) if info["kind"] in {"image", "video"} else None
         if thumb is not None:
             img.alpha_composite(thumb, (tx + (size - thumb.width) // 2, ty + (size - thumb.height) // 2))
+            if info["kind"] == "video":                     # a clip's first frame keeps a small play mark, as in Results
+                self._play_mark(d, tx + size * .2, ty + size * .2, size * .6)
         elif info["kind"] == "file":
             from interface.desktop_brand import make_glyph_icon
 
             img.alpha_composite(make_glyph_icon("file", size, color="#%02x%02x%02x" % tuple(self._cyan[:3])), (tx, ty))
         else:
-            self._play_mark(d, tx, ty, size)
+            self._play_mark(d, tx, ty, size, info["kind"])
         lx = x + (4 + 16 + 5) * ss
         d.text((lx, y + 3 * ss), label, font=font, fill=(*self._text, 255))
         d.text((lx + self._text_width(d, label, font) + 5 * ss, y + 3 * ss), role, font=font, fill=(*self._cyan, 255))
@@ -601,9 +608,17 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     pass
                 return
 
-    def _play_mark(self, d: Any, x: float, y: float, size: float) -> None:
-        """MO's media mark (the media card's play disc) at any size."""
+    def _play_mark(self, d: Any, x: float, y: float, size: float, kind: str = "video") -> None:
+        """MO's media mark (the media card's play disc) at any size; for a sound file the same disc holds a
+        short level of bars instead of the play triangle, so sound and clips read apart."""
         d.ellipse((x, y, x + size, y + size), fill=(*self._cyan, 235))
+        if kind == "audio":
+            bar = max(1.0, size * .09)
+            for step, height in enumerate((.26, .5, .36, .44)):
+                cx = x + size * (.32 + .12 * step)
+                d.rounded_rectangle((cx - bar / 2, y + size * (.5 - height / 2), cx + bar / 2, y + size * (.5 + height / 2)),
+                                    radius=bar / 2, fill=(*self._card, 255))
+            return
         d.polygon([(x + size * .36, y + size * .25), (x + size * .36, y + size * .75), (x + size * .79, y + size / 2)],
                   fill=(*self._card, 255))
 
@@ -679,7 +694,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if picture is not None:
             img.alpha_composite(picture.convert("RGBA"), (px, py))
         elif kind in {"video", "audio"}:
-            self._play_mark(d, px, py, mark_size)
+            self._play_mark(d, px, py, mark_size, kind)
         tx = left + pad + (pic_w + gap if pic_w else 0)
         d.text((tx, top + height / 2 - 15 * ss), title, font=font, fill=(*self._text, 255))
         d.text((tx, top + height / 2 + 1 * ss), details, font=font, fill=(*self._muted, 255))
@@ -712,20 +727,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def place_new_references(self, previous: list[str]) -> None:
         """Each newly attached file sits in the sentence at the caret as its name ([Video1], [Image1]); a clip
         defaults to driving the motion and a picture to being the subject when a video is chosen."""
-        from mo_desktop.generate_controls import default_role, reference_tokens
+        from mo_desktop.generate_controls import default_roles, reference_tokens
 
         paths = [str(p) for p in getattr(self, "_attachment_preview_paths", []) or []]
         names = {path: name for name, path in reference_tokens(paths).items()}
-        roles = dict(getattr(self, "_generate_reference_roles", {}) or {})
-        operation = (getattr(self, "_generate_selection", None) or {}).get("operation")
         known = {str(p) for p in previous}
-        for path in paths:
-            if path in known or path not in names:
-                continue
-            role = default_role(path, operation)
-            if role == "motion" and "motion" in roles.values():   # one clip drives the motion; the next is a reference
-                role = "reference"
-            roles.setdefault(path, role)
+        fresh = [path for path in paths if path not in known and path in names]
+        operation = (getattr(self, "_generate_selection", None) or {}).get("operation")
+        roles = default_roles(fresh, operation, getattr(self, "_generate_reference_roles", {}) or {})
+        for path in fresh:
             body = str(getattr(self, "_body", "") or "")
             cursor = max(0, min(len(body), int(getattr(self, "_cursor", len(body)) or 0)))
             insert = ("" if not body[:cursor] or body[:cursor].endswith(" ") else " ") + names[path] + " "
