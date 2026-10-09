@@ -21,7 +21,7 @@ from ..tooling.sandbox import (
     shell_command_is_mutating,
 )
 from ..runtime.backend_monitor import BackendMonitor, current_monitor_context, monitor_phase
-from ..runtime.surface_identity import normalize_runtime_surface
+from ..runtime.surface_identity import DESKTOP_SESSION_SLOT, normalize_runtime_surface
 from ..utils.jsonl_utils import prune_jsonl_log
 from ..utils.text_utils import cap_text_evidence
 from ..learning.workflow_learning import (
@@ -1769,7 +1769,7 @@ class AgentTurnDispatchMixin:
         if select_role or action == "off":
             state = getattr(self, "_thread_state", None)
             companion = getattr(self, "_companion", None)
-            desktop = companion is not None and getattr(state, "surface_session_slot", "") == "mo-desktop"
+            desktop = companion is not None and getattr(state, "surface_session_slot", "") == DESKTOP_SESSION_SLOT
             if getattr(state, "session", None) is not None and not desktop:
                 return "[ROLE BLOCKED] change the role from the owning conversation, not an isolated worker."
             if action == "off" and active_role is None:

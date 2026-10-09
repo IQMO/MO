@@ -8,11 +8,13 @@ import threading
 import traceback
 from types import SimpleNamespace
 from typing import Any
+from core.runtime.surface_identity import DESKTOP_SESSION_SLOT
 from mo_desktop.intent import DesktopActionReceipt
 from mo_desktop.desktop_log import write_stderr as _write_stderr
 
 # The isolated Desktop slot is durable across restarts; Terminal owns its own slots.
-MO_DESKTOP_SESSION_SLOT = "mo-desktop"
+# Core spells the value once (surface_identity); Desktop derives its slot family from it.
+MO_DESKTOP_SESSION_SLOT = DESKTOP_SESSION_SLOT
 # Each role chosen in the composer keeps its own Desktop conversation in this slot family; the
 # Default-role thread stays MO_DESKTOP_SESSION_SLOT and records which role thread is open.
 _ROLE_SLOT_PREFIX = MO_DESKTOP_SESSION_SLOT + "-role-"

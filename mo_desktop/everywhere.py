@@ -13,10 +13,8 @@ from core.state.device import device_identity
 from core.state.everywhere_coordinator import read_coordinator_status
 from core.state.paths import resolve_state_path
 from core.session.sessions import session_snapshot_path
+from mo_desktop.companion_session import MO_DESKTOP_SESSION_SLOT
 from mo_desktop.notify import Notice, register_source
-
-
-DESKTOP_CONTINUITY_KEY = "mo-desktop"
 
 
 class EverywhereNoticeSource:
@@ -125,7 +123,7 @@ def _profile_sync_detail(profile: dict[str, Any]) -> str:
 def select_desktop_thread(config: dict[str, Any] | None, thread_id: str) -> None:
     LocalContinuityStore(config or {}).bind(
         "mo_desktop",
-        DESKTOP_CONTINUITY_KEY,
+        MO_DESKTOP_SESSION_SLOT,
         thread_id,
     )
 
@@ -134,7 +132,7 @@ def desktop_binding(config: dict[str, Any] | None = None) -> dict[str, Any] | No
     path = Path(resolve_state_path(LOCAL_CONTINUITY_PATH, config or {}))
     if not path.is_file():
         return None
-    return LocalContinuityStore(config or {}).binding("mo_desktop", DESKTOP_CONTINUITY_KEY)
+    return LocalContinuityStore(config or {}).binding("mo_desktop", MO_DESKTOP_SESSION_SLOT)
 
 
 def terminal_session_candidates(config: dict[str, Any] | None, sessions_dir: str | Path, *, require_session: bool = True) -> list[dict[str, Any]]:

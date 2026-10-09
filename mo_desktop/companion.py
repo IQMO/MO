@@ -59,6 +59,7 @@ from mo_desktop.companion_dashboard import CompanionDashboardMixin
 from mo_desktop.companion_session import (
     CompanionSessionMixin,
     DESKTOP_SYNC_CONTEXT_PREFIX,
+    MO_DESKTOP_SESSION_SLOT,
 )
 from mo_desktop.companion_voice import CompanionVoiceMixin
 from mo_desktop.tray import CompanionTray, start_tray_if_enabled
@@ -4477,7 +4478,7 @@ class CompanionSurface(
                 )
                 session_scope_factory = getattr(self._agent, "surface_session_scope", None)
                 session_scope = (
-                    session_scope_factory("mo-desktop")
+                    session_scope_factory(MO_DESKTOP_SESSION_SLOT)
                     if callable(session_scope_factory) else nullcontext()
                 )
                 with (

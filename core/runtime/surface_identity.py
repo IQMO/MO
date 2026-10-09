@@ -22,6 +22,12 @@ RUNTIME_SURFACE_ALIASES = {
 # of re-deriving a drifting private set.
 DESKTOP_SURFACES = frozenset({"mo_desktop", "companion"})
 
+# MO Desktop's isolated conversation slot: the active slot is `mo-desktop` and
+# historical/role snapshots use `mo-desktop-<suffix>` (mo_desktop/MAINTAINING.md).
+# Core owns the value so continuity, session naming and dispatch never re-spell
+# it; the companion package imports it, core never depends on mo_desktop.
+DESKTOP_SESSION_SLOT = "mo-desktop"
+
 # Auxiliary structured-review calls share the no-tools recovery semantics in
 # ``Agent.complete_no_tools``. Keep this surface contract beside canonical
 # normalization so callers do not duplicate a drifting string whitelist.
@@ -43,6 +49,7 @@ __all__ = [
     "RUNTIME_SURFACE_ALIASES",
     "STRUCTURED_REVIEW_SURFACES",
     "DESKTOP_SURFACES",
+    "DESKTOP_SESSION_SLOT",
     "is_structured_review_surface",
     "normalize_runtime_surface",
 ]

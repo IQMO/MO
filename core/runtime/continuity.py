@@ -28,7 +28,7 @@ from .turn_intent import (
     looks_like_prior_work_status_request,
     looks_like_surface_lineage_request,
 )
-from .surface_identity import DESKTOP_SURFACES, normalize_runtime_surface
+from .surface_identity import DESKTOP_SESSION_SLOT, DESKTOP_SURFACES, normalize_runtime_surface
 
 _NEGATIVE_CONTINUITY_RE = re.compile(
     r"(?i)\b("
@@ -108,12 +108,10 @@ def project_status_request_messages(
     return payload
 
 
-# Desktop owns this namespace: the active slot is `mo-desktop` and historical
-# snapshots use `mo-desktop-<stable-session-id>` (mo_desktop/MAINTAINING.md).
-# Mirrored here rather than imported so core never depends on the optional
-# companion package. This scopes which saved topics may be projected into a
-# continuity answer; authorization remains owned by the session/API boundaries.
-DESKTOP_SLOT_NAMESPACE = "mo-desktop"
+# Desktop's slot namespace (`core.runtime.surface_identity.DESKTOP_SESSION_SLOT`)
+# scopes which saved topics may be projected into a continuity answer;
+# authorization remains owned by the session/API boundaries.
+DESKTOP_SLOT_NAMESPACE = DESKTOP_SESSION_SLOT
 TERMINAL_SLOT_FAMILY = "main"
 # Namespaces whose slots are isolated from EACH OTHER, not merely from other
 # surfaces: one Telegram chat must never see another chat's history, and the

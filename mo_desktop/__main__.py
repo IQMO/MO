@@ -160,10 +160,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         desktop_session = companion._ensure_desktop_session()
 
+        from mo_desktop.companion_session import MO_DESKTOP_SESSION_SLOT
+
         @contextmanager
         def _desktop_heartbeat_scope():
             with agent.isolated_session(desktop_session):
-                with agent.surface_session_scope("mo-desktop"):
+                with agent.surface_session_scope(MO_DESKTOP_SESSION_SLOT):
                     yield
 
         heartbeat = deps.start_heartbeat_service_if_enabled(

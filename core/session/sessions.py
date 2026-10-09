@@ -14,6 +14,7 @@ from typing import Any, Iterator
 import traceback
 
 from ..runtime.lock import file_byte_lock
+from ..runtime.surface_identity import DESKTOP_SESSION_SLOT
 from ..state.paths import SESSION_ROOT_DIR, resolve_state_path
 from ..utils.atomic_write import atomic_write_json
 from .session import (
@@ -49,8 +50,8 @@ PORTABLE_CONVERSATION_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 PORTABLE_CONVERSATION_LIMIT = 50
 PORTABLE_TRANSCRIPT_MESSAGE_LIMIT = 100
 PORTABLE_TRANSCRIPT_CHARS = 120_000
-_RESERVED_PORTABLE_NAMES = frozenset({"main", "mo-desktop"})
-_RESERVED_PORTABLE_PREFIXES = ("main-", "api-", "telegram-", "schedule-", "scheduler-", "desktop-", "mo-desktop-")
+_RESERVED_PORTABLE_NAMES = frozenset({"main", DESKTOP_SESSION_SLOT})
+_RESERVED_PORTABLE_PREFIXES = ("main-", "api-", "telegram-", "schedule-", "scheduler-", "desktop-", DESKTOP_SESSION_SLOT + "-")
 _SESSION_THREAD_LOCKS = tuple(threading.RLock() for _ in range(32))
 
 
