@@ -42,6 +42,13 @@ class SettingsPanel(NativeAppWindow):
                        "voice.speech_rate": normalize_speech_rate(voice.get("speech_rate", 1)),
                        "voice.output_device": str(voice.get("output_device") or "default"),
                        "voice.conversation_provider": str(voice.get("conversation_provider") or "")})
+        from mo_desktop.voice import own_voice
+
+        values.update({"voice.clone_model": str(voice.get("clone_model") or ""),
+                       "voice.clone_pitch": int(voice.get("clone_pitch") or 0),
+                       "voice.arabic_model": str(voice.get("arabic_model") or ""),
+                       "voice.clone_status": own_voice.status_text(voice, getattr(self._c, "_speech", None)),
+                       "voice.microphone": own_voice.microphone_text()})
         agent = self._c._agent
         catalog = model_catalog_projection(agent, allow_live=False)
         try:
@@ -66,12 +73,21 @@ class SettingsPanel(NativeAppWindow):
                       for key, skin in theming.available_skin_items()],
             "roles": list(self._c.conversation_role_options()),
             "voice_providers": list(self._c.voice_conversation_provider_names()),
+            "choices": self._choices(voice),
             "startup": CompanionTray._startup_enabled(), "terminal": terminal,
             "models": catalog, "model_state": self._model_state(),
             "projects": self._projects(), "graph": self._graph(),
             "language_servers": sorted((self._authored().get("lsp") or {}).get("servers") or {}),
             "overview": self._overview(),
         }
+
+    @staticmethod
+    def _choices(voice: dict[str, Any]) -> dict[str, list[list[str]]]:
+        """Each choice row's options, from what exists on this computer."""
+        from mo_desktop.voice import own_voice
+
+        return {"voice.clone_model": [list(item) for item in own_voice.speaking_voice_choices(voice)],
+                "voice.arabic_model": [list(item) for item in own_voice.arabic_voice_choices(voice)]}
 
     def _overview(self) -> list[dict[str, Any]]:
         from mo_desktop.settings_app.catalog import configuration_overview
@@ -357,6 +373,13 @@ class SettingsPanel(NativeAppWindow):
             accepted = self._c.set_voice_output_device(value)
         elif key == "voice.conversation_provider":
             accepted = self._c.set_voice_conversation_provider(value)
+        elif key in {"voice.clone_model", "voice.clone_pitch", "voice.arabic_model"}:
+            voice = dict(getattr(self._c, "_voice_cfg", {}) or {})
+            options = self._choices(voice).get(key)
+            if options is not None and value not in [item[0] for item in options]:
+                raise ValueError("Choose an available option")
+            # A pitch slide previews nothing: the voice restarts once, when the value is kept.
+            accepted = self._c.set_own_voice(field, value) if save else True
         else:
             accepted = self._c.apply_desktop_setting(section, field, value)
         if accepted is False:
@@ -368,9 +391,14 @@ class SettingsPanel(NativeAppWindow):
         changes = {section: {field: value}}
         if key == "voice.role":
             changes[section]["role_active"] = bool(value)
+        if key == "voice.clone_model":
+            changes[section]["clone_index"] = str(self._c._voice_cfg.get("clone_index") or "")
         if self._c.persist_desktop_settings(changes) is False:
             return {"ok": False, "value": value, "message": "Preview only · this change could not be saved."}
-        return {"value": value, "message": "Saved", "role_active": bool(value) if key == "voice.role" else None}
+        result = {"value": value, "message": "Saved", "role_active": bool(value) if key == "voice.role" else None}
+        if key in {"voice.clone_model", "voice.clone_pitch", "voice.arabic_model"}:
+            result["state"] = self.snapshot()        # the Status row shows the voice loading at once
+        return result
 
     def _skin(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         from interface import theming

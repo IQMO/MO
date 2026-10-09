@@ -61,6 +61,7 @@ def voice_layout(root: str | Path) -> dict[str, Path]:
         "clone_cache": base / "cache" / "clone",
         "tmp": base / "tmp",
         "profiles": base / "profiles",
+        "my_voice": base / "profiles" / "my-voice",   # the user's recordings and the voice made from them
     }
 
 

@@ -938,9 +938,12 @@ Voice is optional and lazy:
   its turn behind the running task.
 - Local speech output uses an isolated Piper worker and the configured output
   device. **Speak typed replies** extends that output to requests entered as text.
-- **Your own voice (optional).** MO ships no cloned voice. If you have trained
-  your own RVC voice, point `voice.clone_model` (and `voice.clone_index`) at it;
-  every spoken sentence is then converted through audio.cpp's `rvc` family. MO
+- **Your own voice (optional).** MO ships no cloned voice. Settings → Voice →
+  **Your voice** lists MO's voice, a voice made from your recordings
+  (`<voice root>/profiles/my-voice/`) and a trained RVC voice you set in
+  `voice.clone_model` yourself; choosing one takes the `.index` beside it, the
+  **Pitch** row shifts it, and **Status** says whether it loaded. Every spoken
+  sentence is then converted through audio.cpp's `rvc` family. MO
   keeps speaking in its plain voice while the clone loads (a minute or two on
   a small GPU), and for any sentence the clone cannot convert. The clone runs in
   one resident `audiocpp_server` process owned by the voice worker; it ends with
@@ -974,8 +977,9 @@ Voice is optional and lazy:
   delivery and the cube's reaction. Both drop command/code detail and Markdown
   punctuation from speech while the complete text remains visible in the reply
   bubble. The installed Piper voice is English, so Arabic replies stay visible but
-  unspoken unless you configure an Arabic Piper voice you placed yourself
-  (`voice.arabic_model`); then each reply is spoken with the voice for its main
+  unspoken unless you choose an Arabic Piper voice you placed in
+  `<voice root>/models/piper/` (Settings → Voice → **Arabic voice**, saved as
+  `voice.arabic_model`); then each reply is spoken with the voice for its main
   script, and a voice clone converts both. The English voice never reads Arabic.
 
 Voice dependencies and models live in private state, not the product checkout.

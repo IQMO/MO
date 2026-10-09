@@ -348,6 +348,20 @@ class CompanionVoiceMixin:
         self._voice_cfg["conversation_provider"] = value
         return True
 
+    def set_own_voice(self, field: str, value: Any) -> bool:
+        """Settings › Voice › Your voice: the speaking voice (with its index), its pitch or the Arabic voice.
+        A running speech worker restarts so the choice is heard at once; otherwise the next reply loads it."""
+        from mo_desktop.voice.own_voice import matching_index
+
+        if field not in {"clone_model", "clone_pitch", "arabic_model"}:
+            return False
+        self._voice_cfg[field] = value
+        if field == "clone_model":
+            self._voice_cfg["clone_index"] = matching_index(value)
+        if getattr(self, "_speech", None) is not None:
+            self._init_speech_output(force=True)
+        return True
+
     def _voice_conversation_speech(self) -> Any:
         if getattr(self, "_speech", None) is None:
             self._init_speech_output(force=True)

@@ -45,6 +45,12 @@ FIELDS = (
     ("voice.conversation_provider", "voice", "Conversation", "Spoken replies", "A fast model answers when you talk; tasks still run on MO's model.", "provider", ()),
     ("voice.role", "voice", "Conversation", "Role", "An existing role, Default, or a custom persona.", "role", ()),
     ("voice.role_active", "voice", "Conversation", "Use selected role", "Applies to text and voice conversations.", "switch", ()),
+    # Choices list what exists on this computer (mo_desktop/voice/own_voice.py); a status row only shows state.
+    ("voice.clone_model", "voice", "Your voice", "Speaking voice", "MO's voice, or your own once it is made.", "choice", ()),
+    ("voice.clone_pitch", "voice", "Your voice", "Pitch", "Semitones from MO's voice to yours.", "range", (-24, 24, 1, " st")),
+    ("voice.arabic_model", "voice", "Your voice", "Arabic voice", "Speaks Arabic replies; your voice converts them too.", "choice", ()),
+    ("voice.clone_status", "voice", "Your voice", "Status", "Whether your voice loaded.", "status", ()),
+    ("voice.microphone", "voice", "Your voice", "Microphone", "What MO listens and records with.", "status", ()),
 )
 BY_ID = {row[0]: row for row in FIELDS}
 
@@ -359,6 +365,11 @@ def validate_value(key: str, value: Any) -> Any:
     elif kind == "color":
         if not isinstance(value, str) or (value != "skin" and re.fullmatch(r"#[0-9a-fA-F]{6}", value) is None):
             raise ValueError("Choose a color or follow the skin")
+    elif kind == "status":
+        raise ValueError("This row only shows state")
+    elif kind == "choice":           # membership is checked against this computer's choices by the host
+        if not isinstance(value, str) or len(value) > 1000:
+            raise ValueError("Choose an available option")
     else:
         if not isinstance(value, str) or len(value) > 500:
             raise ValueError("Enter at most 500 characters")
