@@ -612,10 +612,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         """MO's media mark (the media card's play disc) at any size; for a sound file the same disc holds a
         short level of bars instead of the play triangle, so sound and clips read apart."""
         d.ellipse((x, y, x + size, y + size), fill=(*self._cyan, 235))
-        if kind == "audio":
-            bar = max(1.0, size * .09)
-            for step, height in enumerate((.26, .5, .36, .44)):
-                cx = x + size * (.32 + .12 * step)
+        if kind == "audio":                                  # three bars stay apart even at a chip's 14 px
+            bar = max(1.0, size * .1)
+            for step, height in enumerate((.3, .56, .38)):
+                cx = x + size * (.32 + .18 * step)
                 d.rounded_rectangle((cx - bar / 2, y + size * (.5 - height / 2), cx + bar / 2, y + size * (.5 + height / 2)),
                                     radius=bar / 2, fill=(*self._card, 255))
             return
