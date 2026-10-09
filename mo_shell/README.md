@@ -48,6 +48,11 @@ covers direct launches, launcher shortcuts, and single-instance applications
 without guessing by title or process name. Other files and ambiguous windows
 are ignored. The launched process is not killed or persisted by Shell.
 
+The terminal learns only the attached window's title (`mo_shell/context.py`).
+In a fresh conversation with no task, MO names the attached app once and asks
+how it can help; later it mentions the window only when it is relevant. Being
+attached is not permission to read the window's content.
+
 This is presentation, not another Agent. The child process is the canonical
 mo.py entry point inside the existing ConPTY implementation. Agent, Gateway,
 sessions, tools, task evidence, and provider configuration stay in their

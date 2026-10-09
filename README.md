@@ -212,7 +212,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **Stays above dimmers** — *Automatic.* Keeps the cubes visible over approved always-on-top overlays such as a screen dimmer.
 - **Pick-and-submit choices** — *When MO offers options.* Choices appear as buttons instead of text you retype.
 - **Report an issue** — *Ask, or the report action.* Opens a separate report session so the companion stays clean.
-- **Hands real code to the Terminal** — *Ask the companion for a code change.* It opens or reuses the same-project MO Terminal and hands the work over.
+- **Hands real code to the Terminal** — *Ask the companion for a code change.* It hands the request to the same project's live MO Terminal, or opens one in MO Shell with your request as its first turn; say "on the server" and it runs on your paired MO host.
 - **Focus mode** — *Hold the lower-right cube, or the tray.* A window switcher with previews, app and file search, taskbar pins, tray icons, calendar, dimming and power controls.
 - **MO Phone (mirror)** *(setup)* — *Launcher → Phone.* Your Android screen live on the PC (scrcpy), USB or wireless; MO can keep a frame to see your phone.
 - **Settings app** — *Launcher → Settings.* Cube size, glow, corners, formation, colour; window effects; movement; voice; role.
@@ -225,7 +225,7 @@ Computer use, the Desktop companion and its apps, voice, MO Shell and PC care.
 - **Hands to a task** — *"Open my report and…".* Anything needing tools is handed to MO in your own words and spoken back when done.
 - **Your own voice** *(setup)* — *Point Settings at a voice clone you trained.* MO speaks in your voice; it never ships anyone's cloned voice.
 - **Arabic speech** *(setup)* — *Configure an Arabic voice.* Arabic replies spoken; never misread by the English voice.
-- **MO Shell** — *Launcher → Shell.* A floating native window for your MO terminal, attached to one window you choose.
+- **MO Shell** — *Launcher → Shell.* A floating native window for your MO terminal, attached to one window you choose; in a fresh conversation MO names the attached app and asks how it can help.
 - **SystemCare app** — *Launcher → SystemCare.* The PC-care workspace.
 - **Scan, plan, apply, undo** — *SystemCare scan.* A read-only scan, an exact plan you approve, and receipts you can roll back.
 - **Game Mode** — *Game Session in the tray.* The PC set up for gaming, then restored.
