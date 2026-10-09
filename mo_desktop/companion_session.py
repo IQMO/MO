@@ -552,6 +552,7 @@ class CompanionSessionMixin:
         while (
             cleaned and cleaned[-1].get("role") == "user"
             and not cleaned[-1].get(PRESENTATION_KEY, {}).get("attachments")
+            and cleaned[-1].get(PRESENTATION_KEY, {}).get("reply_suppressed") is not True
         ):
             cleaned.pop()
         return cleaned

@@ -418,14 +418,24 @@ def _recover_dsml_tool_calls(content: str, tools: list[dict] | None) -> list[Any
 def provider_accepts_image_input(provider: Any) -> bool:
     """Return whether ``provider`` can consume image parts in model input.
 
-    ``supports_vision`` remains the compatibility/config flag for existing
-    providers.  A provider's explicit ``capabilities.image_input`` entry is
-    authoritative, including an explicit false value.
+    Explicit capabilities and vision flags are authoritative, including false.
+    An unspecified flag can use known official model capabilities, evaluated
+    against the current model so cloned provider choices do not inherit them.
     """
     capabilities = getattr(provider, "capabilities", None)
     if isinstance(capabilities, dict) and "image_input" in capabilities:
         return bool(capabilities["image_input"])
-    return bool(getattr(provider, "supports_vision", False))
+    declared = getattr(provider, "supports_vision", None)
+    if declared is not None:
+        return bool(declared)
+    try:
+        host = urllib.parse.urlsplit(str(getattr(provider, "base_url", "") or "")).hostname
+    except ValueError:
+        return False
+    model = str(getattr(provider, "model", "") or "").lower()
+    return host == "api.deepseek.com" and model in {
+        "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp",
+    }
 
 
 def complete_provider(provider: Any, *, cancel_event: object = None, **kwargs: Any):
@@ -515,7 +525,7 @@ class ChatCompletionsProvider(BaseProvider):
     api_mode = "chat_completions"
     output_token_limit_field = "max_tokens"
 
-    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None, reasoning_effort: str | None = None, supports_vision: bool = False, thinking_disabled: bool = False, capabilities: dict | None = None):
+    def __init__(self, *, name: str, base_url: str, api_key: str, model: str, timeout: float = 60.0, headers: dict[str, str] | None = None, reasoning_effort: str | None = None, supports_vision: bool | None = None, thinking_disabled: bool = False, capabilities: dict | None = None):
         super().__init__(model=model)
         self.name = name
         # Preserve optional provider metadata. An image_input entry overrides
@@ -525,9 +535,9 @@ class ChatCompletionsProvider(BaseProvider):
         # `thinking: {type: disabled}` for compatible providers so structured
         # calls do not burn max_tokens on reasoning and return empty content.
         self.thinking_disabled = bool(thinking_disabled)
-        # Opt-in per provider config (`vision: true`). Off by default because most
-        # OpenAI-compatible chat endpoints are text-only; the operator declares it.
-        self.supports_vision = bool(supports_vision)
+        # Keep omission distinct from an explicit opt-in/out. The image predicate
+        # can infer a known official model while unknown routes remain text-only.
+        self.supports_vision = None if supports_vision is None else bool(supports_vision)
         self.base_url = base_url
         self.timeout = float(timeout or 60.0)
         # Optional per-provider OpenAI-style reasoning_effort. Default None → NOT sent,
@@ -649,7 +659,8 @@ class ChatCompletionsProvider(BaseProvider):
         if tools:
             request["tools"] = tools
             request["tool_choice"] = "auto"
-        if reasoning_effort:
+        direct_deepseek = urllib.parse.urlsplit(str(getattr(self, "base_url", "") or "")).hostname == "api.deepseek.com"
+        if reasoning_effort and not (thinking_disabled and direct_deepseek):
             request["reasoning_effort"] = reasoning_effort
         if thinking_disabled:
             request.setdefault("extra_body", {})["thinking"] = {"type": "disabled"}
@@ -2000,7 +2011,7 @@ def _provider_from_config(provider_cfg: dict, model: str, config: dict | None = 
         timeout=float(provider_cfg.get("timeout", 60.0) or 60.0),
         headers=provider_cfg.get("_headers") or provider_cfg.get("headers"),
         reasoning_effort=provider_cfg.get("reasoning_effort"),
-        supports_vision=bool(provider_cfg.get("vision", False)),
+        supports_vision=bool(provider_cfg["vision"]) if "vision" in provider_cfg else None,
         thinking_disabled=bool(provider_cfg.get("thinking_disabled", False)),
         capabilities=provider_cfg.get("capabilities"),
     )

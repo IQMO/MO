@@ -42,6 +42,10 @@ Desktop session snapshots retain shared input/output and cache hit/miss/write
 accounting through save and reload. `companion_session` still owns the separate
 Desktop slot and its conversation sanitizer; transient tool and provider replay
 content is not restored as Desktop conversation memory.
+Completed silent turns retain the shared session's `reply_suppressed` receipt.
+The turn adapter consumes that receipt before reply cards or speech and keeps
+normal cleanup and persistence; unmarked empty results keep the existing
+empty-response handling.
 
 - The connected Dashboard is a separate instance-owned WebView surface documented
   in `core/dashboard/README.md`; it has no Desktop voice UI or embedded terminal.

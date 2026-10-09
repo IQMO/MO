@@ -103,6 +103,8 @@ _PROVIDER_ROUTE_QUERY_RE = re.compile(
     re.IGNORECASE,
 )
 
+_NO_REPLY_MARKER = "__MO_NO_REPLY__"
+
 _CONTEXT_TOPIC_SWITCH_RE = re.compile(
     r"\b(?:instead|unrelated|different\s+(?:task|topic)|new\s+(?:task|topic)|switch(?:ing)?\s+to)\b",
     re.IGNORECASE,
@@ -1342,13 +1344,24 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 monitor.emit("provider_request", payload)
 
             provider_output_emitted = False
+            pending_output = ""
+            checking_reply_control = True
 
             def checked_on_token(token: str):
-                nonlocal provider_output_emitted
+                nonlocal provider_output_emitted, pending_output, checking_reply_control
                 if getattr(cancel_event, "is_set", lambda: False)():
                     raise TurnCancelled()
-                provider_output_emitted = True
                 if on_token:
+                    if checking_reply_control:
+                        pending_output += token
+                        if (
+                            _NO_REPLY_MARKER.startswith(pending_output.lstrip())
+                            or pending_output.strip() == _NO_REPLY_MARKER
+                        ):
+                            return
+                        token, pending_output = pending_output, ""
+                        checking_reply_control = False
+                    provider_output_emitted = True
                     on_token(token)
 
             # No proactive pre-call capacity skip: stay on the operator's chosen
@@ -1385,6 +1398,9 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                     if request_override is not None:
                         call_kwargs["request_messages"] = request_override
                     response = self._call_provider(**call_kwargs)
+                    if on_token and pending_output and pending_output.strip() != _NO_REPLY_MARKER:
+                        provider_output_emitted = True
+                        on_token(pending_output)
             except ProviderRequestLimitReached:
                 raise
             except TurnCancelled:
@@ -1587,6 +1603,11 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             # === Phase 2c: dispatch tool calls or finalize text ===
             # Check for tool calls
             if response.tool_calls:
+                if str(response.content or "").strip() == _NO_REPLY_MARKER:
+                    # A control mixed with tool calls cannot mean silence. Keep
+                    # the calls and their evidence, but do not render the marker
+                    # as interim assistant speech.
+                    response.content = ""
                 if not continuation_gate:
                     clear_internal_continuations(self.session)
                 prepared = self._prepare_tool_batch(
@@ -1616,6 +1637,22 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             # === Phase 2e: text response (no tool calls) → process, gate, finalize ===
             # Text response — no tool calls
             content = response.content or ""
+            if content.strip() == _NO_REPLY_MARKER:
+                # Silence is an explicit successful response, never inferred from
+                # an empty body or the operator's wording. It cannot bypass the
+                # evidence gates after tool work or an active gate continuation.
+                clear_internal_continuations(self.session)
+                if (
+                    finish_reason in {"", "stop", "end_turn"}
+                    and not state.tool_call_counts
+                    and not continuation_gate
+                    and self.session.mark_reply_suppressed()
+                ):
+                    self._emit_session_event(monitor, "intentional_no_reply", request=provider_requests)
+                    return ""
+                # A truncated or misplaced control is not visible prose and is
+                # not permission to silently complete a turn that performed work.
+                content = ""
             content, gate_echoed = self._replace_gate_instruction_echo(
                 content,
                 continuation_instruction,
@@ -3038,7 +3075,7 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
         text = " ".join(str(value or "").lower() for value in values)
         if "big-pickle" in text or "bigpickle" in text:
             return True
-        return "deepseek" in text and any(marker in text for marker in ("v4", "reason", "r1", "thinking"))
+        return "deepseek" in text and any(marker in text for marker in ("v4", "deepseek-flash", "reason", "r1", "thinking"))
 
     def _provider_requires_responses_state(self) -> bool:
         """Whether the active provider consumes private Responses output items."""
@@ -3182,6 +3219,7 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 "visible text or a tool call. Continue where you left off: answer concisely or "
                 "emit your tool call now."
             )
+            mark_last_assistant_internal(self.session)
             return "retry", empty_response_prompts, empty_response_fallback_attempted
         # Fail over immediately when another provider exists so an empty first
         # provider does not consume the one same-provider recovery attempt.
@@ -3201,8 +3239,10 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                     )
                 self.session.add_assistant(
                     "[PROVIDER EMPTY] Previous provider returned no visible text. "
-                    "Answer the user directly and concisely."
+                    "Answer the user directly and concisely. If the current request asks only "
+                    "for silence and this turn performed no tool work, return only __MO_NO_REPLY__."
                 )
+                mark_last_assistant_internal(self.session)
                 return "retry", empty_response_prompts, empty_response_fallback_attempted
         # With no alternate provider, admit one same-provider retry. If the
         # fallback provider is itself empty, or this retry is also empty, stop
@@ -3212,8 +3252,10 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 monitor.emit("provider_retry", {"request": provider_requests, "provider": self.provider_name, "reason": reason, "action": "same_provider_retry"})
             self.session.add_assistant(
                 "[PROVIDER EMPTY] Response had no visible text and no tool calls. "
-                "Answer the user directly and concisely."
+                "Answer the user directly and concisely. If the current request asks only "
+                "for silence and this turn performed no tool work, return only __MO_NO_REPLY__."
             )
+            mark_last_assistant_internal(self.session)
             return "retry", empty_response_prompts, empty_response_fallback_attempted
         if monitor:
             monitor.emit("provider_error", {"request": provider_requests, "provider": self.provider_name, "reason": reason, "error": "Provider returned no visible content after retries."})

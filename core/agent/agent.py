@@ -951,18 +951,34 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
         recent_mcp = set(getattr(self, "_recent_mcp_prefixes", ()) or ())
         self._continued_mcp_prefixes = set()
         if recent_mcp:
+            from ..runtime.capability_routing import capability_hints_for
+            from ..runtime.turn_intent import _without_negated_work_actions
+
+            positive_input = _without_negated_work_actions(raw_input)
+            positive_hints = capability_hints_for(positive_input)
             named_mcp = self._configured_mcp_prefixes_for_turn(raw_input)
+            raw_named_mcp = self._configured_mcp_prefixes_for_turn(
+                raw_input, include_prohibited=True,
+            )
+            recent_mcp.difference_update(raw_named_mcp - named_mcp)
+            if (
+                not named_mcp
+                and "mcp" in capability_hints_for(raw_input)
+                and "mcp" not in positive_hints
+            ):
+                recent_mcp.clear()
+            self._recent_mcp_prefixes = recent_mcp
             same_server_named = bool(named_mcp.intersection(recent_mcp))
             unnamed_mcp_reference = bool(
                 not named_mcp
-                and "mcp" in getattr(intent, "capability_hints", frozenset())
+                and "mcp" in positive_hints
             )
             related_followup = bool(
                 not named_mcp
                 and str(getattr(intent, "context_policy", "") or "") != "work"
                 and (
-                    _MCP_FOLLOWUP_REFERENCE_RE.search(raw_input)
-                    or _MCP_FOLLOWUP_ACTION_RE.search(raw_input)
+                    _MCP_FOLLOWUP_REFERENCE_RE.search(positive_input)
+                    or _MCP_FOLLOWUP_ACTION_RE.search(positive_input)
                 )
             )
             if same_server_named or unnamed_mcp_reference or related_followup:
@@ -991,8 +1007,15 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
         recent.add(name)
         self._recent_project_tool_names = recent
 
-    def _configured_mcp_prefixes_for_turn(self, text: str) -> set[str]:
-        value = str(text or "").strip().lower()
+    def _configured_mcp_prefixes_for_turn(
+        self, text: str, *, include_prohibited: bool = False,
+    ) -> set[str]:
+        from ..runtime.turn_intent import _without_negated_work_actions
+
+        # A prohibited server is not a requested capability. Reuse the same
+        # positive-action projection as turn routing before matching names.
+        value = str(text or "") if include_prohibited else _without_negated_work_actions(text)
+        value = value.strip().lower()
         cfg = getattr(self, "config", {})
         mcp_cfg = cfg.get("mcp", {}) if isinstance(cfg, dict) else {}
         servers = mcp_cfg.get("servers", []) if isinstance(mcp_cfg, dict) else []
@@ -1063,6 +1086,10 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
 
     def _routed_capability_hints(self, intent: object) -> set[str]:
         hints = set(getattr(intent, "capability_hints", frozenset()))
+        if "mcp" in hints and not self._turn_requests_mcp(
+            self._conversation_user_input(getattr(self, "_current_user_input", "")),
+        ):
+            hints.discard("mcp")
         delivered = getattr(self, "_last_turn_context_flags", {}) or {}
         if any(delivered.get(key) for key in ("code_graph", "project_knowledge", "project_history")) or getattr(intent, "work_pattern", "") in {"project_audit", "review_evidence"}:
             # Offer the existing readers with delivered project orientation even
@@ -1516,9 +1543,13 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
         subprocesses. A future configured server remains discoverable by its own
         name without teaching this product every future integration topic.
         """
-        text = str(user_input or "").strip().lower()
-        intent = self._turn_intent_for(user_input)
-        if "mcp" in getattr(intent, "capability_hints", frozenset()):
+        from ..runtime.capability_routing import capability_hints_for
+        from ..runtime.turn_intent import _without_negated_work_actions
+
+        text = _without_negated_work_actions(user_input).strip().lower()
+        # Inspect this query, not Gateway's cached intent for the raw turn.
+        # Discovery queries and prohibited clauses can differ from that input.
+        if "mcp" in capability_hints_for(text):
             return True
         return bool(self._configured_mcp_prefixes_for_turn(text))
 
@@ -1976,13 +2007,18 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
             return {}
         adaptive = self._adaptive_reasoning_level(user_input)
         if adaptive == "low":
+            if (
+                str(getattr(self, "reasoning", "") or "").strip().lower() == "low"
+                and provider_source_key(provider) == "deepseek"
+            ):
+                return model_reasoning_request_overrides(
+                    provider, source_key="deepseek", model=self.model, thinking="low",
+                )
             return self._provider_low_reasoning_overrides(provider)
         configured = str(getattr(self, "reasoning", "") or "").strip().lower()
         if configured not in {"none", "low", "medium", "high", "xhigh", "max"}:
             configured = "high"
         if adaptive != configured:
-            from ..provider.model_catalog import model_reasoning_request_overrides
-
             return model_reasoning_request_overrides(
                 provider,
                 source_key="",
@@ -1992,8 +2028,6 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
         state = getattr(self, "_thread_state", None)
         if not bool(getattr(state, "model_reasoning_scoped", False)):
             return {}
-        from ..provider.model_catalog import model_reasoning_request_overrides
-
         return model_reasoning_request_overrides(
             provider,
             source_key="",

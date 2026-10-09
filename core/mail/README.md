@@ -108,6 +108,11 @@ approval. Gmail follows Google's
 [Workspace Limited Use policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy#limited_use_of_user_data).
 
 Mail turns are omitted from saved MO session transcripts and profile learning.
+Mail classification requires an explicit email or mailbox reference, the mail
+command, or an exact mail approval reply. Generic requests to read, review, or
+send messages do not activate mail privacy handling. Requests concerning chat,
+coding sessions, or diagnostic messages retain their ordinary tools and
+conversation history.
 Ordinary tool audit retains an action name, not mail arguments. Provider
 monitor previews, Gateway continuity, and Hub job records omit mail content;
 Hub jobs retain a placeholder. The live answer remains visible in that turn.

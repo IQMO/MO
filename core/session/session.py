@@ -319,6 +319,16 @@ class Session:
         self.messages.append({"role": "user", "content": sanitize_unicode_text(content)})
         self._trim()
 
+    def mark_reply_suppressed(self) -> bool:
+        """Close the current user turn without inventing assistant speech."""
+        if not self.messages or self.messages[-1].get("role") != "user":
+            return False
+        message = self.messages[-1]
+        presentation = dict(message.get(PRESENTATION_KEY) or {})
+        presentation["reply_suppressed"] = True
+        message[PRESENTATION_KEY] = presentation
+        return True
+
     def add_assistant(
         self,
         content: str,
@@ -542,6 +552,7 @@ class Session:
         while (
             i >= 0 and isinstance(original[i], dict) and original[i].get("role") == "user"
             and not original[i].get(PRESENTATION_KEY, {}).get("attachments")
+            and not original[i].get(PRESENTATION_KEY, {}).get("reply_suppressed")
         ):
             i -= 1
         start = i + 1

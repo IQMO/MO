@@ -29,6 +29,14 @@ THINKING_LEVELS: tuple[tuple[str, str], ...] = (
     ("low", "fast/simple work"),
 )
 
+DEEPSEEK_THINKING_LEVELS: tuple[tuple[str, str], ...] = (
+    ("max", "maximum reasoning"),
+    ("high", "high reasoning"),
+    ("medium", "high reasoning (medium alias)"),
+    ("low", "low reasoning"),
+    ("none", "reasoning disabled"),
+)
+
 OPENAI_GPT56_THINKING_LEVELS: tuple[tuple[str, str], ...] = (
     ("max", "maximum exploration and verification"),
     ("xhigh", "extra-high reasoning"),
@@ -408,6 +416,8 @@ def model_menu_items(
 def thinking_levels_for(source_key: str, model: str) -> tuple[tuple[str, str], ...]:
     key = normalize_model_source(source_key)
     model_id = str(model or "").strip().lower()
+    if key == "deepseek":
+        return DEEPSEEK_THINKING_LEVELS
     if key == "openai-oauth" and model_id in {"gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol"}:
         return OPENAI_ASTRA_THINKING_LEVELS
     if key == "openai-oauth" and model_id == "gpt-6-luna":
@@ -532,7 +542,10 @@ def runtime_model_selection(agent: Any, *, surface: str = "terminal") -> dict[st
         selection["model"] if selection is not None else _provider_text(provider, "model")
     )
     levels = dict(thinking_levels_for(source, model))
-    return {"source": source, "model": model, "thinking": "none" if "none" in levels else "low"}
+    # DeepSeek's existing Desktop default is low; exposing its native off option
+    # must not silently change an operator's unselected default.
+    thinking = "none" if source != "deepseek" and "none" in levels else "low"
+    return {"source": source, "model": model, "thinking": thinking}
 
 
 def active_model_selection(agent: Any) -> dict[str, str]:
@@ -625,6 +638,8 @@ def apply_model_reasoning_choice(
         model=model,
         thinking=thinking,
     )
+    if "thinking_disabled" in overrides:
+        provider.thinking_disabled = overrides["thinking_disabled"]
     if "reasoning_effort" not in overrides:
         return ""
     effort = overrides["reasoning_effort"]
@@ -646,6 +661,15 @@ def model_reasoning_request_overrides(
     level = str(thinking or "").strip().lower()
     if source == "openai-oauth":
         return {"reasoning_effort": level}
+    if source == "deepseek":
+        # The official API accepts medium/xhigh as aliases of high.
+        effort = "high" if level in {"medium", "xhigh"} else level
+        if effort not in {"none", "low", "high", "max"}:
+            return {}
+        return {
+            "reasoning_effort": None if effort == "none" else effort,
+            "thinking_disabled": effort == "none",
+        }
     if source != "zai":
         return {}
     if str(model or "").strip().lower() != "glm-5.2":
@@ -772,5 +796,16 @@ def ensure_model_choice_provider(agent: Any, source_key: str, model: str) -> tup
             clone.model = model_id
         except Exception:
             pass
+        if (
+            key == "deepseek"
+            and urllib.parse.urlsplit(base_url).hostname == "api.deepseek.com"
+            and model_id == "deepseek-v4-pro"
+            and _provider_text(template, "model") != model_id
+        ):
+            # Flash's image declaration belongs to that model. A Pro choice
+            # must use Pro's text-only capability, not the cloned declaration.
+            clone.supports_vision = None
+            clone.capabilities = dict(getattr(template, "capabilities", {}) or {})
+            clone.capabilities.pop("image_input", None)
         agent.providers.append(clone)
         return len(agent.providers) - 1, clone

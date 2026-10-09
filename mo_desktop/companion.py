@@ -4502,18 +4502,39 @@ class CompanionSurface(
                     )
             aborted_turn = self._is_aborted_result(result)
             self._finalize_desktop_action_receipt(admission, result)
-            visible_result = self._sanitize_options_result(result, desktop_session)
-            visible_result = self._role_activation_reply(
-                visible_result,
-                requested_role if role_started else None,
+            from core.session.session import PRESENTATION_KEY
+
+            messages = getattr(desktop_session, "messages", [])
+            last_message = messages[-1] if messages else {}
+            reply_suppressed = (
+                not str(result or "").strip()
+                and last_message.get("role") == "user"
+                and last_message.get(PRESENTATION_KEY, {}).get("reply_suppressed") is True
             )
-            if role_started and not mail_turn:
-                self._replace_last_assistant_text(desktop_session, visible_result)
-            # A native control card owns the physical panel until resolved. Apply
-            # this last so neither a model epilogue nor a role-activation prefix can
-            # replace the choices it asked the operator to make.
-            visible_result = self._native_result(visible_result, desktop_session)
-            self._set_result(visible_result)
+            if reply_suppressed:
+                def _close_status() -> None:
+                    from mo_desktop.design import PanelState
+
+                    bubble = getattr(self, "_bubble", None)
+                    if getattr(bubble, "_panel_state", None) is PanelState.STATUS:
+                        bubble.hide()
+
+                self._post_gui_call(_close_status)
+                self._reset_voice_timing()
+                self._resume_voice_chat_after_turn()
+            else:
+                visible_result = self._sanitize_options_result(result, desktop_session)
+                visible_result = self._role_activation_reply(
+                    visible_result,
+                    requested_role if role_started else None,
+                )
+                if role_started and not mail_turn:
+                    self._replace_last_assistant_text(desktop_session, visible_result)
+                # A native control card owns the physical panel until resolved. Apply
+                # this last so neither a model epilogue nor a role-activation prefix can
+                # replace the choices it asked the operator to make.
+                visible_result = self._native_result(visible_result, desktop_session)
+                self._set_result(visible_result)
             if aborted_turn:
                 quarantine = getattr(desktop_session, "quarantine_unfinished_tail", None)
                 if callable(quarantine):
