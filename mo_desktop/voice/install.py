@@ -49,6 +49,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--config", default=None, help="MO config path; default is the private MO config")
     parser.add_argument("--root", default=None, help="absolute voice runtime root; overrides config for this command")
     parser.add_argument("--yes", action="store_true", help="confirm removal of the managed voice runtime")
+    parser.add_argument("--include-my-voice", action="store_true",
+                        help="also remove your recordings and the voice made from them (kept by default)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     config_path = args.config or default_config_path()
@@ -95,7 +97,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "prepare":
         print(f"managed directories: {len(paths) - 1}")
     if args.command == "uninstall":
-        return _uninstall(paths, confirmed=args.yes)
+        return _uninstall(paths, confirmed=args.yes, include_my_voice=args.include_my_voice)
     if args.command in {"install", "update"}:
         if free is not None and free < MIN_FREE_BYTES:
             print("MO voice setup error: at least 2 GiB free space is required")
@@ -180,18 +182,24 @@ def _install(paths: dict[str, Path], *, upgrade: bool = False) -> int:
     return 0
 
 
-def _uninstall(paths: dict[str, Path], *, confirmed: bool) -> int:
-    """Remove only directories owned by the voice layout, preserving other data."""
+def _uninstall(paths: dict[str, Path], *, confirmed: bool, include_my_voice: bool = False) -> int:
+    """Remove only directories owned by the voice layout, preserving other data. The user's recordings and the
+    voice made from them (``profiles/my-voice``) are their own: kept unless ``include_my_voice`` asks otherwise."""
     root = paths["root"]
     if not confirmed:
-        print("MO voice uninstall requires --yes; managed voice models, runtimes, caches, and profiles will be removed")
+        print("MO voice uninstall requires --yes; managed voice models, runtimes, caches, and profiles will be removed"
+              + ("" if include_my_voice else "; your recordings and your voice are kept"))
         return 2
+    mine = paths["my_voice"]
+    keep = mine if not include_my_voice and mine.is_dir() and any(mine.iterdir()) else None
+    profiles = ([child for child in paths["profiles"].iterdir() if child != keep]
+                if keep is not None else [paths["profiles"]])
     for path in (
         root / "venvs",
         root / "models",
         root / "cache",
         root / "tmp",
-        root / "profiles",
+        *profiles,
     ):
         try:
             if path.is_symlink() or path.is_file():
@@ -201,6 +209,9 @@ def _uninstall(paths: dict[str, Path], *, confirmed: bool) -> int:
         except OSError as exc:
             print(f"MO voice setup error: uninstall failed ({type(exc).__name__})")
             return 2
+    if keep is not None:
+        print(f"MO voice uninstalled: kept your recordings and your voice in {keep}")
+        return 0
     try:
         root.rmdir()
         print("MO voice uninstalled: managed runtime and private voice data removed")

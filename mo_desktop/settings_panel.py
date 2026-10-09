@@ -48,7 +48,8 @@ class SettingsPanel(NativeAppWindow):
                        "voice.clone_pitch": int(voice.get("clone_pitch") or 0),
                        "voice.arabic_model": str(voice.get("arabic_model") or ""),
                        "voice.clone_status": own_voice.status_text(voice, getattr(self._c, "_speech", None)),
-                       "voice.microphone": own_voice.microphone_text()})
+                       "voice.microphone": own_voice.microphone_text(),
+                       "voice.record": self._voice_recording().status()})
         agent = self._c._agent
         catalog = model_catalog_projection(agent, allow_live=False)
         try:
@@ -80,6 +81,14 @@ class SettingsPanel(NativeAppWindow):
             "language_servers": sorted((self._authored().get("lsp") or {}).get("servers") or {}),
             "overview": self._overview(),
         }
+
+    def _voice_recording(self) -> Any:
+        """One recording session for this Settings window, in the private voice root."""
+        from mo_desktop.voice.own_voice import VoiceRecording
+
+        if getattr(self, "_recording", None) is None:
+            self._recording = VoiceRecording(dict(getattr(self._c, "_voice_cfg", {}) or {}))
+        return self._recording
 
     @staticmethod
     def _choices(voice: dict[str, Any]) -> dict[str, list[list[str]]]:
@@ -197,7 +206,8 @@ class SettingsPanel(NativeAppWindow):
 
         # Slow enumeration uses the existing pipe reader; live Desktop changes
         # are posted to their existing GUI owner without another worker pool.
-        if action in {"devices", "chrome_status", "chrome_repair", "chrome_remove", "model", "models_status", "configuration", "lsp", "media_status", "media_install"}:
+        if action in {"devices", "chrome_status", "chrome_repair", "chrome_remove", "model", "models_status", "configuration", "lsp", "media_status", "media_install",
+                      "record_status", "record_start", "record_stop", "record_cancel"}:
             run()
         elif self._c._post_gui_call(run) is False and self.is_running():
             self._send({"cmd": "result", "request_id": request_id,
@@ -217,6 +227,15 @@ class SettingsPanel(NativeAppWindow):
             return {"message": "Verified reference helper ready. No tunnel or upload was started.", **self.dispatch("media_status", {})}
         if action == "snapshot":
             return {"state": self.snapshot()}
+        if action.startswith("record_"):        # Settings › Voice › Record my voice (own_voice.VoiceRecording)
+            session = self._voice_recording()
+            if action == "record_start":
+                return {"recording": session.start(payload.get("step"))}
+            if action == "record_stop":
+                return {"recording": session.stop()}
+            if action == "record_cancel":
+                session.cancel()
+            return {"recording": session.status()}
         if action in {"preview", "save"}:
             return self._setting(str(payload.get("id") or ""), payload.get("value"), save=action == "save")
         if action == "terminal":

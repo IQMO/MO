@@ -942,7 +942,13 @@ Voice is optional and lazy:
   **Your voice** lists MO's voice, a voice made from your recordings
   (`<voice root>/profiles/my-voice/`) and a trained RVC voice you set in
   `voice.clone_model` yourself; choosing one takes the `.index` beside it, the
-  **Pitch** row shifts it, and **Status** says whether it loaded. Every spoken
+  **Pitch** row shifts it, and **Status** says whether it loaded. **Record my
+  voice** in the same group shows one line at a time (then a few free-talk
+  prompts in your own language): Record, read, Stop. MO records at the
+  microphone's own rate, checks each clip (too short, quiet, loud or noisy, with
+  what to do) and keeps only good clips, privately, in
+  `<voice root>/profiles/my-voice/recordings/`; about five minutes of good
+  speech is enough to make a voice. Every spoken
   sentence is then converted through audio.cpp's `rvc` family. MO
   keeps speaking in its plain voice while the clone loads (a minute or two on
   a small GPU), and for any sentence the clone cannot convert. The clone runs in
@@ -1003,7 +1009,9 @@ wrong digest fails closed. Install/update downloads into managed temporary
 storage, validates the model plus required sidecar, warms it, and only then
 promotes it. Exit MO Desktop before update or uninstall. Uninstall removes only
 voice-owned runtime, model, cache, temporary, and profile directories;
-unrelated entries under a custom root are preserved.
+unrelated entries under a custom root are preserved, and so are your
+recordings and the voice made from them (`profiles/my-voice`) unless you add
+`--include-my-voice`.
 
 ## MCP, profile apps, and roles
 

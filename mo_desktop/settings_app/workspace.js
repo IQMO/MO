@@ -3,7 +3,7 @@
   const $ = (id) => document.getElementById(id);
   const all = (query, root = document) => [...root.querySelectorAll(query)];
   const pending = new Map(), bindings = new Map(), unsaved = new Set();
-  let closing = false;
+  let closing = false, recordingVoice = false;
   let sequence = 0, state, page = 'appearance', selectedSkin, skinPicker, draftColors = {}, openPicker, modelTarget = 'desktop', chosenProject, modelPoll = 0;
   const descriptions = {
     general: ['General', 'Small preferences that shape your day.'],
@@ -62,6 +62,7 @@
     document.body.inert = true;
     modelPoll++;
     try {
+      if (recordingVoice) { await request('record_cancel').catch(() => {}); recordingVoice = false; }   // never leave the mic open
       await Promise.all([...bindings.values()].map(binding => binding.lane.flush()));
       while (pending.size) await Promise.all([...pending.values()].map(entry => entry.response));
       if (unsaved.size) throw new Error('A preview has not been saved. Save or reset it before closing.');
@@ -207,6 +208,36 @@
     } else if (field.kind === 'status') {         // shows state only; nothing to save
       const text = element('span', 'muted'); control.append(text);
       update = value => { text.textContent = value || ''; };
+    } else if (field.kind === 'recorder') {       // Record my voice: one line at a time, MO records and checks it
+      const line = element('p'), words = element('strong'), note = element('p', 'muted'), progress = element('p', 'muted');
+      const actions = element('div', 'group-actions'), record = element('button', 'button', 'Record');
+      const back = element('button', 'quiet', 'Back'), next = element('button', 'quiet', 'Next');
+      [record, back, next].forEach(button => { button.type = 'button'; });
+      line.append(words); actions.append(record, back, next); control.append(line, note, actions, progress);
+      let view = {}, step = null;
+      const show = () => {
+        const steps = view.steps || [], current = steps[step];
+        recordingVoice = view.recording !== null && view.recording !== undefined;
+        words.textContent = current ? `${step + 1} of ${steps.length} · ${current.text}` : 'Every line is recorded.';
+        record.textContent = recordingVoice ? 'Stop' : 'Record'; record.disabled = !current;
+        back.disabled = recordingVoice || step === 0; next.disabled = recordingVoice || !current;
+        if (recordingVoice) note.textContent = current?.kind === 'talk' ? 'Recording… talk freely, then press Stop.' : 'Recording… read the line, then press Stop.';
+        const good = Math.round(view.good_seconds || 0);
+        progress.textContent = `${Math.floor(good / 60)} min ${good % 60} s of good speech` + (view.ready ? ' · enough to make your voice' : ' · about 5 minutes are needed');
+      };
+      record.onclick = async () => {
+        record.disabled = true;
+        const result = await act(recordingVoice ? 'record_stop' : 'record_start', recordingVoice ? {} : {step});
+        if (result.ok && result.recording) {
+          view = result.recording;
+          const last = view.last;
+          if (last) { note.textContent = last.advice; if (last.status === 'ok') step = Math.min(step + 1, (view.steps || []).length); }
+        }
+        show();
+      };
+      back.onclick = () => { step = Math.max(0, step - 1); note.textContent = ''; show(); };
+      next.onclick = () => { step = Math.min(step + 1, (view.steps || []).length); note.textContent = ''; show(); };
+      update = value => { view = value || {}; if (step === null) step = view.next || 0; show(); };
     } else if (field.kind === 'color') {
       const follow = element('input', 'settings-switch'), label = element('label', 'muted', 'Follow skin'); follow.type = 'checkbox';
       follow.setAttribute('aria-label', 'Follow skin color'); input = element('input'); input.type = 'color';
