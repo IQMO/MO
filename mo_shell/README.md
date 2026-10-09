@@ -222,6 +222,13 @@ An explicit profile remains available through python -m mo_shell --config
 PATH. Otherwise the canonical MO_CONFIG/default-profile resolution is
 inherited unchanged.
 
+**Open with MO** on a folder's right-click menu (written by `mo --init`, see the
+[Quickstart](../README.md#1-install-and-initialize)) runs `mo --shell <folder>`:
+one MO Shell whose terminal starts in that folder, with no console window of its
+own. When MO Shell cannot start (no build and no .NET 8 SDK), a Windows message says
+why. A first launch after a C# change builds the host first, which can take a
+moment before the window appears.
+
 MO_PYTHON may select a different Python executable and MO_PROJECT_CWD may
 select the working project when launching the native executable directly.
 

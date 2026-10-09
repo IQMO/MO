@@ -325,6 +325,12 @@ and the `mo`/`mo.cmd` launchers under `~/.mo/bin`. On Windows, `~` means your us
 profile directory. Repeating `--init` preserves existing config and credentials.
 It does not initialize or modify the project you are working in.
 
+On Windows, `--init` also adds **Open with MO**, with MO's icon, to the right-click
+menu of every folder and of a folder's empty space; it opens [MO Shell](mo_shell/README.md)
+in that folder. Windows 11 lists it under **Show more options** (or Shift+F10). MO also
+appears in Settings → Apps. `mo --uninstall`, or Uninstall there, removes both entries
+and the generated launchers, and keeps `~/.mo` and this checkout.
+
 ### 2. Configure a provider
 
 Choose one provider from [`config.example.yaml`](config.example.yaml). For the

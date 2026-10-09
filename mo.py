@@ -73,6 +73,46 @@ def _load_initializer():
     return initialize_mo, render_init_report
 
 
+def _run_init_cli() -> None:
+    """`mo --init`: the private home, then MO's own Windows entries (Open with MO, Settings → Apps)."""
+    init_mo, render_init = _load_initializer()
+    report = init_mo(project_path=CALLER_CWD)
+    from core.state.windows_integration import install
+
+    install(report.home / "bin", report)
+    print(render_init(report))
+
+
+def _tell(title: str, text: str) -> None:
+    """Print to the console; without one (Open with MO, Settings → Apps) show a Windows message."""
+    if sys.stdout is not None:
+        print(text)
+    elif os.name == "nt":
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text, title, 0x40)
+
+
+def _open_shell_cli(args: list[str]) -> int:
+    """Open with MO: MO Shell's terminal in the clicked folder."""
+    folder = args[0] if args else CALLER_CWD
+    try:
+        from mo_shell.__main__ import launch_native
+
+        launch_native(project_cwd=folder)
+    except (OSError, ValueError) as error:    # not built and no .NET 8 SDK, or the folder cannot be used
+        _tell("Open with MO", f"MO Shell could not open {folder}:\n{error}")
+        return 2
+    return 0
+
+
+def _run_uninstall_cli() -> None:
+    from core.state.paths import mo_home
+    from core.state.windows_integration import uninstall
+
+    _tell("MO", "\n".join(uninstall(mo_home())))
+
+
 def _default_config_path(*, agent_root: str, caller_cwd: str) -> str:
     global default_config_path
     if default_config_path is None:
@@ -492,6 +532,8 @@ def _print_cli_help() -> None:
     print("  mo -p \"prompt\" | --prompt \"prompt\"  # run one non-interactive turn (scriptable)")
     print("  mo --prompt-file path.txt           # run one non-interactive turn from a prompt file")
     print("  mo [--init]")
+    print("  mo --uninstall                      # remove launchers and Windows entries; keeps ~/.mo and this folder")
+    print("  mo --shell [folder]                 # open MO Shell in a folder (Windows: Open with MO)")
     print("  mo --init-project-docs              # create absent public project-doc starters")
     print("  mo [--help|--version|--update]")
     print("  mo --dashboard       Open the MO Dashboard with the normal MO terminal")
@@ -529,6 +571,14 @@ def main(argv: list[str] | None = None):
         if code:
             raise SystemExit(code)
         return
+    if args[:1] == ["--shell"]:
+        code = _open_shell_cli(args[1:])
+        if code:
+            raise SystemExit(code)
+        return
+    if args[:1] == ["--uninstall"]:
+        _run_uninstall_cli()
+        return
     if any(arg in {"--help", "-h", "help"} for arg in args):
         _print_cli_help()
         return
@@ -539,8 +589,7 @@ def main(argv: list[str] | None = None):
         _run_cli_update()
         return
     if "--init" in args or "init" in args:
-        init_mo, render_init = _load_initializer()
-        print(render_init(init_mo(project_path=CALLER_CWD)))
+        _run_init_cli()
         return
     if "--init-project-docs" in args or "init-project-docs" in args:
         from core.context.project_docs import create_project_docs_starter, render_project_docs_starter_report
@@ -559,8 +608,7 @@ def main(argv: list[str] | None = None):
         sys.exit(2)
     config_path = explicit_config_path or _default_config_path(agent_root=AGENT_ROOT, caller_cwd=CALLER_CWD)
     if not os.path.exists(config_path):
-        init_mo, render_init = _load_initializer()
-        print(render_init(init_mo(project_path=CALLER_CWD)))
+        _run_init_cli()
         print("\nRun `python mo.py` again after adding provider keys to ~/.mo/credentials/providers.env.")
         return
     prompt = _prompt_arg(args)

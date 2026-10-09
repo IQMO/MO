@@ -65,7 +65,7 @@ STATE_LAYOUT: tuple[StatePath, ...] = (
     # --- root dirs ---
     StatePath("docs", "dir", "tooling", "durable", "LEGACY private documentation root; archive under memory/archive/legacy-docs", deprecated=True),
     StatePath("tmp", "dir", "tooling", "ephemeral", "LEGACY private scratch root; archive under memory/archive/legacy-tmp", deprecated=True),
-    StatePath("bin", "dir", "product", "durable", "mo / mo.cmd launcher shims", sync="device", create_at_init=True),
+    StatePath("bin", "dir", "product", "durable", "mo / mo.cmd launcher shims and mo.ico, the Windows Open with MO icon", sync="device", create_at_init=True),
     StatePath("memory", "dir", "product", "durable", "durable state grouped by meaning", create_at_init=True),
     StatePath("memory/transfers.sqlite", "file", "product", "durable", "resumable cross-surface file-transfer state; names and paths remain private", sync="never"),
     StatePath("memory/transfers", "dir", "product", "durable", "bounded sender and hub file-transfer custody until acceptance or expiry", sync="never"),
