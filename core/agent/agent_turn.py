@@ -3240,7 +3240,7 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 self.session.add_assistant(
                     "[PROVIDER EMPTY] Previous provider returned no visible text. "
                     "Answer the user directly and concisely. If the current request asks only "
-                    "for silence and this turn performed no tool work, return only __MO_NO_REPLY__."
+                    f"for silence and this turn performed no tool work, return only {_NO_REPLY_MARKER}."
                 )
                 mark_last_assistant_internal(self.session)
                 return "retry", empty_response_prompts, empty_response_fallback_attempted
@@ -3253,7 +3253,7 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             self.session.add_assistant(
                 "[PROVIDER EMPTY] Response had no visible text and no tool calls. "
                 "Answer the user directly and concisely. If the current request asks only "
-                "for silence and this turn performed no tool work, return only __MO_NO_REPLY__."
+                f"for silence and this turn performed no tool work, return only {_NO_REPLY_MARKER}."
             )
             mark_last_assistant_internal(self.session)
             return "retry", empty_response_prompts, empty_response_fallback_attempted
