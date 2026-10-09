@@ -12,6 +12,9 @@ from mo_desktop.desktop_log import (
     log_event,
 )
 
+# A second Alt released sooner than this was a stray tap, not speech (shorter than any spoken word).
+_ACCIDENTAL_HOLD_SECONDS = 0.4
+
 _VOICE_STATUS_REQUEST_RE = re.compile(
     r"\b(?:double[\s-]*alt|voice\s+chat|voice|microphone|mic|audio)\b"
     r"[^\n]{0,140}\b(?:status|state|enabled|activated|working|listen(?:ing)?|"
@@ -578,18 +581,27 @@ class CompanionVoiceMixin:
         input is used, and every stop path closes the microphone."""
         voice = self._voice
         if not self._voice_input_configured():
-            self._set_status("Voice is off — turn it on in Settings", self._visual_palette.warn)
+            # Voice off: nothing listens; the operator is told which switch turns it on (his note 2026-10-09).
+            self._set_status("Voice is off — turn on Hold to talk in Settings", self._visual_palette.warn)
             cube = getattr(self, "_cube", None)
             if cube is not None:
-                self._post_gui_call(lambda: cube.show_bubble("voice off — Settings"))
+                self._post_gui_call(lambda: cube.show_bubble("Voice is off — Settings › Hold to talk"))
             else:
-                self._show_reply_dialog("Voice input is off in mo_desktop.voice.stt_enabled")
+                self._show_reply_dialog("Voice is off. Turn on Hold to talk in Settings › Voice.")
             return
         if voice is None or not voice.recording_configured:
             self._set_status(self._voice_input_unavailable_message(), self._visual_palette.warn)
             self._show_reply_dialog(self._voice_input_unavailable_message())
             return
         if self._recording_voice:
+            held = time.monotonic() - float(getattr(self, "_voice_capture_started_at", 0.0) or 0.0)
+            if not self._voice_capture_auto and held < _ACCIDENTAL_HOLD_SECONDS:
+                # Alt, Alt released at once is a stray gesture, not an attempt to speak: no transcription and
+                # no "No speech detected." card (his note 2026-10-09; the log showed both in the same second).
+                self._discard_voice_capture()
+                self._set_status("Hold the second Alt while you speak", self._visual_palette.muted)
+                log_event("voice capture released at once; discarded", config=getattr(self._agent, "config", None))
+                return
             # second voice gesture → stop, transcribe, submit
             self._recording_voice = False
             self._cube_set_listening(False)
@@ -617,6 +629,7 @@ class CompanionVoiceMixin:
         if callable(prepare):
             prepare()
         if voice.start_recording():
+            self._voice_capture_started_at = time.monotonic()
             self._warm_voice_conversation()
             if self._voice_chat_enabled() and not chat_auto:
                 self._voice_chat_paused = False

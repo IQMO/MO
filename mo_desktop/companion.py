@@ -6473,6 +6473,8 @@ class CompanionSurface(
         recording state inside that queue preserves a fast second-Alt press/release as
         ordered start then stop instead of racing a stale hook-thread boolean."""
         if not self._voice_input_configured():
+            if start:     # voice off: nothing listens, and the operator is told how to turn it on
+                self._post_gui_call(self._on_voice_input)
             return
 
         def _apply() -> None:

@@ -921,7 +921,10 @@ Voice is optional and lazy:
 
 - Double-Alt hold-to-talk starts capture when the second Alt is pressed and
   sends when that same Alt is released. It uses `sounddevice` plus either
-  `faster-whisper` or Windows SAPI.
+  `faster-whisper` or Windows SAPI. With **Hold to talk** off nothing listens:
+  double-Alt only says to turn it on in Settings. A second Alt released at once
+  is a stray tap and is dropped without a transcription or a "No speech
+  detected." card.
 - A spoken request is answered by the voice conversation layer, not by a full
   MO turn. One fast request to `voice.conversation_provider` (thinking off, a
   small prompt) streams the reply, and each sentence is spoken as soon as it
