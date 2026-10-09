@@ -1077,6 +1077,8 @@ internal sealed class BridgeClient : IDisposable
         if (_process is not null) return;
         var python = Environment.GetEnvironmentVariable("MO_PYTHON") ?? "python";
         var project = ResolveProjectDirectory();
+        // The bridge runs from MO's checkout so `-m mo_shell.bridge` imports from any project; --cwd is the project.
+        var root = Environment.GetEnvironmentVariable("MO_AGENT_ROOT");
         var info = new ProcessStartInfo
         {
             FileName = python,
@@ -1088,7 +1090,7 @@ internal sealed class BridgeClient : IDisposable
             StandardOutputEncoding = Utf8NoBom,
             StandardErrorEncoding = Utf8NoBom,
             CreateNoWindow = true,
-            WorkingDirectory = project,
+            WorkingDirectory = !string.IsNullOrWhiteSpace(root) && Directory.Exists(root) ? root : project,
         };
         info.ArgumentList.Add("-m");
         info.ArgumentList.Add("mo_shell.bridge");

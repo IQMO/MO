@@ -143,5 +143,6 @@ Build:
     dotnet build mo_shell/native/MoShell.Native.csproj -c Release
 
 Run through python -m mo_shell so the native process receives the active
-Python executable and project working directory. Direct launches may set
-MO_PYTHON and MO_PROJECT_CWD.
+Python executable, project working directory and MO's checkout (`MO_AGENT_ROOT`,
+where the bridge starts so it imports from any project). Direct launches may set
+MO_PYTHON, MO_PROJECT_CWD and MO_AGENT_ROOT.

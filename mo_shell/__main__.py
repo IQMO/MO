@@ -108,6 +108,8 @@ def launch_native(
     environment = os.environ.copy()
     environment["MO_PYTHON"] = console_python_executable()
     environment["MO_PROJECT_CWD"] = str(project)
+    # The host starts its bridge here, so `-m mo_shell.bridge` imports in any project (Open with MO).
+    environment["MO_AGENT_ROOT"] = str(Path(__file__).resolve().parents[1])
     environment.pop("MO_SHELL_LAUNCH_ORIGIN", None)
     environment.pop(SHELL_STARTUP_ENV, None)
     if startup_args:
