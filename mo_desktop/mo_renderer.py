@@ -1225,7 +1225,7 @@ def _renderer_icon_path(
     """Materialize the shared skin-aware MO mark for the native window."""
     from core.state.paths import MO_DESIGN_RUNTIME_DIR, resolve_state_path
     from core.utils.atomic_write import atomic_create_bytes
-    from interface.desktop_brand import make_four_cube_icon
+    from interface.desktop_brand import make_four_cube_ico, make_four_cube_icon
     from interface.desktop_ui import DesktopVisualState
 
     if not isinstance(visuals, DesktopVisualState):
@@ -1243,15 +1243,15 @@ def _renderer_icon_path(
     target = Path(resolve_state_path(MO_DESIGN_RUNTIME_DIR, config or {})) / f"mo-design-{fingerprint}{suffix}"
     if target.is_file() and target.stat().st_size > 0:
         return target
-    image = make_four_cube_icon(64, palette=palette)
-    data = io.BytesIO()
     if suffix == ".ico":
-        image.save(data, format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64)])
+        payload = make_four_cube_ico(palette=palette)
     else:
-        image.save(data, format="PNG")
+        data = io.BytesIO()
+        make_four_cube_icon(64, palette=palette).save(data, format="PNG")
+        payload = data.getvalue()
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
-        atomic_create_bytes(target, data.getvalue())
+        atomic_create_bytes(target, payload)
     except FileExistsError:
         pass
     return target

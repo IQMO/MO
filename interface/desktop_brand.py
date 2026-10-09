@@ -193,6 +193,15 @@ def make_four_cube_icon(
     return image
 
 
+def make_four_cube_ico(*, palette: Any = None) -> bytes:
+    """The same mark as a Windows .ico (16–64 px), for the taskbar, window and folder-menu identity."""
+    from io import BytesIO
+
+    stream = BytesIO()
+    make_four_cube_icon(64, palette=palette).save(stream, format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64)])
+    return stream.getvalue()
+
+
 def make_glyph_icon(
     name: str,
     size: int = 14,
@@ -494,5 +503,6 @@ __all__ = [
     "cube_mark_html",
     "draw_four_cube_mark",
     "make_four_cube_icon",
+    "make_four_cube_ico",
     "make_glyph_icon",
 ]

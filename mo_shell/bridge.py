@@ -12,7 +12,6 @@ import argparse
 import base64
 import codecs
 from dataclasses import asdict
-import io
 import json
 import os
 from pathlib import Path
@@ -356,15 +355,9 @@ def _terminal_columns(text: str) -> int:
 
 def _brand_icon_payload(state: Any) -> str:
     """Serialize the canonical Desktop mark for the native taskbar identity."""
-    from interface.desktop_brand import make_four_cube_icon
+    from interface.desktop_brand import make_four_cube_ico
 
-    stream = io.BytesIO()
-    make_four_cube_icon(64, palette=state.palette).save(
-        stream,
-        format="ICO",
-        sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64)],
-    )
-    return base64.b64encode(stream.getvalue()).decode("ascii")
+    return base64.b64encode(make_four_cube_ico(palette=state.palette)).decode("ascii")
 
 
 class ShellWindowVisual:
