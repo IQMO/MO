@@ -3083,8 +3083,8 @@ class CompanionSurface(
         bubble._generate_credit = label
         if detail:
             bubble.show_credit_detail(detail)
-        elif getattr(bubble, "_visible", False) and getattr(bubble, "_mode", "") == "input":
-            bubble._repaint()
+        else:
+            bubble._repaint_open_composer()
 
     def _refine_generate_prompt(self, bubble: Any) -> None:
         """Generate's Refine: MO's own prompt enhancer (the Terminal's Ctrl+E) with the Generate
@@ -3129,16 +3129,23 @@ class CompanionSurface(
 
             def apply() -> None:
                 bubble._generate_refining = False
-                if bubble._body != draft:
+                # Closed while refining (a click away): the result goes to the draft it reopens with, and the
+                # closed panel is never brought back as an empty reply card.
+                composing = getattr(bubble, "_visible", False) and getattr(bubble, "_mode", "") == "input"
+                current = bubble._body if composing else str(getattr(bubble, "_input_draft", "") or "")
+                if current != draft:
                     bubble._generate_progress = "Kept your newer text · Refine again when ready"
                 elif refined and refined != draft.strip():
                     bubble._generate_refined_from, bubble._generate_refined_to = draft, refined
-                    bubble._body, bubble._cursor = refined, len(refined)
+                    if composing:
+                        bubble._body, bubble._cursor = refined, len(refined)
+                    else:
+                        bubble._input_draft = refined
                     model = _short_model(selection.get("model") or "")
                     bubble._generate_progress = (f"Refined for {model}" if model else "Refined") + " · Refine again for your own words"
                 else:
                     bubble._generate_progress = "Already precise · nothing changed"
-                bubble._repaint()
+                bubble._repaint_open_composer()
             self._post_gui_call(apply)
 
         threading.Thread(target=refine, name="mo-generate-refine", daemon=True).start()
@@ -4600,7 +4607,7 @@ class CompanionSurface(
                 bubble = getattr(self, "_bubble", None)
                 if bubble and getattr(bubble, "_mode", "") == "input" and str(getattr(bubble, "_role_label", "")).casefold() == "generate":
                     bubble._generate_progress = str(label)[7:]
-                    bubble._repaint()
+                    bubble._repaint_open_composer()        # a closed composer stays closed
             self._post_gui_call(present_media_progress)
         """Record raw evidence and update the cube's shared glance label."""
         self._set_status(label, self._visual_palette.muted)

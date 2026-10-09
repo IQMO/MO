@@ -26,6 +26,10 @@ when that source tree is present.
   `panel_padding` from the top as from the side (`lift` in `ReplyBubble._render`), and the footer rises by
   the same amount, so the selector's top and Send's bottom stand equally off the edges. Reply cards keep
   `design.accent_top`.
+- `ReplyBubble._repaint()` always blits and shows the window, and `hide()` turns the composer into an empty
+  reply card. Anything that repaints later than the operator's own action (timers, Refine's answer, job
+  progress, credit reads) goes through `_repaint_open_composer()`, so a composer closed by a click away is
+  never brought back as that empty, wrongly sized card; a late Refine result lands in the stashed draft.
 - A role's composer hint is its SKILL.md `role_hint` (`Skill.role_hint`, passed as `role_hints` by `companion._role_hints`); `ReplyBubble._composer_hint` picks a search mode's words, else the role's hint, else the unchanged default.
 - Per-role threads: each role chosen in the composer (`set_voice_role`) owns a Desktop session slot (`companion_session.desktop_role_slot`, `mo-desktop-role-<id>`); `_switch_desktop_thread` saves the thread being left and opens the target through the normal load path. The Default-role slot (`mo-desktop`) stays the restart pointer through its existing `active_role` meta, and startup opens that role's thread only when it exists. Opened old conversations and role threads keep the role already chosen (`restore_role=False`); the history list shows the open thread, not other roles' live threads.
 - Generate is a shipped role in the existing composer, not another app. Its
