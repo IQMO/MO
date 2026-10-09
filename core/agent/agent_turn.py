@@ -2455,7 +2455,8 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             receipt = (
                 f"Previous provider turn {receipt_turn}: delivered skill context: "
                 f"{', '.join(names) or '(none)'}. "
-                "This records context delivery only, not proof that the provider followed the guidance."
+                "This records context delivery only, not the installed skill inventory "
+                "or proof that the provider followed the guidance."
             )
             work_learning_context = receipt + ("\n" + work_learning_context if work_learning_context else "")
         # Current date in the dynamic (non-cached) layer so MO can reason about
@@ -2480,9 +2481,9 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
             "_turn_selected_skill_turn_count",
             max(0, int(getattr(skill_outcome_holder, "turn_count", 0) or 0)),
         )
-        # Generic task skills belong to agentic work. An admitted Terminal UI
-        # action still keeps its typed native route, while Desktop uses only its
-        # explicit persona/role overlay and never loads project skill packs.
+        # Desktop can discover skill metadata without automatically selecting
+        # generic workflows alongside its explicit persona/role overlay. Native
+        # UI actions keep their typed route on every surface.
         native_desktop_action = bool(
             getattr(self, "_native_desktop_action_active", lambda: False)()
         )
@@ -2490,10 +2491,12 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
         skills_cfg = cfg.get("skills", {}) if isinstance(cfg.get("skills", {}), dict) else {}
         skills_enabled = skills_cfg.get("enabled", DEFAULT_PREFERENCES["skills.enabled"])
         generic_skill_context_allowed = bool(skills_enabled and not desktop_assistance)
+        skill_catalog_allowed = bool(
+            skills_enabled and turn_intent.include_skills_context and not native_desktop_action
+        )
         skill_roots = []
-        if generic_skill_context_allowed and (
-            (turn_intent.include_skills_context and not native_desktop_action)
-            or turn_intent.include_conventions_context
+        if skill_catalog_allowed or (
+            generic_skill_context_allowed and turn_intent.include_conventions_context
         ):
             try:
                 from ..skills import default_skill_roots
@@ -2502,14 +2505,11 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                     getattr(self, "runtime_home", None),
                     profile=getattr(self, "profile", None),
                     config=cfg,
+                    maintain=not desktop_assistance,
                 )
             except Exception:
                 traceback.print_exc()
-        if (
-            generic_skill_context_allowed
-            and turn_intent.include_skills_context
-            and not native_desktop_action
-        ):
+        if skill_catalog_allowed:
             try:
                 from ..skills import load_skills, select_skills_context_with_metadata
                 from ..skills.inventory import render_skill_directory
@@ -2517,29 +2517,30 @@ class AgentTurn(AgentTurnToolLoopMixin, AgentTurnDispatchMixin, AgentTurnRecover
                 with monitor_phase("context_skills"):
                     authored_skills = load_skills(skill_roots)
                     skill_catalog_context = render_skill_directory(authored_skills, query=context_query, project_cwd=self._effective_project_cwd())
-                    skills_context, selected_skills = select_skills_context_with_metadata(
-                        context_query,
-                        skill_roots,
-                        profile=getattr(self, "profile", None),
-                        config=cfg,
-                        authored_skills=authored_skills,
-                        project_cwd=self._effective_project_cwd(),
-                    )
-                requested_skills = any(skill_is_requested(skill, context_query) for skill in selected_skills)
-                setattr(
-                    skill_outcome_holder,
-                    "_turn_selected_learning_skill_sources",
-                    tuple(str(getattr(skill, "source", "") or "") for skill in selected_skills),
-                )
-                setattr(
-                    skill_outcome_holder,
-                    "_turn_selected_skill_names",
-                    tuple(dict.fromkeys(
-                        " ".join(str(getattr(skill, "name", "") or "").split())[:120]
-                        for skill in selected_skills
-                        if str(getattr(skill, "name", "") or "").strip()
-                    )),
-                )
+                    if generic_skill_context_allowed:
+                        skills_context, selected_skills = select_skills_context_with_metadata(
+                            context_query,
+                            skill_roots,
+                            profile=getattr(self, "profile", None),
+                            config=cfg,
+                            authored_skills=authored_skills,
+                            project_cwd=self._effective_project_cwd(),
+                        )
+                        requested_skills = any(skill_is_requested(skill, context_query) for skill in selected_skills)
+                        setattr(
+                            skill_outcome_holder,
+                            "_turn_selected_learning_skill_sources",
+                            tuple(str(getattr(skill, "source", "") or "") for skill in selected_skills),
+                        )
+                        setattr(
+                            skill_outcome_holder,
+                            "_turn_selected_skill_names",
+                            tuple(dict.fromkeys(
+                                " ".join(str(getattr(skill, "name", "") or "").split())[:120]
+                                for skill in selected_skills
+                                if str(getattr(skill, "name", "") or "").strip()
+                            )),
+                        )
             except Exception:
                 traceback.print_exc()
         skill_import_context = (

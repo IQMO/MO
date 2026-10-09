@@ -150,6 +150,13 @@ public/private-boundary invariants for changes under `core/`. The root
   read path. The sandbox permits read-only access to the profile-owned skill
   root, including under project access; writes and unrelated private state keep
   their existing boundaries. Directory admission never activates a skill by itself.
+  Desktop and companion turns share this directory under the same eligibility,
+  configuration, project-scope and budget checks, while automatic generic skill
+  bodies, location conventions and pending import guidance remain excluded there.
+  Explicit Desktop roles keep their separate activation owner. An admitted row
+  proves a loader-visible physical pack; a bounded directory or an empty delivery
+  receipt cannot prove that no other skill is installed. Delivery receipts describe
+  supplied instructions, not the installed inventory or successful use.
 - A `learned-convention` with file-glob scope activates through the existing location selector or an explicit request naming it, within its project binding when present. Arbitrary rule-body words in older generated trigger lists do not widen that scope. New convention writes retain the name as their text trigger; ordinary authored and approved task-skill triggers match complete terms or phrases rather than substrings inside unrelated words. Updating private task-trigger coverage belongs in the existing pack, not a product-specific keyword workaround.
 - The structural graph is a per-project code-orientation index, not a learning or personalization database. Profile `important_paths` and the active project may boost ranking; the Dashboard brain layer adds only sanitized count nodes and synthetic explanatory edges. Neither path writes learned project knowledge.
 - Post-provider learning runs only after a response clears the normal gates and only on eligible direct-operator surfaces. It indexes episodic turns, captures explicit terms/corrections/workflow candidates, mines suggestions, and may auto-materialize the narrow safe class; `learning.md` is therefore event-driven after initialization, not a manually maintained-only file. Desktop commits exact/FTS turn recall before returning the accepted answer, then runs profile reconciliation, operator capture, and suggestion mining on one bounded serial worker so those scans do not delay speech. Terminal retains synchronous learning notes.
@@ -778,8 +785,8 @@ search or copy the whole transcript store into the project index.
   transcript only after rechecking its saved ID and surface/principal ownership.
   It never grants the sessions directory or adopts another taskboard. Empty
   current-session rows and clean Git state do not imply no pending project work.
-  The existing provider catalog includes `read_file` when profile or previous
-  conversation context was actually delivered; role, lane and extension filters
+  The existing provider catalog includes `read_file` when profile, previous
+  conversation or skill-directory context was actually delivered; role, lane and extension filters
   still apply. Tool exposure and permission to read a path remain separate.
 - `core/learning/status.py` and `core/runtime/work_learning_status.py` are
   read-only count/state projections. They may report task, boundary, recall,

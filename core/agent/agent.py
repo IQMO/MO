@@ -1267,6 +1267,13 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
             return self._scope_tools_for_active_role(
                 self._filter_taskboard_tool_definitions(definitions)
             )
+        delivered = getattr(self, "_last_turn_context_flags", {}) or {}
+        # Admitted context names exact files. Offer its existing reader with
+        # those references; exposure does not grant path permission.
+        context_reader_required = any(
+            delivered.get(source)
+            for source in ("profile", "previous_conversation", "skill_catalog")
+        )
         admission = getattr(self, "_current_desktop_action_admission", None)
         desktop_plain_conversation = bool(
             self._provider_surface() in {"mo_desktop", "companion"}
@@ -1282,10 +1289,12 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
         )
         if desktop_plain_conversation:
             # Conversation needs only one semantic escape for wording the
-            # lightweight router missed. Do not attach health or file schemas
-            # to every spoken exchange. A successful search exposes exactly
-            # the requested tools on the next provider request.
+            # lightweight router missed. Exact context references additionally
+            # carry their reader; a successful search exposes other requested
+            # tools on the next provider request.
             names = {"tool_search"}
+            if context_reader_required:
+                names.add("read_file")
             if getattr(self, "_screen_followup_active", False):
                 names.update(_SCREEN_FOLLOWUP_TOOL_NAMES)
             if _DESKTOP_TERMINAL_QUESTION_RE.search(raw_input):
@@ -1439,10 +1448,7 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
                 and _DESKTOP_TERMINAL_QUESTION_RE.search(raw_input)
             ):
                 required_names.add("desktop_sync")
-            delivered = getattr(self, "_last_turn_context_flags", {}) or {}
-            # The admitted context names exact files. Offer its existing reader
-            # with those references; exposure does not grant path permission.
-            if delivered.get("profile") or delivered.get("previous_conversation"):
+            if context_reader_required:
                 required_names.add("read_file")
             # Graph delivery supplies navigation, not a blanket repository
             # toolbox. Admit mutation, verification, and delivery from the
