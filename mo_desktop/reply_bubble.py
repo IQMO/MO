@@ -355,9 +355,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         return cache[(path, size)]
 
     def _draw_reference_chip(self, d: Any, img: Any, x: float, y: int, name: str) -> float:
-        """One reference chip at the text position, filled with no stroke like Generate's pills: its rounded
-        picture, or MO's media mark for clips (play) and sound (level), its name and, in Generate, its role. The
-        clip's first frame shows in the quick look. Clicking it opens Generate's References menu, else Remove."""
+        """One reference chip at the text position, filled with no stroke like Generate's pills: MO's media mark
+        for its kind (picture, clip or sound; the file glyph otherwise), its name and, in Generate, its role. The
+        picture or the clip's first frame shows in the quick look. Clicking it opens Generate's References menu,
+        else Remove."""
         ss = int(getattr(self, "_ss", _SS) or _SS)
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
         font = getattr(self, "_sfont", None) or self._font
@@ -369,10 +370,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                             radius=int(self._visuals.metrics.button_corner_radius) * ss, fill=(*self._entry, 255))
         size = 14 * ss
         tx, ty = int(x + 4 * ss), int(top + (bottom - top - size) / 2)
-        thumb = self._chip_thumbnail(info["path"], size) if info["kind"] == "image" else None
-        if thumb is not None:
-            img.alpha_composite(thumb, (tx + (size - thumb.width) // 2, ty + (size - thumb.height) // 2))
-        elif info["kind"] == "file":
+        if info["kind"] == "file":
             from interface.desktop_brand import make_glyph_icon
 
             img.alpha_composite(make_glyph_icon("file", size, color="#%02x%02x%02x" % tuple(self._cyan[:3])), (tx, ty))
@@ -608,9 +606,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 return
 
     def _play_mark(self, d: Any, x: float, y: float, size: float, kind: str = "video") -> None:
-        """MO's media mark (the media card's play disc) at any size; for a sound file the same disc holds a
-        short level of bars instead of the play triangle, so sound and clips read apart."""
+        """MO's media mark (the media card's play disc) at any size; the same disc holds a short level of bars
+        for sound and a sun over a hill for a picture instead of the play triangle, so the kinds read apart."""
         d.ellipse((x, y, x + size, y + size), fill=(*self._cyan, 235))
+        if kind == "image":
+            ink = (*self._card, 255)
+            d.ellipse((x + size * .55, y + size * .26, x + size * .71, y + size * .42), fill=ink)
+            d.polygon([(x + size * .22, y + size * .72), (x + size * .44, y + size * .44), (x + size * .6, y + size * .62),
+                       (x + size * .68, y + size * .54), (x + size * .8, y + size * .72)], fill=ink)
+            return
         if kind == "audio":                                  # three bars stay apart even at a chip's 14 px
             bar = max(1.0, size * .1)
             for step, height in enumerate((.3, .56, .38)):

@@ -12,8 +12,9 @@ exactly as browsing earlier replies does, and says plainly in a lit band what ha
 only the rows they need, a progress line appears only while a job or Refine reports, and the
 composer grows with the prompt and while a drop-down needs room, gliding each time. A References pill for
 purpose-labelled files (each dropped or picked file also sits in the sentence at the caret as a
-chip named [Video1], [Image1] or [Audio1] with its role, filled with no stroke like the pills — the
-picture with rounded corners, or MO's media disc: a play mark for a clip, a short level for sound. For a video the
+chip named [Video1], [Image1] or [Audio1] with its role, filled with no stroke like the pills and
+marked with MO's media disc: a play mark for a clip, a short level for sound, a sun over a hill for a
+picture (the picture itself shows in the preview). For a video the
 first clip defaults to motion (one clip drives the motion; the next is a reference) and a picture to
 subject; a sound's purpose steps through reference, voice (the subject lip-syncs it) and music (the
 motion follows it). Picking another kind gives the files that kind's roles. Generate takes as many
