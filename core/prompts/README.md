@@ -30,6 +30,13 @@ The explicitly gated `MO_ALLOW_SYSTEM_PROMPT_OVERRIDE=1` developer path remains
 a full prompt replacement for compatibility; it is not normal product
 composition and it cannot bypass typed runtime enforcement.
 
+The shared scope policy carries the operator's requested method, interface, and
+exclusions across both surfaces. Terminal tool-selection guidance prefers the
+program's documented CLI/API and relevant session metadata for nonvisual process
+work; missing startup flags do not justify switching to screenshots. Direct
+visual observation remains available for visual tasks. These are provider
+instructions, not a runtime classifier of whether a task needs the screen.
+
 ## Verification
 
 Run the prompt and provider semantic gates without a live provider call:
@@ -43,3 +50,5 @@ python -m core.diagnostics.provider_contract
 and forbidden surface leakage. `provider_contract` checks deterministic message,
 tool schema, tool-call/result linkage, and multimodal conversion across the chat
 and Responses adapters. Paid/live provider smokes remain separate acceptance.
+Composition checks establish that the guidance reaches each surface; they do not
+establish that a live provider follows it on every turn.

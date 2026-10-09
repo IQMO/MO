@@ -671,7 +671,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "shell",
-            "description": "Run shell command text in the configured/ambient system shell with closed stdin; interactive prompts cannot be answered. Returns stdout and stderr, with live output visible in Terminal. Use explicit unattended flags and preserve existing configuration when appropriate. With sudo, apply required environment settings after sudo (for example sudo -n env DEBIAN_FRONTEND=noninteractive apt-get ...); settings exported before sudo may be stripped. Match command syntax to the active environment; use python -c for portable Python snippets during work turns.",
+            "description": "Run shell commands, including process inspection: running processes, PIDs and command lines. Commands use the configured/ambient system shell with closed stdin; interactive prompts cannot be answered. Returns stdout and stderr, with live output visible in Terminal. Use explicit unattended flags and preserve existing configuration when appropriate. With sudo, apply required environment settings after sudo (for example sudo -n env DEBIAN_FRONTEND=noninteractive apt-get ...); settings exported before sudo may be stripped. Match command syntax to the active environment; use python -c for portable Python snippets during work turns.",
             "parameters": {
                 "type": "object",
                 "required": ["command"],

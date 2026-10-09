@@ -655,8 +655,10 @@ search or copy the whole transcript store into the project index.
   selecting a small planning policy must not discard their relevant project sources.
   Tool discovery prioritizes exact names and focused capability matches, counting
   each query term once. Detailed-description overlap is a fallback when no focused
-  candidate matches; weak incidental matches do not pad the result limit. Existing
-  project, role and capability filters remain authoritative. When discovery is
+  candidate matches; weak incidental matches do not pad the result limit. Tool
+  summaries must name the capabilities they already provide: process/PID and
+  command-line inspection uses `shell`, not a separate process integration.
+  Existing project, role and capability filters remain authoritative. When discovery is
   available, a provider call to an omitted tool uses that same discovery path and
   exact filtered catalog before normal dispatch; a reduced schema working set is
   not a reason to end an otherwise valid continuation.
