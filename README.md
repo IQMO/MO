@@ -14,6 +14,10 @@
   <a href="LICENSE"><img alt="PolyForm Shield License 1.0.0" src="https://img.shields.io/badge/License-PolyForm%20Shield%201.0.0-2ea44f"></a>
 </p>
 
+<p align="center">
+  <img src="assets/mo-teaser.gif" alt="Scattered terminals, tabs, chats and jobs gather into MO's four cubes: Meet MO Agent" width="100%">
+</p>
+
 MO is a local agent runtime around the AI model you choose. The model proposes;
 MO's runtime owns the tools, safety, sessions, memory, proof and continuity, so
 your work survives a switch of model, a closed terminal, or a move to another
