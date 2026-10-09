@@ -336,26 +336,28 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         return (4 + 16 + 5 + 7) * ss + self._text_width(draw, label, font) + role_width
 
     def _chip_thumbnail(self, path: str, size: int) -> Any:
-        """A picture, or a clip's first frame read once for the quick look (_chip_glance), filling its square."""
+        """A picture filling its square, its corners rounded like the composer's buttons (no hard edge)."""
         cache = self.__dict__.setdefault("_chip_thumbs", {})
         if (path, size) not in cache:
             try:
-                from PIL import Image, ImageOps
+                from PIL import Image, ImageChops, ImageDraw, ImageOps
 
-                frame = ((getattr(self, "_chip_glance", None) or {}).get(path) or {}).get("frame")
-                if frame is not None:
-                    thumb = frame
-                else:
-                    with Image.open(path) as source:
-                        thumb = source.convert("RGBA")
-                cache[(path, size)] = ImageOps.fit(thumb, (size, size), Image.LANCZOS)   # fills its square
+                with Image.open(path) as source:
+                    thumb = ImageOps.fit(source.convert("RGBA"), (size, size), Image.LANCZOS)   # fills its square
+                ss = int(getattr(self, "_ss", _SS) or _SS)
+                radius = min(int(self._visuals.metrics.button_corner_radius) * ss, size // 4)
+                mask = Image.new("L", (size * 4, size * 4), 0)       # drawn large, then reduced: a smooth curve
+                ImageDraw.Draw(mask).rounded_rectangle((0, 0, size * 4 - 1, size * 4 - 1), radius=radius * 4, fill=255)
+                thumb.putalpha(ImageChops.multiply(thumb.getchannel("A"), mask.resize((size, size), Image.LANCZOS)))
+                cache[(path, size)] = thumb
             except Exception:
                 cache[(path, size)] = None
         return cache[(path, size)]
 
     def _draw_reference_chip(self, d: Any, img: Any, x: float, y: int, name: str) -> float:
-        """One reference chip at the text position: its picture (or MO's play mark for clips and sound), its
-        name and, in Generate, its role. Clicking it opens Generate's References menu (role or remove), else Remove."""
+        """One reference chip at the text position, filled with no stroke like Generate's pills: its rounded
+        picture, or MO's media mark for clips (play) and sound (level), its name and, in Generate, its role. The
+        clip's first frame shows in the quick look. Clicking it opens Generate's References menu, else Remove."""
         ss = int(getattr(self, "_ss", _SS) or _SS)
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
         font = getattr(self, "_sfont", None) or self._font
@@ -364,15 +366,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         width = self._chip_width(d, name)
         top, bottom = y + 1 * ss, y + int(design.line_height) * ss - 2 * ss
         d.rounded_rectangle((x, top, x + width - 2 * ss, bottom),
-                            radius=int(self._visuals.metrics.button_corner_radius) * ss, fill=(*self._entry, 255),
-                            outline=(*self._cyan, 150), width=max(1, ss))
+                            radius=int(self._visuals.metrics.button_corner_radius) * ss, fill=(*self._entry, 255))
         size = 14 * ss
         tx, ty = int(x + 4 * ss), int(top + (bottom - top - size) / 2)
-        thumb = self._chip_thumbnail(info["path"], size) if info["kind"] in {"image", "video"} else None
+        thumb = self._chip_thumbnail(info["path"], size) if info["kind"] == "image" else None
         if thumb is not None:
             img.alpha_composite(thumb, (tx + (size - thumb.width) // 2, ty + (size - thumb.height) // 2))
-            if info["kind"] == "video":                     # a clip's first frame keeps a small play mark, as in Results
-                self._play_mark(d, tx + size * .2, ty + size * .2, size * .6)
         elif info["kind"] == "file":
             from interface.desktop_brand import make_glyph_icon
 

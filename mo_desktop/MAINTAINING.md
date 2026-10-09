@@ -45,7 +45,9 @@ when that source tree is present.
   pick keeps its default's type (`choose`), so a new boolean option such as Sound needs only its
   `DEFAULTS`/`OPTION_ORDER` row, label and values.
 - `ReplyBubble._play_mark(kind)` is the one media mark: the disc with the play triangle, or a short
-  level of bars for sound. A clip's chip shows its first frame from `_chip_glance` (`_chip_thumbnail`).
+  level of bars for sound. Chips are filled with no stroke, like the pills: a picture's chip shows the
+  picture with button-radius corners (`_chip_thumbnail`), clips and sound the media mark; a clip's first
+  frame belongs to the quick look, not the 14 px chip.
 - Composer files are in-sentence chips in every role: `generate_controls.reference_tokens`
   names them per kind in attachment order ([Image1], [Video1], [Audio1], [File1]) and
   `ReplyBubble._remove_reference` is the one removal owner (chip menu, Backspace/Delete,
