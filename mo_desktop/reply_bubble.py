@@ -1020,7 +1020,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         image_card = attachment_caption and self._panel_state == PanelState.IMAGE
         panel_padding = int(self._visuals.metrics.panel_padding)
         image_inset = max(6, panel_padding//2)
-        body_top = image_inset if image_card else int(design.accent_top)+13
+        # The composer's single cube sits one panel padding from the top as from the side, and its footer
+        # rises as much, so neither the controls nor the icons by Send cling to the edge (his note 2026-10-09).
+        lift = max(0, panel_padding - (int(design.accent_top) - 3)) if is_input else 0
+        accent_top = int(design.accent_top) + lift
+        body_top = image_inset if image_card else accent_top+13
         generate_rows = (self._flow_pills(probe, generate_pills, int(design.content_width) - (_COMPOSER_DOTS_RESERVE if dots else 0))
                          if generate_pills else [])
         if generate_mode:   # only the rows that hold something: a picked kind's choices, references, progress
@@ -1090,7 +1094,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # Options always retain their Submit footer, including while scrolling.
         footer = is_input or bool(option_rows) or (bool(self._body) and (nav_controls or has_footer_action))
         frame_h = (
-            body_top + actions_h + preview_gap + 14
+            body_top + actions_h + preview_gap + 14 + lift
             + (int(design.footer_height) if footer else 0) + 2 * int(design.shadow_pad)
         )
         line_h = max(1, int(design.line_height))
@@ -1133,7 +1137,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         card_w = int(content_width) + 2 * panel_padding
         card_h = (
             body_top + preview_h + actions_h + preview_gap + text_h
-            + options_h + (int(design.footer_height) if footer else 0) + 14
+            + options_h + (int(design.footer_height) if footer else 0) + 14 + lift
         )
         open_menu = getattr(self, "_menu", None) if is_input else None
         if open_menu:   # the compact composer grows (gliding) while a drop-down needs the room, then returns
@@ -1141,7 +1145,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             key = owner[len("generate:"):] if owner.startswith("generate:") else ""
             row_of = {pill: index for index, row in enumerate(generate_rows) for pill, _text, _width in row}
             if owner == "role" or key:
-                anchor = int(design.accent_top) + (44 + _GENERATE_ROW_H * row_of[key] if key in row_of else 12)
+                anchor = accent_top + (44 + _GENERATE_ROW_H * row_of[key] if key in row_of else 12)
                 card_h = max(card_h, anchor + 3 + min(6, len(open_menu.get("choices", ()))) * 20 + 6 + 7)
         W = (card_w + 2 * int(design.shadow_pad)) * ss
         H = (card_h + 2 * int(design.shadow_pad)) * ss
@@ -1171,7 +1175,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             base = self._card_base = (base_key, canvas)
         img = base[1].copy()
         d = ImageDraw.Draw(img)
-        ax, ay = pad + panel_padding * ss, pad + int(design.accent_top) * ss
+        ax, ay = pad + panel_padding * ss, pad + accent_top * ss
         if is_input:
             # The composer's single cube is also its search switch: a click turns it into Google,
             # YouTube or Translate (their brand marks) and back to MO's cube.
@@ -1453,7 +1457,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
         # footer: reply recall, history, composer searches, primary action, and context action.
         if footer:
-            fy = box[3] - int(design.footer_height) * ss
+            fy = box[3] - (int(design.footer_height) + lift) * ss
             cyy = fy + 9 * ss
             right_edge = box[2] - panel_padding * ss
             if has_footer_action:
