@@ -1216,10 +1216,10 @@ def execute_record_convention(arguments: dict[str, Any]) -> str:
             "or on unrelated surfaces."
         )
     except ValueError as exc:
-        return (f"Convention NOT recorded: {exc}. A convention needs a concrete rule AND a file-glob "
+        return (f"Error: Convention NOT recorded: {exc}. A convention needs a concrete rule AND a file-glob "
                 "scope (e.g. 'core/tasking/*'). A behavioral style with no code location is not a convention.")
     except Exception as exc:
-        return f"Convention write failed: {exc}"
+        return f"Error: Convention write failed: {exc}"
 
 
 def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
@@ -1238,12 +1238,12 @@ def execute_record_profile_fact(arguments: dict[str, Any]) -> str:
             config=config,
         )
     except Exception as exc:
-        return f"Fact write failed: {exc}"
+        return f"Error: Fact write failed: {exc}"
     if state == "recorded" and entry is not None:
         return f"Recorded operator fact {entry.id} [{entry.category}]: {entry.fact}"
     if state == "already recorded" and entry is not None:
         return f"Fact already recorded ({entry.id}): {entry.fact}"
-    return f"Fact NOT recorded: {state}."
+    return f"Error: Fact NOT recorded: {state}."
 
 
 def execute_credential_status(arguments: dict[str, Any]) -> str:

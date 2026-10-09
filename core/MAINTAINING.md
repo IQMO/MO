@@ -100,6 +100,11 @@ public/private-boundary invariants for changes under `core/`. The root
 
 ## Personalization and project boundaries
 
+- Profile and convention tool adapters report validation rejections and caught write
+  failures with the existing `Error:` result prefix, so dispatch and monitoring
+  record the failed operation. A saved fact or an already-recorded fact remains
+  a successful result; a rejected fact is not a successful write.
+
 - Personalization is operator-scoped by default. `Profile` owns structured identity/preferences/project-history metadata plus the six curated Markdown files; `learning.md` is an accepted-learning ledger and `behavior.md` is its compact categorized mirror. They are not separate project profiles. Accepted behavior rules receive one bounded, query- and purpose-ranked early slot in normal profile context so current rules survive the capsule budget; the event ledger is not a second prompt-injection path.
 - `core.learning.operator_messages` is the single accepted-turn capture router. It writes high-confidence project/privacy facts, explicit corrections, and terms through existing profile owners; keeps workflow promotion approval-gated; stages product requirements under `memory/work/product-intent` for source-backed project-history consolidation; and records bounded message-hash receipts. Retained conversation snapshots reconcile incrementally by mtime so interrupted messages are not lost and normal turns do not rescan unchanged history. The provider-facing capture nudge is retired. Automatic extraction does not cover every durable fact, so the existing profile writer remains available for provider-understood knowledge without forcing a second completion pass.
 - `Profile.projects` is recent-working-directory navigation metadata only. A project entry stores path/name/last-opened/session-count/notes, but the runtime currently writes no learned project rules to `notes`; do not present this list as a complete project inventory or a per-project learning store.
