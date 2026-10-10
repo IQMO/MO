@@ -1125,8 +1125,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             elif caret_line >= self._scroll_line + visible_count:
                 self._scroll_line = caret_line - visible_count + 1
         lines = all_lines[self._scroll_line:self._scroll_line + visible_count] or [""]
-        if browse_head:
-            head = card.fit_text(probe, browse_head, max(1, int(wrap_width or content_width)) * ss, self._font)
+        if browse_head:          # the lit line leaves room for the browse arrows at its right end
+            head = card.fit_text(probe, browse_head, max(1, int(wrap_width or content_width) - 36) * ss, self._font)
             lines = [[(head, False)]] + [[] for _line in lines[1:]]
         privacy = generate_mode and bool(getattr(self, "_privacy_open", False))   # drawn last, at this size
         results = generate_mode and bool(getattr(self, "_results_open", False)) and not privacy
@@ -1251,24 +1251,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 if note:                                           # progress only; no standing sentence
                     d.text((ax, cy + 2 * ss), card.fit_text(d, note, content_width * ss, self._sfont), font=self._sfont, fill=(*self._muted, 255))
 
-        if not is_input and not image_card and callable(getattr(self, "_on_session_history", None)):
-            hcol = self._cyan if self._hovering("sessions") else self._muted
-            hps = max(10, int(getattr(getattr(self, "_panel_design", DEFAULT_DESKTOP_PANEL_DESIGN), "pin_icon_size", 14) or 14)) * ss
-            hx = box[2] - panel_padding * ss - hps - 22 * ss
-            hy = box[1] + int(design.accent_top) * ss - 4 * ss
-            d.ellipse([hx + 2 * ss, hy + 2 * ss, hx + 13 * ss, hy + 13 * ss], outline=(*hcol, 255), width=max(1, ss))
-            d.line([(hx + 7.5 * ss, hy + 4 * ss), (hx + 7.5 * ss, hy + 8 * ss), (hx + 10.5 * ss, hy + 10 * ss)],
-                   fill=(*hcol, 255), width=max(1, ss))
-            _set_hit("sessions", (int(hx / ss) - 2, int(hy / ss) - 2, int(hx / ss) + 17, int(hy / ss) + 17),
-                     min_width=26, min_height=26)
         if (not is_input and not image_card
                 and getattr(self, "_panel_state", PanelState.REPLY) in (PanelState.REPLY, PanelState.FOOTERLESS)
                 and (self._max_scroll_line > 0 or expanded)):
-            # A long answer's bigger/smaller button, left of the history and Copy marks.
+            # A long answer's bigger/smaller button, left of Copy.
             from interface.desktop_brand import make_glyph_icon
             es = max(10, int(getattr(getattr(self, "_panel_design", DEFAULT_DESKTOP_PANEL_DESIGN),
                                      "pin_icon_size", 14) or 14)) * ss
-            ex = box[2] - panel_padding * ss - es - 22 * ss * (2 if callable(getattr(self, "_on_session_history", None)) else 1)
+            ex = box[2] - panel_padding * ss - es - 22 * ss
             ey = box[1] + int(design.accent_top) * ss - 3 * ss
             color = self._cyan if expanded or self._hovering("expand") else self._muted
             img.alpha_composite(make_glyph_icon("collapse" if expanded else "expand", es,
@@ -1575,9 +1565,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     min_height=28,
                 )
                 left = rx0
-                if reply_history and not results and not privacy:
-                    left = self._draw_history_buttons(d, rx0 - 6 * ss, cyy, ss, button_radius, _set_hit,
-                                                      earlier=not browsing or browse_idx > 0, later=browsing)
+                self._history_icon_at = None
+                if callable(getattr(self, "_on_session_history", None)) and not results and not privacy:
+                    left = self._draw_history_icon(d, rx0 - 6 * ss, cyy, ss, _set_hit)
                 if callable(getattr(self, "_on_attach", None)):
                     from interface.desktop_brand import make_glyph_icon
                     color = self._cyan if self._hovering("attach") else self._muted
@@ -1629,8 +1619,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     d.text((tip_left + 8 * ss, cyy - 3 * ss), card.fit_text(d, tip, tip_right - tip_left - 16 * ss, self._sfont),
                            font=self._sfont, fill=(*self._muted, 255))
             elif bool(getattr(self, "_controls_enabled", True)):
-                # The answer's own follow-up field, laid out as the composer's footer: the field, MO's
-                # earlier answers in the history buttons, then send (the reply mark on the accent fill).
+                # The answer's own follow-up field, laid out as the composer's footer: the field, the
+                # history icon, then send (the reply mark on the accent fill).
                 # Type and press Enter or send to answer MO without leaving the answer. The native EDIT
                 # laid under the field owns text, caret keys, clipboard and IME
                 # (NativeLayeredWindow.text_input, as Focus search uses it); the card draws it.
@@ -1649,10 +1639,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 _set_hit("continue_send", (int(rx0 / ss), int((cyy - 5 * ss) / ss), int(rx1 / ss),
                                            int((cyy + 16 * ss) / ss)), min_height=28)   # never over the history
                 fx1 = rx0 - 6 * ss
-                if nav_controls and len(getattr(self, "_reply_history", None) or []) > 1:
-                    index, count = int(getattr(self, "_reply_idx", 0) or 0), len(self._reply_history)
-                    fx1 = self._draw_history_buttons(d, fx1, cyy, ss, button_radius, _set_hit,
-                                                     earlier=index > 0, later=index < count - 1) - 6 * ss
+                if callable(getattr(self, "_on_session_history", None)):
+                    fx1 = self._draw_history_icon(d, fx1, cyy, ss, _set_hit) - 6 * ss
                 fx0 = box[0] + panel_padding * ss
                 if fx1 - fx0 >= 80 * ss:
                     self._continue_geom = (fx0, fx1, cyy, ss, button_radius)
@@ -1703,16 +1691,19 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             caret_rect = None
         if browse_head:
             self._dim_around_browse_line(img, box, panel_radius * ss, pad + body_top * ss, line_h * ss, ss)
-            if callable(getattr(self, "_on_session_history", None)):
-                hx = box[2] - panel_padding * ss - 18 * ss
-                hy = ay - 6 * ss
-                col = self._cyan if self._hovering("sessions") else self._text
-                d2 = ImageDraw.Draw(img)
-                d2.ellipse([hx + 3 * ss, hy + 2 * ss, hx + 14 * ss, hy + 13 * ss], outline=(*col, 255), width=max(1, ss))
-                d2.line([(hx + 8.5 * ss, hy + 4 * ss), (hx + 8.5 * ss, hy + 8 * ss), (hx + 11.5 * ss, hy + 10 * ss)],
-                        fill=(*col, 255), width=max(1, ss))
-                _set_hit("sessions", (int(hx / ss), int(hy / ss) - 2, int(hx / ss) + 18, int(hy / ss) + 16),
-                         min_width=26, min_height=26)
+            d2 = ImageDraw.Draw(img)
+            at = getattr(self, "_history_icon_at", None)
+            if at is not None:
+                self._draw_history_icon(d2, at[0], at[1], ss, _set_hit, live=True)
+            # Arrows only while browsing: earlier and later, at the lit line's right end.
+            mid = pad + body_top * ss + line_h * ss / 2 - 1 * ss
+            for key, x, enabled in (("up", box[2] - panel_padding * ss - 24 * ss, browse_idx > 0),
+                                    ("down", box[2] - panel_padding * ss - 8 * ss, True)):
+                color = (self._cyan if self._hovering(key) else self._text) if enabled else self._muted
+                self._chevron(d2, x, mid, 3.5 * ss, key, color, ss, width=max(1, int(1.4 * ss)))
+                if enabled:
+                    _set_hit(key, (int(x / ss) - 8, int((mid - 9 * ss) / ss), int(x / ss) + 8, int((mid + 9 * ss) / ss)),
+                             min_height=26)
         if privacy:   # browsing's dimming at this size: a lit band in the middle carries the lines
             self._draw_privacy_band(img, box, panel_radius, panel_padding, ss)
         finished = card.finish(img, ss)   # premultiply-then-downscale (shared primitive)
@@ -1764,26 +1755,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
 
 
-
-    def _draw_history_buttons(self, d: Any, right: float, cyy: float, ss: int, radius: int, set_hit: Any, *,
-                              earlier: bool, later: bool) -> float:
-        """MO's earlier messages: two small buttons ending at ``right`` (supersampled px), earlier
-        and later, beside Send on the composer and beside the follow-up field on an answer. Both
-        run ``_nav`` (the composer browses in place, an answer recalls). Returns their left edge."""
-        size, gap = 19 * ss, 3 * ss
-        left = right - 2 * size - gap
-        for index, (key, enabled) in enumerate((("up", earlier), ("down", later))):
-            x0 = left + index * (size + gap)
-            hot = enabled and self._hovering(key)
-            d.rounded_rectangle([x0, cyy - 4 * ss, x0 + size, cyy + 15 * ss], radius=radius,
-                                fill=(*self._entry, 255))
-            color = (self._cyan if hot else self._text) if enabled else self._muted
-            self._chevron(d, x0 + size / 2, cyy + (5.5 + (-1 if key == "down" else 1)) * ss, 3.5 * ss, key, color, ss,
-                          width=max(1, int(1.4 * ss)))
-            if enabled:
-                set_hit(key, (int(x0 / ss), int((cyy - 5 * ss) / ss), int((x0 + size) / ss), int((cyy + 16 * ss) / ss)),
-                        min_height=28)
-        return left
 
     def _continue_selection(self) -> tuple[int, int] | None:
         """The follow-up field's caret/selection while it has the keyboard, else None."""
@@ -1883,6 +1854,20 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             callback(text)
         except Exception:
             pass
+
+    def _draw_history_icon(self, d: Any, right: float, cyy: float, ss: int, set_hit: Any, *,
+                           live: bool = False) -> float:
+        """The one history icon (the clock that opens the conversation history), ending at ``right``
+        beside Send on the composer and on an answer. Returns its left edge."""
+        left = right - 19 * ss
+        cx, cy = left + 9.5 * ss, cyy + 5.5 * ss
+        color = self._cyan if self._hovering("sessions") else (self._text if live else self._muted)
+        d.ellipse([cx - 5.5 * ss, cy - 5.5 * ss, cx + 5.5 * ss, cy + 5.5 * ss], outline=(*color, 255), width=max(1, ss))
+        d.line([(cx, cy - 3.5 * ss), (cx, cy), (cx + 3 * ss, cy + 2 * ss)], fill=(*color, 255), width=max(1, ss))
+        set_hit("sessions", (int(left / ss), int((cyy - 5 * ss) / ss), int(right / ss), int((cyy + 16 * ss) / ss)),
+                min_height=28)
+        self._history_icon_at = (right, cyy)
+        return left
 
     def _input_frame_with_caret(self) -> Any:
         base = getattr(self, "_input_base_image", None)
