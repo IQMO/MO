@@ -345,7 +345,8 @@ them. The history buttons step through earlier replies; the conversation-history
 the top beside Copy. A long answer also shows a bigger/smaller button there: bigger lets the
 card take the screen's height, smaller returns it to its usual size; each new answer starts at
 its usual size. Drag an answer by its top strip (above the text) to move the four cubes and
-the answer together. Replies retain their own choices and attachment presentation when recalled or
+the answer together. Drag across an answer's text to select part of it; Ctrl+C or Copy then
+copies the selection (with nothing selected, the whole answer). Replies retain their own choices and attachment presentation when recalled or
 restored after restart. Independent choices support multi-selection; exclusive
 destinations and approvals remain single-select. Long choice lists scroll inside
 the card with Submit still visible; selecting a row preserves its full detail,

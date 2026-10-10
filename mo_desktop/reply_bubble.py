@@ -789,10 +789,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._chip_names_shown = {match.group(0) for match in REFERENCE_TOKEN.finditer(str(getattr(self, "_body", "") or ""))
                                   if match.group(0) in self._chips}
 
-    def _wrap_spans(self, draw: Any, text: str, *, rich: bool = False, width: int | None = None) -> list[list[tuple[str, bool]]]:
+    def _wrap_spans(self, draw: Any, text: str, *, rich: bool = False, width: int | None = None,
+                    starts: list[int] | None = None) -> list[list[tuple[str, bool]]]:
         limit = int(width if width is not None else self._content_width(draw, text, rich=rich)) * int(getattr(self, '_ss', _SS) or _SS)
         lines: list[list[tuple[str, bool]]] = []
         for para in (str(text).splitlines() or [""]):
+            if starts is not None:
+                starts.append(len(lines))        # where each paragraph begins (a copy keeps them apart)
             parsed = parse_inline_emphasis(para) if rich else [(para, False)]
             words: list[tuple[str, bool]] = []
             for chunk, bold in parsed:
@@ -1034,9 +1037,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     id(self._font), id(self._bfont), wrap_width)
         cached = getattr(self, "_wrapped_body", None)
         if cached is None or cached[0] != wrap_key:
-            cached = (wrap_key, self._wrap_spans(probe, wrap_text, rich=rich_text, width=wrap_width))
+            starts: list[int] = []
+            cached = (wrap_key, self._wrap_spans(probe, wrap_text, rich=rich_text, width=wrap_width, starts=starts), starts)
             self._wrapped_body = cached
         all_lines = cached[1]
+        self._text_lines = (all_lines, cached[2] if len(cached) > 2 else [])
         content_width = self._content_width(probe, shown if not placeholder else hint,
                                             rich=rich_text)
         option_rows = list(getattr(self, "_options", []) or []) if not is_input else []
@@ -1339,6 +1344,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         hinted = placeholder and not browse_head and not results and hint != self._DEFAULT_HINT   # the default stays as it was
         if hinted:
             self._draw_composer_hint(d, tx, ty, hint, content_width * ss)
+        # An answer's text is selectable: each drawn line is kept (window px) for the pointer,
+        # and the selection is painted behind its characters.
+        selectable = (not is_input and not attachment_caption and not hinted
+                      and getattr(self, "_panel_state", PanelState.REPLY) in (PanelState.REPLY, PanelState.FOOTERLESS))
+        self._text_rows = [] if selectable else None
+        selected = self._ordered_text_selection() if selectable else None
         for idx, ln in enumerate([] if hinted else lines):
             mail_heading = mail_reply and self._scroll_line + idx == 0
             if mail_heading:
@@ -1351,6 +1362,21 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 )
             plain = plain_spans(ln)
             disp, rtl = shape_line(plain)  # Arabic/RTL: reshape + reorder so it isn't reversed
+            row = self._scroll_line + idx
+            row_h = int(design.line_height) * ss
+            if selectable:
+                self._text_rows.append((row, int(ty / ss), int((ty + row_h) / ss), tx, ss, ln, rtl))
+            if selected is not None and selected[0][0] <= row <= selected[1][0] and plain:
+                first = selected[0][1] if row == selected[0][0] else 0
+                last = selected[1][1] if row == selected[1][0] else len(plain)
+                if rtl:
+                    span_w = int(d.textlength(disp, font=body_font))
+                    x0, x1 = content_r - span_w, content_r
+                else:
+                    x0, x1 = tx + self._line_prefix_width(d, ln, first), tx + self._line_prefix_width(d, ln, last)
+                if x1 > x0:
+                    mark = tuple(int(base * 0.62 + accent * 0.38) for base, accent in zip(self._card, self._cyan))
+                    d.rounded_rectangle([x0, ty - 1 * ss, x1, ty + row_h - 3 * ss], radius=ss, fill=(*mark, 255))
             if rtl:
                 lw = int(d.textlength(disp, font=body_font))
                 lx = content_r - lw
@@ -2522,6 +2548,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         body = str(text or "")
         if body != self._body:
             self._scroll_line = 0
+            self._text_selection = None
         self._body = body
         self._apply_reply_presentation(presentation or {})
         if self._controls_enabled and history is not None:
@@ -2777,6 +2804,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 self._move_keyboard_hit(1)
             elif ks == "Left":
                 self._move_keyboard_hit(-1)
+            elif ks == "c" and int(getattr(event, "state", 0) or 0) & 0x4:
+                self._copy_body()            # Ctrl+C: the selection, else the whole answer
             elif ks in {"Return", "KP_Enter"} and self._continue_selection() is not None:
                 self._send_continue()
             elif ks in {"Return", "KP_Enter", "space"}:
@@ -2886,8 +2915,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not self._visible:
             return
         x, y = getattr(event, "x", -1), getattr(event, "y", -1)
-        if self._end_carry():
-            return                      # a carry ends here; it was never a click
+        if self._end_carry() or self._end_text_select():
+            return                      # a carry or a selection ends here; it was never a click
         if getattr(self, "_crop", None) is not None and self._crop.dragging:
             self._crop.end()            # a crop drag ends here; keep the selection, not a click
             self._repaint()
@@ -3612,16 +3641,23 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def _on_motion(self, event: Any) -> None:
         """Point at a control and it lights up under a hand cursor. Repaint only on a change."""
-        if not getattr(self, "_visible", False) or getattr(self, "_carry", None) is not None:
+        if (not getattr(self, "_visible", False) or getattr(self, "_carry", None) is not None
+                or getattr(self, "_selecting", False)):
             return
-        key = self._hit_key_at(getattr(event, "x", -1), getattr(event, "y", -1))
+        x, y = getattr(event, "x", -1), getattr(event, "y", -1)
+        key = self._hit_key_at(x, y)
+        rows = getattr(self, "_text_rows", None)
+        over_text = not key and bool(rows) and rows[0][1] <= y < rows[-1][2]
+        cursor = "hand" if key and not key.startswith("glance:") else "text" if over_text else "arrow"
+        if cursor != getattr(self, "_hover_cursor", ""):
+            self._hover_cursor = cursor
+            try:
+                self._win.set_cursor(cursor)       # a preview only shows; an answer's text takes the I-beam
+            except Exception:
+                pass
         if key == getattr(self, "_hover", ""):
             return
         self._hover = key
-        try:
-            self._win.set_cursor("hand" if key and not key.startswith("glance:") else "arrow")   # a preview only shows
-        except Exception:
-            pass
         self._repaint()
 
     def _on_leave(self, _event: Any = None) -> None:
@@ -3641,7 +3677,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not getattr(self, "_visible", False):
             return
         if getattr(self, "_panel_tool_active", "") != "crop":
-            self._begin_carry(event)
+            if not self._begin_carry(event):
+                self._begin_text_select(event)
             return
         db = getattr(self, "_crop_disp_box", None)
         if db is None:
@@ -3656,12 +3693,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if getattr(self, "_carry", None) is not None:
             self._carry_to(event)
             return
+        if getattr(self, "_selecting", False):
+            self._extend_text_select(event)
+            return
         if getattr(self, "_panel_tool_active", "") != "crop" or not self._crop.dragging:
             return
         self._crop.drag(getattr(event, "x", -1), getattr(event, "y", -1))
         self._repaint()
 
-    def _begin_carry(self, event: Any) -> None:
+    def _begin_carry(self, event: Any) -> bool:
         """A press on an answer's top strip, off its buttons, starts carrying the group. Focus
         owns the layout while it is expanded, so the strip stays still then."""
         band = getattr(self, "_header_band", None)
@@ -3670,11 +3710,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if (band is None or cube is None or getattr(cube, "_focus_controller", None) is not None
                 or not (band[0] <= x <= band[2] and band[1] <= y <= band[3]) or self._hit_key_at(x, y)
                 or self._panel_transition_active() or getattr(self, "_last_layered_geometry", None) is None):
-            return
+            return False
         self._carry = {"from": (getattr(event, "x_root", 0), getattr(event, "y_root", 0)),
                        "cube": (float(cube._x), float(cube._y)), "panel": tuple(self._last_layered_geometry),
                        "bounds": tuple(self._bounds)}
         self._place_blur_backdrop(False)            # Windows' blur waits until the card settles
+        return True
 
     def _carry_to(self, event: Any) -> None:
         """Move the cubes and the answer by the pointer's travel, kept on the screen."""
@@ -3808,9 +3849,99 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return False
         return True
 
+    def _line_prefix_width(self, d: Any, ln: list[tuple[str, bool]], chars: int) -> float:
+        """Width of a wrapped answer line's first ``chars`` characters, drawn span by span."""
+        width, left = 0.0, int(chars)
+        for piece, bold in ln:
+            if left <= 0:
+                break
+            part = piece[:left]
+            width += float(d.textlength(part, font=getattr(self, "_bfont", self._font) if bold else self._font))
+            left -= len(part)
+        return width
+
+    def _ordered_text_selection(self) -> tuple[tuple[int, int], tuple[int, int]] | None:
+        selection = getattr(self, "_text_selection", None)
+        if not selection or selection[0] == selection[1]:
+            return None
+        return (selection[0], selection[1]) if selection[0] <= selection[1] else (selection[1], selection[0])
+
+    def _text_point(self, x: int, y: int) -> tuple[int, int] | None:
+        """The (line, character) of an answer under window point (x, y); above or below the text
+        clamps to its first or last line."""
+        rows = getattr(self, "_text_rows", None)
+        if not rows:
+            return None
+        if y < rows[0][1]:
+            target = rows[0]
+        elif y >= rows[-1][2]:
+            target = rows[-1]
+        else:
+            target = next((row for row in rows if row[1] <= y < row[2]), rows[-1])
+        line, _top, _bottom, left, ss, spans, rtl = target
+        text = plain_spans(spans)
+        offset = x * ss - left
+        if rtl:
+            return (line, len(text) if offset > 0 else 0)
+        from PIL import ImageDraw
+        probe = ImageDraw.Draw(card.new_canvas(4, 4))
+        best, best_gap = 0, abs(offset)
+        for count in range(1, len(text) + 1):
+            gap = abs(self._line_prefix_width(probe, spans, count) - offset)
+            if gap > best_gap:
+                break                    # widths only grow along a line
+            best, best_gap = count, gap
+        return (line, best)
+
+    def _begin_text_select(self, event: Any) -> bool:
+        """A press on an answer's text, off its controls, starts a selection there."""
+        x, y = getattr(event, "x", -1), getattr(event, "y", -1)
+        rows = getattr(self, "_text_rows", None)
+        had = self._ordered_text_selection() is not None
+        self._text_selection = None
+        if not rows or self._hit_key_at(x, y) or not (rows[0][1] <= y < rows[-1][2]):
+            if had:
+                self._repaint()
+            return False
+        point = self._text_point(x, y)
+        self._text_selection = (point, point)
+        self._selecting = True
+        if had:
+            self._repaint()
+        return True
+
+    def _extend_text_select(self, event: Any) -> None:
+        point = self._text_point(getattr(event, "x", -1), getattr(event, "y", -1))
+        selection = getattr(self, "_text_selection", None)
+        if point is not None and selection and point != selection[1]:
+            self._text_selection = (selection[0], point)
+            self._repaint()
+
+    def _end_text_select(self) -> bool:
+        """Release: True when a selection was made (that release is not a click)."""
+        if not getattr(self, "_selecting", False):
+            return False
+        self._selecting = False
+        return self._ordered_text_selection() is not None
+
+    def _selected_text(self) -> str:
+        """The selected answer text as shown: wrapped lines join with a space, paragraphs with a newline."""
+        selection = self._ordered_text_selection()
+        lines, starts = getattr(self, "_text_lines", None) or ([], [])
+        if selection is None or not lines:
+            return ""
+        (first, start), (last, end) = selection
+        out: list[str] = []
+        for line in range(first, min(last, len(lines) - 1) + 1):
+            text = plain_spans(lines[line])
+            if out:
+                out.append("\n" if line in starts else " ")
+            out.append(text[(start if line == first else 0):(end if line == last else len(text))])
+        return "".join(out).strip()
+
     def _copy_body(self) -> None:
-        """Copy MO's message to the clipboard, and flash the control so the click is felt."""
-        text = str(getattr(self, "_body", "") or "").strip()
+        """Copy MO's message (or the selected part of it) to the clipboard, and flash the control."""
+        text = self._selected_text() or str(getattr(self, "_body", "") or "").strip()
         if not self._copy_to_clipboard(text):
             return
         self._copied = True
@@ -3869,8 +4000,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _click_is_away(self) -> bool:
         """The left button is down outside this panel, the faces docked with it and the cubes."""
         from core.desktop.win32 import VK_LBUTTON, mouse_button_held
-        if getattr(self, "_carry", None) is not None or not mouse_button_held((VK_LBUTTON,)):
-            return False                # carrying the group by its top is never a click away
+        if (getattr(self, "_carry", None) is not None or getattr(self, "_selecting", False)
+                or not mouse_button_held((VK_LBUTTON,))):
+            return False                # carrying the group or selecting text is never a click away
         px, py = pointer_position()
         x0, y0, x1, y1 = self._bounds
         if (x0 <= px <= x1 and y0 <= py <= y1) or self._inside_docked_group(px, py):

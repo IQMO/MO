@@ -621,7 +621,7 @@ class NativeLayeredWindow(LayeredWindow):
         from types import SimpleNamespace
 
         if message == 0x0020:  # WM_SETCURSOR
-            cursor = {"hand": 32649, "cross": 32515}.get(self._cursor, 32512)
+            cursor = {"hand": 32649, "cross": 32515, "text": 32513}.get(self._cursor, 32512)
             win32gui.SetCursor(win32gui.LoadCursor(0, cursor))
             return 1
         state = (1 if win32api.GetKeyState(16) < 0 else 0) | (4 if win32api.GetKeyState(17) < 0 else 0)
