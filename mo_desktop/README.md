@@ -671,7 +671,8 @@ new windows.
 
 The four cubes lead a turn: Send folds the composer back into its cube, the cubes
 turn a quarter at a time while MO works, and what MO is doing ("got it…", "opening
-Paint…") shows on their small label. The answer then grows out of the cubes into a
+Paint…") shows on their small label, which slides out from the cubes as it fades in, cross-fades
+to each new step and slides back as it leaves. The answer then grows out of the cubes into a
 card sized to the answer: a short answer stays small, and a long answer and its
 choices scroll inside a capped height while the buttons stay in place. Escape folds
 the answer back into the cubes.

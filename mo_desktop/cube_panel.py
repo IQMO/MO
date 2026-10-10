@@ -351,8 +351,17 @@ class CubePanelMixin:
             self._hide_label()
             return
         try:
+            now = time.perf_counter()
+            shown = getattr(self, "_label_painted_img", None)
+            leaving = getattr(self, "_label_leaving", None)
+            self._label_leaving = None
             self._label_img = self._render_label(text)
             if self._label_img is not None:
+                if shown is not None and shown is not self._label_img:
+                    self._label_from_img, self._label_change_at = shown, now     # the old step fades out
+                elif shown is None:
+                    # From a leaving pill the slide continues back out; from nothing it starts.
+                    self._label_enter_at = now if leaving is None else now - (1.0 - leaving[1]) * self._label_motion_seconds()
                 self._reposition_label()  # blit at the right spot WHILE hidden…
                 self._label_win.show()  # …then show, so it never flashes at a stale pos
         except Exception:
@@ -485,6 +494,10 @@ class CubePanelMixin:
         return card.finish(img, ss)
 
     def _hide_label(self) -> None:
+        painted, rect = getattr(self, "_label_painted_img", None), getattr(self, "_label_rect", None)
+        if painted is not None and rect is not None and getattr(self, "_label_value", "") \
+                and self._label_motion_seconds() > 0:
+            self._label_leaving = (painted, self._label_progress(time.perf_counter()), time.perf_counter(), rect)
         self._clear_running_label()
         self._label_until = 0.0
         self._label_value = ""
@@ -501,10 +514,59 @@ class CubePanelMixin:
         self._notice_action = None
         self._notice_action_until = 0.0
         self._pending_notice_action = None
+        self._label_enter_at = 0.0
+        self._label_from_img = None
+        if getattr(self, "_label_leaving", None) is not None:
+            return                              # it slides back first (_animate_label hides it)
         try:
             self._label_win.hide()
         except Exception:
             pass
+
+    def _label_motion_seconds(self) -> float:
+        design = getattr(self, "_panel_design", None)
+        return max(0.0, float(getattr(design, "transition_ms", 200) or 0) / 1000.0)
+
+    def _label_progress(self, now: float) -> float:
+        """How far the pill has slid out (0..1, eased like the panels)."""
+        seconds = self._label_motion_seconds()
+        started = float(getattr(self, "_label_enter_at", 0.0) or 0.0)
+        if seconds <= 0 or not started:
+            return 1.0
+        raw = max(0.0, min(1.0, (now - started) / seconds))
+        return raw * raw * (3.0 - 2.0 * raw)
+
+    def _label_offset(self, x: int, width: int, amount: float) -> int:
+        """The slide: a pill beside the cubes starts 16 px nearer them."""
+        side = -1 if x + width / 2 > self._x else 1
+        return int(round(side * 16 * (1.0 - amount)))
+
+    def _animate_label(self, now: float) -> None:
+        """One frame of the label's slide, cross-fade or leave (called from the cube's tick)."""
+        leaving = getattr(self, "_label_leaving", None)
+        if leaving is not None:
+            image, start, began, rect = leaving
+            seconds = self._label_motion_seconds()
+            raw = 1.0 if seconds <= 0 else max(0.0, min(1.0, (now - began) / seconds))
+            amount = start * (1.0 - raw * raw * (3.0 - 2.0 * raw))
+            if amount <= 0.0:
+                self._label_leaving = None
+                try:
+                    self._label_win.hide()
+                except Exception:
+                    pass
+                return
+            x, y = rect[0], rect[1]
+            try:
+                self._label.blit(image, x + self._label_offset(x, image.width, amount), y,
+                                 premultiplied=True, opacity=int(255 * amount))
+            except Exception:
+                pass
+            return
+        if getattr(self, "_label_value", "") and getattr(self, "_label_img", None) is not None and (
+                self._label_progress(now) < 1.0 or getattr(self, "_label_from_img", None) is not None):
+            self._label_painted_img = None      # a moving frame: blit it rather than only move the window
+            self._reposition_label()
 
     def _reposition_label(self) -> None:
         if not self._label_value or self._label_img is None:
@@ -543,11 +605,38 @@ class CubePanelMixin:
         y = max(0, min(y, sh - h))
         x = max(0, min(x, max(0, sw - w)))
         self._label_rect = (x, y, x + w, y + h)
+        now = time.perf_counter()
+        amount = self._label_progress(now)
+        image = self._label_img
+        old = getattr(self, "_label_from_img", None)
+        if old is not None:                      # a new step cross-fades over the old one
+            seconds = 0.18
+            mix = min(1.0, (now - float(getattr(self, "_label_change_at", now) or now)) / seconds)
+            if mix >= 1.0:
+                self._label_from_img = None
+            else:
+                from PIL import Image
+                size = (max(w, old.width), max(h, old.height))
+                right = x + w / 2 <= self._x                     # a pill left of the cubes keeps its right edge
+                layers = []
+                for piece in (old, image):
+                    canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+                    canvas.paste(piece, (size[0] - piece.width if right else 0, (size[1] - piece.height) // 2))
+                    layers.append(canvas)
+                image = Image.blend(layers[0], layers[1], mix * mix * (3.0 - 2.0 * mix))   # premultiplied: linear
+                x = x - (size[0] - w) if right else x
+                y = y - (size[1] - h) // 2
+        moving = amount < 1.0 or image is not self._label_img
         try:
-            if getattr(self, "_label_painted_img", None) is self._label_img:
+            if not moving and getattr(self, "_label_painted_img", None) is self._label_img:
                 self._label_win.position(x, y, w, h)
-            elif self._label.blit(self._label_img, x, y, premultiplied=True):
-                self._label_painted_img = self._label_img
+            elif not moving:
+                if self._label.blit(image, x, y, premultiplied=True):
+                    self._label_painted_img = self._label_img
+            else:
+                self._label.blit(image, x + self._label_offset(x, image.width, amount), y,
+                                 premultiplied=True, opacity=int(255 * amount))
+                self._label_painted_img = None
         except Exception:
             pass
 

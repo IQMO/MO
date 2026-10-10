@@ -233,6 +233,7 @@ class CubeMotionMixin:
         self._last_tick_at = current
         self._expire_app_pulse(current)
         self._expire_thinking(current)
+        self._animate_label(current)
         terminal_only = (getattr(self, "_terminal_working", None) is not None
                          and not set(getattr(self, "_actuation_yield_holders", ()) or ()) - {"terminal"})
         if bool(getattr(self, "_actuation_yield", False)) and not (
