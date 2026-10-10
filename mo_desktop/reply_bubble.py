@@ -3849,24 +3849,36 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._repaint()
 
     def _begin_carry(self, event: Any) -> bool:
-        """A press on an answer's top strip, off its buttons, starts carrying the group. Focus
-        owns the layout while it is expanded, so the strip stays still then."""
+        """A press on an answer's top strip (off its buttons) or on the composer's own cube starts
+        carrying the group. The composer's cube carries only once the pointer travels 6 px, as the
+        Focus cube does, so a plain click still switches MO chat, Google, YouTube and Translate.
+        Focus owns the layout while it is expanded, so nothing carries then."""
         band = getattr(self, "_header_band", None)
         x, y = getattr(event, "x", -1), getattr(event, "y", -1)
         cube = getattr(self, "_cube", None)
-        if (band is None or cube is None or getattr(cube, "_focus_controller", None) is not None
-                or not (band[0] <= x <= band[2] and band[1] <= y <= band[3]) or self._hit_key_at(x, y)
+        key = self._hit_key_at(x, y)
+        grip = getattr(self, "_mode", "") == "input" and key in {"search_cycle", "collapse"}
+        strip = band is not None and band[0] <= x <= band[2] and band[1] <= y <= band[3] and not key
+        if (cube is None or getattr(cube, "_focus_controller", None) is not None or not (grip or strip)
                 or self._panel_transition_active() or getattr(self, "_last_layered_geometry", None) is None):
             return False
         self._carry = {"from": (getattr(event, "x_root", 0), getattr(event, "y_root", 0)),
                        "cube": (float(cube._x), float(cube._y)), "panel": tuple(self._last_layered_geometry),
-                       "bounds": tuple(self._bounds)}
-        self._place_blur_backdrop(False)            # Windows' blur waits until the card settles
+                       "bounds": tuple(self._bounds), "armed": grip}
+        if not grip:
+            self._place_blur_backdrop(False)        # Windows' blur waits until the card settles
         return True
 
     def _carry_to(self, event: Any) -> None:
-        """Move the cubes and the answer by the pointer's travel, kept on the screen."""
+        """Move the cubes and the panel by the pointer's travel, kept on the screen."""
         carry, cube = self._carry, self._cube
+        if carry.get("armed"):
+            travel = max(abs(getattr(event, "x_root", 0) - carry["from"][0]),
+                         abs(getattr(event, "y_root", 0) - carry["from"][1]))
+            if travel < 6:
+                return                              # still a click on the composer's cube
+            carry["armed"] = False
+            self._place_blur_backdrop(False)
         try:
             sw, sh = (int(value) for value in screen_size()[:2])
         except Exception:
@@ -3892,10 +3904,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._layered.set_input_bounds(self._bounds)
 
     def _end_carry(self) -> bool:
-        """Release: the answer settles once at its docked place beside the moved cubes."""
-        if getattr(self, "_carry", None) is None:
-            return False
+        """Release: the panel settles once at its docked place beside the moved cubes. A press on
+        the composer's cube that never travelled is a click (the release goes on to it)."""
+        carry = getattr(self, "_carry", None)
         self._carry = None
+        if carry is None or carry.get("armed"):
+            return False
         self._repaint()
         return True
 
