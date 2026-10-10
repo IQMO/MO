@@ -1368,7 +1368,9 @@ class Agent(AgentTaskBoard, AgentSlashCommands, AgentStatusCommands, AgentTurn):
             if desktop_native_action:
                 names = {"computer_targets", "computer_observe", "computer_act"}
             else:
-                names = {"computer_targets", "computer_observe"}
+                # A screen request may ask MO to point at or outline what it found ("highlight
+                # the Chrome window"): the guide primitive actuates nothing and belongs here.
+                names = {"computer_targets", "computer_observe", "point_on_screen"}
             if extension_allowlist is not None:
                 names.intersection_update(extension_allowlist)
             definitions = [
