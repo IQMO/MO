@@ -981,8 +981,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return self._render_session_history()
         if getattr(self, "_panel_state", None) == PanelState.DASHBOARD:
             return self._render_dashboard()
-        if getattr(self, "_panel_state", None) == PanelState.STATUS:
-            return self._render_status()
         from PIL import Image, ImageDraw, ImageChops
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
         button_pad = int(self._visuals.metrics.button_padding) * ss
@@ -2094,9 +2092,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         """Give the custom-drawn surface a useful Automation window name."""
         state = getattr(self, "_panel_state", PanelState.REPLY)
         mode = str(getattr(self, "_mode", "reply") or "reply")
-        if state == PanelState.STATUS:
-            title = f"MO Desktop — {getattr(self, '_status_text', '') or 'Working'}"
-        elif state == PanelState.DASHBOARD:
+        if state == PanelState.DASHBOARD:
             title = "MO Desktop — Dashboard"
         elif state == PanelState.HISTORY:
             title = ("MO Desktop — Clipboard" if getattr(self, "_list_view", "") == "clipboard"
@@ -2165,7 +2161,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if getattr(self, "_panel_state", None) == PanelState.DASHBOARD:
             from mo_desktop.dashboard_card import CONTENT_W as _DCW
             return _DCW + 2 * int(self._visuals.metrics.panel_padding)
-        if getattr(self, "_panel_state", None) in (PanelState.HISTORY, PanelState.STATUS):
+        if getattr(self, "_panel_state", None) == PanelState.HISTORY:
             content = max(
                 int(design.content_width),
                 int(getattr(design, "reply_content_width", 0) or 0),
@@ -2449,19 +2445,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._reply_idx = len(self._reply_history) - 1
         return self._repaint_for_panel_show(transition)
 
-    def show_status(self, text: str) -> bool:
-        """Show what MO heard or is doing as the compact line the reply grows from.
-
-        Repeated steps update the same line in place; the next reply or composer
-        is a state change, so it grows out of the cube through the usual reveal.
-        """
-        if getattr(self, "_mode", "reply") == "input" and bool(getattr(self, "_visible", False)):
-            self._stash_input_draft()
-        self._keyboard_hit = ""
-        transition = self._prepare_panel_show("status", PanelState.STATUS)
-        self._status_text = " ".join(str(text or "").split())[:120]
-        return self._repaint_for_panel_show(transition)
-
     def show_session_history(
         self,
         items: list[dict[str, Any]],
@@ -2698,7 +2681,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if self._mode != "input":
             shift = bool(int(getattr(event, "state", 0) or 0) & 0x1)
             if ks == "Escape":
-                self.hide()
+                self.collapse_to_cube()
             elif ks in {"Tab", "ISO_Left_Tab"}:
                 self._move_keyboard_hit(-1 if shift or ks == "ISO_Left_Tab" else 1)
             elif ks == "Right":
@@ -2830,17 +2813,19 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._activate_hit(key)
 
     def collapse_to_cube(self) -> None:
-        """Close a docked face back into its cube: the composer into the upper-right cube
-        (keeping the half-typed draft), the Dashboard into the upper-left one. Same reverse
-        morph for both, so they open and close alike."""
+        """Close a panel back into its cube: the composer into the upper-right cube (keeping
+        the half-typed draft), the Dashboard into the upper-left one, an answer into the cube
+        it grew from. Same reverse morph for all, so they open and close alike."""
         if getattr(self, "_cube_closing", False):
             return
         self._stash_input_draft()
         self._cancel_panel_transition()
         self._stop_blink()
         index = (1 if getattr(self._cube, "_composer_controller", None) is self
-                 else 0 if getattr(self._cube, "_dashboard_controller", None) is self else None)
-        if self._transition_seconds() <= 0 or index is None:
+                 else 0 if getattr(self._cube, "_dashboard_controller", None) is self
+                 else (1 if getattr(self, "_dock_side", "") == "right" else 0) if getattr(self, "_mode", "") == "reply"
+                 else None)
+        if self._transition_seconds() <= 0 or index is None or getattr(self, "_cube_source_image", None) is None:
             self.hide()
             return
         now = time.perf_counter()
@@ -3113,8 +3098,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
         else:
             attached = list(getattr(self, "_attachment_preview_paths", []) or [])
-            self.hide()
-            self._attachment_preview_paths = attached    # hide() clears them; the files in the sentence go with it
+            self.collapse_to_cube()       # the composer folds back into its cube; the answer grows from the cubes
+            self._attachment_preview_paths = attached    # an instant hide() clears them; the files go with the sentence
             cb(text)
             self._attachment_preview_paths = []
         self._input_draft = ""      # submitted to MO — the draft must not reappear

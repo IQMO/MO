@@ -81,13 +81,19 @@ def moody(i: int, t: float, dur: float) -> tuple[float, float, float]:
 
 
 def thinking(i: int, t: float, dur: float) -> tuple[float, float, float]:
-    """A coherent small twist and breath of the formation, settling at each lap."""
-    e = _env(t, dur)
+    """The formation turns a quarter clockwise as one body, drawing in a little, then rests
+    (chosen 2026-10-10). The four cubes are identical, so each lap ends exactly where
+    the next begins and the loop is seamless."""
+    from mo_desktop.design import DEFAULT_CUBE_FORM
+
+    half_pitch = (1 + DEFAULT_CUBE_FORM.gap_ratio / DEFAULT_CUBE_FORM.edge_ratio) / 2   # corner -> base, edges
+    turn = min(1.0, ((t / dur) % 1.0) / 0.55) if dur > 0 else 0.0
+    angle = turn * turn * turn * (turn * (6 * turn - 15) + 10) * math.pi / 2           # smootherstep
+    squeeze = 1.0 - 0.16 * math.sin(math.pi * turn)
     cx, cy = _corner(i)
-    phase = 2 * math.pi * t / max(.001, dur)
-    twist = .13 * math.sin(phase) * e
-    spread = .10 * e
-    return (cx * spread - cy * twist, cy * spread + cx * twist, .04 * e)
+    rx = (cx * math.cos(angle) - cy * math.sin(angle)) * squeeze
+    ry = (cx * math.sin(angle) + cy * math.cos(angle)) * squeeze
+    return ((rx - cx) * half_pitch, (ry - cy) * half_pitch, 0.04 * math.sin(math.pi * turn))   # no brightness flash
 
 
 def alert(i: int, t: float, dur: float) -> tuple[float, float, float]:
@@ -297,7 +303,7 @@ EMOTES: dict[str, tuple[Any, float]] = {
     "jump": (jump, 0.75),
     "happy": (happy, 1.2),
     "moody": (moody, 1.4),
-    "thinking": (thinking, 2.4),
+    "thinking": (thinking, 1.2),
     "alert": (alert, 1.0),
     "worm": (worm, 1.4),
     "wiggle": (wiggle, 0.65),

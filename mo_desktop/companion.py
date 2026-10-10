@@ -4349,9 +4349,8 @@ class CompanionSurface(
         # the whole turn; fall back to a text line only when there is no cube.
         if getattr(self, "_cube", None) is not None:
             self._cube_set_thinking(True)
-            # The turn starts on the panel's status line ("got it…"), grown from
-            # the cubes; the reply later grows from that same surface. A preserved
-            # selected/attachment card keeps its place and status uses the label.
+            # The four cubes lead the turn: they turn while MO works and the step
+            # ("got it…") rides their small label; the answer grows from the cubes.
             self._reply_visible = False
             self._present_activity(self._turn_start_activity())
         else:
@@ -4532,14 +4531,6 @@ class CompanionSurface(
                 and last_message.get(PRESENTATION_KEY, {}).get("reply_suppressed") is True
             )
             if reply_suppressed:
-                def _close_status() -> None:
-                    from mo_desktop.design import PanelState
-
-                    bubble = getattr(self, "_bubble", None)
-                    if getattr(bubble, "_panel_state", None) is PanelState.STATUS:
-                        bubble.hide()
-
-                self._post_gui_call(_close_status)
                 self._reset_voice_timing()
                 self._resume_voice_chat_after_turn()
             else:
@@ -4780,13 +4771,12 @@ class CompanionSurface(
         return "thinking it through…"
 
     def _present_activity(self, text: str) -> None:
-        """Show the current short action on the panel's status line.
+        """Show the current short action on the cubes' small label while they think.
 
         One surface at a time: when the turn keeps a selected or attachment card
-        open, that card stays the only panel and the cubes' working spinner shows
-        MO is busy. The cube's glance label carries activity only when no panel is
-        open (a walkthrough observing the screen). Hidden model reasoning never
-        appears.
+        open, that card stays the only panel and the cubes' thinking motion shows
+        MO is busy; a composer folding back into the cubes no longer counts as one.
+        Hidden model reasoning never appears.
         """
         t = " ".join(str(text or "").strip().split())
         if len(t) > 36:
@@ -4802,9 +4792,8 @@ class CompanionSurface(
         def _do() -> None:
             if getattr(self, "_reply_visible", False):
                 return
-            if self._show_status_line(t):
-                return
-            if self._panel_visible() or self._dashboard_docked():
+            closing = bool(getattr(getattr(self, "_bubble", None), "_cube_closing", False))
+            if (self._panel_visible() and not closing) or self._dashboard_docked():
                 return  # the kept card is the one surface; no second label beside it
             cube = getattr(self, "_cube", None)
             if cube is None:
@@ -4812,19 +4801,6 @@ class CompanionSurface(
             cube.show_bubble(t, seconds=_ACTIVITY_LABEL_SECONDS, side=self._activity_label_side())
 
         self._post_gui_call(_do)
-
-    def _show_status_line(self, text: str) -> bool:
-        """Put MO's current step on the panel's status line (GUI thread).
-
-        A selected or attachment card this turn preserves keeps the panel, and
-        status then stays on the cube label so that card is never replaced.
-        """
-        if bool(getattr(self, "_preserve_panel_for_turn", False)):
-            return False
-        shown = self._show_on_reply_surface("status", lambda bubble: bool(bubble.show_status(text)))
-        if shown:
-            self._visible = True
-        return shown
 
     def _clear_activity(self) -> None:
         """Clear the shared cube-label activity without touching an open panel."""

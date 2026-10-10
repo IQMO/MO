@@ -660,11 +660,12 @@ wanders; Lock mode follows the pointer. Thinking, listening, success, warnings,
 notices, and authored emotes change the existing cluster instead of creating
 new windows.
 
-One panel grows out of the cubes for a whole turn: while MO works it is one small
-line, MO's four-cube mark and what it is doing ("got it…", "opening Paint…"),
-sized to the text; the answer then grows from it into a card sized to the answer:
-a short answer stays small, and a long answer and its choices scroll inside a capped
-height while the buttons stay in place.
+The four cubes lead a turn: Send folds the composer back into its cube, the cubes
+turn a quarter at a time while MO works, and what MO is doing ("got it…", "opening
+Paint…") shows on their small label. The answer then grows out of the cubes into a
+card sized to the answer: a short answer stays small, and a long answer and its
+choices scroll inside a capped height while the buttons stay in place. Escape folds
+the answer back into the cubes.
 The same card carries input, choices, files and
 Dashboard, with icon controls. Only one surface shows at a time: while a card
 is open, MO's progress stays off the screen (the cubes show it is working) and

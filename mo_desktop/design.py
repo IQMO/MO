@@ -124,9 +124,6 @@ class PanelState(str, Enum):
     """States rendered by the shared cube-attached Desktop panel."""
 
     COMPACT = "compact"
-    # One line, MO's mark and its current step: what MO heard or is doing. The
-    # same surface then grows into the reply, so status never needs a second window.
-    STATUS = "status"
     REPLY = "reply"
     INPUT = "input"
     # A reply rendered with no footer controls — a genuine walkthrough, OR transient
