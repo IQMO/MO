@@ -59,9 +59,6 @@ _SS = card.SS         # one supersample factor for every desktop card (anti-alia
 # affordance, which swaps the preview slot to this quick-tool grid; each tile is a drawn
 
 
-# The composer's earlier-message browse: room kept for the three dots above Send, the dim behind
-# the composer, and the cross-fade between messages.
-_COMPOSER_DOTS_RESERVE = 16
 _GENERATE_ROW_H = 28          # one row of a picked kind's choice pills (none under Auto)
 _RESULT_ROW_H = 34            # one row of the compact Saved results list
 _RESULT_ROWS = 4              # rows shown at once; the list scrolls past them
@@ -100,7 +97,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._on_submit: Callable[[str], None] | None = None
         self._reply_history: list[dict[str, Any]] = []  # canonical replies, oldest->newest
         self._reply_idx = 0
-        self._browse_idx: int | None = None   # an earlier reply shown IN the composer (Up/Down, dots)
+        self._browse_idx: int | None = None   # an earlier reply shown IN the composer (Up/Down, history buttons)
         self._browse_veil: Any = None         # the dim behind the composer while it shows one
         self._controls_enabled = True
         self._copied = False
@@ -141,7 +138,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._transition_finish_base = False
         self._transition_callbacks: list[Callable[[], None]] = []
         self._font, self._bfont, self._sfont, self._ifont = self._fonts(_SS)
-        self._on_reply: Callable[[int], None] | None = None  # companion sets this (reply/history control)
+        self._on_continue: Callable[[str], Any] | None = None  # companion sets this (the answer's follow-up field)
+        self._continue_text = ""
         self._on_footer_action: Callable[[], None] | None = None
         self._footer_action_label = ""
         self._on_session_history: Callable[[], None] | None = None
@@ -1000,7 +998,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             generate_pills = option_pills(self._generate_selection, len(getattr(self, "_attachment_preview_paths", [])))
         caret_rect: tuple[int, int, int, int] | None = None
         shown = self._body if (self._body or not is_input) else ""
-        # Browsing MO's earlier replies happens IN the composer (Up/Down, the three dots).
+        # Browsing MO's earlier replies happens IN the composer (Up/Down, the history buttons).
         reply_history = list(getattr(self, "_reply_history", None) or []) if is_input else []
         browse_idx = getattr(self, "_browse_idx", None) if is_input else None
         browsing = browse_idx is not None and 0 <= browse_idx < len(reply_history)
@@ -1008,7 +1006,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         # head takes the first line and the panel dims around it (row 31, his correction).
         browse_head = (" ".join(str(reply_history[browse_idx].get("content") or "").split()) or "…") if browsing else ""
         placeholder = is_input and not shown
-        dots = is_input and bool(reply_history)
         attachment_caption = (
             not is_input
             and not bool(getattr(self, "_controls_enabled", False))
@@ -1023,8 +1020,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         lift = max(0, panel_padding - (int(design.accent_top) - 3)) if is_input else 0
         accent_top = int(design.accent_top) + lift
         body_top = image_inset if image_card else accent_top+13
-        generate_rows = (self._flow_pills(probe, generate_pills, int(design.content_width) - (_COMPOSER_DOTS_RESERVE if dots else 0))
-                         if generate_pills else [])
+        generate_rows = self._flow_pills(probe, generate_pills, int(design.content_width)) if generate_pills else []
         if generate_mode:   # only the rows that hold something: a picked kind's choices, references, progress
             progress = bool(getattr(self, "_generate_progress", ""))
             body_top += ((_GENERATE_ROW_H * len(generate_rows) + 9) if (generate_rows or progress) else 0) + \
@@ -1033,8 +1029,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         hint = self._composer_hint() if placeholder else ""
         wrap_text = shown if not placeholder else hint
         mail_reply = rich_text and shown.startswith(("**Gmail / ", "**Outlook / "))
-        # The three dots sit above Send, so the composer's text wraps short of them.
-        wrap_width = (self._content_width(probe, wrap_text, rich=rich_text) - _COMPOSER_DOTS_RESERVE) if dots else None
+        wrap_width = None
         wrap_key = (wrap_text, rich_text, ss, self._content_width(probe, wrap_text, rich=rich_text),
                     id(self._font), id(self._bfont), wrap_width)
         cached = getattr(self, "_wrapped_body", None)
@@ -1087,7 +1082,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             str(getattr(self, "_footer_action_label", "") or "").strip()
             and callable(getattr(self, "_on_footer_action", None))
         )
-        # Replies keep ↑ n/n ↓; the composer browses with the three dots above Send instead.
+        # Replies and the composer both keep MO's earlier messages in the history buttons by Send.
         nav_controls = bool(getattr(self, "_controls_enabled", True)) and not is_input
         # Options always retain their Submit footer, including while scrolling.
         footer = is_input or bool(option_rows) or (bool(self._body) and (nav_controls or has_footer_action))
@@ -1528,10 +1523,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     min_width=48,
                     min_height=28,
                 )
+                left = rx0
+                if reply_history and not results and not privacy:
+                    left = self._draw_history_buttons(d, rx0 - 6 * ss, cyy, ss, button_radius, _set_hit,
+                                                      earlier=not browsing or browse_idx > 0, later=browsing)
                 if callable(getattr(self, "_on_attach", None)):
                     from interface.desktop_brand import make_glyph_icon
                     color = self._cyan if self._hovering("attach") else self._muted
-                    clip_x = rx0 - 8 * ss - 15 * ss
+                    clip_x = left - 8 * ss - 15 * ss
                     img.alpha_composite(make_glyph_icon("clip", 15 * ss, color="#%02x%02x%02x" % tuple(color)),
                                         (int(clip_x), int(cyy - 2 * ss)))
                     _set_hit("attach", (int(clip_x / ss) - 4, int((cyy - 5 * ss) / ss), int(clip_x / ss) + 19,
@@ -1539,7 +1538,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 if generate_mode:          # Refine: MO's prompt enhancer for this request (Generate only)
                     busy = getattr(self, "_generate_refining", False)
                     color = self._cyan if (busy or self._hovering("generate:enhance")) else self._muted
-                    spark_x = (clip_x if callable(getattr(self, "_on_attach", None)) else rx0) - 8 * ss - 14 * ss
+                    spark_x = (clip_x if callable(getattr(self, "_on_attach", None)) else left) - 8 * ss - 14 * ss
                     mx, my, outer, inner = spark_x + 7 * ss, cyy + 5.5 * ss, 6 * ss, 1.7 * ss
                     d.polygon([(mx, my - outer), (mx + inner, my - inner), (mx + outer, my), (mx + inner, my + inner),
                                (mx, my + outer), (mx - inner, my + inner), (mx - outer, my), (mx - inner, my - inner)],
@@ -1578,70 +1577,58 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                         fill=(*self._entry, 255), outline=(*self._edge, 120), width=max(1, ss))
                     d.text((tip_left + 8 * ss, cyy - 3 * ss), card.fit_text(d, tip, tip_right - tip_left - 16 * ss, self._sfont),
                            font=self._sfont, fill=(*self._muted, 255))
-                if dots and not results and not privacy:
-                    # MO's earlier replies: three dots at the right edge, centred, an arrow above and
-                    # below. The bottom dot is your draft, the middle one MO's last reply, the top one
-                    # anything older; the upper half moves back, the lower half forward.
-                    lit = 2 if not browsing else (1 if browse_idx == len(reply_history) - 1 else 0)
-                    dot_x = box[2] - 10 * ss
-                    low, high = box[1] + 40 * ss, cyy - 30 * ss
-                    mid = (box[1] + box[3]) // 2
-                    mid = min(max(mid, low), high) if low <= high else (box[1] + cyy) // 2
-                    for index in range(3):                         # quiet: dim dots, the lit one softly cyan
-                        dot_y = mid + (index - 1) * 6 * ss
-                        hot = (index < 2 and self._hovering("dots_up")) or (index == 2 and self._hovering("dots_down"))
-                        alpha = 150 if index == lit or hot else 60
-                        color = self._cyan if index == lit or hot else self._muted
-                        d.ellipse([dot_x - 1.6 * ss, dot_y - 1.6 * ss, dot_x + 1.6 * ss, dot_y + 1.6 * ss], fill=(*color, alpha))
-                    for direction, key in ((-1, "dots_up"), (1, "dots_down")):     # small, dimmed arrows
-                        tip_y = mid + direction * 18 * ss
-                        hot = self._hovering(key)
-                        color, alpha = (self._cyan, 220) if hot else (self._muted, 150)
-                        d.line([(dot_x - 3 * ss, tip_y - direction * 1.8 * ss), (dot_x, tip_y + direction * 1.2 * ss),
-                                (dot_x + 3 * ss, tip_y - direction * 1.8 * ss)], fill=(*color, alpha),
-                               width=max(1, int(1.2 * ss)), joint="curve")
-                    mid_y = int(mid / ss)
-                    _set_hit("dots_up", (int(dot_x / ss) - 9, mid_y - 27, int(dot_x / ss) + 9, mid_y))
-                    _set_hit("dots_down", (int(dot_x / ss) - 9, mid_y, int(dot_x / ss) + 9,
-                                           min(mid_y + 27, self._hit["send"][1] - 1)))   # never over Send
             elif bool(getattr(self, "_controls_enabled", True)):
-                # Reply: icon only (a drawn return arrow on the accent fill).
+                # The answer's own follow-up field, laid out as the composer's footer: the field, MO's
+                # earlier answers in the history buttons, then send (the reply mark on the accent fill).
+                # Type and press Enter or send to answer MO without leaving the answer. The native EDIT
+                # laid under the field owns text, caret keys, clipboard and IME
+                # (NativeLayeredWindow.text_input, as Focus search uses it); the card draws it.
                 px = button_pad; ic = 13 * ss
                 rx1 = right_edge
                 rx0 = rx1 - 2 * px - ic
                 d.rounded_rectangle([rx0, cyy - 4 * ss, rx1, cyy + 15 * ss], radius=button_radius,
                                     fill=(*self._cyan, 255),
-                                    outline=(*self._text, 255) if self._hovering("reply") else None,
+                                    outline=(*self._text, 255) if self._hovering("continue_send") else None,
                                     width=max(1, ss))
                 ink = getattr(self, "_accent_ink", self._card)
                 ix, iy = rx0 + px, cyy + 6 * ss
                 d.line([(ix + 9 * ss, iy - 4 * ss), (ix + 9 * ss, iy), (ix, iy)], fill=ink, width=ss)
                 d.line([(ix, iy), (ix + 4 * ss, iy - 3 * ss)], fill=ink, width=ss)
                 d.line([(ix, iy), (ix + 4 * ss, iy + 3 * ss)], fill=ink, width=ss)
-                _set_hit(
-                    "reply",
-                    (int(rx0 / ss), int((cyy - 5 * ss) / ss),
-                     int(rx1 / ss), int((cyy + 16 * ss) / ss)),
-                    min_width=48,
-                    min_height=28,
-                )
+                _set_hit("continue_send", (int(rx0 / ss), int((cyy - 5 * ss) / ss), int(rx1 / ss),
+                                           int((cyy + 16 * ss) / ss)), min_height=28)   # never over the history
+                fx1 = rx0 - 6 * ss
                 if nav_controls and len(getattr(self, "_reply_history", None) or []) > 1:
-                    # The composer's three dots, just left of Reply: the lit one is where you are
-                    # (top = older replies, middle = the newest). Click above or below to move.
-                    history_count = len(self._reply_history)
-                    at_newest = int(getattr(self, "_reply_idx", 0) or 0) >= history_count - 1
-                    dot_x = rx0 - 10 * ss
-                    mid_y = cyy + 5 * ss
-                    for index, dot_y in enumerate((mid_y - 6 * ss, mid_y, mid_y + 6 * ss)):
-                        lit = index == (1 if at_newest else 0)
-                        hot = (index == 0 and self._hovering("up")) or (index == 2 and self._hovering("down"))
-                        color = self._cyan if lit or hot else self._muted
-                        d.ellipse([dot_x - 2 * ss, dot_y - 2 * ss, dot_x + 2 * ss, dot_y + 2 * ss],
-                                  fill=(*color, 210 if lit or hot else 95))
-                    _set_hit("up", (int(dot_x / ss) - 10, int((mid_y - 14 * ss) / ss), int(dot_x / ss) + 8, int(mid_y / ss)),
-                             min_width=28)
-                    _set_hit("down", (int(dot_x / ss) - 10, int(mid_y / ss), int(dot_x / ss) + 8, int((mid_y + 14 * ss) / ss)),
-                             min_width=28)
+                    index, count = int(getattr(self, "_reply_idx", 0) or 0), len(self._reply_history)
+                    fx1 = self._draw_history_buttons(d, fx1, cyy, ss, button_radius, _set_hit,
+                                                     earlier=index > 0, later=index < count - 1) - 6 * ss
+                fx0 = box[0] + panel_padding * ss
+                if fx1 - fx0 >= 80 * ss:
+                    selection = self._continue_selection()
+                    self._continue_drawn_selection = selection
+                    typed = str(getattr(self, "_continue_text", "") or "")
+                    live = selection is not None or self._hovering("continue")
+                    d.rounded_rectangle([fx0, cyy - 4 * ss, fx1, cyy + 15 * ss], radius=button_radius,
+                                        fill=(*self._entry, 255), outline=(*(self._cyan if live else self._edge), 255),
+                                        width=max(1, ss))
+                    tx, room = fx0 + 7 * ss, fx1 - fx0 - 14 * ss
+                    start = 0
+                    while start < len(typed) and d.textlength(typed[start:], font=self._sfont) > room:
+                        start += 1          # the end of a long follow-up stays in view
+                    if typed:
+                        d.text((tx, cyy - 3 * ss), typed[start:], font=self._sfont, fill=(*self._text, 255))
+                    elif selection is None:
+                        d.text((tx, cyy - 3 * ss), "Reply to MO…", font=self._sfont, fill=(*self._muted, 255))
+                    if selection is not None:
+                        lo, hi = (max(0, value - start) for value in selection)
+                        cx = min(fx1 - 5 * ss, tx + d.textlength(typed[start:start + hi], font=self._sfont))
+                        if lo != hi:
+                            sx = min(cx, tx + d.textlength(typed[start:start + lo], font=self._sfont))
+                            d.line((sx, cyy + 12 * ss, cx, cyy + 12 * ss), fill=(*self._cyan, 255), width=ss)
+                        else:
+                            d.line((cx, cyy - 1 * ss, cx, cyy + 12 * ss), fill=(*self._cyan, 255), width=ss)
+                    _set_hit("continue", (int(fx0 / ss), int((cyy - 4 * ss) / ss), int(fx1 / ss),
+                                          int((cyy + 15 * ss) / ss)))
 
         hovered = str(getattr(self, "_hover", "") or getattr(self, "_keyboard_hit", "") or "")
         prefix, _sep, number = hovered.rpartition(":")
@@ -1747,6 +1734,73 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
 
 
+
+    def _draw_history_buttons(self, d: Any, right: float, cyy: float, ss: int, radius: int, set_hit: Any, *,
+                              earlier: bool, later: bool) -> float:
+        """MO's earlier messages: two small buttons ending at ``right`` (supersampled px), earlier
+        and later, beside Send on the composer and beside the follow-up field on an answer. Both
+        run ``_nav`` (the composer browses in place, an answer recalls). Returns their left edge."""
+        size, gap = 19 * ss, 3 * ss
+        left = right - 2 * size - gap
+        for index, (key, enabled) in enumerate((("up", earlier), ("down", later))):
+            x0 = left + index * (size + gap)
+            hot = enabled and self._hovering(key)
+            d.rounded_rectangle([x0, cyy - 4 * ss, x0 + size, cyy + 15 * ss], radius=radius,
+                                fill=(*self._entry, 255), outline=(*(self._cyan if hot else self._edge), 255),
+                                width=max(1, ss))
+            color = (self._cyan if hot else self._text) if enabled else self._muted
+            self._chevron(d, x0 + size / 2, cyy + (5.5 + (-1 if key == "down" else 1)) * ss, 3.5 * ss, key, color, ss,
+                          width=max(1, int(1.4 * ss)))
+            if enabled:
+                set_hit(key, (int(x0 / ss), int((cyy - 5 * ss) / ss), int((x0 + size) / ss), int((cyy + 16 * ss) / ss)),
+                        min_height=28)
+        return left
+
+    def _continue_selection(self) -> tuple[int, int] | None:
+        """The follow-up field's caret/selection while it has the keyboard, else None."""
+        getter = getattr(getattr(self, "_layered", None), "text_selection", None)
+        try:
+            return getter() if callable(getter) else None
+        except Exception:
+            return None
+
+    def _place_continue_field(self, settled: bool) -> None:
+        """Lay the native EDIT under the drawn follow-up field, or put it away (any other panel)."""
+        place = getattr(getattr(self, "_layered", None), "text_input", None)
+        if not callable(place):
+            return
+        hit = (getattr(self, "_hit", None) or {}).get("continue") if settled and self._mode == "reply" else None
+        try:
+            place(None if hit is None else (hit[0], hit[1], hit[2] - hit[0], hit[3] - hit[1]),
+                  self._continue_changed, limit=2000)
+        except Exception:
+            pass
+
+    def _continue_changed(self, value: str) -> None:
+        self._continue_text = str(value or "")
+        if self._visible and self._mode == "reply" and not getattr(self, "_cube_closing", False):
+            self._repaint()
+
+    def _send_continue(self) -> None:
+        """Send the typed follow-up: the answer folds back into its cube and MO takes the turn."""
+        text = str(getattr(self, "_continue_text", "") or "").strip()
+        callback = getattr(self, "_on_continue", None)
+        if not text or not callable(callback):
+            return
+        self._continue_text = ""
+        for name in ("clear_text_input", "blur_text_input"):
+            fn = getattr(getattr(self, "_layered", None), name, None)
+            if callable(fn):
+                try:
+                    fn()
+                except Exception:
+                    pass
+        self._attachment_preview_paths = []      # a follow-up is plain text, never the answer's files again
+        self.collapse_to_cube()
+        try:
+            callback(text)
+        except Exception:
+            pass
 
     def _input_frame_with_caret(self) -> Any:
         base = getattr(self, "_input_base_image", None)
@@ -1943,6 +1997,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._last_layered_geometry = geometry
             self._layered.set_input_bounds(self._bounds)
             self._last_error = ""
+            self._place_continue_field(not morphing)
         try:
             self._win.show()
         except Exception:
@@ -2429,6 +2484,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._stash_input_draft()   # a reply arriving mid-compose must not drop the draft
         state = PanelState.FOOTERLESS if not controls else PanelState.REPLY
         transition = self._prepare_panel_show("reply", state, controls=controls)
+        if transition and getattr(self, "_continue_text", ""):
+            self._continue_text = ""
+            clear = getattr(self._layered, "clear_text_input", None)
+            if callable(clear):
+                clear()
         self._footer_action_label = str(action_label or "").strip()[:24]
         self._on_footer_action = on_action if self._footer_action_label and callable(on_action) else None
         self._on_session_history = on_session_history if callable(on_session_history) else None
@@ -2641,6 +2701,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._attachment_tools_allowed = True
         self._end_browse(repaint=False)
         self._hold(False)
+        if self._continue_selection() is not None:
+            blur = getattr(self._layered, "blur_text_input", None)
+            if callable(blur):
+                blur()                      # the keyboard goes back to the window it came from
+        self._place_continue_field(False)
         try:
             self._win.hide()
         except Exception:
@@ -2688,6 +2753,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 self._move_keyboard_hit(1)
             elif ks == "Left":
                 self._move_keyboard_hit(-1)
+            elif ks in {"Return", "KP_Enter"} and self._continue_selection() is not None:
+                self._send_continue()
             elif ks in {"Return", "KP_Enter", "space"}:
                 self._activate_hit(getattr(self, "_keyboard_hit", ""))
             else:
@@ -2800,7 +2867,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
             return
         key = self._hit_key_at(x, y)
-        if getattr(self, "_browse_idx", None) is not None and key != "sessions":
+        if getattr(self, "_browse_idx", None) is not None and key not in {"sessions", "up", "down"}:
             # While browsing, the darkened panel is not clickable: a click there only brings the
             # composer back to normal. The lit message line opens that message in full; the
             # history button at the top stays live.
@@ -2897,10 +2964,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             current = self._composer_search_provider()
             self._search_provider = order[(order.index(current) + 1) % len(order)]
             self._repaint()
-        elif key == "dots_up":
-            self._browse(-1)
-        elif key == "dots_down":
-            self._browse(+1)
         elif key == "attach":
             callback = getattr(self, "_on_attach", None)
             if callable(callback):
@@ -3023,8 +3086,16 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._fire_footer_action()
         elif key == "send":
             self._submit_input()
-        elif key == "reply":
-            self._fire_reply(0)
+        elif key == "continue":
+            focus = getattr(self._layered, "focus_text_input", None)
+            if callable(focus):
+                focus()
+            self._repaint()
+        elif key == "continue_send":
+            if str(getattr(self, "_continue_text", "") or "").strip():
+                self._send_continue()
+            else:
+                self._activate_hit("continue")      # nothing typed yet: send puts the keyboard in the field
         elif key == "up":
             self._nav(-1)
         elif key == "down":
@@ -3306,14 +3377,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._panel_state = PanelState.REPLY
         self._apply_reply_presentation(message.get("_mo_presentation", {}))
         self._scroll_line = 0
-
-    def _fire_reply(self, step: int) -> None:
-        cb = self._on_reply
-        if callable(cb):
-            try:
-                cb(step)
-            except Exception:
-                pass
 
     def _fire_footer_action(self) -> None:
         cb = getattr(self, "_on_footer_action", None)
@@ -3705,6 +3768,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 return
         except Exception:
             pass
+        if (getattr(self, "_mode", "") == "reply" and "continue" in (getattr(self, "_hit", None) or {})
+                and not getattr(self, "_cube_closing", False)
+                and self._continue_selection() != getattr(self, "_continue_drawn_selection", None)):
+            self._repaint()
         try:
             # Every 30 ms: a normal click (60-120 ms, press to release) can no longer fall between two
             # reads; at 90 ms a quick click often did and the panel needed a second one (his report).

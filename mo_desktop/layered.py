@@ -728,7 +728,7 @@ class NativeLayeredWindow(LayeredWindow):
             win32gui.SetWindowText(child, label)
             win32gui.SetWindowPos(child, 0, *box, 0x0014)
 
-    def text_input(self, box: tuple[int, int, int, int] | None, changed: Any) -> None:
+    def text_input(self, box: tuple[int, int, int, int] | None, changed: Any, *, limit: int = 200) -> None:
         """Native EDIT owns text, selection, clipboard and IME; the card owns pixels."""
         import win32gui
         self._text_callback = changed
@@ -741,7 +741,7 @@ class NativeLayeredWindow(LayeredWindow):
                 *box, self._native_hwnd, 900, 0, None)
             self._text_input = child
             win32gui.SetLayeredWindowAttributes(child, 0, 0, 2)
-            win32gui.SendMessage(child, 0x00C5, 200, 0)  # EM_LIMITTEXT
+            win32gui.SendMessage(child, 0x00C5, int(limit), 0)  # EM_LIMITTEXT
             previous = None
             def proc(hwnd: int, message: int, wparam: int, lparam: int) -> int:
                 if message == 0x0100 and wparam in (13, 27, 38, 40):

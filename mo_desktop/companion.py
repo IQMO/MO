@@ -5214,12 +5214,11 @@ class CompanionSurface(
             text += "\n\n" + _attached_files_note(paths, named)
         return self._submit_text_request(text, source="submit", hide_input=False, preserve_panel=generate, media_selection=selection)
 
-    def _reply_button_pressed(self, step: int = 0) -> None:
-        """Open the composer; reply-history arrows stay on the reply card."""
-        _ = step
+    def _continue_from_answer(self, text: str) -> bool:
+        """A follow-up typed on the answer's own field takes the composer's request path."""
         if self._recording_voice:
             self._on_stop_click()
-        self._display_input_dialog()
+        return self._submit_text_request(text, source="submit", hide_input=False)
 
     def _get_reply_bubble(self) -> Any:
         """The layered, PIL-rendered reply surface (smooth like the cube). Lazily built;
@@ -5242,7 +5241,7 @@ class CompanionSurface(
                 bubble.destroy()
                 self._bubble = False
                 return None
-            bubble._on_reply = self._reply_button_pressed  # wire the card's Reply/↑/↓ controls
+            bubble._on_continue = self._continue_from_answer  # the answer's own follow-up field
             bubble._on_history_options_submit = self._submit_options
             bubble._on_report = self._launch_issue_report_from_reply
             bubble._on_visibility_changed = self._on_reply_visibility_changed
