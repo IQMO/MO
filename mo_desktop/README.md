@@ -338,8 +338,9 @@ model, with confirmation from that instance and no draft/focus change.
 
 Replies stay concise by default but retain requested detail in the existing scrollable card. There is no Desktop-only first-response token ceiling, reply-character cap, or rolling conversation-message cap; normal provider output, context-pressure, safety, and evidence limits still apply. Read-only answers and honest tool limitations do not trigger compulsory action retries.
 
-A reply card uses the composer's footer: a small "Reply to MO…" field, the same history icon and
-the send button. Type in the field and press Enter (or send) to answer MO
+A reply card uses the composer's footer: a small "Reply to MO…" field, the same paperclip, the
+same history icon and the send button. The paperclip opens the composer with the picked files in
+it, keeping anything typed in the field. Type in the field and press Enter (or send) to answer MO
 without leaving the answer: the answer folds back into the cubes and the next one grows from
 them. When the answer is to something you typed, its field already has the keyboard, so you just
 keep typing; it leaves the keyboard alone if you typed somewhere else or switched windows while

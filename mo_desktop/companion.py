@@ -5246,6 +5246,7 @@ class CompanionSurface(
                 self._bubble = False
                 return None
             bubble._on_continue = self._continue_from_answer  # the answer's own follow-up field
+            bubble._on_attach = self._attach_from_composer    # the composer's paperclip, on answers too
             bubble._on_history_options_submit = self._submit_options
             bubble._on_report = self._launch_issue_report_from_reply
             bubble._on_visibility_changed = self._on_reply_visibility_changed

@@ -1578,13 +1578,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 if callable(getattr(self, "_on_session_history", None)) and not results and not privacy:
                     left = self._draw_history_icon(d, rx0 - 6 * ss, cyy, ss, _set_hit)
                 if callable(getattr(self, "_on_attach", None)):
-                    from interface.desktop_brand import make_glyph_icon
-                    color = self._cyan if self._hovering("attach") else self._muted
-                    clip_x = left - 8 * ss - 15 * ss
-                    img.alpha_composite(make_glyph_icon("clip", 15 * ss, color="#%02x%02x%02x" % tuple(color)),
-                                        (int(clip_x), int(cyy - 2 * ss)))
-                    _set_hit("attach", (int(clip_x / ss) - 4, int((cyy - 5 * ss) / ss), int(clip_x / ss) + 19,
-                                        int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
+                    clip_x = self._draw_attach_icon(img, left, cyy, ss, _set_hit)
                 if generate_mode:          # Refine: MO's prompt enhancer for this request (Generate only)
                     busy = getattr(self, "_generate_refining", False)
                     color = self._cyan if (busy or self._hovering("generate:enhance")) else self._muted
@@ -1629,7 +1623,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                            font=self._sfont, fill=(*self._muted, 255))
             elif bool(getattr(self, "_controls_enabled", True)):
                 # The answer's own follow-up field, laid out as the composer's footer: the field, the
-                # history icon, then send (the reply mark on the accent fill).
+                # paperclip, the history icon, then send (the reply mark on the accent fill).
                 # Type and press Enter or send to answer MO without leaving the answer. The native EDIT
                 # laid under the field owns text, caret keys, clipboard and IME
                 # (NativeLayeredWindow.text_input, as Focus search uses it); the card draws it.
@@ -1650,6 +1644,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 fx1 = rx0 - 6 * ss
                 if callable(getattr(self, "_on_session_history", None)):
                     fx1 = self._draw_history_icon(d, fx1, cyy, ss, _set_hit) - 6 * ss
+                if callable(getattr(self, "_on_attach", None)):
+                    fx1 = self._draw_attach_icon(img, fx1 + 6 * ss, cyy, ss, _set_hit) - 6 * ss
                 fx0 = box[0] + panel_padding * ss
                 if fx1 - fx0 >= 80 * ss:
                     self._continue_geom = (fx0, fx1, cyy, ss, button_radius)
@@ -1908,6 +1904,18 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         see-through hole in it (the composer's text selection did)."""
         amount = max(0.0, min(255.0, float(alpha))) / 255.0
         return (*(int(round(c * amount + b * (1.0 - amount))) for c, b in zip(rgb[:3], self._card[:3])), 255)
+
+    def _draw_attach_icon(self, img: Any, right: float, cyy: float, ss: int, set_hit: Any) -> float:
+        """The paperclip (Windows' file picker, imported like a drop), ending 8 px before ``right``
+        on the composer's and an answer's footer. Returns its left edge."""
+        from interface.desktop_brand import make_glyph_icon
+        color = self._cyan if self._hovering("attach") else self._muted
+        clip_x = right - 8 * ss - 15 * ss
+        img.alpha_composite(make_glyph_icon("clip", 15 * ss, color="#%02x%02x%02x" % tuple(color)),
+                            (int(clip_x), int(cyy - 2 * ss)))
+        set_hit("attach", (int(clip_x / ss) - 4, int((cyy - 5 * ss) / ss), int(clip_x / ss) + 19,
+                           int((cyy + 16 * ss) / ss)), min_width=26, min_height=28)
+        return clip_x
 
     def _draw_history_icon(self, d: Any, right: float, cyy: float, ss: int, set_hit: Any, *,
                            live: bool = False) -> float:
@@ -3204,6 +3212,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
         elif key == "attach":
             callback = getattr(self, "_on_attach", None)
+            if self._mode == "reply" and str(getattr(self, "_continue_text", "") or "").strip():
+                self._input_draft = self._continue_text      # the composer opens with it and the files
             if callable(callback):
                 try:
                     callback()
