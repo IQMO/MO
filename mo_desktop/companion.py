@@ -4587,6 +4587,9 @@ class CompanionSurface(
                 # pointer labels queued on the GUI thread. Their own queue, not generic turn
                 # cleanup, owns the cube until the final recap is ready.
                 self._post_gui_call(self._clear_activity)
+            bubble_ = getattr(self, "_bubble", None)
+            if bubble_ and not pointer_sequence_active and callable(getattr(bubble_, "release_keyboard", None)):
+                self._post_gui_call(bubble_.release_keyboard)
             self._schedule_next_desktop_follow_up()
 
     # ------------------------------------------------------------------
@@ -5419,11 +5422,11 @@ class CompanionSurface(
 
     def _answer_takes_the_keyboard(self) -> bool:
         """The answer to a request typed here takes the keyboard (its Reply field), once, so the
-        conversation goes on by typing. Never when a key went down anywhere since sending (MO's own
-        computer actions included) or another window took over while MO worked."""
+        conversation goes on by typing. Send keeps the panel's window active through the turn
+        (ReplyBubble._rest_with_keyboard); a click on another window meanwhile keeps it there."""
         sent = float(getattr(self, "_typed_turn_at", 0.0) or 0.0)
         self._typed_turn_at = 0.0
-        if not sent or float(getattr(self, "_last_key_down_at", 0.0) or 0.0) > sent + 0.5:
+        if not sent:
             return False
         still = getattr(getattr(self, "_bubble", None), "keyboard_still_here", None)
         return bool(callable(still) and still())
@@ -6249,9 +6252,9 @@ class CompanionSurface(
         # competing presentation surface, so hide it without replaying its
         # partial text between numbered points.
         bubble = getattr(self, "_bubble", None)
-        if bubble and bubble is not False:
+        if bubble and bubble is not False and getattr(bubble, "_visible", True):
             try:
-                bubble.hide()
+                bubble.hide(keep_keyboard=True)     # the recap that follows can still take the keyboard
             except Exception:
                 pass
         # Reserve the reply slot so generic activity labels cannot replace the
@@ -6262,6 +6265,8 @@ class CompanionSurface(
             return False
         extras = extras or {}
         number = int(extras.get("number") or 0)
+        if number and re.match(rf"\s*{number}\s*[.):\-–—]?\s", label):
+            label = re.sub(rf"^\s*{number}\s*[.):\-–—]?\s*", "", label)   # MO already wrote "1. …"
         ok = bool(cube.point_to(x, y, f"{number}  {label}" if number else label, seconds))
         self._show_spotlight(extras.get("box") if ok else None, seconds=seconds, zoom=bool(extras.get("zoom")))
         if ok:
@@ -6349,8 +6354,6 @@ class CompanionSurface(
         Win+Alt+M) and key auto-repeat never arm a gesture."""
         name = str(getattr(event, "name", "") or "")
         etype = getattr(event, "event_type", "")
-        if etype == "down":
-            self._last_key_down_at = time.monotonic()   # typing elsewhere keeps an answer off the keyboard
         if name == "esc" and etype == "down":
             self._maybe_escape_stop()
         is_ctrl = "ctrl" in name

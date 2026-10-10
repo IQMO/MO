@@ -1764,27 +1764,42 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
 
 
-    def _note_foreground_before_typing(self) -> None:
-        """Remember the window the keyboard came from, where Windows returns it when the panel folds."""
+    def _rest_with_keyboard(self) -> None:
+        """End a Send's fold without handing the keyboard to another window. Hiding the window let
+        Windows give the keyboard away and refuse it back once the pointer moved; instead the window
+        shows nothing, lets every click through and stays the active one, so the answer takes the
+        keyboard straight back. A click elsewhere moves the keyboard as usual. ``release_keyboard``
+        hides it when a turn ends without an answer."""
+        from PIL import Image
+        x, y = (getattr(self, "_last_layered_geometry", None) or (0, 0))[:2]
         try:
-            import win32gui
-            current = win32gui.GetForegroundWindow()
+            self._layered.set_input_bounds((0, 0, 0, 0))
+            self._layered.blit(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), x, y, premultiplied=True, position=True)
+            self._last_layered_geometry = (x, y, 1, 1)
+            self._keyboard_kept = True
         except Exception:
-            return
-        if current and current != getattr(getattr(self, "_layered", None), "hwnd", 0):
-            self._foreground_before_typing = current
+            self._keyboard_kept = False
+            try:
+                self._win.hide()
+            except Exception:
+                pass
+
+    def release_keyboard(self) -> None:
+        """A turn that ends with no answer on screen lets the kept, empty window go."""
+        if getattr(self, "_keyboard_kept", False) and not bool(getattr(self, "_visible", False)):
+            self._keyboard_kept = False
+            try:
+                self._win.hide()
+            except Exception:
+                pass
 
     def keyboard_still_here(self) -> bool:
-        """True while the keyboard is still on this panel or back where it came from when the panel
-        folded away, so nobody has picked another window since."""
+        """True while this panel's window is still the active one (nobody clicked elsewhere)."""
         try:
             import win32gui
-            current = win32gui.GetForegroundWindow()
+            return win32gui.GetForegroundWindow() == getattr(self._layered, "hwnd", -1)
         except Exception:
             return False
-        ours = {getattr(self._layered, "hwnd", 0), getattr(self, "_foreground_before_typing", 0),
-                getattr(self._layered, "_text_previous_hwnd", 0)}
-        return bool(current) and current in ours
 
     def focus_follow_up(self) -> None:
         """Put the keyboard in the answer's Reply field, as the composer has it, so the conversation
@@ -1884,15 +1899,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not text or not callable(callback):
             return
         self._continue_text = ""
-        for name in ("clear_text_input", "blur_text_input"):
-            fn = getattr(getattr(self, "_layered", None), name, None)
-            if callable(fn):
-                try:
-                    fn()
-                except Exception:
-                    pass
+        clear = getattr(getattr(self, "_layered", None), "clear_text_input", None)
+        if callable(clear):
+            try:
+                clear()
+            except Exception:
+                pass
         self._attachment_preview_paths = []      # a follow-up is plain text, never the answer's files again
-        self.collapse_to_cube()
+        self.collapse_to_cube(keep_keyboard=True)
         try:
             callback(text)
         except Exception:
@@ -2468,6 +2482,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if mode == "input" and transition:
             self._rest_face_height = None      # a fresh composer measures its rest height again
         self._cube_closing = False
+        self._keyboard_kept = False            # a new panel takes the kept window over
         if mode != "input":
             self._conversations_open = False   # the list lives only in the composer
         self._mode = mode
@@ -2554,7 +2569,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             painted = self._repaint()
         if painted:
             if is_input:
-                self._note_foreground_before_typing()
                 try:
                     self._win.activate()
                 except Exception:
@@ -2634,7 +2648,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._transition_after = None
         if getattr(self, "_cube_closing", False):
             if time.perf_counter()-self._transition_started_at >= self._transition_seconds():
-                self.hide()
+                self.hide(keep_keyboard=bool(getattr(self, "_fold_keeps_keyboard", False)))
             else:
                 self._repaint()
                 self._schedule_panel_transition()
@@ -2892,7 +2906,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._crop_clear()
         return self._repaint_for_panel_show(transition)
 
-    def hide(self) -> None:
+    def hide(self, *, keep_keyboard: bool = False) -> None:
         self._end_browse(repaint=False)
         self._menu = None
         self._cube_closing = False
@@ -2927,11 +2941,15 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._attachment_tools_allowed = True
         self._end_browse(repaint=False)
         self._hold(False)
-        if self._continue_selection() is not None:
+        if not keep_keyboard and self._continue_selection() is not None:
             blur = getattr(self._layered, "blur_text_input", None)
             if callable(blur):
                 blur()                      # the keyboard goes back to the window it came from
         self._place_continue_field(False)
+        if keep_keyboard:
+            self._rest_with_keyboard()
+            return
+        self._keyboard_kept = False
         try:
             self._win.hide()
         except Exception:
@@ -2948,6 +2966,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     # ------------------------------------------------------------------ input keys
     def _on_key(self, event: Any) -> str | None:
         if not self._visible:
+            if getattr(self, "_keyboard_kept", False) and getattr(event, "keysym", "") == "Escape":
+                self.release_keyboard()      # Escape while MO thinks: the keyboard goes back
             return
         ks = getattr(event, "keysym", "")
         key = str(ks).lower()
@@ -3122,12 +3142,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             return
         self._activate_hit(key)
 
-    def collapse_to_cube(self) -> None:
+    def collapse_to_cube(self, *, keep_keyboard: bool = False) -> None:
         """Close a panel back into its cube: the composer into the upper-right cube (keeping
         the half-typed draft), the Dashboard into the upper-left one, an answer into the cube
         it grew from. Same reverse morph for all, so they open and close alike."""
         if getattr(self, "_cube_closing", False):
             return
+        self._fold_keeps_keyboard = bool(keep_keyboard)
         self._stash_input_draft()
         self._cancel_panel_transition()
         self._stop_blink()
@@ -3136,7 +3157,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                  else (1 if getattr(self, "_dock_side", "") == "right" else 0) if getattr(self, "_mode", "") == "reply"
                  else None)
         if self._transition_seconds() <= 0 or index is None or getattr(self, "_cube_source_image", None) is None:
-            self.hide()
+            self.hide(keep_keyboard=bool(keep_keyboard))
             return
         now = time.perf_counter()
         duration = self._transition_seconds()
@@ -3424,7 +3445,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
         else:
             attached = list(getattr(self, "_attachment_preview_paths", []) or [])
-            self.collapse_to_cube()       # the composer folds back into its cube; the answer grows from the cubes
+            self.collapse_to_cube(keep_keyboard=True)   # folds into its cube; the answer grows from the cubes
             self._attachment_preview_paths = attached    # an instant hide() clears them; the files go with the sentence
             cb(text)
             self._attachment_preview_paths = []
