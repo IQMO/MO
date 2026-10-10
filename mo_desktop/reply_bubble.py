@@ -1186,6 +1186,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         elif not image_card:
             d.rounded_rectangle([ax, ay, ax + 26 * ss, ay + 3 * ss], radius=ss, fill=(*self._cyan, 255))
         self._hit = {}
+        # An answer's top strip (above its text) carries the four cubes and the answer together.
+        answer = (not is_input and not image_card
+                  and getattr(self, "_panel_state", PanelState.REPLY) in (PanelState.REPLY, PanelState.FOOTERLESS))
+        self._header_band = ((int(box[0] / ss), int(box[1] / ss), int(box[2] / ss), int(box[1] / ss) + body_top)
+                             if answer else None)
 
         def _set_hit(key: str, rect: tuple[int, int, int, int], *,
                      min_width: int = 0, min_height: int = 0) -> None:
@@ -2881,6 +2886,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if not self._visible:
             return
         x, y = getattr(event, "x", -1), getattr(event, "y", -1)
+        if self._end_carry():
+            return                      # a carry ends here; it was never a click
         if getattr(self, "_crop", None) is not None and self._crop.dragging:
             self._crop.end()            # a crop drag ends here; keep the selection, not a click
             self._repaint()
@@ -3605,7 +3612,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
     def _on_motion(self, event: Any) -> None:
         """Point at a control and it lights up under a hand cursor. Repaint only on a change."""
-        if not getattr(self, "_visible", False):
+        if not getattr(self, "_visible", False) or getattr(self, "_carry", None) is not None:
             return
         key = self._hit_key_at(getattr(event, "x", -1), getattr(event, "y", -1))
         if key == getattr(self, "_hover", ""):
@@ -3629,8 +3636,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
 
     def _on_press(self, event: Any) -> None:
-        """Begin a crop selection when pressing inside the shown image (crop mode only)."""
-        if not getattr(self, "_visible", False) or getattr(self, "_panel_tool_active", "") != "crop":
+        """Begin a crop selection inside the shown image (crop mode), or carry the cubes and the
+        answer together from the answer's top strip."""
+        if not getattr(self, "_visible", False):
+            return
+        if getattr(self, "_panel_tool_active", "") != "crop":
+            self._begin_carry(event)
             return
         db = getattr(self, "_crop_disp_box", None)
         if db is None:
@@ -3641,11 +3652,64 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
 
     def _on_drag(self, event: Any) -> None:
-        """Extend the crop rectangle while dragging (crop mode only)."""
+        """Extend the crop rectangle while dragging (crop mode), or carry the group."""
+        if getattr(self, "_carry", None) is not None:
+            self._carry_to(event)
+            return
         if getattr(self, "_panel_tool_active", "") != "crop" or not self._crop.dragging:
             return
         self._crop.drag(getattr(event, "x", -1), getattr(event, "y", -1))
         self._repaint()
+
+    def _begin_carry(self, event: Any) -> None:
+        """A press on an answer's top strip, off its buttons, starts carrying the group. Focus
+        owns the layout while it is expanded, so the strip stays still then."""
+        band = getattr(self, "_header_band", None)
+        x, y = getattr(event, "x", -1), getattr(event, "y", -1)
+        cube = getattr(self, "_cube", None)
+        if (band is None or cube is None or getattr(cube, "_focus_controller", None) is not None
+                or not (band[0] <= x <= band[2] and band[1] <= y <= band[3]) or self._hit_key_at(x, y)
+                or self._panel_transition_active() or getattr(self, "_last_layered_geometry", None) is None):
+            return
+        self._carry = {"from": (getattr(event, "x_root", 0), getattr(event, "y_root", 0)),
+                       "cube": (float(cube._x), float(cube._y)), "panel": tuple(self._last_layered_geometry),
+                       "bounds": tuple(self._bounds)}
+        self._place_blur_backdrop(False)            # Windows' blur waits until the card settles
+
+    def _carry_to(self, event: Any) -> None:
+        """Move the cubes and the answer by the pointer's travel, kept on the screen."""
+        carry, cube = self._carry, self._cube
+        try:
+            sw, sh = (int(value) for value in screen_size()[:2])
+        except Exception:
+            sw, sh = 1 << 15, 1 << 15
+        half = float(getattr(cube, "_size", 84)) / 2.0
+        x0, y0, w, h = carry["panel"]
+        cx = carry["cube"][0] + getattr(event, "x_root", 0) - carry["from"][0]
+        cy = carry["cube"][1] + getattr(event, "y_root", 0) - carry["from"][1]
+        cx = max(half, min(sw - half, cx))
+        cy = max(half, min(sh - half, cy))
+        dx, dy = round(cx - carry["cube"][0]), round(cy - carry["cube"][1])
+        cube._x, cube._y = carry["cube"][0] + dx, carry["cube"][1] + dy
+        cube._from = cube._to = cube._wander_to = (cube._x, cube._y)
+        cube._glide_dur = 0.0
+        try:
+            cube._reposition()                      # its label follows
+            self._win.position(x0 + dx, y0 + dy, w, h)
+        except Exception:
+            return
+        b = carry["bounds"]
+        self._bounds = (b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy)
+        self._last_layered_geometry = (x0 + dx, y0 + dy, w, h)
+        self._layered.set_input_bounds(self._bounds)
+
+    def _end_carry(self) -> bool:
+        """Release: the answer settles once at its docked place beside the moved cubes."""
+        if getattr(self, "_carry", None) is None:
+            return False
+        self._carry = None
+        self._repaint()
+        return True
 
     def _first_attachment_file(self) -> Any | None:
         from pathlib import Path
@@ -3805,8 +3869,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _click_is_away(self) -> bool:
         """The left button is down outside this panel, the faces docked with it and the cubes."""
         from core.desktop.win32 import VK_LBUTTON, mouse_button_held
-        if not mouse_button_held((VK_LBUTTON,)):
-            return False
+        if getattr(self, "_carry", None) is not None or not mouse_button_held((VK_LBUTTON,)):
+            return False                # carrying the group by its top is never a click away
         px, py = pointer_position()
         x0, y0, x1, y1 = self._bounds
         if (x0 <= px <= x1 and y0 <= py <= y1) or self._inside_docked_group(px, py):
