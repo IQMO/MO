@@ -392,9 +392,10 @@ empty-response handling.
 - Desktop session compaction preserves user-facing conversation plus owned Terminal-sync and core momentum context; it has no Desktop-only rolling message cap. Canonical Session context-pressure limits remain authoritative. Transient
   final-gate continuation controls are removed by the core session owner; the
   active `mo-desktop` slot is the restart target. Historical Desktop snapshots use
-  only the `mo-desktop-<stable-session-id>` namespace. The icon-only in-panel history
-  picker is reachable from both reply and composer states, loads that namespace
-  dynamically from SessionManager's canonical preview/age/turn rows without reopening each conversation. Paint cached history first and start one background refresh after the panel reveal, never disk work on the GUI callback. The picker archives a non-empty current conversation before switching or creating,
+  only the `mo-desktop-<stable-session-id>` namespace. The history icon lists those
+  conversations inside the composer itself (`ReplyBubble.show_conversations` / `_draw_conversations`,
+  at the composer's size in the browse dimming's look; an answer's icon opens the composer first)
+  and loads that namespace dynamically from SessionManager's canonical preview/age/turn rows without reopening each conversation. Paint cached history first and start one background refresh, never disk work on the GUI callback; Up/Down walk the open list and otherwise keep browsing earlier messages. The separate list panel now carries only the Clipboard history. The picker archives a non-empty current conversation before switching or creating,
   and restores the selected snapshot into the active slot. Back to the composer restores
   its stashed draft. Summoning an already-open composer preserves its live text,
   caret, selection, and scroll position rather than consuming an empty stash.

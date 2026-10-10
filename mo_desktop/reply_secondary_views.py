@@ -21,7 +21,8 @@ class ReplySecondaryViewsMixin:
         return fit_text(draw, text, width, font)
 
     def _render_session_history(self) -> Any:
-        """Draw a bounded conversation picker in the existing reply-panel footprint."""
+        """Draw the Clipboard history list in the existing reply-panel footprint (the conversation
+        history lists inside the composer instead, ReplyBubble._draw_conversations)."""
         from PIL import ImageDraw
 
         design = getattr(self, "_design", DEFAULT_BUBBLE_DESIGN)
@@ -74,17 +75,13 @@ class ReplySecondaryViewsMixin:
             radius=ss,
             fill=(*self._cyan, 255),
         )
-        clipboard = getattr(self, "_list_view", "") == "clipboard"
         draw.text(
             (left, accent_y + 12 * ss),
-            "Clipboard" if clipboard else "Conversations",
+            "Clipboard",
             font=self._bfont,
             fill=(*self._text, 255),
         )
-        if clipboard:
-            count_label = f"{len(items)} · memory only" if items else "Empty · memory only"
-        else:
-            count_label = f"{len(items)} saved" if items else "No saved conversations"
+        count_label = f"{len(items)} · memory only" if items else "Empty · memory only"
         count_w = int(draw.textlength(count_label, font=self._sfont))
         draw.text(
             (right - count_w, accent_y + 14 * ss),
@@ -98,7 +95,7 @@ class ReplySecondaryViewsMixin:
         if not shown:
             draw.text(
                 (left, y + 14 * ss),
-                "Copy something and it shows here." if clipboard else "Start a new conversation to create history.",
+                "Copy something and it shows here.",
                 font=self._sfont,
                 fill=(*self._muted, 255),
             )
@@ -139,7 +136,7 @@ class ReplySecondaryViewsMixin:
             text_w = content_w * ss - 24 * ss - reserved * ss
             title = self._fit_plain(
                 draw,
-                str(item.get("title") or "Untitled conversation"),
+                str(item.get("title") or "Item"),
                 text_w,
                 self._font,
             )
@@ -202,7 +199,7 @@ class ReplySecondaryViewsMixin:
                 int((center_x + 44 * ss) / ss), int((footer_y + 26 * ss) / ss),
             )
         new_key = "session:new"
-        label = "Clear all" if clipboard else "New"
+        label = "Clear all"
         label_w = int(draw.textlength(label, font=self._sfont))
         button_pad = int(visuals.metrics.button_padding) * ss
         new_right = right
@@ -260,18 +257,19 @@ class ReplySecondaryViewsMixin:
             "action": str(getattr(self, "_footer_action_label", "") or "Action"),
             "send": f"Search {provider_label}" if provider_label else "Send message",
             "continue": "Reply to MO",
+            "sessions": "Close the conversation history" if getattr(self, "_conversations_open", False)
+            else "Historical conversations",
             "expand": "Make the answer smaller" if getattr(self, "_reply_expanded", False) else "Make the answer bigger",
             "continue_send": "Send reply",
             "up": "Earlier message",
             "down": "Later message",
-            "sessions": "Historical conversations",
             "search_cycle": (f"Searching {provider_label}; switch search" if provider_label
                              else "MO chat; switch to a search"),
             "attach": "Attach a file",
             "session:back": "Back",
-            "session:new": "New conversation",
-            "session:prev": "Previous conversations",
-            "session:next": "Next conversations",
+            "session:new": "Clear the clipboard history",
+            "session:prev": "Previous items",
+            "session:next": "Next items",
             "options_submit": "Submit options",
             "option:other": "Type another response",
             "panel_tools": "Image tools",
@@ -282,9 +280,10 @@ class ReplySecondaryViewsMixin:
             "panel_tools_back": "Back",
             "panel_crop_apply": "Apply crop",
         }
-        clipboard = getattr(self, "_list_view", "") == "clipboard"
-        if clipboard and key == "session:new":
-            return "Clear the clipboard history"
+        if key.startswith("conv:"):
+            rows = self._conversation_rows()
+            index = int(key.split(":", 1)[1])
+            return rows[index][1] if 0 <= index < len(rows) else ""
         if key in names:
             return names[key]
         if key.startswith(("session:ask:", "session:remove:")):
@@ -299,11 +298,9 @@ class ReplySecondaryViewsMixin:
                 item = (getattr(self, "_session_history_items", None) or [])[
                     int(key.partition(":")[2])
                 ]
-                if clipboard:
-                    return "Copy again: " + str(item.get("title") or "item")[:52]
-                return "Open " + str(item.get("title") or "conversation")[:52]
+                return "Copy again: " + str(item.get("title") or "item")[:52]
             except (IndexError, TypeError, ValueError):
-                return "Conversation"
+                return "Item"
         if key.startswith("option:"):
             try:
                 option = (getattr(self, "_options", None) or [])[int(key.partition(":")[2])]

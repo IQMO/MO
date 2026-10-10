@@ -363,25 +363,15 @@ class CompanionSessionMixin:
             self._set_status("Still working on the previous request…", self._visual_palette.warn)
             return
         items = list(getattr(self, "_desktop_history_items", []))
-
-        def present(bubble: Any) -> bool:
-            self._desktop_history_return_to_input = (
-                str(getattr(bubble, "_mode", "") or "") == "input"
-            )
-            show_history = getattr(bubble, "show_session_history", None)
-            return bool(
-                callable(show_history)
-                and show_history(
-                    items,
-                    on_select=self._load_desktop_history_session,
-                    on_new=self._new_desktop_session_from_panel,
-                    on_back=self._return_from_desktop_session_history,
-                )
-            )
-
-        self._reply_visible = self._show_on_reply_surface("session history", present)
-        if self._reply_visible:
-            self._bubble.after_panel_transition(self._refresh_desktop_history_async)
+        bubble = self._get_reply_bubble()
+        if bubble is None:
+            return
+        if not (bubble.visible() and str(getattr(bubble, "_mode", "") or "") == "input"):
+            self._display_input_dialog()      # the history lives in the composer: an answer's icon opens it first
+        if bubble.show_conversations(items, on_select=self._load_desktop_history_session,
+                                     on_new=self._new_desktop_session_from_panel):
+            self._visible = True
+            self._refresh_desktop_history_async()
 
     def _refresh_desktop_history_async(self) -> None:
         if getattr(self, "_desktop_history_loading", False):
@@ -402,15 +392,10 @@ class CompanionSessionMixin:
                     return
                 self._desktop_history_items = items
                 bubble = getattr(self, "_bubble", None)
-                if not bubble or not bubble.visible():
+                if not bubble or not getattr(bubble, "_conversations_open", False):
                     return
-                if str(getattr(getattr(bubble, "_panel_state", None), "value", "")) != "history":
-                    return
-                bubble.show_session_history(
-                    items, on_select=self._load_desktop_history_session,
-                    on_new=self._new_desktop_session_from_panel,
-                    on_back=self._return_from_desktop_session_history,
-                )
+                bubble.show_conversations(items, on_select=self._load_desktop_history_session,
+                                          on_new=self._new_desktop_session_from_panel)
 
             self._post_gui_call(apply)
 
@@ -423,7 +408,6 @@ class CompanionSessionMixin:
             or target.startswith(MO_DESKTOP_SESSION_SLOT + "-")
         ):
             return
-        self._desktop_history_return_to_input = False
         if target == self._current_desktop_slot():
             self._return_from_desktop_session_history()
             return
@@ -460,7 +444,6 @@ class CompanionSessionMixin:
         self._return_from_desktop_session_history()
 
     def _new_desktop_session_from_panel(self) -> None:
-        self._desktop_history_return_to_input = False
         self._start_new_desktop_session()
         bubble = self._get_reply_bubble()
         if bubble is not None:
@@ -470,16 +453,12 @@ class CompanionSessionMixin:
         self._display_input_dialog()
 
     def _return_from_desktop_session_history(self) -> None:
-        return_to_input = bool(getattr(self, "_desktop_history_return_to_input", False))
-        self._desktop_history_return_to_input = False
-        if return_to_input:
-            self._display_input_dialog()
-            return
-        last_reply = self._last_desktop_reply()
-        if last_reply:
-            self._display_reply_dialog(last_reply)
-        else:
-            self._display_input_dialog()
+        """Back from the conversation list to the composer (the list lives inside it)."""
+        bubble = self._get_reply_bubble()
+        close = getattr(bubble, "close_conversations", None)
+        if callable(close):
+            close()
+        self._display_input_dialog()
 
     @classmethod
     def _clean_desktop_session_messages(

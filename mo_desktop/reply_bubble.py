@@ -143,6 +143,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._on_footer_action: Callable[[], None] | None = None
         self._footer_action_label = ""
         self._on_session_history: Callable[[], None] | None = None
+        self._conversations_open = False      # the conversation history listed inside the composer
         self._on_web_search: Callable[[str, str], bool] | None = None
         self._search_provider = ""  # "" | "google" | "youtube"; composer-only routing state
         self._session_history_items: list[dict[str, Any]] = []
@@ -1130,6 +1131,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             lines = [[(head, False)]] + [[] for _line in lines[1:]]
         privacy = generate_mode and bool(getattr(self, "_privacy_open", False))   # drawn last, at this size
         results = generate_mode and bool(getattr(self, "_results_open", False)) and not privacy
+        listing = is_input and bool(getattr(self, "_conversations_open", False)) and not privacy and not results
+        if listing:               # the conversation list draws over the composer's inside, at its size
+            lines = [[] for _line in lines]
         if results:   # Saved results: a compact list in the text area while it is open
             shown_rows = max(1, min(len(getattr(self, "_results", None) or []), _RESULT_ROWS))
             lines = [[] for _row in range(-(-shown_rows * _RESULT_ROW_H // line_h))]
@@ -1178,7 +1182,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         img = base[1].copy()
         d = ImageDraw.Draw(img)
         ax, ay = pad + panel_padding * ss, pad + accent_top * ss
-        if is_input:
+        if listing:
+            pass                # the conversation list takes the composer's top row too
+        elif is_input:
             # The composer's single cube is also its search switch: a click turns it into Google,
             # YouTube or Translate (their brand marks) and back to MO's cube.
             provider = self._composer_search_provider() if callable(getattr(self, "_on_web_search", None)) else ""
@@ -1215,7 +1221,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 max(0, x0), max(0, y0), min(W // ss, x1), min(H // ss, y1),
             )
 
-        if is_input:
+        if listing:
+            pass
+        elif is_input:
             _set_hit("search_cycle" if callable(getattr(self, "_on_web_search", None)) else "collapse",
                      (int(ax/ss)-6, int(ay/ss)-7, int(ax/ss)+18, int(ay/ss)+12))
             role_right = ax + 16 * ss
@@ -1397,7 +1405,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                             lx += float(d.textlength(part, font=font))
             if idx < len(lines) - 1:
                 ty += int(design.line_height) * ss
-        if is_input and not browsing and not privacy and not results and not bool(getattr(self, "_select_all", False)):
+        if (is_input and not browsing and not privacy and not results and not listing
+                and not bool(getattr(self, "_select_all", False))):
             caret_spans = caret_lines[-1] if caret_lines else [("", False)]
             caret_plain = plain_spans(caret_spans)
             caret_display, caret_rtl = shape_line(caret_plain)
@@ -1689,6 +1698,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 ty = menu_top+4*ss+(track-thumb)*scroll/max(1, len(choices)-self._menu_capacity)
                 d.rounded_rectangle((menu_right-3*ss, ty, menu_right-2*ss, ty+thumb), radius=ss, fill=(*self._muted, 180))
             caret_rect = None
+        if listing:
+            self._draw_conversations(img, box, ay - 8 * ss, box[3] - (int(design.footer_height) + lift + 4) * ss,
+                                     ss, panel_radius, _set_hit)
         if browse_head:
             self._dim_around_browse_line(img, box, panel_radius * ss, pad + body_top * ss, line_h * ss, ss)
             d2 = ImageDraw.Draw(img)
@@ -1868,6 +1880,104 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 min_height=28)
         self._history_icon_at = (right, cyy)
         return left
+
+    def show_conversations(self, items: list[dict[str, Any]], *, on_select: Callable[[str], None],
+                           on_new: Callable[[], None]) -> bool:
+        """The conversation history as a list inside the open composer, at the composer's size and in
+        the browse dimming's look. A second call refreshes the open list and keeps its place."""
+        if self._mode != "input" or not bool(getattr(self, "_visible", False)):
+            return False
+        self._conversations = [dict(item) for item in list(items or [])][:24]
+        self._on_conversation_select = on_select if callable(on_select) else None
+        self._on_conversation_new = on_new if callable(on_new) else None
+        if not getattr(self, "_conversations_open", False):
+            self._end_browse(repaint=False)
+            self._menu = None
+            self._results_open = self._privacy_open = False
+            self._conversations_open = True
+            current = next((index for index, item in enumerate(self._conversations) if item.get("current")), None)
+            self._conversation_pick = 0 if current is None else current + 1   # row 0 is New conversation
+            self._conversations_scroll = 0
+        self._transition_base = None          # a composer still growing draws the list too
+        self._repaint_open_composer()
+        return True
+
+    def close_conversations(self, *, repaint: bool = True) -> None:
+        """Put the list away: the composer shows its draft again."""
+        if not getattr(self, "_conversations_open", False):
+            return
+        self._conversations_open = False
+        if repaint:
+            self._repaint_open_composer()
+
+    def _conversation_rows(self) -> list[tuple[str, str, str, bool]]:
+        """(name, title, detail, current) per row; the first row starts a new conversation."""
+        rows = [("", "New conversation", "", False)]
+        for item in getattr(self, "_conversations", None) or []:
+            rows.append((str(item.get("name") or ""), str(item.get("title") or "Untitled conversation"),
+                         str(item.get("detail") or ""), bool(item.get("current"))))
+        return rows
+
+    def _move_conversation_pick(self, step: int) -> None:
+        rows = self._conversation_rows()
+        self._conversation_pick = max(0, min(len(rows) - 1, int(getattr(self, "_conversation_pick", 0) or 0) + step))
+        self._repaint_open_composer()
+
+    def _pick_conversation(self, index: int | None = None) -> None:
+        """Open the picked row: a saved conversation, or a new one."""
+        rows = self._conversation_rows()
+        index = int(getattr(self, "_conversation_pick", 0) or 0) if index is None else int(index)
+        if not 0 <= index < len(rows):
+            return
+        self.close_conversations(repaint=False)
+        callback = (getattr(self, "_on_conversation_new", None) if index == 0
+                    else getattr(self, "_on_conversation_select", None))
+        if callable(callback):
+            try:
+                callback() if index == 0 else callback(rows[index][0])
+            except Exception:
+                pass
+        self._repaint_open_composer()
+
+    def _draw_conversations(self, img: Any, box: Any, top: float, bottom: float, ss: int,
+                            panel_radius: int, set_hit: Any) -> None:
+        """The conversation history inside the composer, the way browsing earlier messages looks:
+        rows from the top (New conversation first), the row under the pointer or keys lit and the
+        rest of the panel dimmed; it scrolls a row at a time and the history icon stays live."""
+        from PIL import ImageDraw
+        d = ImageDraw.Draw(img)
+        rows = self._conversation_rows()
+        row_h = 24 * ss
+        capacity = max(1, int((bottom - top) // row_h))
+        pick = max(0, min(len(rows) - 1, int(getattr(self, "_conversation_pick", 0) or 0)))
+        first = max(0, min(int(getattr(self, "_conversations_scroll", 0) or 0), len(rows) - capacity))
+        first = pick if pick < first else max(first, pick - capacity + 1)   # the pick stays in view
+        self._conversation_pick, self._conversations_scroll = pick, first
+        shown = range(first, min(len(rows), first + capacity))
+        lit = next((index for index in shown if self._hovering(f"conv:{index}")), pick)
+        panel_padding = int(self._visuals.metrics.panel_padding)
+        left, right = box[0] + panel_padding * ss, box[2] - panel_padding * ss
+        for index in shown:
+            name, title, detail, current = rows[index]
+            y = top + (index - first) * row_h
+            detail_w = d.textlength(detail, font=self._sfont) if detail else 0
+            text_right = right - (detail_w + 10 * ss if detail else 0)
+            colour = self._cyan if index == 0 or current else self._text
+            d.text((left, y + 3 * ss), card.fit_text(d, title, max(1, text_right - left), self._font), font=self._font,
+                   fill=(*colour, 255))
+            if detail:
+                d.text((right - detail_w, y + 6 * ss), detail, font=self._sfont, fill=(*self._muted, 255))
+            set_hit(f"conv:{index}", (int(left / ss), int(y / ss), int(right / ss), int((y + row_h) / ss)))
+        if len(rows) > capacity:                  # where the list is, as Saved results shows it
+            track = capacity * row_h - 6 * ss
+            thumb = max(8 * ss, track * capacity / len(rows))
+            y = top + 3 * ss + (track - thumb) * first / max(1, len(rows) - capacity)
+            d.rounded_rectangle((right + 4 * ss, y, right + 5 * ss, y + thumb), radius=ss, fill=(*self._muted, 180))
+        lit_top = top + (lit - first) * row_h
+        self._dim_around_browse_line(img, box, panel_radius * ss, lit_top + 4 * ss, row_h - 8 * ss, ss)
+        at = getattr(self, "_history_icon_at", None)
+        if at is not None:
+            self._draw_history_icon(ImageDraw.Draw(img), at[0], at[1], ss, set_hit, live=True)
 
     def _input_frame_with_caret(self) -> Any:
         base = getattr(self, "_input_base_image", None)
@@ -2219,8 +2329,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if state == PanelState.DASHBOARD:
             title = "MO Desktop — Dashboard"
         elif state == PanelState.HISTORY:
-            title = ("MO Desktop — Clipboard" if getattr(self, "_list_view", "") == "clipboard"
-                     else "MO Desktop — Conversation history")
+            title = "MO Desktop — Clipboard"
+        elif mode == "input" and getattr(self, "_conversations_open", False):
+            title = "MO Desktop — Conversation history"
         elif mode == "input":
             provider_label = self._composer_search_label()
             title = (
@@ -2307,6 +2418,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if mode == "input" and transition:
             self._rest_face_height = None      # a fresh composer measures its rest height again
         self._cube_closing = False
+        if mode != "input":
+            self._conversations_open = False   # the list lives only in the composer
         self._mode = mode
         self._panel_state = state
         self._controls_enabled = bool(controls)
@@ -2577,17 +2690,6 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._reply_idx = len(self._reply_history) - 1
         return self._repaint_for_panel_show(transition)
 
-    def show_session_history(
-        self,
-        items: list[dict[str, Any]],
-        *,
-        on_select: Callable[[str], None],
-        on_new: Callable[[], None],
-        on_back: Callable[[], None],
-    ) -> bool:
-        """Show the dynamic Desktop conversation catalog without opening another window."""
-        return self._show_list("conversations", items[:24], on_select=on_select, on_new=on_new, on_back=on_back)
-
     def show_clipboard(
         self,
         rows: list[dict[str, Any]],
@@ -2743,6 +2845,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._end_browse(repaint=False)
         self._menu = None
         self._cube_closing = False
+        self._conversations_open = False
         self._cancel_panel_transition()
         if getattr(self, "_settle_after", None) is not None:
             try:
@@ -2801,6 +2904,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._privacy_open = False                    # any key returns from the privacy note
             self._repaint()
             return "break"
+        if self._mode == "input" and getattr(self, "_conversations_open", False):
+            if ks in {"Return", "KP_Enter"}:
+                self._pick_conversation()
+                return "break"
+            self.close_conversations(repaint=ks == "Escape")   # typing goes on into the draft
+            if ks == "Escape":
+                return "break"
         if self._mode == "input" and getattr(self, "_results_open", False):
             self._results_open = False                    # the list closes; typing goes on into the draft
             if ks == "Escape":
@@ -2943,6 +3053,12 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             self._repaint()
             return
         key = self._hit_key_at(x, y)
+        if getattr(self, "_mode", "") == "input" and getattr(self, "_conversations_open", False):
+            if key.startswith("conv:"):
+                self._pick_conversation(int(key.split(":", 1)[1]))
+            else:
+                self.close_conversations()        # the history icon or anywhere else: back to the draft
+            return
         if getattr(self, "_browse_idx", None) is not None and key not in {"sessions", "up", "down"}:
             # While browsing, the darkened panel is not clickable: a click there only brings the
             # composer back to normal. The lit message line opens that message in full; the
@@ -3198,6 +3314,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._repaint()
 
     def _nav(self, step: int) -> None:
+        if self._mode == "input" and getattr(self, "_conversations_open", False):
+            self._move_conversation_pick(step)        # Up/Down walk the conversation list while it is open
+            return
         if self._mode == "input" and getattr(self, "_menu", None) is not None:
             open_menu = self._menu
             current = str(getattr(self, "_keyboard_hit", ""))
@@ -3303,6 +3422,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             limit = max(0, len(open_menu["choices"])-getattr(self, "_menu_capacity", 3))
             open_menu["scroll"] = max(0, min(limit, int(open_menu.get("scroll", 0))+direction))
             self._repaint()
+            return "break"
+        if getattr(self, "_mode", "") == "input" and getattr(self, "_conversations_open", False):
+            self._move_conversation_pick(-1 if getattr(event, "delta", 0) > 0 else 1)
             return "break"
         if getattr(self, "_results_open", False):         # the Saved results list scrolls a row at a time
             limit = max(0, len(getattr(self, "_results", None) or []) - _RESULT_ROWS)
