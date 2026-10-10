@@ -3319,6 +3319,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if len(self._reply_history) < 2:
             return
         self._reply_idx = max(0, min(len(self._reply_history) - 1, self._reply_idx + step))
+        self._text_selection = None          # a selection belongs to the answer it was made on
         self._restore_history_reply()
         self._repaint()
 
