@@ -80,6 +80,15 @@ def moody(i: int, t: float, dur: float) -> tuple[float, float, float]:
     return (0.0, 0.28 * e, -0.4 * e)
 
 
+_TURN = 0.55     # the share of each thinking lap spent turning; the rest of the lap is still
+
+
+def thinking_lands_in(elapsed: float, dur: float) -> float:
+    """Seconds until the current quarter turn lands (0 while the formation rests)."""
+    phase = (elapsed / dur) % 1.0 if dur > 0 else 0.0
+    return 0.0 if phase <= 0.0 or phase >= _TURN else (_TURN - phase) * dur
+
+
 def thinking(i: int, t: float, dur: float) -> tuple[float, float, float]:
     """The formation turns a quarter clockwise as one body, drawing in a little, then rests
     (chosen 2026-10-10). The four cubes are identical, so each lap ends exactly where
@@ -87,7 +96,7 @@ def thinking(i: int, t: float, dur: float) -> tuple[float, float, float]:
     from mo_desktop.design import DEFAULT_CUBE_FORM
 
     half_pitch = (1 + DEFAULT_CUBE_FORM.gap_ratio / DEFAULT_CUBE_FORM.edge_ratio) / 2   # corner -> base, edges
-    turn = min(1.0, ((t / dur) % 1.0) / 0.55) if dur > 0 else 0.0
+    turn = min(1.0, ((t / dur) % 1.0) / _TURN) if dur > 0 else 0.0
     angle = turn * turn * turn * (turn * (6 * turn - 15) + 10) * math.pi / 2           # smootherstep
     squeeze = 1.0 - 0.16 * math.sin(math.pi * turn)
     cx, cy = _corner(i)

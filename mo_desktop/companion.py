@@ -4813,6 +4813,8 @@ class CompanionSurface(
 
     def _activity_label_side(self) -> str | None:
         bubble = getattr(self, "_bubble", None)
+        if getattr(bubble, "_cube_closing", False):
+            return None     # a composer folding away holds no side: the label keeps the cubes' own
         if bubble and bubble is not False:
             try:
                 side = bubble.dock_side()

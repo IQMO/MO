@@ -999,14 +999,30 @@ class DesktopCube(CubeInteractionMixin, CubeMotionMixin, CubePanelMixin):
     def set_thinking(self, on: bool) -> None:
         """Sustained working motion through the existing thinking emote,
         driven while a turn runs — the cube IS the thinking/responding indicator, so turn
-        status never opens a surface (it is recorded to the desktop log instead)."""
-        if on and not self._thinking:
-            self._thinking_started_at = time.perf_counter()
-        self._thinking = bool(on)
-        if on:
-            self._stop_looping_emote()  # the recharge loop yields to the working spinner
-            self._hide_at = 0.0
-            self._show()
+        status never opens a surface (it is recorded to the desktop log instead). Stopping
+        lets the quarter turn in progress land first, so the cubes never snap back from it."""
+        now = time.perf_counter()
+        if not on:
+            if self._thinking and not getattr(self, "_thinking_stop_at", 0.0):
+                from mo_desktop.emotes import get, thinking_lands_in
+                _emote, duration = get("thinking")
+                elapsed = now - float(getattr(self, "_thinking_started_at", now) or now)
+                self._thinking_stop_at = now + thinking_lands_in(elapsed, duration)
+            self._expire_thinking(now)
+            return
+        if not self._thinking:
+            self._thinking_started_at = now
+        self._thinking_stop_at = 0.0            # a new turn while one lands simply keeps turning
+        self._thinking = True
+        self._stop_looping_emote()  # the recharge loop yields to the working spinner
+        self._hide_at = 0.0
+        self._show()
+
+    def _expire_thinking(self, now: float) -> None:
+        """End a stopped thinking motion once its last quarter turn has landed."""
+        stop = float(getattr(self, "_thinking_stop_at", 0.0) or 0.0)
+        if stop and now >= stop:
+            self._thinking, self._thinking_stop_at = False, 0.0
 
     def set_faded(self, on: bool) -> None:
         """Dissolve out of the way, or come back. Eased, never a snap."""
