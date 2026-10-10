@@ -516,7 +516,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             track = _RESULT_ROWS * row_h - 8 * ss
             thumb = max(8 * ss, track * _RESULT_ROWS / len(items))
             y = top + (track - thumb) * first / max(1, len(items) - _RESULT_ROWS)
-            d.rounded_rectangle((left + width + 3 * ss, y, left + width + 4 * ss, y + thumb), radius=ss, fill=(*self._muted, 180))
+            d.rounded_rectangle((left + width + 3 * ss, y, left + width + 4 * ss, y + thumb), radius=ss, fill=self._on_card(self._muted, 180))
 
     def _draw_privacy_band(self, img: Any, box: Any, panel_radius: int, panel_padding: int, ss: int) -> None:
         """Generate's privacy, the way browsing earlier replies looks: the panel keeps its size and dims
@@ -607,7 +607,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
     def _play_mark(self, d: Any, x: float, y: float, size: float, kind: str = "video") -> None:
         """MO's media mark (the media card's play disc) at any size; the same disc holds a short level of bars
         for sound and a sun over a hill for a picture instead of the play triangle, so the kinds read apart."""
-        d.ellipse((x, y, x + size, y + size), fill=(*self._cyan, 235))
+        d.ellipse((x, y, x + size, y + size), fill=(*self._cyan, 255))
         if kind == "image":
             ink = (*self._card, 255)
             d.ellipse((x + size * .55, y + size * .26, x + size * .71, y + size * .42), fill=ink)
@@ -1287,7 +1287,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             w = max(1, ss)
             back = (px + ps * 0.30, py + ps * 0.06, px + ps * 0.96, py + ps * 0.72)
             front = (px + ps * 0.04, py + ps * 0.30, px + ps * 0.70, py + ps * 0.96)
-            d.rounded_rectangle(back, radius=r, outline=(*copy_col, 150), width=w)
+            d.rounded_rectangle(back, radius=r, outline=self._on_card(copy_col, 150), width=w)
             d.rounded_rectangle(front, radius=r, outline=(*copy_col, 255), width=w,
                                 fill=(*self._card, 255))
             _set_hit(
@@ -1327,7 +1327,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 d.rounded_rectangle(
                     [px, py, px + preview.size[0], py + preview.size[1]],
                     radius=button_radius,
-                    outline=(*self._edge, 200),
+                    outline=self._on_card(self._edge, 200),
                     width=max(1, ss),
                 )
                 self._draw_panel_preview_actions(
@@ -1382,14 +1382,14 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 lw = int(d.textlength(disp, font=body_font))
                 lx = content_r - lw
                 if is_input and bool(getattr(self, "_select_all", False)) and not placeholder:
-                    d.rectangle([lx, ty, lx + lw, ty + int(design.line_height) * ss], fill=(*self._cyan, 70))
+                    d.rectangle([lx, ty, lx + lw, ty + int(design.line_height) * ss], fill=self._on_card(self._cyan, 70))
                 d.text((lx, ty), disp, font=body_font,
                        fill=(*(self._cyan if mail_heading else fill), 255))
             else:
                 lw = int(self._line_width(d, ln))
                 lx = tx
                 if is_input and bool(getattr(self, "_select_all", False)) and not placeholder:
-                    d.rectangle([lx, ty, lx + lw, ty + int(design.line_height) * ss], fill=(*self._cyan, 70))
+                    d.rectangle([lx, ty, lx + lw, ty + int(design.line_height) * ss], fill=self._on_card(self._cyan, 70))
                 for piece, bold in ln:
                     font = (
                         self._sfont
@@ -1427,11 +1427,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             thumb_y = text_y + int((track_h - thumb_h) * self._scroll_line / self._max_scroll_line)
             d.rounded_rectangle(
                 [track_x, text_y, track_x + 2 * ss, text_y + track_h],
-                radius=ss, fill=(*self._muted, 45),
+                radius=ss, fill=self._on_card(self._muted, 45),
             )
             d.rounded_rectangle(
                 [track_x, thumb_y, track_x + 2 * ss, thumb_y + thumb_h],
-                radius=ss, fill=(*self._muted, 170),
+                radius=ss, fill=self._on_card(self._muted, 170),
             )
 
         if option_rows:
@@ -1491,11 +1491,11 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 thumb_y = options_top + int((viewport_h - thumb_h) * self._options_scroll / self._max_options_scroll)
                 d.rounded_rectangle(
                     [track_x, options_top, track_x + 2 * ss, options_top + viewport_h],
-                    radius=ss, fill=(*self._muted, 45),
+                    radius=ss, fill=self._on_card(self._muted, 45),
                 )
                 d.rounded_rectangle(
                     [track_x, thumb_y, track_x + 2 * ss, thumb_y + thumb_h],
-                    radius=ss, fill=(*self._muted, 170),
+                    radius=ss, fill=self._on_card(self._muted, 170),
                 )
 
         # footer: reply recall, history, composer searches, primary action, and context action.
@@ -1512,7 +1512,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 rx0 = rx1 - ic - 2 * px
                 d.rounded_rectangle([rx0, cyy - 4 * ss, rx1, cyy + 15 * ss], radius=button_radius,
                                     fill=(*self._edge, 255),
-                                    outline=(*self._cyan, 255 if self._hovering("action") else 220),
+                                    outline=self._on_card(self._cyan, 255 if self._hovering("action") else 220),
                                     width=max(1, ss) * (2 if self._hovering("action") else 1))
                 ix, iy = rx0 + px, cyy - 1 * ss
                 if "send" in label.casefold():
@@ -1696,7 +1696,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 track = max(8*ss, menu_bottom-menu_top-8*ss)
                 thumb = max(8*ss, track*self._menu_capacity/len(choices))
                 ty = menu_top+4*ss+(track-thumb)*scroll/max(1, len(choices)-self._menu_capacity)
-                d.rounded_rectangle((menu_right-3*ss, ty, menu_right-2*ss, ty+thumb), radius=ss, fill=(*self._muted, 180))
+                d.rounded_rectangle((menu_right-3*ss, ty, menu_right-2*ss, ty+thumb), radius=ss, fill=self._on_card(self._muted, 180))
             caret_rect = None
         if listing:
             self._draw_conversations(img, box, ay - 8 * ss, box[3] - (int(design.footer_height) + lift + 4) * ss,
@@ -1867,6 +1867,13 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         except Exception:
             pass
 
+    def _on_card(self, rgb: Any, alpha: float) -> tuple[int, int, int, int]:
+        """A see-through colour as the opaque colour it shows over the card. PIL replaces RGBA pixels
+        instead of blending them, so drawing a translucent colour on the card would punch a
+        see-through hole in it (the composer's text selection did)."""
+        amount = max(0.0, min(255.0, float(alpha))) / 255.0
+        return (*(int(round(c * amount + b * (1.0 - amount))) for c, b in zip(rgb[:3], self._card[:3])), 255)
+
     def _draw_history_icon(self, d: Any, right: float, cyy: float, ss: int, set_hit: Any, *,
                            live: bool = False) -> float:
         """The one history icon (the clock that opens the conversation history), ending at ``right``
@@ -1972,7 +1979,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             track = capacity * row_h - 6 * ss
             thumb = max(8 * ss, track * capacity / len(rows))
             y = top + 3 * ss + (track - thumb) * first / max(1, len(rows) - capacity)
-            d.rounded_rectangle((right + 4 * ss, y, right + 5 * ss, y + thumb), radius=ss, fill=(*self._muted, 180))
+            d.rounded_rectangle((right + 4 * ss, y, right + 5 * ss, y + thumb), radius=ss, fill=self._on_card(self._muted, 180))
         lit_top = top + (lit - first) * row_h
         self._dim_around_browse_line(img, box, panel_radius * ss, lit_top + 4 * ss, row_h - 8 * ss, ss)
         at = getattr(self, "_history_icon_at", None)
