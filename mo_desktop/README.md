@@ -341,7 +341,9 @@ Replies stay concise by default but retain requested detail in the existing scro
 A reply card uses the composer's footer: a small "Reply to MO…" field, the same history icon and
 the send button. Type in the field and press Enter (or send) to answer MO
 without leaving the answer: the answer folds back into the cubes and the next one grows from
-them. Up/Down step through earlier replies. A long answer also shows a bigger/smaller button beside
+them. When the answer is to something you typed, its field already has the keyboard, so you just
+keep typing; it leaves the keyboard alone if you typed somewhere else or switched windows while
+MO worked. Up/Down step through earlier replies. A long answer also shows a bigger/smaller button beside
 Copy (two diagonal arrows): bigger
 lets the card grow to three times its usual height, smaller returns it to its usual size; each new answer starts at
 its usual size. Drag an answer by its top strip (above the text) to move the four cubes and

@@ -1768,6 +1768,41 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
 
 
 
+    def _note_foreground_before_typing(self) -> None:
+        """Remember the window the keyboard came from, where Windows returns it when the panel folds."""
+        try:
+            import win32gui
+            current = win32gui.GetForegroundWindow()
+        except Exception:
+            return
+        if current and current != getattr(getattr(self, "_layered", None), "hwnd", 0):
+            self._foreground_before_typing = current
+
+    def keyboard_still_here(self) -> bool:
+        """True while the keyboard is still on this panel or back where it came from when the panel
+        folded away, so nobody has picked another window since."""
+        try:
+            import win32gui
+            current = win32gui.GetForegroundWindow()
+        except Exception:
+            return False
+        ours = {getattr(self._layered, "hwnd", 0), getattr(self, "_foreground_before_typing", 0),
+                getattr(self._layered, "_text_previous_hwnd", 0)}
+        return bool(current) and current in ours
+
+    def focus_follow_up(self) -> None:
+        """Put the keyboard in the answer's Reply field, as the composer has it, so the conversation
+        goes on by typing. If Windows refuses the change, a click on the field still works."""
+        if not (bool(getattr(self, "_visible", False)) and self._mode == "reply"
+                and "continue" in (getattr(self, "_hit", None) or {})):
+            return
+        focus = getattr(self._layered, "focus_text_input", None)
+        try:
+            focus()
+        except Exception:
+            return
+        self._repaint_continue_field()
+
     def _continue_selection(self) -> tuple[int, int] | None:
         """The follow-up field's caret/selection while it has the keyboard, else None."""
         getter = getattr(getattr(self, "_layered", None), "text_selection", None)
@@ -2511,6 +2546,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             painted = self._repaint()
         if painted:
             if is_input:
+                self._note_foreground_before_typing()
                 try:
                     self._win.activate()
                 except Exception:

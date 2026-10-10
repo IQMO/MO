@@ -5214,12 +5214,14 @@ class CompanionSurface(
             paths = [str(path) for path in bubble._attachment_preview_paths]
             named = {path: name for name, path in reference_tokens(paths).items()}
             text += "\n\n" + _attached_files_note(paths, named)
+        self._typed_turn_at = time.monotonic()      # the answer may take the keyboard back
         return self._submit_text_request(text, source="submit", hide_input=False, preserve_panel=generate, media_selection=selection)
 
     def _continue_from_answer(self, text: str) -> bool:
         """A follow-up typed on the answer's own field takes the composer's request path."""
         if self._recording_voice:
             self._on_stop_click()
+        self._typed_turn_at = time.monotonic()      # the answer may take the keyboard back
         return self._submit_text_request(text, source="submit", hide_input=False)
 
     def _get_reply_bubble(self) -> Any:
@@ -5410,7 +5412,20 @@ class CompanionSurface(
         cube = getattr(self, "_cube", None)   # the reply took over; clear the working readout
         if cube is not None:
             self._clear_activity()
+        if controls and self._answer_takes_the_keyboard():
+            self._bubble.after_panel_transition(self._bubble.focus_follow_up)
         return True
+
+    def _answer_takes_the_keyboard(self) -> bool:
+        """The answer to a request typed here takes the keyboard (its Reply field), once, so the
+        conversation goes on by typing. Never when a key went down anywhere since sending (MO's own
+        computer actions included) or another window took over while MO worked."""
+        sent = float(getattr(self, "_typed_turn_at", 0.0) or 0.0)
+        self._typed_turn_at = 0.0
+        if not sent or float(getattr(self, "_last_key_down_at", 0.0) or 0.0) > sent + 0.5:
+            return False
+        still = getattr(getattr(self, "_bubble", None), "keyboard_still_here", None)
+        return bool(callable(still) and still())
 
     def _launch_issue_report_from_reply(self) -> None:
         text = str(getattr(self, "_last_reply_dialog_text", "") or "")
@@ -6333,6 +6348,8 @@ class CompanionSurface(
         Win+Alt+M) and key auto-repeat never arm a gesture."""
         name = str(getattr(event, "name", "") or "")
         etype = getattr(event, "event_type", "")
+        if etype == "down":
+            self._last_key_down_at = time.monotonic()   # typing elsewhere keeps an answer off the keyboard
         if name == "esc" and etype == "down":
             self._maybe_escape_stop()
         is_ctrl = "ctrl" in name
