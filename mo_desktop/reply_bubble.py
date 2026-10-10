@@ -1097,7 +1097,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._max_options_scroll = max(0, options_content_h - (options_h - 8)) if option_rows else 0
         self._options_scroll = max(0, min(int(getattr(self, "_options_scroll", 0)), self._max_options_scroll))
         self._options_region = None
-        text_budget = max(minimum_text, min(int(design.max_text_height), available_h - options_h))
+        # A long answer can be made bigger: it then takes the screen's height instead of the cap.
+        expanded = self._mode == "reply" and bool(getattr(self, "_reply_expanded", False))
+        cap = available_h if expanded else int(design.max_text_height)
+        text_budget = max(minimum_text, min(cap, available_h - options_h))
         max_visible = max(1, text_budget // line_h)
         visible_count = max(1, min(len(all_lines), max_visible))
         self._max_scroll_line = max(0, len(all_lines) - visible_count)
@@ -1125,7 +1128,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             shown_rows = max(1, min(len(getattr(self, "_results", None) or []), _RESULT_ROWS))
             lines = [[] for _row in range(-(-shown_rows * _RESULT_ROW_H // line_h))]
             visible_count = len(lines)
-        text_h = max(int(design.min_text_height), min(int(design.max_text_height), visible_count * line_h))
+        text_h = max(int(design.min_text_height), min(cap, visible_count * line_h))
         panel_radius = int(self._visuals.metrics.panel_corner_radius)
         card_w = int(content_width) + 2 * panel_padding
         card_h = (
@@ -1245,6 +1248,20 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             d.line([(hx + 7.5 * ss, hy + 4 * ss), (hx + 7.5 * ss, hy + 8 * ss), (hx + 10.5 * ss, hy + 10 * ss)],
                    fill=(*hcol, 255), width=max(1, ss))
             _set_hit("sessions", (int(hx / ss) - 2, int(hy / ss) - 2, int(hx / ss) + 17, int(hy / ss) + 17),
+                     min_width=26, min_height=26)
+        if (not is_input and not image_card
+                and getattr(self, "_panel_state", PanelState.REPLY) in (PanelState.REPLY, PanelState.FOOTERLESS)
+                and (self._max_scroll_line > 0 or expanded)):
+            # A long answer's bigger/smaller button, left of the history and Copy marks.
+            from interface.desktop_brand import make_glyph_icon
+            es = max(10, int(getattr(getattr(self, "_panel_design", DEFAULT_DESKTOP_PANEL_DESIGN),
+                                     "pin_icon_size", 14) or 14)) * ss
+            ex = box[2] - panel_padding * ss - es - 22 * ss * (2 if callable(getattr(self, "_on_session_history", None)) else 1)
+            ey = box[1] + int(design.accent_top) * ss - 3 * ss
+            color = self._cyan if expanded or self._hovering("expand") else self._muted
+            img.alpha_composite(make_glyph_icon("restore" if expanded else "maximize", es,
+                                                color="#%02x%02x%02x" % tuple(color)), (int(ex), int(ey)))
+            _set_hit("expand", (int(ex / ss) - 3, int(ey / ss) - 3, int((ex + es) / ss) + 3, int((ey + es) / ss) + 3),
                      min_width=26, min_height=26)
         if not is_input and not image_card:
             # Copy MO's message. Two offset rounded squares — the universal copy mark. The old
@@ -2484,6 +2501,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._stash_input_draft()   # a reply arriving mid-compose must not drop the draft
         state = PanelState.FOOTERLESS if not controls else PanelState.REPLY
         transition = self._prepare_panel_show("reply", state, controls=controls)
+        if transition:
+            self._reply_expanded = False            # each new answer starts at its normal size
         if transition and getattr(self, "_continue_text", ""):
             self._continue_text = ""
             clear = getattr(self._layered, "clear_text_input", None)
@@ -3091,6 +3110,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             if callable(focus):
                 focus()
             self._repaint()
+        elif key == "expand":
+            self._reply_expanded = not bool(getattr(self, "_reply_expanded", False))
+            self._scroll_line = 0 if not self._reply_expanded else self._scroll_line
+            self._repaint()             # the reply's height glide carries it smoothly
         elif key == "continue_send":
             if str(getattr(self, "_continue_text", "") or "").strip():
                 self._send_continue()

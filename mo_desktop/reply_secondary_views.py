@@ -260,6 +260,7 @@ class ReplySecondaryViewsMixin:
             "action": str(getattr(self, "_footer_action_label", "") or "Action"),
             "send": f"Search {provider_label}" if provider_label else "Send message",
             "continue": "Reply to MO",
+            "expand": "Make the answer smaller" if getattr(self, "_reply_expanded", False) else "Make the answer bigger",
             "continue_send": "Send reply",
             "up": "Earlier message",
             "down": "Later message",

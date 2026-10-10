@@ -342,7 +342,9 @@ A reply card uses the composer's footer: a small "Reply to MO…" field, the sam
 buttons and the send button. Type in the field and press Enter (or send) to answer MO
 without leaving the answer: the answer folds back into the cubes and the next one grows from
 them. The history buttons step through earlier replies; the conversation-history button sits at
-the top beside Copy. Replies retain their own choices and attachment presentation when recalled or
+the top beside Copy. A long answer also shows a bigger/smaller button there: bigger lets the
+card take the screen's height, smaller returns it to its usual size; each new answer starts at
+its usual size. Replies retain their own choices and attachment presentation when recalled or
 restored after restart. Independent choices support multi-selection; exclusive
 destinations and approvals remain single-select. Long choice lists scroll inside
 the card with Submit still visible; selecting a row preserves its full detail,
