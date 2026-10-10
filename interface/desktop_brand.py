@@ -484,6 +484,14 @@ def make_glyph_icon(
         else:
             draw.line(body + body[:1], fill=color, width=stroke, joint="curve")
         draw.line([pt(.5, .59), pt(.5, .90)], fill=color, width=stroke)
+    elif name in ("expand", "collapse"):      # two diagonal arrows: outward grows, inward shrinks
+        for corner, inner in (((.84, .16), (.58, .42)), ((.16, .84), (.42, .58))):
+            tip, tail = (corner, inner) if name == "expand" else (inner, corner)
+            draw.line([pt(*tail), pt(*tip)], fill=color, width=stroke)
+            sx = .26 if tail[0] > tip[0] else -.26
+            sy = .26 if tail[1] > tip[1] else -.26
+            draw.line([pt(tip[0] + sx, tip[1]), pt(*tip), pt(tip[0], tip[1] + sy)],
+                      fill=color, width=stroke, joint="curve")
     elif name == "maximize":
         draw.rectangle([pt(0.2, 0.2), pt(0.8, 0.8)], outline=color, width=stroke)
     elif name == "restore":

@@ -342,8 +342,8 @@ A reply card uses the composer's footer: a small "Reply to MO…" field, the sam
 buttons and the send button. Type in the field and press Enter (or send) to answer MO
 without leaving the answer: the answer folds back into the cubes and the next one grows from
 them. The history buttons step through earlier replies; the conversation-history button sits at
-the top beside Copy. A long answer also shows a bigger/smaller button there: bigger lets the
-card take the screen's height, smaller returns it to its usual size; each new answer starts at
+the top beside Copy. A long answer also shows a bigger/smaller button there (two diagonal arrows): bigger
+lets the card grow to three times its usual height, smaller returns it to its usual size; each new answer starts at
 its usual size. Drag an answer by its top strip (above the text) to move the four cubes and
 the answer together. Drag across an answer's text to select part of it; Ctrl+C or Copy then
 copies the selection (with nothing selected, the whole answer). Replies retain their own choices and attachment presentation when recalled or

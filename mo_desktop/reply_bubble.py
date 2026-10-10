@@ -1102,9 +1102,10 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         self._max_options_scroll = max(0, options_content_h - (options_h - 8)) if option_rows else 0
         self._options_scroll = max(0, min(int(getattr(self, "_options_scroll", 0)), self._max_options_scroll))
         self._options_region = None
-        # A long answer can be made bigger: it then takes the screen's height instead of the cap.
+        # A long answer can be made bigger: three times its usual text height (the panel setting),
+        # never past the screen.
         expanded = self._mode == "reply" and bool(getattr(self, "_reply_expanded", False))
-        cap = available_h if expanded else int(design.max_text_height)
+        cap = min(available_h, 3 * int(design.max_text_height)) if expanded else int(design.max_text_height)
         text_budget = max(minimum_text, min(cap, available_h - options_h))
         max_visible = max(1, text_budget // line_h)
         visible_count = max(1, min(len(all_lines), max_visible))
@@ -1196,6 +1197,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                   and getattr(self, "_panel_state", PanelState.REPLY) in (PanelState.REPLY, PanelState.FOOTERLESS))
         self._header_band = ((int(box[0] / ss), int(box[1] / ss), int(box[2] / ss), int(box[1] / ss) + body_top)
                              if answer else None)
+        self._continue_geom = None
 
         def _set_hit(key: str, rect: tuple[int, int, int, int], *,
                      min_width: int = 0, min_height: int = 0) -> None:
@@ -1269,7 +1271,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             ex = box[2] - panel_padding * ss - es - 22 * ss * (2 if callable(getattr(self, "_on_session_history", None)) else 1)
             ey = box[1] + int(design.accent_top) * ss - 3 * ss
             color = self._cyan if expanded or self._hovering("expand") else self._muted
-            img.alpha_composite(make_glyph_icon("restore" if expanded else "maximize", es,
+            img.alpha_composite(make_glyph_icon("collapse" if expanded else "expand", es,
                                                 color="#%02x%02x%02x" % tuple(color)), (int(ex), int(ey)))
             _set_hit("expand", (int(ex / ss) - 3, int(ey / ss) - 3, int((ex + es) / ss) + 3, int((ey + es) / ss) + 3),
                      min_width=26, min_height=26)
@@ -1376,7 +1378,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                     x0, x1 = tx + self._line_prefix_width(d, ln, first), tx + self._line_prefix_width(d, ln, last)
                 if x1 > x0:
                     mark = tuple(int(base * 0.62 + accent * 0.38) for base, accent in zip(self._card, self._cyan))
-                    d.rounded_rectangle([x0, ty - 1 * ss, x1, ty + row_h - 3 * ss], radius=ss, fill=(*mark, 255))
+                    d.rounded_rectangle([x0, ty - 1 * ss, x1, ty + row_h - 3 * ss], radius=button_radius,
+                                        fill=(*mark, 255))
             if rtl:
                 lw = int(d.textlength(disp, font=body_font))
                 lx = content_r - lw
@@ -1622,7 +1625,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 if tip:
                     tip_left = max(box[0] + panel_padding * ss, tip_right - d.textlength(tip, font=self._sfont) - 16 * ss)
                     d.rounded_rectangle((tip_left, cyy - 4 * ss, tip_right, cyy + 15 * ss), radius=button_radius,
-                                        fill=(*self._entry, 255), outline=(*self._edge, 120), width=max(1, ss))
+                                        fill=(*self._entry, 255))
                     d.text((tip_left + 8 * ss, cyy - 3 * ss), card.fit_text(d, tip, tip_right - tip_left - 16 * ss, self._sfont),
                            font=self._sfont, fill=(*self._muted, 255))
             elif bool(getattr(self, "_controls_enabled", True)):
@@ -1652,29 +1655,8 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                                                      earlier=index > 0, later=index < count - 1) - 6 * ss
                 fx0 = box[0] + panel_padding * ss
                 if fx1 - fx0 >= 80 * ss:
-                    selection = self._continue_selection()
-                    self._continue_drawn_selection = selection
-                    typed = str(getattr(self, "_continue_text", "") or "")
-                    live = selection is not None or self._hovering("continue")
-                    d.rounded_rectangle([fx0, cyy - 4 * ss, fx1, cyy + 15 * ss], radius=button_radius,
-                                        fill=(*self._entry, 255), outline=(*(self._cyan if live else self._edge), 255),
-                                        width=max(1, ss))
-                    tx, room = fx0 + 7 * ss, fx1 - fx0 - 14 * ss
-                    start = 0
-                    while start < len(typed) and d.textlength(typed[start:], font=self._sfont) > room:
-                        start += 1          # the end of a long follow-up stays in view
-                    if typed:
-                        d.text((tx, cyy - 3 * ss), typed[start:], font=self._sfont, fill=(*self._text, 255))
-                    elif selection is None:
-                        d.text((tx, cyy - 3 * ss), "Reply to MO…", font=self._sfont, fill=(*self._muted, 255))
-                    if selection is not None:
-                        lo, hi = (max(0, value - start) for value in selection)
-                        cx = min(fx1 - 5 * ss, tx + d.textlength(typed[start:start + hi], font=self._sfont))
-                        if lo != hi:
-                            sx = min(cx, tx + d.textlength(typed[start:start + lo], font=self._sfont))
-                            d.line((sx, cyy + 12 * ss, cx, cyy + 12 * ss), fill=(*self._cyan, 255), width=ss)
-                        else:
-                            d.line((cx, cyy - 1 * ss, cx, cyy + 12 * ss), fill=(*self._cyan, 255), width=ss)
+                    self._continue_geom = (fx0, fx1, cyy, ss, button_radius)
+                    self._draw_continue_field(d, *self._continue_geom)
                     _set_hit("continue", (int(fx0 / ss), int((cyy - 4 * ss) / ss), int(fx1 / ss),
                                           int((cyy + 15 * ss) / ss)))
 
@@ -1794,8 +1776,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
             x0 = left + index * (size + gap)
             hot = enabled and self._hovering(key)
             d.rounded_rectangle([x0, cyy - 4 * ss, x0 + size, cyy + 15 * ss], radius=radius,
-                                fill=(*self._entry, 255), outline=(*(self._cyan if hot else self._edge), 255),
-                                width=max(1, ss))
+                                fill=(*self._entry, 255))
             color = (self._cyan if hot else self._text) if enabled else self._muted
             self._chevron(d, x0 + size / 2, cyy + (5.5 + (-1 if key == "down" else 1)) * ss, 3.5 * ss, key, color, ss,
                           width=max(1, int(1.4 * ss)))
@@ -1824,10 +1805,63 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         except Exception:
             pass
 
+    def _card_key(self, card_w: int) -> tuple:
+        """What a finished card depends on, for reusing it across a reveal or a fold."""
+        return (self._mode, getattr(self, "_panel_state", PanelState.REPLY), getattr(self, "_body", ""),
+                card_w, getattr(self, "_role_label", ""))
+
+    def _draw_continue_field(self, d: Any, fx0: float, fx1: float, cyy: float, ss: int, radius: int) -> None:
+        """The answer's follow-up field: a fill-only pill with its text or hint and the caret."""
+        selection = self._continue_selection()
+        self._continue_drawn_selection = selection
+        typed = str(getattr(self, "_continue_text", "") or "")
+        d.rounded_rectangle([fx0, cyy - 4 * ss, fx1, cyy + 15 * ss], radius=radius, fill=(*self._entry, 255))
+        tx, room = fx0 + 7 * ss, fx1 - fx0 - 14 * ss
+        start = 0
+        while start < len(typed) and d.textlength(typed[start:], font=self._sfont) > room:
+            start += 1          # the end of a long follow-up stays in view
+        if typed:
+            d.text((tx, cyy - 3 * ss), typed[start:], font=self._sfont, fill=(*self._text, 255))
+        elif selection is None:
+            d.text((tx, cyy - 3 * ss), "Reply to MO…", font=self._sfont, fill=(*self._muted, 255))
+        if selection is not None:
+            lo, hi = (max(0, value - start) for value in selection)
+            cx = min(fx1 - 5 * ss, tx + d.textlength(typed[start:start + hi], font=self._sfont))
+            if lo != hi:
+                sx = min(cx, tx + d.textlength(typed[start:start + lo], font=self._sfont))
+                d.line((sx, cyy + 12 * ss, cx, cyy + 12 * ss), fill=(*self._cyan, 255), width=ss)
+            else:
+                d.line((cx, cyy - 1 * ss, cx, cyy + 12 * ss), fill=(*self._cyan, 255), width=ss)
+
+    def _repaint_continue_field(self) -> bool:
+        """Typing in the follow-up field paints only the field over the settled answer, the way the
+        composer's caret is painted over its cached card; anything else takes the full repaint."""
+        settled = getattr(self, "_settled_card", None)
+        position = getattr(self, "_last_layered_geometry", None)
+        geom = settled[1] if settled is not None else None
+        if (geom is None or position is None or geom is not getattr(self, "_continue_geom", None)
+                or self._panel_transition_active() or getattr(self, "_panel_glide", None) is not None):
+            return self._repaint()
+        from PIL import Image, ImageDraw
+        fx0, fx1, cyy, ss, radius = geom
+        image = settled[2]
+        x0, y0 = max(0, int(fx0 // ss) - 1), max(0, int((cyy - 4 * ss) // ss) - 1)
+        x1, y1 = min(image.width, int(-(-fx1 // ss)) + 1), min(image.height, int(-(-(cyy + 15 * ss) // ss)) + 1)
+        crop = image.crop((x0, y0, x1, y1))
+        patch = Image.frombytes("RGBa", crop.size, crop.tobytes()).convert("RGBA").resize(
+            ((x1 - x0) * ss, (y1 - y0) * ss), Image.Resampling.NEAREST)
+        self._font, self._bfont, self._sfont, self._ifont = self._fonts(ss)
+        self._draw_continue_field(ImageDraw.Draw(patch), fx0 - x0 * ss, fx1 - x0 * ss, cyy - y0 * ss, ss, radius)
+        frame = image.copy()
+        frame.paste(card.finish(patch, ss), (x0, y0))
+        if self._layered.blit(frame, position[0], position[1], premultiplied=True, position=False):
+            return True
+        return self._repaint()
+
     def _continue_changed(self, value: str) -> None:
         self._continue_text = str(value or "")
         if self._visible and self._mode == "reply" and not getattr(self, "_cube_closing", False):
-            self._repaint()
+            self._repaint_continue_field()
 
     def _send_continue(self) -> None:
         """Send the typed follow-up: the answer folds back into its cube and MO takes the turn."""
@@ -1938,8 +1972,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         side = "right" if cx + half + card_w + 2 * int(design.shadow_pad) <= sw else "left"
         self._dock_side = side
         if morphing:
-            key = (self._mode, self._panel_state, self._body, card_w, getattr(self, "_role_label", ""))   # a role switch mid-reveal redraws
+            key = self._card_key(card_w)   # a role switch mid-reveal redraws
             if getattr(self, "_transition_base", None) is None or getattr(self, "_transition_base_key", None) != key:
+                # (a fold starts from the settled card already on screen, set by collapse_to_cube)
                 self._transition_base = self._render()   # rendered ONCE, crisp
                 self._transition_base_key = key
             img = self._transition_base
@@ -1957,6 +1992,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
                 img = self._render()
                 if fast:
                     self._schedule_settle()
+            self._settled_card = (self._card_key(card_w), getattr(self, "_continue_geom", None), img)
         W, H = img.size
         overlap = int(design.dock_overlap)
         card_left = (cx + half - overlap) if side == "right" else (cx - half - card_w + overlap)
@@ -2955,6 +2991,9 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         started = self._transition_started_at
         opened_for = (0.0 if self._transition_pending_start else
                       min(duration, max(0.0, now-started)) if started > 0 else duration)
+        settled = getattr(self, "_settled_card", None)
+        if settled is not None and settled[0] == self._card_key(self._card_width()):
+            self._transition_base, self._transition_base_key = settled[2], settled[0]   # no second render
         if opened_for >= duration:
             bx, by = self._cube._bases[index]
             self._cube_source_center = (self._cube._x+bx-self._cube._size/2,
@@ -3990,7 +4029,7 @@ class ReplyBubble(ReplyPanelToolsMixin, ReplySecondaryViewsMixin):
         if (getattr(self, "_mode", "") == "reply" and "continue" in (getattr(self, "_hit", None) or {})
                 and not getattr(self, "_cube_closing", False)
                 and self._continue_selection() != getattr(self, "_continue_drawn_selection", None)):
-            self._repaint()
+            self._repaint_continue_field()
         try:
             # Every 30 ms: a normal click (60-120 ms, press to release) can no longer fall between two
             # reads; at 90 ms a quick click often did and the panel needed a second one (his report).
