@@ -27,7 +27,7 @@ the linked product documentation. See the
 
 See the [release notes](https://github.com/IQMO/MO/releases/tag/v0.1.0-preview.1) for the exact release assets.
 
-## Preparation history
+## Earlier product work
 
 ### Product
 
@@ -48,17 +48,14 @@ See the [release notes](https://github.com/IQMO/MO/releases/tag/v0.1.0-preview.1
   local Ollama, and custom OpenAI-compatible endpoints. Provider access and
   charges remain the user's responsibility.
 
-### Current preparation
+### Setup and runtime behavior
 
-- User guidance is being separated from private development instructions. The
+- User guidance is separate from private development instructions. The
   [README](README.md), [FAQ](FAQ.md) and [capability reference](CAPABILITIES.md)
   describe product behavior and availability.
-- Windows packaging is under development. Component checks do not establish
-  that an installer or installed runtime is ready.
 - Native `mo setup` reuses existing provider/model choices and Codex subscription
   sign-in, with optional Desktop enablement and Windows sign-in startup. Android
-  pairing stays optional in MO Phone after Hub setup. The branded installer and
-  first-conversation journey still require installed acceptance.
+  pairing stays optional in MO Phone after Hub setup.
 - Setup keeps the saved provider/model and Codex session status visible when
   reopened. A saved session is distinguished from a verified provider response.
 - An optional paired local MCP connection lets ChatGPT Desktop submit work to
@@ -97,15 +94,3 @@ See the [release notes](https://github.com/IQMO/MO/releases/tag/v0.1.0-preview.1
 - Windows child processes preserve the non-secret machine name required by
   ordinary system utilities. Requested native key actions use the normal
   computer-action authority and verification boundaries.
-
-### Distribution and support
-
-- Source and its history stay private. Public downloads will contain the
-  installed product and user guidance, separately from profile data and credentials.
-- A public defect-reporting route will accompany distribution. The
-  [security policy](.github/SECURITY.md) records the private reporting channel
-  still required before Windows release.
-
-The Windows installed product remains **unreleased**. Android's separate
-closed-test and Production availability are documented in [ANDROID.md](ANDROID.md);
-Windows packaging checks do not change that status.

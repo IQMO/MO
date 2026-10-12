@@ -5,15 +5,36 @@
 <h1 align="center">MO Agent</h1>
 
 <p align="center">
-  <strong><a href="https://github.com/IQMO/MO/releases/download/v0.1.0-preview.2/MO-0.1.0-preview.2-windows-x64.exe">Download MO for Windows</a></strong> ·
-  <a href="#installation-availability">Install with a command</a> ·
-  <a href="https://github.com/IQMO/MO/issues">Support</a><br>
-  Free · Windows 11 x64 · One installer; no source checkout or developer tools needed
+  <strong>Your local AI agent for coding, everyday assistance and visual work.</strong>
 </p>
 
+MO helps you work with your projects, files and computer using the AI provider
+you choose. **MO Terminal** is the engineering workbench for investigating,
+building and reviewing projects. **MO Desktop** is the resident companion for
+everyday questions, screen help, voice and files. **MO Design** gives you a
+shared Board and interactive previews to explore an idea before implementing it.
+
+MO keeps your conversations, memory, preferences and project context in a
+private home on your machine. Its tools, task evidence and saved work remain
+with MO when you change models. With **MO Everywhere**, your own Hub connects
+paired devices so you can continue work and reach your computers while away.
+Conversations stay separate unless you explicitly share them.
+
+**MO for Windows is free and closed-source.** The [public repository](https://github.com/IQMO/MO)
+provides the app, updates and user guides; the implementation stays private.
+Only the [Android companion](ANDROID.md#availability) is paid. AI provider
+access and any usage charges are separate.
+
 <p align="center">
-  <strong>One local agent runtime. Honest progress. Reachable everywhere.</strong>
+  <strong><a href="https://github.com/IQMO/MO/releases/download/v0.1.0-preview.2/MO-0.1.0-preview.2-windows-x64.exe">Download MO for Windows</a></strong> ·
+  <a href="#installation-availability">Install with a command</a> ·
+  <a href="#getting-started">Get started</a> ·
+  <a href="https://github.com/IQMO/MO/issues">Support</a><br>
+  Windows 11 x64 · Preview 0.1.0-preview.2
 </p>
+
+**[Choose an interface](#reachable-everywhere)** · **[What makes MO different](#what-makes-mo-different)** ·
+**[Everything MO does](#everything-mo-does)** · **[FAQ](FAQ.md)**
 
 <p align="center">
   <a href="LICENSE"><img alt="PolyForm Shield License 1.0.0" src="https://img.shields.io/badge/License-PolyForm%20Shield%201.0.0-2ea44f"></a>
@@ -22,26 +43,6 @@
 <p align="center">
   <img src="assets/mo-teaser.gif" alt="Scattered terminals, tabs, chats and jobs gather into MO's four cubes: Meet MO Agent" width="100%">
 </p>
-
-MO is a local agent runtime around the AI model you choose. The model proposes;
-MO's runtime owns the tools, safety, sessions, memory, proof and continuity, so
-your work survives a switch of model, a closed terminal, or a move to another
-device. Work in the terminal, MO's main workbench; add MO Desktop as a resident
-assistant on Windows; reach your machines from the Android app through your own
-Hub; or use Telegram and a headless service. Everything stays private by default.
-
-**[Installation availability](#installation-availability)** · **[What makes MO different](#what-makes-mo-different)** ·
-**[Everything MO does](#everything-mo-does)** · **[Choose an interface](#reachable-everywhere)** ·
-**[Read the FAQ](FAQ.md)**
-
-> Start with the [critical FAQ and surface comparison](FAQ.md) if you want to
-> understand what runs where, what stays private, or which interface to use.
-
-MO is a closed-source product. The [public repository](https://github.com/IQMO/MO)
-provides downloads, updates and user guides. MO's implementation and history remain private.
-
-MO for Windows is free. The [Android companion](ANDROID.md#availability) is
-the paid app; its purchase is separate from provider access and Windows setup.
 
 ## What makes MO different
 
@@ -53,6 +54,22 @@ the paid app; its purchase is separate from provider access and Windows setup.
 - **Private, and it learns you openly.** Everything lives in your private MO home; credentials never enter the model's context; learning is reviewable and memory is kept in separate, honest kinds.
 - **Deep project work.** A structural code graph, project mapping, project rules, goals with an auditor, background workers, roles and a review team that hands confirmed findings back for fixing.
 - **It uses your computer with you.** Target-owned actions on real windows, tabs and controls, each returning its own proof; actions requiring approval name their target; a resident companion you can talk to.
+
+## Reachable everywhere
+
+| Surface | Best for | What you need |
+| --- | --- | --- |
+| **MO Terminal** | Coding, research, file work, goals, reviews and automation | MO for Windows and a configured provider |
+| **MO Desktop** | Dashboard, visual design, screen help, voice and files | Enable Desktop in setup or Settings; Windows-focused |
+| **MO Shell** | Keep the terminal beside a selected app in a floating workspace | Open Shell from the Desktop launcher on Windows |
+| **MO Everywhere for Android** | Conversations, tasks, schedules, Remote and Files while away | Google Play access and your running Hub for connected features; separate **This phone** chat needs only your provider |
+| **Telegram** | Remote conversation and approvals | Your configured bot and running MO service |
+| **Headless service** | Keep the Hub, scheduler and integrations running | An existing configured MO host; public server packages are not available yet |
+
+Detailed ownership, capability, and limitation rows are in
+[FAQ — Which MO surface should I use?](FAQ.md#which-mo-surface-should-i-use).
+The [capability reference](CAPABILITIES.md) covers built-in commands, supported
+surfaces, privacy boundaries and observable behavior.
 
 ## Everything MO does
 
@@ -267,23 +284,7 @@ Install, health checks, credentials, updates and settings.
 
 - **Health checks** — */doctor, /status, /usage, /now.* Offline health, status, token use and the current snapshot.
 - **Setup checks** — */credentials, /settings, /reload.* Check credentials without displaying them and review your configuration.
-- **Installation and updates** — See [current availability](#installation-availability). Public Windows installation and update instructions will accompany an accepted release.
-
-## Reachable everywhere
-
-| Surface | Best for | What you need |
-| --- | --- | --- |
-| **MO Terminal** | Coding, research, file work, goals, reviews and automation | The base install and your provider; add screen tools only when needed |
-| **MO Desktop** | Dashboard, visual design, screen help, voice and files | Optional companion and computer-use packages; native Desktop is Windows-focused |
-| **MO Shell** | Keep the terminal beside a selected app in a floating workspace | Optional native Windows shell around the existing terminal |
-| **MO Everywhere for Android** | Conversations, tasks, schedules, Remote and Files while away | Google Play access and your running Hub for connected features; separate **This phone** chat needs only your provider |
-| **Telegram** | Remote conversation and approvals | Your configured bot and running MO service |
-| **Headless service** | Keep the Hub, scheduler and integrations running | Your computer/server, selected extras and private configuration |
-
-Detailed ownership, capability, and limitation rows are in
-[FAQ — Which MO surface should I use?](FAQ.md#which-mo-surface-should-i-use).
-The [capability reference](CAPABILITIES.md) covers built-in commands, supported
-surfaces, privacy boundaries and observable behavior.
+- **Installation and updates** — [Install MO for Windows](#installation-availability), then use `/update` or `mo update` for new releases. Both use the same application installer.
 
 ## MO Everywhere in one minute
 
@@ -323,12 +324,6 @@ After installation, close and reopen the terminal application before running
 `mo`. Opening another tab in an already running Windows Terminal can retain
 its old PATH. Your project folder does not need to be inside MO's install folder.
 
-Existing source installations are not automatically converted. Their Git-based
-updates require authorized access to the private source repository and working
-Git credentials. An access failure does not mean your MO profile is damaged;
-do not delete or reinitialize it to resolve a repository access problem.
-Moving from a source installation to this installed preview is an explicit choice.
-
 This preview installer is unsigned. The installation command and updater use
 HTTPS and validate the exact selected GitHub asset, size and SHA256; this trusts
 the official distribution repository and GitHub, without an independent
@@ -342,10 +337,10 @@ Android is separately available through Google Play's eligible testing track;
 see [Android availability](ANDROID.md#availability). GitHub does not supply
 Android APKs or replace Google Play updates.
 
-## Getting started with an available MO installation
+## Getting started
 
-The following describes use of an existing MO installation. It is not a source
-build or a substitute for the release's installation instructions.
+Open MO after installation. Use setup to connect your provider, then choose the
+Terminal, Desktop or Design for the work you want to do.
 
 ### Configure a provider
 
@@ -354,10 +349,10 @@ native setup window. Setup also offers MO Desktop and optional startup at
 Windows sign-in. Save, then open MO and send a first request to check the connection.
 These controls are also available from Desktop Settings.
 
-Choose a provider already configured for MO. Provider availability, model access
-and billing belong to that provider account; you do not need credentials for
-every provider in the example configuration. MO's existing Codex connection
-uses a ChatGPT subscription session, separately from API-key providers.
+Select the provider you want to use and connect that account. You only need
+credentials for your chosen provider. Model access and billing belong to that
+account; MO's existing Codex connection uses a ChatGPT subscription session,
+separately from API-key providers.
 
 Use **OpenAI OAuth → Connect Codex (ChatGPT subscription)** for MO's existing
 Codex-compatible device sign-in. Complete the browser sign-in, then send a short
@@ -370,40 +365,24 @@ Android pairing is optional and can wait until later. Once your Hub is ready,
 open **MO Phone → Add phone** in Desktop and follow the existing QR flow. See
 the [Android guide](ANDROID.md#install-and-pair) for app availability and pairing.
 
-For advanced configuration, [`config.example.yaml`](config.example.yaml)
-describes the supported fields. Provider keys belong only in the private
-`~/.mo/credentials/providers.env` file.
+For other providers and local Ollama models, see [Which providers work?](FAQ.md#which-providers-work).
+Advanced settings are described in [`config.example.yaml`](config.example.yaml).
+Keep provider keys in `~/.mo/credentials/providers.env` and personal settings in
+`~/.mo/config.yaml`, separate from the installed application and your projects.
 
-In `~/.mo/config.yaml`, keep the selected provider's configuration and set
-`model.default` to its name. For example, these are the relevant DeepSeek sections:
+### Everyday help and visual work
 
-```yaml
-providers:
-  - name: deepseek
-    type: chat_completions
-    base_url: https://api.deepseek.com
-    api_key_env: DEEPSEEK_API_KEY
-    model: deepseek-v4-pro
-
-model:
-  default: deepseek
-```
-
-MO reads provider keys from that canonical credential file. `api_key_env` is a
-logical key name, not a request to read arbitrary process environment variables.
-Keep keys and personal configuration in your private MO home, separate from
-the installed application and your project files.
-
-Local Ollama models use the same `chat_completions` interface at
-`http://localhost:11434/v1`; no MO-specific local-model dependency is required.
-For the other supported routes, see [Which providers work?](FAQ.md#which-providers-work).
+Use Desktop's panel to ask questions, attach a file, or request help with an app
+or screen. Open **Design** from the Desktop launcher to sketch with MO or develop
+a visual concept. You review the preview before authorizing project changes.
+See the [Desktop guide](mo_desktop/README.md) and
+[Design Studio guide](mo_desktop/design_studio/README.md).
 
 ### Work in your project
 
-Open MO in the project you want it to work on. The Terminal keeps that project
-separate from MO's private profile. Use the `mo` command where it has been
-configured by your installation; command availability is not proof that a
-public Windows package has shipped.
+Open a terminal in the project folder you want MO to work on and run `mo`.
+MO works with that project's files while keeping your private profile separate.
+You do not need MO's own source code to work on your projects.
 
 Try a small first task: **“Read this project's README and explain how to run it.
 Do not change files.”** Use `/credentials` to check provider readiness without
@@ -437,32 +416,11 @@ agent:
   max_provider_requests_per_turn: 8
 ```
 
-Run `/reload`, then `/settings` to check the configured value. The default is
-`0` (unlimited). For a one-shot run, use
-`mo --config path/to/config.yaml --prompt-file task.txt` with your configured
-provider and this limit. A limit written only in the prompt is not enforced.
-
-The cap counts model completion attempts, including retries and auxiliary or
-worker calls started from that turn. Internal continuation shares the same
-allowance. Exhaustion stops further provider requests and leaves unfinished
-work open. HTTP redirect hops, credential refresh and separate embedding work
-are outside this count. It is not a token, cost, or elapsed-time limit.
-
-### Optional surfaces
-
-- **MO Desktop:** the Windows companion can be opened with `/desktop` when
-  available and enabled. See the [Desktop guide](mo_desktop/README.md).
-- **MO Design:** open Design from the Desktop launcher, or ask MO to create a
-  visual. Sketch and diagram requests can use a compact Board connected to the
-  originating Terminal. Accepting a draft does not authorize implementation.
-  See the [artifact guide](core/design/README.md) and
-  [Design Studio guide](mo_desktop/design_studio/README.md).
-- **Everywhere:** your running Hub supplies connected work to paired devices.
-  See [Hub setup and permissions](mo_everywhere/README.md).
-- **Android:** install through Google Play only when eligible. See the
-  [Android guide](ANDROID.md) for testing and Production availability.
-- **Telegram and headless use:** these require a configured running MO host.
-  A public server distribution is not available yet.
+Run `/reload`, then `/settings` to check the value. The default is `0`
+(unlimited). This caps provider completion attempts for a turn, including its
+retries and worker calls; it is not a price or token budget. When reached, MO
+leaves unfinished work open. A request limit written only in a prompt is not
+enforced.
 
 ## Documentation
 
@@ -473,6 +431,8 @@ are outside this count. It is not a token, cost, or elapsed-time limit.
 | [Terminal](interface/README.md) | Commands, input, queueing and steering |
 | [Desktop](mo_desktop/README.md) | Companion behavior, apps and settings |
 | [MO Shell](mo_shell/README.md) | Windows terminal and attached-app workspace |
+| [Design Studio](mo_desktop/design_studio/README.md) | Board, visual previews, saved revisions and implementation handoff |
+| [Design artifacts](core/design/README.md) | Private saved concepts and their boundaries |
 | [Everywhere](mo_everywhere/README.md) | Hub, continuity, pairing, API and Live Control |
 | [Connected Tab](clients/chrome/README.md) | Chrome consent, status and removal |
 | [Android](ANDROID.md) | Availability, requirements, setup and privacy |
@@ -491,16 +451,7 @@ are outside this count. It is not a token, cost, or elapsed-time limit.
 - Suspected vulnerabilities use the private
   [security reporting policy](.github/SECURITY.md), never a public issue.
 
-## Distribution
-
-MO is an owner-maintained product with private implementation sources. Public
-downloads, updates and user support will use a separate distribution channel.
-See [installation availability](#installation-availability) before looking for
-an installer. Repository privacy does not change the licenses of copies
-already distributed.
-
-For product reports and participation, see [Project participation](CONTRIBUTING.md).
-Do not include credentials, personal conversations or unsanitized logs in a report.
+## Updates and removal
 
 ### Update and recover
 
@@ -511,10 +462,10 @@ manually is not the normal update workflow. A build without a configured
 release channel reports that automatic updates are unavailable and changes
 nothing.
 
-Existing source checkouts retain their separate Git-based update route.
-`/doctor` and `/credentials` diagnose runtime and provider readiness without
-showing credential values. An update failure does not call for deleting your
-private MO home.
+Use `/doctor` and `/credentials` to diagnose runtime and provider readiness
+without showing credential values. An update failure does not call for deleting
+your private MO home. For an older source-based installation, see the
+[update guide](FAQ.md#how-do-i-update-mo) before switching to the Windows app.
 
 Android updates come from Google Play for eligible users; see
 [Android availability](ANDROID.md#availability).
@@ -528,12 +479,19 @@ Removing the application must not be mistaken for erasing your profile,
 revoking paired devices or closing a provider account. Do not delete a profile
 directory or parent folder merely to remove application files.
 
+## Support
+
+Use [MO support](https://github.com/IQMO/MO/issues) for product help and reports;
+[Project participation](CONTRIBUTING.md) explains what to include. Remove
+credentials, personal conversations and private details before posting logs.
+Report suspected vulnerabilities through the [security policy](.github/SECURITY.md).
+
 ## License
 
-MO's existing source license is the PolyForm Shield License 1.0.0: you may
-use, change and share it for any purpose except providing a product that
-competes with MO Agent. See [LICENSE](LICENSE). Copies published up to commit
-`b7e94b3a` (9 October 2026) were released under the MIT License and keep it.
+MO is distributed under the [PolyForm Shield License 1.0.0](LICENSE).
+The license governs distributed copies; it does not provide access to MO's
+private implementation. Copies published up to commit `b7e94b3a`
+(9 October 2026) were released under the MIT License and keep it.
 
 Third-party components retain their original licenses and notices; MO's Shield
 restrictions do not override their grants. For covered combined works, MO
@@ -541,5 +499,5 @@ permits modification for your own use and reverse engineering to debug those
 modifications, with library replacement or relinking rights as required by the
 applicable [LGPL 2.1 section 6](https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0.2/COPYING.LGPLv2.1)
 or [LGPL 3 section 4](https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0.2/COPYING.LGPLv3).
-These preserved rights do not establish that every proposed component or binary
-is cleared for public distribution; each release must satisfy its own terms.
+Third-party license notices and the corresponding source links accompany the
+[release](https://github.com/IQMO/MO/releases/tag/v0.1.0-preview.2).

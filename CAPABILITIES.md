@@ -3,9 +3,8 @@
 This reference explains what MO can do, where each capability is available,
 how it uses your data and permissions, and the limits to expect.
 Optional integrations depend on your configuration and the installed release.
-The capability list is not a claim that every integration is connected or
-that an installer has been accepted for public distribution. See the
-[current availability and installation guidance](README.md#installation-availability).
+See the [installation guide](README.md#installation-availability) for the current
+Windows release and setup, and each feature's guide for connection requirements.
 
 ## Product charter
 

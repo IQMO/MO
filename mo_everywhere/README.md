@@ -363,27 +363,19 @@ not authorization. Clients intersect its advertised actions with locally
 derived authority; the server still authenticates the eventual operation.
 Unknown or malformed cube data is discarded without granting an action.
 
-### Device identity and customer accounts
+### Device pairing and Android purchase
 
-The hub registry owns devices authorized to use one private MO runtime. Its
-device IDs, pairing codes, access tokens, refresh tokens, and exact scopes are
-not customer accounts or proof of a Google Play purchase. Device-owned jobs and
-transfers do not turn the hub's shared profile, Files, or portable conversations
-into a service for unrelated customers. Public registration must never enroll a
-buyer into the publisher's private hub or grant computer access from payment.
+Pairing authorizes a device to use your private MO runtime. Device IDs, pairing
+codes and access tokens identify that device and its granted scopes; they do
+not verify an Android purchase or create a shared account across MO users.
 
-MO currently has no customer registration, purchase ledger, or Play license
-verification owner. Any future publisher account service must keep its customer
-sessions and entitlements separate from hub credentials and from other products'
-accounts. A new commercial entitlement cannot broaden a paired device's scopes
-or change the app's distribution boundary. The public
-[Android availability contract](../ANDROID.md#availability) keeps Google Play
-separate from private owner-device builds and Hub authorization.
+Google Play manages the Android app's purchase and availability. Pair the phone
+with your own Hub separately. Buying the app does not supply Hub credentials,
+pair with another person's runtime or grant computer-control permissions.
+See [Android availability and pairing](../ANDROID.md#availability).
 
-The former browser/PWA client and its cookie-authentication path are retired.
-The current API requires explicit native-client credentials and provides no
-public account portal. A publisher landing/account page has a different purpose
-and does not restore browser access to the private runtime.
+Hub access uses explicitly authorized native-client credentials. Its device
+registry is separate from website accounts and provider sign-in.
 
 ## Continuity, portable conversations, and profile sync
 

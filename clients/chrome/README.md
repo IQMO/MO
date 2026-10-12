@@ -7,13 +7,12 @@ is no per-tab activation click and no second browser or profile.
 
 ## One-time setup
 
-MO Connected Tab is not yet published in the Chrome Web Store, and an accepted
-consumer extension/native-host package is still pending. Existing configured
-installations can use the controls below; these are not a public installation
-offer.
+The [Windows preview](../../README.md#installation-availability) includes MO's
+extension files. MO Connected Tab is not yet published in the Chrome Web Store;
+Chrome requires the manual setup below.
 
-If your existing installation provides the extension folder, choose **Copy
-extension folder** in MO Desktop's **Settings → Tools & connections → Connected Chrome**.
+Choose **Copy extension folder** in MO Desktop's
+**Settings → Tools & connections → Connected Chrome**.
 In `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**,
 and select that folder. This manual Chrome setup is still required for the
 current extension; it is not a published one-click connector.

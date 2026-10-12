@@ -2,8 +2,8 @@
 
 This optional process owns the public home, support, privacy and deletion pages,
 and the Android schema-1 AI-report receiver. It has no Hub, Agent, provider,
-customer-account, purchase, or remote-control authority. Using public support
-or submitting a report does not grant access to a private MO Hub. Customer
+user-account, purchase, or remote-control authority. Using public support
+or submitting a report does not grant access to a private MO Hub. User
 registration and purchases are not currently provided by this service.
 
 ## Public pages and availability
