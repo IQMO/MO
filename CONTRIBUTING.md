@@ -15,7 +15,7 @@ unless the maintainer has explicitly requested that exact change.
 Use the [product defect form](https://github.com/IQMO/MO-Downloads/issues/new?template=bug_report.yml)
 for one reproducible problem. Include its smallest reproduction, the expected
 and observed result, and the affected MO surface and product version.
-For general help, use [MO support](https://mo.omro.app/support).
+For general help, use [MO support](https://github.com/IQMO/MO-Downloads/issues).
 
 Before submitting, remove credentials, tokens, private URLs, personal names,
 account details, local absolute paths, conversation content, and unrelated logs.
