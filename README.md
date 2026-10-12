@@ -5,6 +5,13 @@
 <h1 align="center">MO Agent</h1>
 
 <p align="center">
+  <strong><a href="https://github.com/IQMO/MO/releases/download/v0.1.0-preview.2/MO-0.1.0-preview.2-windows-x64.exe">Download MO for Windows</a></strong> ·
+  <a href="#installation-availability">Install with a command</a> ·
+  <a href="https://github.com/IQMO/MO/issues">Support</a><br>
+  Free · Windows 11 x64 · One installer; no source checkout or developer tools needed
+</p>
+
+<p align="center">
   <strong>One local agent runtime. Honest progress. Reachable everywhere.</strong>
 </p>
 
@@ -30,9 +37,8 @@ Hub; or use Telegram and a headless service. Everything stays private by default
 > Start with the [critical FAQ and surface comparison](FAQ.md) if you want to
 > understand what runs where, what stays private, or which interface to use.
 
-MO is a private-source product. Get the free Windows preview from the
-[official release](https://github.com/IQMO/MO-Downloads/releases/tag/v0.1.0-preview.1). The public download repository contains downloads and user
-guides; MO's implementation and history remain private.
+MO is a closed-source product. The [public repository](https://github.com/IQMO/MO)
+provides downloads, updates and user guides. MO's implementation and history remain private.
 
 MO for Windows is free. The [Android companion](ANDROID.md#availability) is
 the paid app; its purchase is separate from provider access and Windows setup.
@@ -294,20 +300,24 @@ owns current availability. The repository contains no Android package downloads.
 
 ## Installation availability
 
-**MO 0.1.0-preview.1** is a free preview for **Windows 11 x64**.
-[Download the Windows installer](https://github.com/IQMO/MO-Downloads/releases/download/v0.1.0-preview.1/MO-0.1.0-preview.1-windows-x64.exe) and open it, or use these two commands
+**MO 0.1.0-preview.2** is a free preview for **Windows 11 x64**.
+[Download the Windows installer](https://github.com/IQMO/MO/releases/download/v0.1.0-preview.2/MO-0.1.0-preview.2-windows-x64.exe) and open it, or use these two commands
 in PowerShell to download and run the same per-user installer:
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing 'https://github.com/IQMO/MO-Downloads/releases/download/v0.1.0-preview.1/MO-install-windows-x64.ps1' -OutFile "$env:TEMP\MO-install-windows-x64.ps1"
+Invoke-WebRequest -UseBasicParsing 'https://github.com/IQMO/MO/releases/download/v0.1.0-preview.2/MO-install-windows-x64.ps1' -OutFile "$env:TEMP\MO-install-windows-x64.ps1"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\MO-install-windows-x64.ps1"
 ```
 
 Both routes install the same application. No MO source checkout, Python, Git
 or .NET SDK is required. The command verifies the installer's size and SHA256
 before opening it; it does not build from source. Optional integrations can
-have separate requirements. See the [preview release notes](https://github.com/IQMO/MO-Downloads/releases/tag/v0.1.0-preview.1).
+have separate requirements. See the [preview release notes](https://github.com/IQMO/MO/releases/tag/v0.1.0-preview.2).
 Public server packages and container images are not available yet.
+
+If you installed **preview.1**, run the preview.2 installer once to switch to
+the final download address. It preserves your profile. After that, use `/update`
+inside MO or `mo update` from a terminal for future releases.
 
 After installation, close and reopen the terminal application before running
 `mo`. Opening another tab in an already running Windows Terminal can retain

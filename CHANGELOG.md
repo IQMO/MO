@@ -5,10 +5,19 @@ behavior and installed releases. Current behavior and limitations are owned by
 the linked product documentation. See the
 [installation guide](README.md#installation-availability).
 
+## 0.1.0-preview.2 — Windows fixes
+
+- Correct escaped quotes and literal operators in Windows Python commands.
+- Permit embedded audio and video in Design previews under the existing offline
+  media policy.
+- Download one Windows installer or use the command in the installation guide.
+  Preview.1 users run this installer once to adopt the final download address;
+  subsequent releases use `/update` or `mo update`.
+
 ## 0.1.0-preview.1 — Windows preview
 
 - Free Windows 11 x64 application with the same per-user installer through
-  [download](https://github.com/IQMO/MO-Downloads/releases/download/v0.1.0-preview.1/MO-0.1.0-preview.1-windows-x64.exe) or the
+  [download](https://github.com/IQMO/MO/releases/download/v0.1.0-preview.1/MO-0.1.0-preview.1-windows-x64.exe) or the
   [PowerShell installation command](README.md#installation-availability).
 - Optional Desktop and existing provider/model setup; Android is a separate
   paid companion. No MO source checkout, Python, Git or .NET SDK is required.
@@ -16,7 +25,7 @@ the linked product documentation. See the
 - The installer is unsigned. The unfinished modern Windows 11 **Open with MO**
   menu is excluded from this preview.
 
-See the [release notes](https://github.com/IQMO/MO-Downloads/releases/tag/v0.1.0-preview.1) for the exact release assets.
+See the [release notes](https://github.com/IQMO/MO/releases/tag/v0.1.0-preview.1) for the exact release assets.
 
 ## Preparation history
 

@@ -4,7 +4,7 @@
 
 Do not open a public issue for a suspected vulnerability.
 
-Use [GitHub's private vulnerability report](https://github.com/IQMO/MO-Downloads/security/advisories/new)
+Use [GitHub's private vulnerability report](https://github.com/IQMO/MO/security/advisories/new)
 for the official MO distribution. Sign in to GitHub to submit it privately.
 If that route is unavailable, do not substitute a public issue or upload
 sensitive evidence there.
