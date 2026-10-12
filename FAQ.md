@@ -793,7 +793,9 @@ appropriate authorization; asking for an MO feature does not create that access.
 
 ## How do I update MO?
 
-Use `/update` inside MO, or `mo update` / `mo --update` from a terminal.
+If you installed preview.1, first follow the
+[one-time installer upgrade](README.md#installation-availability). Subsequent
+updates use `/update` inside MO, or `mo update` / `mo --update` from a terminal.
 The Windows preview checks its official preview channel and verifies and opens
 the same application installer when a newer version is available. It does not
 fetch MO's source or require Git. A build without a release channel reports
