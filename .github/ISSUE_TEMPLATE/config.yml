@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: MO support
+    url: https://mo.omro.app/support
+    about: Get help using MO. Do not send credentials or unsanitized logs.
+  - name: Report a security vulnerability privately
+    url: https://github.com/IQMO/MO-Downloads/security/advisories/new
+    about: Keep suspected vulnerabilities and sensitive evidence out of public issues.
