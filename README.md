@@ -31,7 +31,7 @@ Hub; or use Telegram and a headless service. Everything stays private by default
 > understand what runs where, what stays private, or which interface to use.
 
 MO is a private-source product. Get the free Windows preview from the
-[official release](https://github.com/IQMO/MO-Downloads/releases/tag/v0.1.0-preview.1). This repository contains downloads and user
+[official release](https://github.com/IQMO/MO-Downloads/releases/tag/v0.1.0-preview.1). The public download repository contains downloads and user
 guides; MO's implementation and history remain private.
 
 MO for Windows is free. The [Android companion](ANDROID.md#availability) is
